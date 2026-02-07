@@ -500,8 +500,46 @@ def status() -> dict:
 def main():
     """Run the Cairn MCP server."""
     if config.transport == "http":
-        logger.info("Starting Cairn MCP server (HTTP on %s:%d)", config.http_host, config.http_port)
-        mcp.run(transport="streamable-http")
+        import uvicorn
+        from cairn.api import create_api
+
+        # Get MCP's Starlette app (parent — owns lifespan, serves /mcp)
+        mcp_app = mcp.streamable_http_app()
+
+        # Wrap MCP's lifespan with DB lifecycle.
+        # streamable_http_app() only starts the session manager — our custom
+        # lifespan (DB connect) doesn't fire unless we inject it here.
+        _mcp_lifespan = mcp_app.router.lifespan_context
+
+        @asynccontextmanager
+        async def combined_lifespan(app):
+            db.connect()
+            db.run_migrations()
+            logger.info("Cairn started. Embedding: %s", config.embedding.model)
+            try:
+                async with _mcp_lifespan(app) as state:
+                    yield state
+            finally:
+                db.close()
+                logger.info("Cairn stopped.")
+
+        mcp_app.router.lifespan_context = combined_lifespan
+
+        # Build REST API and mount as sub-app at /api
+        api = create_api(
+            db=db,
+            config=config,
+            memory_store=memory_store,
+            search_engine=search_engine,
+            cluster_engine=cluster_engine,
+            project_manager=project_manager,
+            task_manager=task_manager,
+            thinking_engine=thinking_engine,
+        )
+        mcp_app.mount("/api", api)
+
+        logger.info("Starting Cairn (HTTP on %s:%d — MCP at /mcp, API at /api)", config.http_host, config.http_port)
+        uvicorn.run(mcp_app, host=config.http_host, port=config.http_port)
     else:
         logger.info("Starting Cairn MCP server (stdio)")
         mcp.run(transport="stdio")
