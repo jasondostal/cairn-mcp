@@ -23,6 +23,17 @@ services:
       cairn-db:
         condition: service_healthy
 
+  cairn-ui:
+    build: ./cairn-ui
+    container_name: cairn-ui
+    restart: unless-stopped
+    environment:
+      CAIRN_API_URL: http://cairn:8000
+    ports:
+      - "${CAIRN_UI_PORT:-3000}:3000"
+    depends_on:
+      - cairn
+
   cairn-db:
     image: pgvector/pgvector:pg16
     container_name: cairn-db

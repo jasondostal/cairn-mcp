@@ -1,0 +1,199 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { api, type Memory } from "@/lib/api";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Search, FileText, Tag, Star } from "lucide-react";
+
+function MemoryCard({ memory }: { memory: Memory }) {
+  const content =
+    memory.content.length > 300
+      ? memory.content.slice(0, 300) + "…"
+      : memory.content;
+
+  return (
+    <Link href={`/memories/${memory.id}`}>
+      <Card className="transition-colors hover:border-primary/30">
+        <CardContent className="space-y-3 p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="font-mono text-xs">
+                {memory.memory_type}
+              </Badge>
+              <span className="text-xs text-muted-foreground">
+                {memory.project}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {memory.score !== undefined && (
+                <span className="font-mono text-xs text-muted-foreground">
+                  {(memory.score * 100).toFixed(0)}%
+                </span>
+              )}
+              <div className="flex items-center gap-0.5">
+                <Star className="h-3 w-3 text-muted-foreground" />
+                <span className="font-mono text-xs text-muted-foreground">
+                  {memory.importance.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {memory.summary && (
+            <p className="text-sm font-medium">{memory.summary}</p>
+          )}
+
+          <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+            {content}
+          </p>
+
+          {memory.tags.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Tag className="h-3 w-3 text-muted-foreground" />
+              {memory.tags.map((t) => (
+                <Badge key={t} variant="secondary" className="text-xs">
+                  {t}
+                </Badge>
+              ))}
+            </div>
+          )}
+
+          {memory.related_files.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <FileText className="h-3 w-3 text-muted-foreground" />
+              {memory.related_files.map((f) => (
+                <span
+                  key={f}
+                  className="font-mono text-xs text-muted-foreground"
+                >
+                  {f}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>#{memory.id}</span>
+            <span>·</span>
+            <span>{new Date(memory.created_at).toLocaleDateString()}</span>
+            {memory.cluster && (
+              <>
+                <span>·</span>
+                <span>cluster: {memory.cluster.label}</span>
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+export default function SearchPage() {
+  const [query, setQuery] = useState("");
+  const [project, setProject] = useState("");
+  const [type, setType] = useState("");
+  const [mode, setMode] = useState("semantic");
+  const [results, setResults] = useState<Memory[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
+
+  async function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!query.trim()) return;
+    setLoading(true);
+    setSearched(true);
+    try {
+      const data = await api.search(query, {
+        project: project || undefined,
+        type: type || undefined,
+        mode,
+        limit: "20",
+      });
+      setResults(data);
+    } catch {
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-semibold">Search</h1>
+
+      <form onSubmit={handleSearch} className="space-y-3">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search memories..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Button type="submit" disabled={loading || !query.trim()}>
+            {loading ? "Searching…" : "Search"}
+          </Button>
+        </div>
+
+        <div className="flex gap-2">
+          <Input
+            placeholder="Project filter"
+            value={project}
+            onChange={(e) => setProject(e.target.value)}
+            className="w-40"
+          />
+          <Input
+            placeholder="Type filter"
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            className="w-40"
+          />
+          <div className="flex gap-1">
+            {["semantic", "keyword", "vector"].map((m) => (
+              <Button
+                key={m}
+                type="button"
+                variant={mode === m ? "default" : "outline"}
+                size="sm"
+                onClick={() => setMode(m)}
+              >
+                {m}
+              </Button>
+            ))}
+          </div>
+        </div>
+      </form>
+
+      {loading && (
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-32" />
+          ))}
+        </div>
+      )}
+
+      {!loading && searched && results.length === 0 && (
+        <p className="text-sm text-muted-foreground">No results found.</p>
+      )}
+
+      {!loading && results.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            {results.length} result{results.length !== 1 && "s"}
+          </p>
+          {results.map((m) => (
+            <MemoryCard key={m.id} memory={m} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
