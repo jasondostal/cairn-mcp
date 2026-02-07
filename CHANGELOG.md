@@ -10,14 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.0] - 2026-02-07
 
 ### Added
-- **Web UI** — Next.js 16 + shadcn/ui + Tailwind CSS 4 dashboard (`cairn-ui/`)
-- Dashboard page: stat cards (memories, projects, clusters, embedding model), LLM backend info, memory type breakdown, project grid
-- Sidebar navigation: Dashboard, Search, Projects, Clusters, Tasks, Thinking, Rules
+- **Web UI** — Complete Next.js 16 + shadcn/ui + Tailwind CSS 4 dashboard (`cairn-ui/`)
+- 7 pages: Dashboard, Search, Projects (list + detail), Clusters, Tasks, Thinking (list + detail), Rules
+- Memory detail view (`/memories/:id`) with full content, metadata, tags, cluster context
 - Typed API client (`cairn-ui/src/lib/api.ts`) covering all 10 REST endpoints
-- shadcn/ui component library: card, badge, button, skeleton, table, tabs, dialog, command, input, scroll-area, separator
-- Next.js API rewrites proxy `/api/*` to Cairn backend (`CAIRN_API_URL` env var)
-- Standalone output mode for Docker deployment
+- Search page with hybrid/keyword/vector mode selector, project and type filters
+- Cluster explorer with expandable sample memories and confidence scores
+- Thinking sequence viewer with thought timeline, type icons, and branch visualization
+- Multi-stage production Dockerfile (deps → build → standalone runner)
+- `.dockerignore` for efficient Docker builds
+- `cairn-ui` service in `docker-compose.yml`
 - Recallium migration script (`scripts/migrate_recallium.py`)
+
+### Fixed
+- `CAIRN_API_URL` set at Docker build time so Next.js rewrites resolve correctly in standalone mode
 
 ### Infrastructure
 - SWAG reverse proxy config for `cairn.witekdivers.com`

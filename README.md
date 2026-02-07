@@ -1,25 +1,44 @@
-# Cairn
+<p align="center">
+  <strong>Cairn</strong><br>
+  <em>Semantic memory for AI agents</em>
+</p>
 
-Semantic memory for AI agents. An MCP server that gives LLMs persistent, searchable, pattern-discovering memory backed by PostgreSQL + pgvector.
+<p align="center">
+  <a href="https://github.com/jasondostal/cairn-mcp/releases"><img src="https://img.shields.io/github/v/release/jasondostal/cairn-mcp?style=flat-square&color=blue" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/jasondostal/cairn-mcp?style=flat-square" alt="License"></a>
+  <img src="https://img.shields.io/badge/MCP-compatible-brightgreen?style=flat-square" alt="MCP">
+  <img src="https://img.shields.io/badge/PostgreSQL-16%20%2B%20pgvector-336791?style=flat-square" alt="PostgreSQL">
+</p>
 
-## What It Does
+---
 
-Cairn stores memories with automatic semantic enrichment (summaries, tags, importance scoring via LLM), embeds them for vector search, clusters them to discover patterns, and exposes it all through 10 MCP tools that any compatible AI agent can use.
+An MCP server that gives LLMs persistent, searchable, pattern-discovering memory. Store anything, find it later through hybrid semantic search, and let clustering surface patterns you didn't know were there.
 
-**10 MCP Tools:**
+**Built for agents.** 10 MCP tools, a REST API, and a web dashboard — all from a single container.
 
-| Tool | Purpose |
-|------|---------|
-| `store` | Store a memory with auto-enrichment (summary, tags, importance) |
-| `search` | Hybrid search: vector similarity + keyword + tag matching with RRF fusion |
+## Highlights
+
+- **Hybrid search** — Vector similarity + full-text + tag matching, fused with Reciprocal Rank Fusion. 83.8% recall@10 on our eval benchmark.
+- **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, and importance score on store. Bedrock or Ollama.
+- **Pattern discovery** — DBSCAN clustering finds themes across memories. LLM writes the labels. No cron jobs — clusters refresh lazily.
+- **Structured thinking** — Reasoning sequences with branching, for when an agent needs to think through a problem step by step.
+- **Web dashboard** — Next.js + shadcn/ui. Search, browse projects, explore clusters, review thinking chains. Dark mode.
+- **One port, everything** — MCP protocol at `/mcp`, REST API at `/api`, same process. stdio also supported.
+
+## MCP Tools
+
+| Tool | What it does |
+|------|-------------|
+| `store` | Persist a memory with auto-enrichment (summary, tags, importance) |
+| `search` | Hybrid semantic search with project, type, and mode filters |
 | `recall` | Expand memory IDs to full content with cluster context |
-| `modify` | Update, inactivate, or reactivate memories |
-| `rules` | Retrieve behavioral rules (global or per-project) |
+| `modify` | Update, soft-delete, or reactivate memories |
+| `rules` | Behavioral guardrails — global or per-project |
 | `insights` | DBSCAN clustering with LLM-generated pattern summaries |
-| `projects` | Project documents (briefs, PRDs, plans) and cross-project linking |
-| `tasks` | Task lifecycle: create, complete, list, link memories |
+| `projects` | Documents (briefs, PRDs, plans) and cross-project linking |
+| `tasks` | Task lifecycle — create, complete, list, link to memories |
 | `think` | Structured reasoning sequences with branching |
-| `status` | System health: memory counts, embedding stats, cluster info |
+| `status` | System health, counts, embedding model info |
 
 ## Architecture
 
@@ -34,54 +53,36 @@ Browser                   MCP Client (Claude, etc.)         curl / scripts
 | UI   |                  |  cairn.server  (MCP tool definitions)             |
 +------+                  |  cairn.api     (read-only FastAPI endpoints)      |
 cairn-ui                  |                                                   |
-                          |  cairn.core.memory      - store / recall          |
-                          |  cairn.core.search      - hybrid RRF search       |
-                          |  cairn.core.enrichment  - LLM auto-enrichment     |
-                          |  cairn.core.clustering  - DBSCAN patterns         |
-                          |  cairn.core.projects    - docs & linking           |
-                          |  cairn.core.tasks       - task lifecycle           |
-                          |  cairn.core.thinking    - structured reasoning     |
+                          |  core: memory, search, enrichment, clustering     |
+                          |        projects, tasks, thinking                  |
                           |                                                   |
-                          |  cairn.embedding.engine - MiniLM-L6-v2 (local)    |
-                          |  cairn.llm.bedrock      - Llama 90B via Bedrock    |
-                          |  cairn.llm.ollama       - Local Ollama fallback    |
-                          |  cairn.storage.database - PostgreSQL + pgvector    |
+                          |  embedding: MiniLM-L6-v2 (local, 384-dim)        |
+                          |  llm: Bedrock (Llama 90B) / Ollama fallback      |
+                          |  storage: PostgreSQL 16 + pgvector (HNSW)        |
                           +---------------------------------------------------+
                               |
                               v
-                          PostgreSQL 16 + pgvector (13 tables, HNSW indexing)
+                          PostgreSQL 16 + pgvector (13 tables, 3 migrations)
 ```
 
 ## Quick Start
 
-### Prerequisites
-
-- Docker and Docker Compose
-- AWS credentials (for Bedrock enrichment) or Ollama (local fallback)
-
-### 1. Get the compose file
+### 1. Pull and run
 
 ```bash
 curl -O https://raw.githubusercontent.com/jasondostal/cairn-mcp/main/docker-compose.yml
-```
-
-### 2. Start services
-
-```bash
 docker compose up -d
 ```
 
-This pulls the pre-built image from GHCR and starts:
-- **cairn**: MCP server with HTTP transport on port 8000 (Python 3.11, MiniLM-L6-v2 embedded)
-- **cairn-db**: PostgreSQL 16 with pgvector extension
+This starts two containers:
+- **cairn** — MCP server + REST API on port 8000
+- **cairn-db** — PostgreSQL 16 with pgvector
 
-Migrations run automatically on first start. The MCP server starts immediately in HTTP mode — no additional setup needed.
+Migrations run automatically. Ready in seconds.
 
-### 3. Connect your MCP client
+### 2. Connect your agent
 
-The default docker-compose configuration starts Cairn with HTTP transport. Add to your MCP client configuration:
-
-**HTTP transport** (default, recommended):
+**HTTP** (recommended — supports multiple concurrent clients):
 
 ```json
 {
@@ -93,7 +94,7 @@ The default docker-compose configuration starts Cairn with HTTP transport. Add t
 }
 ```
 
-**stdio transport** (set `CAIRN_TRANSPORT=stdio` in your environment or docker-compose override):
+**stdio** (single-client, same host):
 
 ```json
 {
@@ -106,24 +107,30 @@ The default docker-compose configuration starts Cairn with HTTP transport. Add t
 }
 ```
 
-HTTP is the default and recommended for most setups — it supports multiple concurrent clients (e.g. Claude Code + web UI) and remote access. Use stdio only for single-client setups where the client runs on the same Docker host.
+### 3. Store your first memory
 
-### 4. REST API (optional)
+Once connected, your agent can immediately use all 10 tools. Try:
 
-When running in HTTP mode, a read-only REST API is available at `/api` on the same port. This powers the web UI and is useful for scripting.
+> "Remember that we chose PostgreSQL with pgvector for the storage layer because it gives us hybrid search without a separate vector database."
+
+Cairn will store it, generate a summary, auto-tag it, and score its importance.
+
+## REST API
+
+Read-only endpoints at `/api` — powers the web UI and works great for scripting.
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/status` | System health, memory counts, cluster info |
-| `GET /api/search?q=&project=&type=&mode=&limit=` | Hybrid search with full content |
-| `GET /api/memories/:id` | Single memory with cluster membership |
+| `GET /api/search?q=&project=&type=&mode=&limit=` | Hybrid search |
+| `GET /api/memories/:id` | Single memory with cluster context |
 | `GET /api/projects` | All projects with memory counts |
 | `GET /api/projects/:name` | Project docs and links |
-| `GET /api/clusters?project=&topic=` | Cluster data with member lists |
-| `GET /api/tasks?project=` | Task list for a project |
-| `GET /api/thinking?project=&status=` | Thinking sequence list |
+| `GET /api/clusters?project=&topic=` | Clusters with member lists |
+| `GET /api/tasks?project=` | Tasks for a project |
+| `GET /api/thinking?project=&status=` | Thinking sequences |
 | `GET /api/thinking/:id` | Sequence detail with all thoughts |
-| `GET /api/rules?project=` | Behavioral rules (global + project) |
+| `GET /api/rules?project=` | Behavioral rules |
 
 ```bash
 curl http://localhost:8000/api/status
@@ -132,40 +139,39 @@ curl "http://localhost:8000/api/search?q=architecture&limit=5"
 
 ## Web UI
 
-Cairn includes a Next.js web dashboard (`cairn-ui/`) built with shadcn/ui and Tailwind CSS 4. It provides a visual interface to browse memories, search, explore clusters, and review thinking sequences.
+A full dashboard for browsing your agent's memory. Built with Next.js 16, shadcn/ui, and Tailwind CSS 4.
 
-**Stack:** Next.js 16 · shadcn/ui · Tailwind CSS 4 · TypeScript
+**7 pages:** Dashboard / Search / Projects / Clusters / Tasks / Thinking / Rules
 
-The UI proxies API requests to the Cairn backend via Next.js rewrites. Set `CAIRN_API_URL` to point to the MCP server (defaults to `http://localhost:8000`).
+The UI runs as a separate container and proxies API calls to the Cairn backend.
+
+```bash
+docker compose up -d  # starts cairn, cairn-db, and cairn-ui
+```
+
+Or run in development:
 
 ```bash
 cd cairn-ui
 npm install
-CAIRN_API_URL=http://cairn:8000 npm run dev
+CAIRN_API_URL=http://localhost:8000 npm run dev
 ```
 
-**Pages:** Dashboard · Search · Projects · Clusters · Tasks · Thinking · Rules
+## Search
 
-## Development
+Cairn fuses three signals with **Reciprocal Rank Fusion (RRF)**:
 
-For contributors who want to build from source:
+| Signal | Weight | How |
+|--------|--------|-----|
+| Vector similarity | 60% | Cosine distance on MiniLM-L6-v2 embeddings via pgvector HNSW |
+| Keyword search | 25% | PostgreSQL `ts_rank` full-text search |
+| Tag matching | 15% | Intersection of query-derived tags with memory tags |
 
-```bash
-git clone https://github.com/jasondostal/cairn-mcp.git
-cd cairn-mcp
-cp .env.example .env
-# Edit .env with your settings
-```
-
-To build and run locally, replace `image: ghcr.io/jasondostal/cairn-mcp:latest` with `build: .` in `docker-compose.yml`, then:
-
-```bash
-docker compose up -d --build
-```
+Filter by project, memory type, file path, recency, or set custom limits. Three modes: `semantic` (hybrid, default), `keyword`, or `vector`.
 
 ## Configuration
 
-All configuration via environment variables:
+All via environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -173,40 +179,28 @@ All configuration via environment variables:
 | `CAIRN_DB_PORT` | `5432` | PostgreSQL port |
 | `CAIRN_DB_NAME` | `cairn` | Database name |
 | `CAIRN_DB_USER` | `cairn` | Database user |
-| `CAIRN_DB_PASS` | (required) | Database password |
-| `CAIRN_LLM_BACKEND` | `bedrock` | LLM backend: `bedrock` or `ollama` |
+| `CAIRN_DB_PASS` | *(required)* | Database password |
+| `CAIRN_LLM_BACKEND` | `bedrock` | `bedrock` or `ollama` |
 | `CAIRN_BEDROCK_MODEL` | `us.meta.llama3-2-90b-instruct-v1:0` | Bedrock model ID |
 | `CAIRN_OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama API URL |
 | `CAIRN_OLLAMA_MODEL` | `qwen2.5-coder:7b` | Ollama model name |
-| `CAIRN_TRANSPORT` | `stdio` | Transport: `stdio` or `http` |
+| `CAIRN_TRANSPORT` | `stdio` | `stdio` or `http` |
 | `CAIRN_HTTP_HOST` | `0.0.0.0` | HTTP bind address |
 | `CAIRN_HTTP_PORT` | `8000` | HTTP listen port |
 | `CAIRN_EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence transformer model |
 
-## Search
+## Development
 
-Cairn uses **Reciprocal Rank Fusion (RRF)** to combine three search signals:
+```bash
+git clone https://github.com/jasondostal/cairn-mcp.git
+cd cairn-mcp
+cp .env.example .env   # edit with your settings
+docker compose up -d --build
+```
 
-1. **Vector similarity** (60%) - cosine distance on MiniLM-L6-v2 embeddings via pgvector HNSW
-2. **Keyword search** (25%) - PostgreSQL full-text search with `ts_rank`
-3. **Tag matching** (15%) - intersection of query-derived tags with memory tags
+### Testing
 
-Results are fused and re-ranked. Supports filtering by project, memory type, file path, recency, and custom limits.
-
-## Clustering
-
-The `insights` tool runs **DBSCAN** clustering on memory embeddings:
-
-- **Lazy reclustering**: No background jobs. Clusters are refreshed when stale (>24h, >20% memory growth, or no prior run).
-- **LLM summaries**: Each cluster gets a human-readable label and summary via LLM. Falls back to generic labels if LLM is unavailable.
-- **Topic filtering**: Pass a `topic` parameter to find clusters semantically similar to your query.
-- **Confidence scoring**: Based on cluster tightness (inverse of average distance from centroid).
-
-Parameters: `eps=0.65`, `min_samples=3`, cosine metric. Calibrated for MiniLM-L6-v2 embedding space.
-
-## Testing
-
-Tests run inside the container alongside the running server:
+30 tests across 3 suites:
 
 ```bash
 docker exec cairn pip install pytest
@@ -214,16 +208,16 @@ docker cp tests/ cairn:/app/tests/
 docker exec cairn python -m pytest tests/ -v
 ```
 
-30 tests across 3 suites: clustering (12), enrichment (10), RRF search (8).
-
-## Database Schema
+### Database Schema
 
 13 tables across 3 migrations:
 
-**Core (001):** `projects`, `memories`, `memory_related_files`, `memory_related_memories`
-**Clustering (002):** `clusters`, `cluster_members`, `clustering_runs`
-**Phase 4 (003):** `project_documents`, `project_links`, `tasks`, `task_memory_links`, `thinking_sequences`, `thoughts`
+| Migration | Tables |
+|-----------|--------|
+| **001 Core** | `projects`, `memories`, `memory_related_files`, `memory_related_memories` |
+| **002 Clustering** | `clusters`, `cluster_members`, `clustering_runs` |
+| **003 Phase 4** | `project_documents`, `project_links`, `tasks`, `task_memory_links`, `thinking_sequences`, `thoughts` |
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+[GNU General Public License v3.0](LICENSE)
