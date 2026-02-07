@@ -24,32 +24,32 @@ Cairn stores memories with automatic semantic enrichment (summaries, tags, impor
 ## Architecture
 
 ```
-MCP Client (Claude, etc.)         Web UI / curl
-    |                                  |
-    | stdio or streamable-http         | REST (GET)
-    |                                  |
-+---v----------------------------------v-----------+
-|  /mcp  (MCP protocol)          /api  (REST API)  |
-|                                                   |
-|  cairn.server  (MCP tool definitions)             |
-|  cairn.api     (read-only FastAPI endpoints)      |
-|                                                   |
-|  cairn.core.memory      - store / recall          |
-|  cairn.core.search      - hybrid RRF search       |
-|  cairn.core.enrichment  - LLM auto-enrichment     |
-|  cairn.core.clustering  - DBSCAN patterns         |
-|  cairn.core.projects    - docs & linking           |
-|  cairn.core.tasks       - task lifecycle           |
-|  cairn.core.thinking    - structured reasoning     |
-|                                                   |
-|  cairn.embedding.engine - MiniLM-L6-v2 (local)    |
-|  cairn.llm.bedrock      - Llama 90B via Bedrock    |
-|  cairn.llm.ollama       - Local Ollama fallback    |
-|  cairn.storage.database - PostgreSQL + pgvector    |
-+---------------------------------------------------+
-    |
-    v
-PostgreSQL 16 + pgvector (13 tables, HNSW indexing)
+Browser                   MCP Client (Claude, etc.)         curl / scripts
+   |                          |                                  |
+   | HTTPS                    | stdio or streamable-http         | REST (GET)
+   |                          |                                  |
++--v---+                  +---v----------------------------------v-----------+
+| Next | --/api proxy-->  |  /mcp  (MCP protocol)          /api  (REST API)  |
+| .js  |                  |                                                   |
+| UI   |                  |  cairn.server  (MCP tool definitions)             |
++------+                  |  cairn.api     (read-only FastAPI endpoints)      |
+cairn-ui                  |                                                   |
+                          |  cairn.core.memory      - store / recall          |
+                          |  cairn.core.search      - hybrid RRF search       |
+                          |  cairn.core.enrichment  - LLM auto-enrichment     |
+                          |  cairn.core.clustering  - DBSCAN patterns         |
+                          |  cairn.core.projects    - docs & linking           |
+                          |  cairn.core.tasks       - task lifecycle           |
+                          |  cairn.core.thinking    - structured reasoning     |
+                          |                                                   |
+                          |  cairn.embedding.engine - MiniLM-L6-v2 (local)    |
+                          |  cairn.llm.bedrock      - Llama 90B via Bedrock    |
+                          |  cairn.llm.ollama       - Local Ollama fallback    |
+                          |  cairn.storage.database - PostgreSQL + pgvector    |
+                          +---------------------------------------------------+
+                              |
+                              v
+                          PostgreSQL 16 + pgvector (13 tables, HNSW indexing)
 ```
 
 ## Quick Start
@@ -129,6 +129,22 @@ When running in HTTP mode, a read-only REST API is available at `/api` on the sa
 curl http://localhost:8000/api/status
 curl "http://localhost:8000/api/search?q=architecture&limit=5"
 ```
+
+## Web UI
+
+Cairn includes a Next.js web dashboard (`cairn-ui/`) built with shadcn/ui and Tailwind CSS 4. It provides a visual interface to browse memories, search, explore clusters, and review thinking sequences.
+
+**Stack:** Next.js 16 · shadcn/ui · Tailwind CSS 4 · TypeScript
+
+The UI proxies API requests to the Cairn backend via Next.js rewrites. Set `CAIRN_API_URL` to point to the MCP server (defaults to `http://localhost:8000`).
+
+```bash
+cd cairn-ui
+npm install
+CAIRN_API_URL=http://cairn:8000 npm run dev
+```
+
+**Pages:** Dashboard · Search · Projects · Clusters · Tasks · Thinking · Rules
 
 ## Development
 
