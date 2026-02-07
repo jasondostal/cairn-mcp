@@ -6,6 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/error-state";
+import { usePagination, PaginationControls } from "@/components/pagination";
 import { Shield, Star } from "lucide-react";
 
 function RuleCard({ rule }: { rule: Rule }) {
@@ -49,26 +51,59 @@ function RuleCard({ rule }: { rule: Rule }) {
   );
 }
 
+function RulesList({ rules }: { rules: Rule[] }) {
+  const { page, totalPages, pageItems, setPage } = usePagination(rules, 20);
+
+  return (
+    <div className="space-y-3">
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        total={rules.length}
+        noun="rules"
+      />
+      {pageItems.map((r) => (
+        <RuleCard key={r.id} rule={r} />
+      ))}
+      {totalPages > 1 && (
+        <PaginationControls
+          page={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          total={rules.length}
+          noun="rules"
+        />
+      )}
+    </div>
+  );
+}
+
 export default function RulesPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selected, setSelected] = useState<string | undefined>(undefined);
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setError(null);
     Promise.all([api.projects(), api.rules()])
       .then(([p, r]) => {
         setProjects(p);
         setRules(r);
       })
+      .catch((err) => setError(err?.message || "Failed to load rules"))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
     setLoading(true);
+    setError(null);
     api
       .rules(selected)
       .then(setRules)
+      .catch((err) => setError(err?.message || "Failed to load rules"))
       .finally(() => setLoading(false));
   }, [selected]);
 
@@ -104,19 +139,14 @@ export default function RulesPage() {
         </div>
       )}
 
-      {!loading && rules.length === 0 && (
+      {error && <ErrorState message="Failed to load rules" detail={error} />}
+
+      {!loading && !error && rules.length === 0 && (
         <p className="text-sm text-muted-foreground">No rules found.</p>
       )}
 
-      {!loading && rules.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            {rules.length} rule{rules.length !== 1 && "s"}
-          </p>
-          {rules.map((r) => (
-            <RuleCard key={r.id} rule={r} />
-          ))}
-        </div>
+      {!loading && !error && rules.length > 0 && (
+        <RulesList rules={rules} />
       )}
     </div>
   );

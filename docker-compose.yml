@@ -31,6 +31,12 @@ services:
       CAIRN_API_URL: http://cairn:8000
     ports:
       - "${CAIRN_UI_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     depends_on:
       - cairn
 

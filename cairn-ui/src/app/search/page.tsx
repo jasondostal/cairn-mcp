@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ErrorState } from "@/components/error-state";
+import { usePagination, PaginationControls } from "@/components/pagination";
 import { Search, FileText, Tag, Star } from "lucide-react";
 
 function MemoryCard({ memory }: { memory: Memory }) {
@@ -94,6 +96,34 @@ function MemoryCard({ memory }: { memory: Memory }) {
   );
 }
 
+function ResultsList({ results }: { results: Memory[] }) {
+  const { page, totalPages, pageItems, setPage } = usePagination(results, 20);
+
+  return (
+    <div className="space-y-3">
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        total={results.length}
+        noun="results"
+      />
+      {pageItems.map((m) => (
+        <MemoryCard key={m.id} memory={m} />
+      ))}
+      {totalPages > 1 && (
+        <PaginationControls
+          page={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          total={results.length}
+          noun="results"
+        />
+      )}
+    </div>
+  );
+}
+
 export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [project, setProject] = useState("");
@@ -102,21 +132,24 @@ export default function SearchPage() {
   const [results, setResults] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     if (!query.trim()) return;
     setLoading(true);
     setSearched(true);
+    setError(null);
     try {
       const data = await api.search(query, {
         project: project || undefined,
         type: type || undefined,
         mode,
-        limit: "20",
+        limit: "100",
       });
       setResults(data);
-    } catch {
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Search failed");
       setResults([]);
     } finally {
       setLoading(false);
@@ -143,7 +176,7 @@ export default function SearchPage() {
           </Button>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Input
             placeholder="Project filter"
             value={project}
@@ -180,19 +213,14 @@ export default function SearchPage() {
         </div>
       )}
 
-      {!loading && searched && results.length === 0 && (
+      {error && <ErrorState message="Search failed" detail={error} />}
+
+      {!loading && !error && searched && results.length === 0 && (
         <p className="text-sm text-muted-foreground">No results found.</p>
       )}
 
-      {!loading && results.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            {results.length} result{results.length !== 1 && "s"}
-          </p>
-          {results.map((m) => (
-            <MemoryCard key={m.id} memory={m} />
-          ))}
-        </div>
+      {!loading && !error && results.length > 0 && (
+        <ResultsList results={results} />
       )}
     </div>
   );

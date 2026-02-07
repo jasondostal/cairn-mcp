@@ -1,31 +1,40 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { api, type Memory } from "@/lib/api";
+import { useFetch } from "@/lib/use-fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tag, FileText, Star, Clock, Network } from "lucide-react";
+import { ErrorState } from "@/components/error-state";
+import { Tag, FileText, Star, Clock, Network, ArrowLeft } from "lucide-react";
 
 export default function MemoryDetail() {
   const params = useParams();
+  const router = useRouter();
   const id = Number(params.id);
-  const [memory, setMemory] = useState<Memory | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api
-      .memory(id)
-      .then(setMemory)
-      .finally(() => setLoading(false));
-  }, [id]);
+  const { data: memory, loading, error } = useFetch<Memory>(
+    () => api.memory(id),
+    [id]
+  );
 
   if (loading) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 max-w-3xl">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-64" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-4 max-w-3xl">
+        <Button variant="ghost" size="sm" onClick={() => router.back()}>
+          <ArrowLeft className="mr-1 h-4 w-4" /> Back
+        </Button>
+        <ErrorState message="Failed to load memory" detail={error} />
       </div>
     );
   }
@@ -37,6 +46,9 @@ export default function MemoryDetail() {
   return (
     <div className="space-y-6 max-w-3xl">
       <div className="flex items-center gap-3">
+        <Button variant="ghost" size="sm" onClick={() => router.back()}>
+          <ArrowLeft className="mr-1 h-4 w-4" /> Back
+        </Button>
         <h1 className="text-2xl font-semibold">Memory #{memory.id}</h1>
         <Badge variant="outline" className="font-mono">
           {memory.memory_type}

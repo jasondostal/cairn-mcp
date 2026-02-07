@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { useFetch } from "@/lib/use-fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ErrorState } from "@/components/error-state";
 
 interface ProjectDetail {
   name: string;
@@ -16,15 +17,10 @@ interface ProjectDetail {
 export default function ProjectDetailPage() {
   const params = useParams();
   const name = decodeURIComponent(params.name as string);
-  const [project, setProject] = useState<ProjectDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api
-      .project(name)
-      .then(setProject)
-      .finally(() => setLoading(false));
-  }, [name]);
+  const { data: project, loading, error } = useFetch<ProjectDetail>(
+    () => api.project(name),
+    [name]
+  );
 
   if (loading) {
     return (
@@ -33,6 +29,10 @@ export default function ProjectDetailPage() {
         <Skeleton className="h-40" />
       </div>
     );
+  }
+
+  if (error) {
+    return <ErrorState message="Failed to load project" detail={error} />;
   }
 
   if (!project) {

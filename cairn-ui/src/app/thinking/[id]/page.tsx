@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, type ThinkingDetail } from "@/lib/api";
+import { useFetch } from "@/lib/use-fetch";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ErrorState } from "@/components/error-state";
 import {
   Brain,
   Eye,
@@ -68,15 +69,10 @@ function ThoughtCard({
 export default function ThinkingDetailPage() {
   const params = useParams();
   const id = Number(params.id);
-  const [detail, setDetail] = useState<ThinkingDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api
-      .thinkingDetail(id)
-      .then(setDetail)
-      .finally(() => setLoading(false));
-  }, [id]);
+  const { data: detail, loading, error } = useFetch<ThinkingDetail>(
+    () => api.thinkingDetail(id),
+    [id]
+  );
 
   if (loading) {
     return (
@@ -85,6 +81,10 @@ export default function ThinkingDetailPage() {
         <Skeleton className="h-40" />
       </div>
     );
+  }
+
+  if (error) {
+    return <ErrorState message="Failed to load thinking sequence" detail={error} />;
   }
 
   if (!detail) {

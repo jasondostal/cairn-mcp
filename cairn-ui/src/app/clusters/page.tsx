@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { ErrorState } from "@/components/error-state";
 import { Network } from "lucide-react";
 
 type Cluster = ClusterResult["clusters"][number];
@@ -74,17 +75,20 @@ function ClusterCard({ cluster }: { cluster: Cluster }) {
 export default function ClustersPage() {
   const [data, setData] = useState<ClusterResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [project, setProject] = useState("");
   const [topic, setTopic] = useState("");
 
   function load() {
     setLoading(true);
+    setError(null);
     api
       .clusters({
         project: project || undefined,
         topic: topic || undefined,
       })
       .then(setData)
+      .catch((err) => setError(err?.message || "Failed to load clusters"))
       .finally(() => setLoading(false));
   }
 
@@ -126,7 +130,9 @@ export default function ClustersPage() {
         </div>
       )}
 
-      {!loading && data && (
+      {error && <ErrorState message="Failed to load clusters" detail={error} />}
+
+      {!loading && !error && data && (
         <>
           <p className="text-sm text-muted-foreground">
             {data.cluster_count} cluster{data.cluster_count !== 1 && "s"}

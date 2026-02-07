@@ -1,21 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, type Project } from "@/lib/api";
+import { useFetch } from "@/lib/use-fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ErrorState } from "@/components/error-state";
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api
-      .projects()
-      .then(setProjects)
-      .finally(() => setLoading(false));
-  }, []);
+  const { data: projects, loading, error } = useFetch<Project[]>(
+    () => api.projects(),
+    []
+  );
 
   if (loading) {
     return (
@@ -30,11 +26,20 @@ export default function ProjectsPage() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-semibold">Projects</h1>
+        <ErrorState message="Failed to load projects" detail={error} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Projects</h1>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
-        {projects.map((p) => (
+        {(projects ?? []).map((p) => (
           <Link key={p.id} href={`/projects/${encodeURIComponent(p.name)}`}>
             <Card className="transition-colors hover:border-primary/30">
               <CardHeader className="p-4 pb-2">

@@ -6,6 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/error-state";
+import { usePagination, PaginationControls } from "@/components/pagination";
 import { CheckCircle, Circle, Link2 } from "lucide-react";
 
 function TaskCard({ task }: { task: Task }) {
@@ -52,31 +54,64 @@ function TaskCard({ task }: { task: Task }) {
   );
 }
 
+function TasksList({ tasks }: { tasks: Task[] }) {
+  const { page, totalPages, pageItems, setPage } = usePagination(tasks, 20);
+
+  return (
+    <div className="space-y-2">
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        total={tasks.length}
+        noun="tasks"
+      />
+      {pageItems.map((t) => (
+        <TaskCard key={t.id} task={t} />
+      ))}
+      {totalPages > 1 && (
+        <PaginationControls
+          page={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          total={tasks.length}
+          noun="tasks"
+        />
+      )}
+    </div>
+  );
+}
+
 export default function TasksPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selected, setSelected] = useState("");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
+    setError(null);
     api
       .projects()
       .then((p) => {
         setProjects(p);
         if (p.length > 0) setSelected(p[0].name);
       })
+      .catch((err) => setError(err?.message || "Failed to load projects"))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
     if (!selected) return;
     setLoading(true);
+    setError(null);
     api
       .tasks(selected, {
         include_completed: showCompleted ? "true" : undefined,
       })
       .then(setTasks)
+      .catch((err) => setError(err?.message || "Failed to load tasks"))
       .finally(() => setLoading(false));
   }, [selected, showCompleted]);
 
@@ -114,18 +149,16 @@ export default function TasksPage() {
         </div>
       )}
 
-      {!loading && tasks.length === 0 && (
+      {error && <ErrorState message="Failed to load tasks" detail={error} />}
+
+      {!loading && !error && tasks.length === 0 && (
         <p className="text-sm text-muted-foreground">
           No tasks for {selected}.
         </p>
       )}
 
-      {!loading && tasks.length > 0 && (
-        <div className="space-y-2">
-          {tasks.map((t) => (
-            <TaskCard key={t.id} task={t} />
-          ))}
-        </div>
+      {!loading && !error && tasks.length > 0 && (
+        <TasksList tasks={tasks} />
       )}
     </div>
   );

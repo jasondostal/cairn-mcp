@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, type Status, type Project } from "@/lib/api";
+import { useFetch } from "@/lib/use-fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ErrorState } from "@/components/error-state";
 import {
   Database,
   FolderOpen,
@@ -68,33 +69,46 @@ function ProjectCard({ project }: { project: Project }) {
 }
 
 export default function Dashboard() {
-  const [status, setStatus] = useState<Status | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    data: status,
+    loading: statusLoading,
+    error: statusError,
+  } = useFetch<Status>(() => api.status());
+  const {
+    data: projects,
+    loading: projectsLoading,
+    error: projectsError,
+  } = useFetch<Project[]>(() => api.projects());
 
-  useEffect(() => {
-    Promise.all([api.status(), api.projects()])
-      .then(([s, p]) => {
-        setStatus(s);
-        setProjects(p);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+  const loading = statusLoading || projectsLoading;
+  const error = statusError || projectsError;
 
   if (loading) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-20" />
           ))}
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-24" />
           ))}
         </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-semibold">Dashboard</h1>
+        <ErrorState
+          message="Failed to load dashboard"
+          detail={error}
+        />
       </div>
     );
   }
@@ -105,7 +119,6 @@ export default function Dashboard() {
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Dashboard</h1>
 
-      {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Memories" value={status.memories} icon={Database} />
         <StatCard label="Projects" value={status.projects} icon={FolderOpen} />
@@ -117,7 +130,6 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* LLM info */}
       <Card>
         <CardContent className="flex items-center gap-4 p-4">
           <div className="rounded-md bg-muted p-2">
@@ -141,7 +153,6 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* Memory types */}
       <div>
         <h2 className="mb-3 text-sm font-medium text-muted-foreground">
           Memory Types
@@ -155,13 +166,12 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Project cards */}
       <div>
         <h2 className="mb-3 text-sm font-medium text-muted-foreground">
           Projects
         </h2>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
-          {projects.map((p) => (
+          {(projects || []).map((p) => (
             <ProjectCard key={p.id} project={p} />
           ))}
         </div>
