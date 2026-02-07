@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-02-07
+
 ### Added
 - HTTP transport support via `CAIRN_TRANSPORT=http` env var (streamable-http on configurable host/port)
 - `CAIRN_HTTP_HOST` and `CAIRN_HTTP_PORT` configuration
@@ -62,5 +64,6 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jasondostal/cairn-mcp/releases/tag/v0.1.0
