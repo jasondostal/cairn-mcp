@@ -24,26 +24,29 @@ Cairn stores memories with automatic semantic enrichment (summaries, tags, impor
 ## Architecture
 
 ```
-MCP Client (Claude, etc.)
-    |
-    | stdio or HTTP (streamable-http on port 8000)
-    |
-+---v----------------------------------------------+
-|  cairn.server  (MCP tool definitions)            |
-|                                                  |
-|  cairn.core.memory      - store / recall         |
-|  cairn.core.search      - hybrid RRF search      |
-|  cairn.core.enrichment  - LLM auto-enrichment    |
-|  cairn.core.clustering  - DBSCAN patterns        |
-|  cairn.core.projects    - docs & linking          |
-|  cairn.core.tasks       - task lifecycle          |
-|  cairn.core.thinking    - structured reasoning    |
-|                                                  |
-|  cairn.embedding.engine - MiniLM-L6-v2 (local)   |
-|  cairn.llm.bedrock      - Llama 90B via Bedrock   |
-|  cairn.llm.ollama       - Local Ollama fallback   |
-|  cairn.storage.database - PostgreSQL + pgvector   |
-+--------------------------------------------------+
+MCP Client (Claude, etc.)         Web UI / curl
+    |                                  |
+    | stdio or streamable-http         | REST (GET)
+    |                                  |
++---v----------------------------------v-----------+
+|  /mcp  (MCP protocol)          /api  (REST API)  |
+|                                                   |
+|  cairn.server  (MCP tool definitions)             |
+|  cairn.api     (read-only FastAPI endpoints)      |
+|                                                   |
+|  cairn.core.memory      - store / recall          |
+|  cairn.core.search      - hybrid RRF search       |
+|  cairn.core.enrichment  - LLM auto-enrichment     |
+|  cairn.core.clustering  - DBSCAN patterns         |
+|  cairn.core.projects    - docs & linking           |
+|  cairn.core.tasks       - task lifecycle           |
+|  cairn.core.thinking    - structured reasoning     |
+|                                                   |
+|  cairn.embedding.engine - MiniLM-L6-v2 (local)    |
+|  cairn.llm.bedrock      - Llama 90B via Bedrock    |
+|  cairn.llm.ollama       - Local Ollama fallback    |
+|  cairn.storage.database - PostgreSQL + pgvector    |
++---------------------------------------------------+
     |
     v
 PostgreSQL 16 + pgvector (13 tables, HNSW indexing)
@@ -104,6 +107,28 @@ The default docker-compose configuration starts Cairn with HTTP transport. Add t
 ```
 
 HTTP is the default and recommended for most setups — it supports multiple concurrent clients (e.g. Claude Code + web UI) and remote access. Use stdio only for single-client setups where the client runs on the same Docker host.
+
+### 4. REST API (optional)
+
+When running in HTTP mode, a read-only REST API is available at `/api` on the same port. This powers the web UI and is useful for scripting.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/status` | System health, memory counts, cluster info |
+| `GET /api/search?q=&project=&type=&mode=&limit=` | Hybrid search with full content |
+| `GET /api/memories/:id` | Single memory with cluster membership |
+| `GET /api/projects` | All projects with memory counts |
+| `GET /api/projects/:name` | Project docs and links |
+| `GET /api/clusters?project=&topic=` | Cluster data with member lists |
+| `GET /api/tasks?project=` | Task list for a project |
+| `GET /api/thinking?project=&status=` | Thinking sequence list |
+| `GET /api/thinking/:id` | Sequence detail with all thoughts |
+| `GET /api/rules?project=` | Behavioral rules (global + project) |
+
+```bash
+curl http://localhost:8000/api/status
+curl "http://localhost:8000/api/search?q=architecture&limit=5"
+```
 
 ## Development
 

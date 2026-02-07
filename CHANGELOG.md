@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-02-07
+
+### Added
+- Read-only REST API at `/api` for web UI consumption (`cairn/api.py`)
+- 10 GET endpoints: status, search, memories, projects, clusters, tasks, thinking, rules
+- FastAPI + uvicorn dependencies
+- CORS middleware (permissive for dev, tighten with Authentik later)
+
+### Changed
+- HTTP mode now serves MCP at `/mcp` and REST API at `/api` on the same port
+- MCP Starlette app is the parent; FastAPI mounted as sub-app
+- Combined lifespan wraps DB lifecycle around MCP session manager
+
 ## [0.2.0] - 2026-02-07
 
 ### Added
@@ -64,6 +77,7 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jasondostal/cairn-mcp/releases/tag/v0.1.0
