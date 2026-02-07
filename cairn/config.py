@@ -1,0 +1,68 @@
+"""Configuration management. All settings from environment variables with sensible defaults."""
+
+import os
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True)
+class DatabaseConfig:
+    host: str = "localhost"
+    port: int = 5432
+    name: str = "cairn"
+    user: str = "cairn"
+    password: str = "cairn"
+
+    @property
+    def dsn(self) -> str:
+        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+
+
+@dataclass(frozen=True)
+class EmbeddingConfig:
+    model: str = "all-MiniLM-L6-v2"
+    dimensions: int = 384
+
+
+@dataclass(frozen=True)
+class LLMConfig:
+    backend: str = "bedrock"  # "bedrock" or "ollama"
+
+    # Bedrock settings
+    bedrock_model: str = "us.meta.llama3-2-90b-instruct-v1:0"
+    bedrock_region: str = "us-east-1"
+
+    # Ollama settings
+    ollama_url: str = "http://localhost:11434"
+    ollama_model: str = "qwen2.5-coder:7b"
+
+
+@dataclass(frozen=True)
+class Config:
+    db: DatabaseConfig = field(default_factory=DatabaseConfig)
+    embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
+    llm: LLMConfig = field(default_factory=LLMConfig)
+    enrichment_enabled: bool = True
+
+
+def load_config() -> Config:
+    """Load configuration from environment variables."""
+    return Config(
+        db=DatabaseConfig(
+            host=os.getenv("CAIRN_DB_HOST", "localhost"),
+            port=int(os.getenv("CAIRN_DB_PORT", "5432")),
+            name=os.getenv("CAIRN_DB_NAME", "cairn"),
+            user=os.getenv("CAIRN_DB_USER", "cairn"),
+            password=os.getenv("CAIRN_DB_PASS", "cairn"),
+        ),
+        embedding=EmbeddingConfig(
+            model=os.getenv("CAIRN_EMBEDDING_MODEL", "all-MiniLM-L6-v2"),
+        ),
+        llm=LLMConfig(
+            backend=os.getenv("CAIRN_LLM_BACKEND", "bedrock"),
+            bedrock_model=os.getenv("CAIRN_BEDROCK_MODEL", "us.meta.llama3-2-90b-instruct-v1:0"),
+            bedrock_region=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
+            ollama_url=os.getenv("CAIRN_OLLAMA_URL", "http://localhost:11434"),
+            ollama_model=os.getenv("CAIRN_OLLAMA_MODEL", "qwen2.5-coder:7b"),
+        ),
+        enrichment_enabled=os.getenv("CAIRN_ENRICHMENT_ENABLED", "true").lower() in ("true", "1", "yes"),
+    )

@@ -1,0 +1,298 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "query_count": 25,
+    "notes": "Hand-labeled queries against 50-memory corpus. Binary relevance."
+  },
+  "queries": [
+    {
+      "id": "q01",
+      "query": "how does hybrid search work in cairn",
+      "relevant": [
+        "m08",
+        "m17",
+        "m32",
+        "m34"
+      ],
+      "filters": {},
+      "notes": "RRF hybrid search with 3 signals: vector, keyword, tag"
+    },
+    {
+      "id": "q02",
+      "query": "RRF formula and weights",
+      "relevant": [
+        "m08",
+        "m17",
+        "m22"
+      ],
+      "filters": {},
+      "notes": "Reciprocal Rank Fusion: k=60, vector 60%, keyword 25%, tag 15%"
+    },
+    {
+      "id": "q03",
+      "query": "embedding model dimensions and configuration",
+      "relevant": [
+        "m06",
+        "m15",
+        "m19",
+        "m20",
+        "m22"
+      ],
+      "filters": {},
+      "notes": "MiniLM-L6-v2, 384 dims, SentenceTransformer, lazy loading"
+    },
+    {
+      "id": "q04",
+      "query": "DBSCAN clustering parameters and calibration",
+      "relevant": [
+        "m12",
+        "m32",
+        "m41",
+        "m45"
+      ],
+      "filters": {},
+      "notes": "eps=0.65, min_samples=3, cosine distance, staleness detection"
+    },
+    {
+      "id": "q05",
+      "query": "LLM enrichment pipeline and graceful degradation",
+      "relevant": [
+        "m12",
+        "m13",
+        "m14",
+        "m18",
+        "m19",
+        "m42"
+      ],
+      "filters": {},
+      "notes": "Single LLM call, tags/importance/type/summary, empty dict on failure"
+    },
+    {
+      "id": "q06",
+      "query": "database migration files and schema",
+      "relevant": [
+        "m15",
+        "m23",
+        "m24",
+        "m29"
+      ],
+      "filters": {},
+      "notes": "3 migration files, 13 tables, pgvector, HNSW indexes"
+    },
+    {
+      "id": "q07",
+      "query": "MCP tools list and what each does",
+      "relevant": [
+        "m23",
+        "m33",
+        "m35",
+        "m46"
+      ],
+      "filters": {},
+      "notes": "10 tools: store, search, recall, modify, rules, insights, projects, tasks, think, status"
+    },
+    {
+      "id": "q08",
+      "query": "memory store override logic caller vs LLM",
+      "relevant": [
+        "m21",
+        "m25",
+        "m34",
+        "m43"
+      ],
+      "filters": {},
+      "notes": "Caller tags -> tags, LLM tags -> auto_tags, importance/type rules"
+    },
+    {
+      "id": "q09",
+      "query": "project management and linking features",
+      "relevant": [
+        "m07",
+        "m23",
+        "m44"
+      ],
+      "filters": {},
+      "notes": "ProjectManager, docs, linking (6 relationship types)"
+    },
+    {
+      "id": "q10",
+      "query": "thinking engine structured reasoning",
+      "relevant": [
+        "m07",
+        "m15",
+        "m44"
+      ],
+      "filters": {},
+      "notes": "ThinkingEngine: start, add_thought, conclude, branching"
+    },
+    {
+      "id": "q11",
+      "query": "PostgreSQL full-text search and GIN indexes",
+      "relevant": [
+        "m08",
+        "m17",
+        "m29"
+      ],
+      "filters": {},
+      "notes": "ts_rank, plainto_tsquery, GIN index on tsvector"
+    },
+    {
+      "id": "q12",
+      "query": "how to deploy cairn to the server",
+      "relevant": [
+        "m37",
+        "m38",
+        "m41",
+        "m45",
+        "m47"
+      ],
+      "filters": {},
+      "notes": "file sync to server, docker compose build, docker compose up -d"
+    },
+    {
+      "id": "q13",
+      "query": "cairn configuration environment variables",
+      "relevant": [
+        "m06",
+        "m15",
+        "m20"
+      ],
+      "filters": {},
+      "notes": "CAIRN_DB_*, CAIRN_EMBEDDING_MODEL, CAIRN_LLM_BACKEND, etc."
+    },
+    {
+      "id": "q14",
+      "query": "eval framework search quality metrics",
+      "relevant": [
+        "m01",
+        "m02",
+        "m03"
+      ],
+      "filters": {},
+      "notes": "recall@k, precision@k, MRR, NDCG, model comparison"
+    },
+    {
+      "id": "q15",
+      "query": "Bedrock Llama LLM backend",
+      "relevant": [
+        "m04",
+        "m06",
+        "m11",
+        "m42"
+      ],
+      "filters": {},
+      "notes": "AWS Bedrock, Llama 3.2 90B, converse API, temperature 0.3"
+    },
+    {
+      "id": "q16",
+      "query": "vector similarity pgvector HNSW index",
+      "relevant": [
+        "m17",
+        "m29",
+        "m31"
+      ],
+      "filters": {},
+      "notes": "pgvector cosine distance, HNSW m=16 ef_construction=64"
+    },
+    {
+      "id": "q17",
+      "query": "test suite and what tests exist",
+      "relevant": [
+        "m01",
+        "m09",
+        "m14"
+      ],
+      "filters": {},
+      "notes": "30 tests: test_rrf.py (8), test_enrichment.py (10), test_clustering.py (12)"
+    },
+    {
+      "id": "q18",
+      "query": "memory type classification and validation",
+      "relevant": [
+        "m18",
+        "m25"
+      ],
+      "filters": {},
+      "notes": "11 VALID_MEMORY_TYPES, enrichment prompt, validation rules"
+    },
+    {
+      "id": "q19",
+      "query": "Docker setup and container configuration",
+      "relevant": [
+        "m20",
+        "m37",
+        "m40",
+        "m47"
+      ],
+      "filters": {},
+      "notes": "Dockerfile, docker-compose.yml, cairn + cairn-db containers"
+    },
+    {
+      "id": "q20",
+      "query": "cairn directory structure and file layout",
+      "relevant": [
+        "m05",
+        "m16",
+        "m26",
+        "m28",
+        "m30"
+      ],
+      "filters": {},
+      "notes": "Package structure: cairn/core/, cairn/storage/, cairn/embedding/, cairn/llm/"
+    },
+    {
+      "id": "q21",
+      "query": "clustering staleness detection when to recluster",
+      "relevant": [
+        "m12",
+        "m32",
+        "m45"
+      ],
+      "filters": {},
+      "notes": "No prior run, older than 24h, memory growth >20%"
+    },
+    {
+      "id": "q22",
+      "query": "agent behavioral rules and safety",
+      "relevant": [
+        "m49",
+        "m50"
+      ],
+      "filters": {},
+      "notes": "Destructive operations confirmation, no silent fallbacks"
+    },
+    {
+      "id": "q23",
+      "query": "phases of cairn development and timeline",
+      "relevant": [
+        "m04",
+        "m38",
+        "m39",
+        "m41",
+        "m42",
+        "m44"
+      ],
+      "filters": {},
+      "notes": "Phase 1-5: core, enrichment, clustering, organization, polish"
+    },
+    {
+      "id": "q24",
+      "query": "search candidate set strategy and result formatting",
+      "relevant": [
+        "m08",
+        "m13"
+      ],
+      "filters": {},
+      "notes": "Fetch limit*5 candidates, fuse, return top N, include_full flag"
+    },
+    {
+      "id": "q25",
+      "query": "patterns for adding new features to cairn",
+      "relevant": [
+        "m27"
+      ],
+      "filters": {},
+      "notes": "New tool, new search signal, new LLM backend, new table, etc."
+    }
+  ]
+}

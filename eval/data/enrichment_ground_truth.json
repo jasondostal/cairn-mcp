@@ -1,0 +1,129 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "sample_count": 20,
+    "notes": "Hand-annotated enrichment ground truth. Each sample has expected tags, importance range, and acceptable memory types."
+  },
+  "samples": [
+    {
+      "content": "Decided to use Reciprocal Rank Fusion (RRF) with k=60 for combining vector, keyword, and tag search signals. Weights: vector 60%, keyword 25%, tag 15%. This balances semantic understanding with exact-match recall.",
+      "expected_tags": ["rrf", "search", "hybrid-search", "vector-search"],
+      "importance_range": [0.7, 1.0],
+      "expected_types": ["decision", "design"]
+    },
+    {
+      "content": "Fixed a bug where null embeddings caused the vector search to crash. Added a WHERE embedding IS NOT NULL filter to all vector queries.",
+      "expected_tags": ["bug-fix", "search", "embeddings", "vector-search"],
+      "importance_range": [0.5, 0.8],
+      "expected_types": ["debug", "code-snippet"]
+    },
+    {
+      "content": "PostgreSQL full-text search uses ts_rank for relevance scoring. The english dictionary handles stemming and stop words. GIN index on to_tsvector enables fast lookups.",
+      "expected_tags": ["postgresql", "full-text-search", "indexing"],
+      "importance_range": [0.4, 0.7],
+      "expected_types": ["learning", "research", "note"]
+    },
+    {
+      "content": "DBSCAN clustering parameters: eps=0.65, min_samples=3. These were tuned on a set of 200 memories. Cosine distance metric used for semantic similarity.",
+      "expected_tags": ["clustering", "dbscan", "parameters"],
+      "importance_range": [0.6, 0.9],
+      "expected_types": ["decision", "design"]
+    },
+    {
+      "content": "The MCP server exposes 10 tools: store, search, recall, modify, rules, insights, projects, tasks, think, status. Each tool maps to a core module.",
+      "expected_tags": ["mcp", "architecture", "tools"],
+      "importance_range": [0.5, 0.8],
+      "expected_types": ["design", "note", "learning"]
+    },
+    {
+      "content": "User preference: always use kebab-case for tags. No underscores, no camelCase. Tags should be lowercase and descriptive.",
+      "expected_tags": ["tags", "convention", "naming"],
+      "importance_range": [0.3, 0.6],
+      "expected_types": ["rule", "decision"]
+    },
+    {
+      "content": "Implemented batch embedding using SentenceTransformers with batch_size=32. Normalized embeddings to unit vectors for cosine similarity. Model: all-MiniLM-L6-v2 producing 384-dim vectors.",
+      "expected_tags": ["embeddings", "sentence-transformers", "implementation"],
+      "importance_range": [0.5, 0.8],
+      "expected_types": ["code-snippet", "learning", "note"]
+    },
+    {
+      "content": "Sprint 1 complete: core memory CRUD, hybrid search with RRF, basic enrichment pipeline. 30 tests passing. Next: clustering and pattern discovery.",
+      "expected_tags": ["sprint", "progress", "milestone"],
+      "importance_range": [0.5, 0.8],
+      "expected_types": ["progress"]
+    },
+    {
+      "content": "The enrichment pipeline makes a single LLM call per memory to extract tags, importance score, memory type, and a one-sentence summary. Gracefully degrades on any failure.",
+      "expected_tags": ["enrichment", "llm", "pipeline"],
+      "importance_range": [0.5, 0.8],
+      "expected_types": ["design", "learning", "note"]
+    },
+    {
+      "content": "Docker Compose setup: cairn-db (PostgreSQL 16 with pgvector), cairn-app (Python 3.11). Persistent volume for database. Health checks on both containers.",
+      "expected_tags": ["docker", "infrastructure", "deployment"],
+      "importance_range": [0.4, 0.7],
+      "expected_types": ["note", "code-snippet", "design"]
+    },
+    {
+      "content": "Project links support six relationship types: related, parent, child, dependency, fork, template. Links are bidirectional in queries but stored as source->target.",
+      "expected_tags": ["projects", "relationships", "data-model"],
+      "importance_range": [0.4, 0.7],
+      "expected_types": ["design", "learning"]
+    },
+    {
+      "content": "Investigated memory leak in the embedding engine. Root cause: SentenceTransformer model was being reloaded on every call instead of cached. Fixed with lazy initialization pattern.",
+      "expected_tags": ["memory-leak", "embeddings", "performance"],
+      "importance_range": [0.6, 0.9],
+      "expected_types": ["debug", "code-snippet"]
+    },
+    {
+      "content": "The staleness detection for clustering checks three conditions: no prior run (always stale), older than 24 hours, or memory growth exceeding 20% since last run.",
+      "expected_tags": ["clustering", "staleness", "algorithm"],
+      "importance_range": [0.5, 0.8],
+      "expected_types": ["design", "learning", "note"]
+    },
+    {
+      "content": "Meeting notes: discussed migration from SQLite to PostgreSQL. Decided on pgvector for embedding storage. Key concern was HNSW index build time for large datasets.",
+      "expected_tags": ["migration", "postgresql", "pgvector"],
+      "importance_range": [0.6, 0.9],
+      "expected_types": ["discussion", "decision"]
+    },
+    {
+      "content": "TODO: Add rate limiting to the enrichment pipeline. Current implementation sends one LLM call per store() which could overwhelm the backend under batch inserts.",
+      "expected_tags": ["enrichment", "rate-limiting", "todo"],
+      "importance_range": [0.4, 0.7],
+      "expected_types": ["task", "note"]
+    },
+    {
+      "content": "Cluster confidence scoring uses inverse of average centroid distance, normalized to 0-1. Tight clusters (low avg distance) get high confidence scores.",
+      "expected_tags": ["clustering", "confidence", "scoring"],
+      "importance_range": [0.5, 0.8],
+      "expected_types": ["design", "learning"]
+    },
+    {
+      "content": "The thinking engine supports branching: alternative, branch, option, variant, fork thought types create new branches within a reasoning sequence for exploring different approaches.",
+      "expected_tags": ["thinking", "branching", "reasoning"],
+      "importance_range": [0.4, 0.7],
+      "expected_types": ["design", "learning", "note"]
+    },
+    {
+      "content": "Benchmarked hybrid search: 50ms median latency on 1000 memories. Vector signal accounts for 80% of query time. Keyword and tag signals add ~5ms each.",
+      "expected_tags": ["performance", "search", "benchmarking"],
+      "importance_range": [0.5, 0.8],
+      "expected_types": ["research", "learning"]
+    },
+    {
+      "content": "Rule: Never store memories containing passwords, API keys, or other secrets. The store tool should warn users if content appears to contain credentials.",
+      "expected_tags": ["security", "rule", "secrets"],
+      "importance_range": [0.7, 1.0],
+      "expected_types": ["rule"]
+    },
+    {
+      "content": "Refactored the search module to separate RRF fusion from signal retrieval. Each signal (vector, keyword, tag) is now an independent query that returns ranked IDs. Fusion combines them.",
+      "expected_tags": ["refactoring", "search", "architecture"],
+      "importance_range": [0.5, 0.8],
+      "expected_types": ["code-snippet", "design", "note"]
+    }
+  ]
+}
