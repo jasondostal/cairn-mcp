@@ -9,6 +9,8 @@ FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+ARG CAIRN_API_URL=http://cairn:8000
+ENV CAIRN_API_URL=$CAIRN_API_URL
 RUN npm run build
 
 FROM base AS runner
