@@ -42,6 +42,9 @@ class Config:
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     enrichment_enabled: bool = True
+    transport: str = "stdio"  # "stdio" or "http"
+    http_host: str = "0.0.0.0"
+    http_port: int = 8000
 
 
 def load_config() -> Config:
@@ -65,4 +68,7 @@ def load_config() -> Config:
             ollama_model=os.getenv("CAIRN_OLLAMA_MODEL", "qwen2.5-coder:7b"),
         ),
         enrichment_enabled=os.getenv("CAIRN_ENRICHMENT_ENABLED", "true").lower() in ("true", "1", "yes"),
+        transport=os.getenv("CAIRN_TRANSPORT", "stdio"),
+        http_host=os.getenv("CAIRN_HTTP_HOST", "0.0.0.0"),
+        http_port=int(os.getenv("CAIRN_HTTP_PORT", "8000")),
     )

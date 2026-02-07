@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- HTTP transport support via `CAIRN_TRANSPORT=http` env var (streamable-http on configurable host/port)
+- `CAIRN_HTTP_HOST` and `CAIRN_HTTP_PORT` configuration
+- Docker container now runs MCP server directly (replaces `tail -f /dev/null`)
 - Eval framework for search quality measurement (`eval/`)
 - Recall@k, precision@k, MRR, NDCG metrics (`eval/metrics.py`)
 - Multi-model comparison with MODEL_REGISTRY (`eval/model_compare.py`)

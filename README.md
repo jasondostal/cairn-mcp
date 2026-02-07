@@ -26,7 +26,7 @@ Cairn stores memories with automatic semantic enrichment (summaries, tags, impor
 ```
 MCP Client (Claude, etc.)
     |
-    | stdio (docker exec -i cairn python -m cairn.server)
+    | stdio or HTTP (streamable-http on port 8000)
     |
 +---v----------------------------------------------+
 |  cairn.server  (MCP tool definitions)            |
@@ -69,14 +69,28 @@ docker compose up -d
 ```
 
 This pulls the pre-built image from GHCR and starts:
-- **cairn**: The MCP server container (Python 3.11, MiniLM-L6-v2 embedded)
+- **cairn**: MCP server with HTTP transport on port 8000 (Python 3.11, MiniLM-L6-v2 embedded)
 - **cairn-db**: PostgreSQL 16 with pgvector extension
 
-Migrations run automatically on first start.
+Migrations run automatically on first start. The MCP server starts immediately in HTTP mode — no additional setup needed.
 
 ### 3. Connect your MCP client
 
-Add to your MCP client configuration (e.g. Claude Desktop `claude_desktop_config.json`):
+The default docker-compose configuration starts Cairn with HTTP transport. Add to your MCP client configuration:
+
+**HTTP transport** (default, recommended):
+
+```json
+{
+  "mcpServers": {
+    "cairn": {
+      "url": "http://localhost:8000/mcp"
+    }
+  }
+}
+```
+
+**stdio transport** (set `CAIRN_TRANSPORT=stdio` in your environment or docker-compose override):
 
 ```json
 {
@@ -89,6 +103,8 @@ Add to your MCP client configuration (e.g. Claude Desktop `claude_desktop_config
 }
 ```
 
+HTTP is the default and recommended for most setups — it supports multiple concurrent clients (e.g. Claude Code + web UI) and remote access. Use stdio only for single-client setups where the client runs on the same Docker host.
+
 ## Development
 
 For contributors who want to build from source:
@@ -98,8 +114,11 @@ git clone https://github.com/jasondostal/cairn-mcp.git
 cd cairn-mcp
 cp .env.example .env
 # Edit .env with your settings
+```
 
-# Build and run locally (replace "image:" with "build: ." in docker-compose.yml)
+To build and run locally, replace `image: ghcr.io/jasondostal/cairn-mcp:latest` with `build: .` in `docker-compose.yml`, then:
+
+```bash
 docker compose up -d --build
 ```
 
@@ -118,6 +137,9 @@ All configuration via environment variables:
 | `CAIRN_BEDROCK_MODEL` | `us.meta.llama3-2-90b-instruct-v1:0` | Bedrock model ID |
 | `CAIRN_OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama API URL |
 | `CAIRN_OLLAMA_MODEL` | `qwen2.5-coder:7b` | Ollama model name |
+| `CAIRN_TRANSPORT` | `stdio` | Transport: `stdio` or `http` |
+| `CAIRN_HTTP_HOST` | `0.0.0.0` | HTTP bind address |
+| `CAIRN_HTTP_PORT` | `8000` | HTTP listen port |
 | `CAIRN_EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence transformer model |
 
 ## Search
@@ -143,14 +165,11 @@ Parameters: `eps=0.65`, `min_samples=3`, cosine metric. Calibrated for MiniLM-L6
 
 ## Testing
 
+Tests run inside the container alongside the running server:
+
 ```bash
-# Install test dependencies
 docker exec cairn pip install pytest
-
-# Copy tests into container
 docker cp tests/ cairn:/app/tests/
-
-# Run all tests
 docker exec cairn python -m pytest tests/ -v
 ```
 

@@ -29,6 +29,5 @@ COPY entrypoint.sh .
 RUN chmod +x entrypoint.sh
 ENTRYPOINT ["./entrypoint.sh"]
 
-# Container stays alive; MCP clients connect via:
-#   docker exec -i cairn python -m cairn.server
-CMD ["tail", "-f", "/dev/null"]
+# Default: run the MCP server (transport controlled by CAIRN_TRANSPORT env var)
+CMD ["python", "-m", "cairn.server"]

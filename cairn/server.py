@@ -71,11 +71,16 @@ async def lifespan(server: FastMCP):
 
 
 # Create MCP server
-mcp = FastMCP(
-    "cairn",
+mcp_kwargs = dict(
+    name="cairn",
     instructions="Semantic memory for AI agents. Store, search, and discover patterns across persistent context.",
     lifespan=lifespan,
 )
+if config.transport == "http":
+    mcp_kwargs["host"] = config.http_host
+    mcp_kwargs["port"] = config.http_port
+
+mcp = FastMCP(**mcp_kwargs)
 
 
 # ============================================================
@@ -494,7 +499,12 @@ def status() -> dict:
 
 def main():
     """Run the Cairn MCP server."""
-    mcp.run(transport="stdio")
+    if config.transport == "http":
+        logger.info("Starting Cairn MCP server (HTTP on %s:%d)", config.http_host, config.http_port)
+        mcp.run(transport="streamable-http")
+    else:
+        logger.info("Starting Cairn MCP server (stdio)")
+        mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":
