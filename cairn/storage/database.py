@@ -1,10 +1,24 @@
-"""Database connection and migration management."""
+"""Database connection pool and migration management.
+
+Uses psycopg_pool.ConnectionPool for thread-safe concurrent access.
+Each thread gets its own connection via thread-local storage:
+  - First execute() on a thread checks out a connection from the pool
+  - commit() / rollback() return the connection to the pool
+  - Stale transactions (from uncaught exceptions) are auto-rolled back
+    on the next access from the same thread
+
+This is critical for the REST API (FastAPI + uvicorn threadpool) where
+concurrent requests would otherwise race on a single shared connection.
+MCP stdio (serial) works fine too — it just uses one connection at a time.
+"""
 
 import logging
+import threading
 from pathlib import Path
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 from cairn.config import DatabaseConfig
 
@@ -12,35 +26,74 @@ logger = logging.getLogger(__name__)
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
+# Pool sizing: min_size covers typical concurrent load (MCP + API + dashboard),
+# max_size caps runaway connections. Adjust via subclass if needed.
+POOL_MIN_SIZE = 2
+POOL_MAX_SIZE = 10
+
 
 class Database:
-    """PostgreSQL connection manager with migration support."""
+    """PostgreSQL connection pool with thread-local connection tracking."""
 
     def __init__(self, config: DatabaseConfig):
         self.config = config
-        self._conn = None
+        self._pool: ConnectionPool | None = None
+        self._local = threading.local()
 
     def connect(self) -> None:
-        """Establish connection pool."""
-        self._conn = psycopg.Connection.connect(
+        """Initialize the connection pool."""
+        self._pool = ConnectionPool(
             self.config.dsn,
-            row_factory=dict_row,
-            autocommit=False,
+            min_size=POOL_MIN_SIZE,
+            max_size=POOL_MAX_SIZE,
+            kwargs={"row_factory": dict_row, "autocommit": False},
         )
-        logger.info("Connected to PostgreSQL at %s:%s/%s", self.config.host, self.config.port, self.config.name)
+        # Block until min_size connections are ready
+        self._pool.wait()
+        logger.info(
+            "Connection pool ready: %s:%s/%s (min=%d, max=%d)",
+            self.config.host, self.config.port, self.config.name,
+            POOL_MIN_SIZE, POOL_MAX_SIZE,
+        )
 
     def close(self) -> None:
-        """Close connection."""
-        if self._conn:
-            self._conn.close()
-            self._conn = None
+        """Release current thread's connection and shut down the pool."""
+        self._release()
+        if self._pool:
+            self._pool.close()
+            self._pool = None
 
     @property
     def conn(self) -> psycopg.Connection:
-        """Get the active connection."""
-        if self._conn is None:
+        """Get the current thread's connection, checking out from pool if needed.
+
+        If the thread's connection has a failed transaction (INERROR state),
+        it's automatically rolled back before reuse.
+        """
+        existing = getattr(self._local, "conn", None)
+        if existing is not None and not existing.closed:
+            # Auto-recover from failed transactions (e.g. uncaught exceptions
+            # between execute and commit left the connection in INERROR)
+            if existing.info.transaction_status == psycopg.pq.TransactionStatus.INERROR:
+                logger.warning("Rolling back failed transaction on reused connection")
+                existing.rollback()
+            return existing
+
+        # Check out a new connection from the pool
+        if self._pool is None:
             raise RuntimeError("Database not connected. Call connect() first.")
-        return self._conn
+        self._local.conn = self._pool.getconn()
+        return self._local.conn
+
+    def _release(self) -> None:
+        """Return the current thread's connection to the pool."""
+        existing = getattr(self._local, "conn", None)
+        if existing is not None and self._pool is not None:
+            try:
+                self._pool.putconn(existing)
+            except Exception:
+                logger.warning("Failed to return connection to pool", exc_info=True)
+            self._local.conn = None
 
     def execute(self, query: str, params: tuple | list | None = None) -> list[dict]:
         """Execute a query and return results."""
@@ -59,12 +112,14 @@ class Database:
             return None
 
     def commit(self) -> None:
-        """Commit the current transaction."""
+        """Commit the current transaction and return connection to pool."""
         self.conn.commit()
+        self._release()
 
     def rollback(self) -> None:
-        """Rollback the current transaction."""
+        """Rollback the current transaction and return connection to pool."""
         self.conn.rollback()
+        self._release()
 
     def run_migrations(self) -> None:
         """Apply all pending migrations in order."""
