@@ -18,11 +18,11 @@ class Database:
 
     def __init__(self, config: DatabaseConfig):
         self.config = config
-        self._pool = None
+        self._conn = None
 
     def connect(self) -> None:
         """Establish connection pool."""
-        self._pool = psycopg.Connection.connect(
+        self._conn = psycopg.Connection.connect(
             self.config.dsn,
             row_factory=dict_row,
             autocommit=False,
@@ -31,16 +31,16 @@ class Database:
 
     def close(self) -> None:
         """Close connection."""
-        if self._pool:
-            self._pool.close()
-            self._pool = None
+        if self._conn:
+            self._conn.close()
+            self._conn = None
 
     @property
     def conn(self) -> psycopg.Connection:
         """Get the active connection."""
-        if self._pool is None:
+        if self._conn is None:
             raise RuntimeError("Database not connected. Call connect() first.")
-        return self._pool
+        return self._conn
 
     def execute(self, query: str, params: tuple | list | None = None) -> list[dict]:
         """Execute a query and return results."""

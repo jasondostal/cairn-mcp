@@ -23,14 +23,14 @@ import psycopg
 # ---------------------------------------------------------------------------
 # Connection defaults
 # ---------------------------------------------------------------------------
-RECALLIUM_DSN = os.getenv(
-    "RECALLIUM_DSN",
-    "postgresql://recallium:recallium_homelab_2026@192.168.1.33:5433/recallium_memories",
-)
-CAIRN_DSN = os.getenv(
-    "CAIRN_DSN",
-    "postgresql://cairn:Bh4Os5Mc3bS8EAyf3aVRNKLr@cairn-db:5432/cairn",
-)
+RECALLIUM_DSN = os.getenv("RECALLIUM_DSN")
+CAIRN_DSN = os.getenv("CAIRN_DSN")
+
+if not RECALLIUM_DSN or not CAIRN_DSN:
+    print("ERROR: Set RECALLIUM_DSN and CAIRN_DSN environment variables.")
+    print("  RECALLIUM_DSN=postgresql://user:pass@host:port/dbname")
+    print("  CAIRN_DSN=postgresql://user:pass@host:port/dbname")
+    sys.exit(1)
 
 # Memory type mapping: Recallium → Cairn
 TYPE_MAP = {

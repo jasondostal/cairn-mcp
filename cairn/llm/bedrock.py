@@ -1,8 +1,10 @@
 """AWS Bedrock LLM implementation via Converse API."""
 
 import logging
+import time
 
 import boto3
+from botocore.exceptions import ClientError
 
 from cairn.config import LLMConfig
 from cairn.llm.interface import LLMInterface
@@ -32,7 +34,7 @@ class BedrockLLM(LLMInterface):
         )
 
     def generate(self, messages: list[dict], max_tokens: int = 1024) -> str:
-        """Generate via Bedrock Converse API."""
+        """Generate via Bedrock Converse API with retry on transient failures."""
         # Separate system prompt from conversation messages
         system_prompts = []
         converse_messages = []
@@ -54,8 +56,30 @@ class BedrockLLM(LLMInterface):
         if system_prompts:
             kwargs["system"] = system_prompts
 
-        response = self._client.converse(**kwargs)
-        return response["output"]["message"]["content"][0]["text"]
+        last_error = None
+        for attempt in range(3):
+            try:
+                response = self._client.converse(**kwargs)
+                # Defensive parsing — don't trust nested structure
+                output = response.get("output", {})
+                message = output.get("message", {})
+                content = message.get("content", [])
+                if not content or "text" not in content[0]:
+                    raise ValueError(f"Unexpected Bedrock response structure: {list(response.keys())}")
+                return content[0]["text"]
+            except ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code", "")
+                if error_code in ("ThrottlingException", "ServiceUnavailableException", "ModelTimeoutException"):
+                    last_error = e
+                    wait = 2 ** attempt
+                    logger.warning("Bedrock transient error (attempt %d/3): %s. Retrying in %ds...", attempt + 1, error_code, wait)
+                    time.sleep(wait)
+                    continue
+                raise
+            except (KeyError, IndexError, TypeError) as e:
+                raise ValueError(f"Failed to parse Bedrock response: {e}") from e
+
+        raise last_error  # All retries exhausted
 
     def get_model_name(self) -> str:
         return self.model_id

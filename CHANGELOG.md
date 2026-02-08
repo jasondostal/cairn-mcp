@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-02-08
+
+### Fixed
+- **Security** — removed hardcoded database passwords from `migrate_recallium.py`; script now requires `RECALLIUM_DSN` and `CAIRN_DSN` environment variables
+- **AWS credentials path** — compose volume mount comment updated from `/root/` to `/home/cairn/` for non-root container
+- **LLM response parsing** — Bedrock and Ollama backends now use defensive key access instead of trusting nested response structure
+
+### Added
+- **LLM retry logic** — both Bedrock and Ollama retry up to 3 times on transient failures (throttling, timeouts, network errors) with exponential backoff
+- **Consistent error handling** — all 10 MCP tools now catch runtime exceptions and return `{"error": ...}` instead of letting stack traces reach the client
+- **`.dockerignore`** — excludes PDFs, archives, tests, UI, scripts from Docker build context
+- **Reproducible builds** — `requirements.lock` now wired into Dockerfile (`pip install -r requirements.lock` before `pip install --no-deps .`)
+- **Health check** on `cairn` service in docker-compose (hits `/api/status`)
+- `CAIRN_ENRICHMENT_ENABLED` documented in `.env.example`
+
+### Changed
+- `Database._pool` renamed to `Database._conn` — it's a single connection, not a pool
+
 ## [0.5.2] - 2026-02-08
 
 ### Added
@@ -190,7 +208,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.3...v0.5.0

@@ -18,7 +18,13 @@ services:
       - "${CAIRN_HTTP_PORT:-8000}:8000"
     # Uncomment to mount AWS credentials for Bedrock:
     # volumes:
-    #   - ~/.aws/credentials:/root/.aws/credentials:ro
+    #   - ~/.aws/credentials:/home/cairn/.aws/credentials:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/status')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       cairn-db:
         condition: service_healthy

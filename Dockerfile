@@ -14,12 +14,16 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 # When sentence-transformers resolves its torch dep, it's already satisfied.
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
-# Copy everything needed for install
+# Install from lockfile for reproducible builds
+COPY requirements.lock .
+RUN pip install --no-cache-dir -r requirements.lock
+
+# Copy application code
 COPY pyproject.toml .
 COPY cairn/ cairn/
 
-# Install the package (torch already present, skips CUDA pull)
-RUN pip install --no-cache-dir .
+# Install the package itself (deps already satisfied by lockfile)
+RUN pip install --no-cache-dir --no-deps .
 
 # Non-root user for runtime security
 RUN useradd --create-home --shell /bin/bash cairn \

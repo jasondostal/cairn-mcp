@@ -1,0 +1,39 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.egg-info
+.venv
+.pytest_cache
+
+# IDE
+.vscode
+.idea
+
+# Docs and media
+*.pdf
+*.md
+!README.md
+
+# Archives and backups
+*.tar.gz
+*.tar.gz.gpg
+
+# Working directories not needed in image
+motes/
+mcp-work/
+eval/
+tests/
+scripts/
+cairn-ui/
+
+# Misc
+.env
+.env.*
+*.txt
+*.json
+!pyproject.toml
+homelab.md

@@ -95,18 +95,21 @@ def store(
     """
     try:
         validate_store(content, project, memory_type, importance, tags, session_name)
+        return memory_store.store(
+            content=content,
+            project=project,
+            memory_type=memory_type,
+            importance=importance,
+            tags=tags,
+            session_name=session_name,
+            related_files=related_files,
+            related_ids=related_ids,
+        )
     except ValidationError as e:
         return {"error": str(e)}
-    return memory_store.store(
-        content=content,
-        project=project,
-        memory_type=memory_type,
-        importance=importance,
-        tags=tags,
-        session_name=session_name,
-        related_files=related_files,
-        related_ids=related_ids,
-    )
+    except Exception as e:
+        logger.exception("store failed")
+        return {"error": f"Internal error: {e}"}
 
 
 # ============================================================
@@ -142,18 +145,21 @@ def search(
     """
     try:
         validate_search(query, limit)
+        if search_mode not in VALID_SEARCH_MODES:
+            return {"error": f"invalid search_mode: {search_mode}. Must be one of: {', '.join(VALID_SEARCH_MODES)}"}
+        return search_engine.search(
+            query=query,
+            project=project,
+            memory_type=memory_type,
+            search_mode=search_mode,
+            limit=limit,
+            include_full=include_full,
+        )
     except ValidationError as e:
         return {"error": str(e)}
-    if search_mode not in VALID_SEARCH_MODES:
-        return {"error": f"invalid search_mode: {search_mode}. Must be one of: {', '.join(VALID_SEARCH_MODES)}"}
-    return search_engine.search(
-        query=query,
-        project=project,
-        memory_type=memory_type,
-        search_mode=search_mode,
-        limit=limit,
-        include_full=include_full,
-    )
+    except Exception as e:
+        logger.exception("search failed")
+        return {"error": f"Internal error: {e}"}
 
 
 # ============================================================
@@ -170,11 +176,15 @@ def recall(ids: list[int]) -> list[dict]:
     Args:
         ids: List of memory IDs to retrieve (max 10 per call).
     """
-    if not ids:
-        return {"error": "ids list is required and cannot be empty"}
-    if len(ids) > MAX_RECALL_IDS:
-        return {"error": f"Maximum {MAX_RECALL_IDS} IDs per recall. Batch into multiple calls."}
-    return memory_store.recall(ids)
+    try:
+        if not ids:
+            return {"error": "ids list is required and cannot be empty"}
+        if len(ids) > MAX_RECALL_IDS:
+            return {"error": f"Maximum {MAX_RECALL_IDS} IDs per recall. Batch into multiple calls."}
+        return memory_store.recall(ids)
+    except Exception as e:
+        logger.exception("recall failed")
+        return {"error": f"Internal error: {e}"}
 
 
 # ============================================================
@@ -207,23 +217,27 @@ def modify(
         tags: New tags - replaces existing (update only).
         reason: Reason for inactivation (required for inactivate).
     """
-    if action not in MemoryAction.ALL:
-        return {"error": f"invalid action: {action}. Must be one of: {', '.join(sorted(MemoryAction.ALL))}"}
-    if content is not None and len(content) > MAX_CONTENT_SIZE:
-        return {"error": f"content exceeds {MAX_CONTENT_SIZE} character limit"}
-    if memory_type is not None and memory_type not in VALID_MEMORY_TYPES:
-        return {"error": f"invalid memory_type: {memory_type}"}
-    if importance is not None and not (0.0 <= importance <= 1.0):
-        return {"error": "importance must be between 0.0 and 1.0"}
-    return memory_store.modify(
-        memory_id=id,
-        action=action,
-        content=content,
-        memory_type=memory_type,
-        importance=importance,
-        tags=tags,
-        reason=reason,
-    )
+    try:
+        if action not in MemoryAction.ALL:
+            return {"error": f"invalid action: {action}. Must be one of: {', '.join(sorted(MemoryAction.ALL))}"}
+        if content is not None and len(content) > MAX_CONTENT_SIZE:
+            return {"error": f"content exceeds {MAX_CONTENT_SIZE} character limit"}
+        if memory_type is not None and memory_type not in VALID_MEMORY_TYPES:
+            return {"error": f"invalid memory_type: {memory_type}"}
+        if importance is not None and not (0.0 <= importance <= 1.0):
+            return {"error": "importance must be between 0.0 and 1.0"}
+        return memory_store.modify(
+            memory_id=id,
+            action=action,
+            content=content,
+            memory_type=memory_type,
+            importance=importance,
+            tags=tags,
+            reason=reason,
+        )
+    except Exception as e:
+        logger.exception("modify failed")
+        return {"error": f"Internal error: {e}"}
 
 
 # ============================================================
@@ -241,8 +255,12 @@ def rules(project: str | None = None) -> list[dict]:
     Args:
         project: Project name to get rules for. Omit for global rules only.
     """
-    result = memory_store.get_rules(project)
-    return result["items"]
+    try:
+        result = memory_store.get_rules(project)
+        return result["items"]
+    except Exception as e:
+        logger.exception("rules failed")
+        return {"error": f"Internal error: {e}"}
 
 
 # ============================================================
@@ -268,28 +286,32 @@ def insights(
         min_confidence: Minimum cluster confidence score (0.0-1.0, default 0.5).
         limit: Maximum clusters to return (default 10).
     """
-    # Check staleness and recluster if needed
-    reclustered = False
-    if cluster_engine.is_stale(project):
-        cluster_engine.run_clustering(project)
-        reclustered = True
+    try:
+        # Check staleness and recluster if needed
+        reclustered = False
+        if cluster_engine.is_stale(project):
+            cluster_engine.run_clustering(project)
+            reclustered = True
 
-    # Fetch clusters
-    clusters = cluster_engine.get_clusters(
-        project=project,
-        topic=topic,
-        min_confidence=min_confidence,
-        limit=limit,
-    )
+        # Fetch clusters
+        clusters = cluster_engine.get_clusters(
+            project=project,
+            topic=topic,
+            min_confidence=min_confidence,
+            limit=limit,
+        )
 
-    last_run = cluster_engine.get_last_run(project)
+        last_run = cluster_engine.get_last_run(project)
 
-    return {
-        "status": "reclustered" if reclustered else "cached",
-        "cluster_count": len(clusters),
-        "clusters": clusters,
-        "last_clustered_at": last_run["created_at"] if last_run else None,
-    }
+        return {
+            "status": "reclustered" if reclustered else "cached",
+            "cluster_count": len(clusters),
+            "clusters": clusters,
+            "last_clustered_at": last_run["created_at"] if last_run else None,
+        }
+    except Exception as e:
+        logger.exception("insights failed")
+        return {"error": f"Internal error: {e}"}
 
 
 # ============================================================
@@ -325,34 +347,38 @@ def projects(
         target: Target project name (required for link).
         link_type: Relationship type for link (default 'related').
     """
-    if action == "list":
-        return project_manager.list_all()["items"]
+    try:
+        if action == "list":
+            return project_manager.list_all()["items"]
 
-    if not project:
-        return {"error": "project is required for this action"}
+        if not project:
+            return {"error": "project is required for this action"}
 
-    if action == "create_doc":
-        if not doc_type or not content:
-            return {"error": "doc_type and content are required for create_doc"}
-        return project_manager.create_doc(project, doc_type, content)
+        if action == "create_doc":
+            if not doc_type or not content:
+                return {"error": "doc_type and content are required for create_doc"}
+            return project_manager.create_doc(project, doc_type, content)
 
-    if action == "get_docs":
-        return project_manager.get_docs(project, doc_type=doc_type)
+        if action == "get_docs":
+            return project_manager.get_docs(project, doc_type=doc_type)
 
-    if action == "update_doc":
-        if not doc_id or not content:
-            return {"error": "doc_id and content are required for update_doc"}
-        return project_manager.update_doc(doc_id, content)
+        if action == "update_doc":
+            if not doc_id or not content:
+                return {"error": "doc_id and content are required for update_doc"}
+            return project_manager.update_doc(doc_id, content)
 
-    if action == "link":
-        if not target:
-            return {"error": "target project is required for link"}
-        return project_manager.link(project, target, link_type)
+        if action == "link":
+            if not target:
+                return {"error": "target project is required for link"}
+            return project_manager.link(project, target, link_type)
 
-    if action == "get_links":
-        return project_manager.get_links(project)
+        if action == "get_links":
+            return project_manager.get_links(project)
 
-    return {"error": f"Unknown action: {action}"}
+        return {"error": f"Unknown action: {action}"}
+    except Exception as e:
+        logger.exception("projects failed")
+        return {"error": f"Internal error: {e}"}
 
 
 # ============================================================
@@ -384,25 +410,29 @@ def tasks(
         memory_ids: Memory IDs to link (required for link_memories).
         include_completed: Include completed tasks in list (default false).
     """
-    if action == "create":
-        if not description:
-            return {"error": "description is required for create"}
-        return task_manager.create(project, description)
+    try:
+        if action == "create":
+            if not description:
+                return {"error": "description is required for create"}
+            return task_manager.create(project, description)
 
-    if action == "complete":
-        if not task_id:
-            return {"error": "task_id is required for complete"}
-        return task_manager.complete(task_id)
+        if action == "complete":
+            if not task_id:
+                return {"error": "task_id is required for complete"}
+            return task_manager.complete(task_id)
 
-    if action == "list":
-        return task_manager.list_tasks(project, include_completed=include_completed)["items"]
+        if action == "list":
+            return task_manager.list_tasks(project, include_completed=include_completed)["items"]
 
-    if action == "link_memories":
-        if not task_id or not memory_ids:
-            return {"error": "task_id and memory_ids are required for link_memories"}
-        return task_manager.link_memories(task_id, memory_ids)
+        if action == "link_memories":
+            if not task_id or not memory_ids:
+                return {"error": "task_id and memory_ids are required for link_memories"}
+            return task_manager.link_memories(task_id, memory_ids)
 
-    return {"error": f"Unknown action: {action}"}
+        return {"error": f"Unknown action: {action}"}
+    except Exception as e:
+        logger.exception("tasks failed")
+        return {"error": f"Internal error: {e}"}
 
 
 # ============================================================
@@ -441,30 +471,34 @@ def think(
                       assumption, analysis, general, alternative, branch.
         branch_name: Name for a branch when thought_type is alternative/branch.
     """
-    if action == "start":
-        if not goal:
-            return {"error": "goal is required for start"}
-        return thinking_engine.start(project, goal)
+    try:
+        if action == "start":
+            if not goal:
+                return {"error": "goal is required for start"}
+            return thinking_engine.start(project, goal)
 
-    if action == "add":
-        if not sequence_id or not thought:
-            return {"error": "sequence_id and thought are required for add"}
-        return thinking_engine.add_thought(sequence_id, thought, thought_type, branch_name)
+        if action == "add":
+            if not sequence_id or not thought:
+                return {"error": "sequence_id and thought are required for add"}
+            return thinking_engine.add_thought(sequence_id, thought, thought_type, branch_name)
 
-    if action == "conclude":
-        if not sequence_id or not thought:
-            return {"error": "sequence_id and thought (conclusion) are required for conclude"}
-        return thinking_engine.conclude(sequence_id, thought)
+        if action == "conclude":
+            if not sequence_id or not thought:
+                return {"error": "sequence_id and thought (conclusion) are required for conclude"}
+            return thinking_engine.conclude(sequence_id, thought)
 
-    if action == "get":
-        if not sequence_id:
-            return {"error": "sequence_id is required for get"}
-        return thinking_engine.get_sequence(sequence_id)
+        if action == "get":
+            if not sequence_id:
+                return {"error": "sequence_id is required for get"}
+            return thinking_engine.get_sequence(sequence_id)
 
-    if action == "list":
-        return thinking_engine.list_sequences(project)["items"]
+        if action == "list":
+            return thinking_engine.list_sequences(project)["items"]
 
-    return {"error": f"Unknown action: {action}"}
+        return {"error": f"Unknown action: {action}"}
+    except Exception as e:
+        logger.exception("think failed")
+        return {"error": f"Internal error: {e}"}
 
 
 # ============================================================
@@ -478,7 +512,11 @@ def status() -> dict:
     Returns memory count, project count, cluster info, embedding model info,
     and database status. No parameters required.
     """
-    return get_status(db, config)
+    try:
+        return get_status(db, config)
+    except Exception as e:
+        logger.exception("status failed")
+        return {"error": f"Internal error: {e}"}
 
 
 # ============================================================

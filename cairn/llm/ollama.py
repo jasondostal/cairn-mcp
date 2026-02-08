@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 import urllib.request
 import urllib.error
 
@@ -20,7 +21,7 @@ class OllamaLLM(LLMInterface):
         logger.info("Ollama LLM ready: %s at %s", self.model, self.base_url)
 
     def generate(self, messages: list[dict], max_tokens: int = 1024) -> str:
-        """Generate via Ollama chat API."""
+        """Generate via Ollama chat API with retry on transient failures."""
         payload = json.dumps({
             "model": self.model,
             "messages": messages,
@@ -34,9 +35,29 @@ class OllamaLLM(LLMInterface):
             headers={"Content-Type": "application/json"},
         )
 
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            result = json.loads(resp.read())
-            return result["message"]["content"]
+        last_error = None
+        for attempt in range(3):
+            try:
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    raw = resp.read()
+                try:
+                    result = json.loads(raw)
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"Ollama returned invalid JSON: {raw[:200]}") from e
+                # Defensive parsing
+                message = result.get("message", {})
+                content = message.get("content")
+                if content is None:
+                    raise ValueError(f"Unexpected Ollama response structure: {list(result.keys())}")
+                return content
+            except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+                last_error = e
+                wait = 2 ** attempt
+                logger.warning("Ollama transient error (attempt %d/3): %s. Retrying in %ds...", attempt + 1, e, wait)
+                time.sleep(wait)
+                continue
+
+        raise last_error  # All retries exhausted
 
     def get_model_name(self) -> str:
         return self.model
