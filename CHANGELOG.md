@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-02-08
+
+### Added
+- **Memory timeline / activity feed** — `GET /api/timeline` endpoint + `/timeline` page with date-grouped cards (Today, Yesterday, older), project/type/days filters
+- **Command palette (Cmd+K)** — global `Cmd+K`/`Ctrl+K` shortcut, navigation to all 8 pages + debounced memory search, mounted in root layout
+- **Inline memory viewer (Sheet)** — slide-over panel shows full memory detail (content, tags, stats, cluster, metadata) without navigating away. Wired into Search and Timeline pages
+- **Cluster visualization** — `GET /api/clusters/visualization` endpoint runs t-SNE on memory embeddings; canvas scatter plot at `/clusters/visualization` with cluster coloring, hover tooltips, click-to-view
+- **Export** — `GET /api/export?project=&format=` endpoint returns JSON or Markdown; download button on project detail page with format dropdown
+- shadcn Sheet UI component (`components/ui/sheet.tsx`)
+- Timeline nav item (Clock icon, second position after Dashboard)
+- Visualization link button on Clusters page
+
+### Changed
+- Search results now open inline Sheet instead of navigating to `/memories/:id`
+- API version bumped to 0.5.0
+- `cairn-ui` package version bumped to 0.5.0
+
 ## [0.4.3] - 2026-02-07
 
 ### Added
@@ -147,7 +164,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.0...v0.4.1

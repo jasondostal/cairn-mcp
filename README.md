@@ -22,7 +22,7 @@ An MCP server that gives LLMs persistent, searchable, pattern-discovering memory
 - **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, and importance score on store. Bedrock or Ollama.
 - **Pattern discovery** — DBSCAN clustering finds themes across memories. LLM writes the labels. No cron jobs — clusters refresh lazily.
 - **Structured thinking** — Reasoning sequences with branching, for when an agent needs to think through a problem step by step.
-- **Web dashboard** — Next.js + shadcn/ui. Search, browse projects, explore clusters, review thinking chains. Dark mode.
+- **Web dashboard** — Next.js + shadcn/ui. Timeline, search, cluster visualization, Cmd+K command palette, inline memory viewer. Dark mode.
 - **One port, everything** — MCP protocol at `/mcp`, REST API at `/api`, same process. stdio also supported.
 
 ## MCP Tools
@@ -139,6 +139,9 @@ Read-only endpoints at `/api` — powers the web UI and works great for scriptin
 | `GET /api/thinking?project=&status=` | Thinking sequences |
 | `GET /api/thinking/:id` | Sequence detail with all thoughts |
 | `GET /api/rules?project=` | Behavioral rules |
+| `GET /api/timeline?project=&type=&days=` | Memory activity feed |
+| `GET /api/clusters/visualization?project=` | t-SNE 2D coordinates for scatter plot |
+| `GET /api/export?project=&format=` | Export project memories (JSON or Markdown) |
 
 ```bash
 curl http://localhost:8000/api/status
@@ -149,7 +152,9 @@ curl "http://localhost:8000/api/search?q=architecture&limit=5"
 
 A full dashboard for browsing your agent's memory. Built with Next.js 16, shadcn/ui, and Tailwind CSS 4.
 
-**7 pages:** Dashboard / Search / Projects / Clusters / Tasks / Thinking / Rules
+**9 pages:** Dashboard / Timeline / Search / Projects / Clusters / Cluster Visualization / Tasks / Thinking / Rules
+
+**Plus:** Cmd+K command palette (global), inline memory viewer (Sheet slide-over), project export
 
 The UI runs as a separate container and proxies API calls to the Cairn backend.
 

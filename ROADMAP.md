@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.4.3** — All 5 PRD phases complete + web UI polished + CI for both images + server-side pagination.
+Current: **v0.5.0** — Timeline, Cmd+K, inline viewer, cluster visualization, export.
 
 ---
 
@@ -17,15 +17,15 @@ Tighten what's already there.
 - [x] **Health check** — `wget` healthcheck for cairn-ui in docker-compose
 - [x] **Mobile responsive** — hamburger menu + backdrop drawer on small screens
 
-## v0.5.0 — Features
+## v0.5.0 — Features ✓
 
 Make the UI worth opening every day.
 
-- [ ] **Memory timeline / activity feed** — "what did my agent store today?" reverse-chronological stream with filters
-- [ ] **Command palette (Cmd+K)** — quick search from anywhere in the UI (command component already installed)
-- [ ] **Inline memory viewer** — click a search result, slide-over panel shows detail without navigating away
-- [ ] **Cluster visualization** — 2D scatter plot (t-SNE or UMAP reduced) showing how memories relate spatially
-- [ ] **Export** — download a project's memories as JSON or markdown
+- [x] **Memory timeline / activity feed** — reverse-chronological stream with date grouping, project/type/days filters
+- [x] **Command palette (Cmd+K)** — global shortcut, page navigation + debounced memory search
+- [x] **Inline memory viewer** — Sheet slide-over with full memory detail from search/timeline
+- [x] **Cluster visualization** — t-SNE scatter plot with cluster coloring, tooltips, click-to-view
+- [x] **Export** — JSON/Markdown download from project detail page
 
 ## Stretch
 
@@ -50,3 +50,6 @@ Clustering, projects, tasks, thinking, REST API (FastAPI inside MCP Starlette), 
 
 ### v0.4.0 — Web UI
 Next.js 16 + shadcn/ui dashboard. 7 pages: Dashboard, Search, Projects, Clusters, Tasks, Thinking, Rules. Production Dockerfile. Authentik auth. SWAG proxy. Live at cairn.witekdivers.com.
+
+### v0.5.0 — Features
+Timeline, Cmd+K command palette, inline memory viewer (Sheet), cluster visualization (t-SNE scatter plot), project export (JSON/Markdown). 3 new API endpoints, 5 new UI pages/components.
