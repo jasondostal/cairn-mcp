@@ -4,14 +4,11 @@ from __future__ import annotations
 
 import logging
 
+from cairn.core.constants import VALID_THOUGHT_TYPES, ThinkingStatus
+from cairn.core.utils import get_or_create_project
 from cairn.storage.database import Database
 
 logger = logging.getLogger(__name__)
-
-VALID_THOUGHT_TYPES = [
-    "observation", "hypothesis", "question", "reasoning", "conclusion",
-    "assumption", "analysis", "general", "alternative", "branch",
-]
 
 
 class ThinkingEngine:
@@ -20,24 +17,9 @@ class ThinkingEngine:
     def __init__(self, db: Database):
         self.db = db
 
-    def _resolve_project_id(self, project_name: str) -> int:
-        """Get or create a project by name. Returns project ID."""
-        row = self.db.execute_one(
-            "SELECT id FROM projects WHERE name = %s", (project_name,)
-        )
-        if row:
-            return row["id"]
-
-        row = self.db.execute_one(
-            "INSERT INTO projects (name) VALUES (%s) RETURNING id",
-            (project_name,),
-        )
-        self.db.commit()
-        return row["id"]
-
     def start(self, project: str, goal: str) -> dict:
         """Start a new thinking sequence."""
-        project_id = self._resolve_project_id(project)
+        project_id = get_or_create_project(self.db,project)
 
         row = self.db.execute_one(
             """
@@ -54,7 +36,7 @@ class ThinkingEngine:
             "sequence_id": row["id"],
             "project": project,
             "goal": goal,
-            "status": "active",
+            "status": ThinkingStatus.ACTIVE,
             "created_at": row["created_at"].isoformat(),
         }
 
@@ -73,7 +55,7 @@ class ThinkingEngine:
         )
         if not seq:
             raise ValueError(f"Thinking sequence {sequence_id} not found")
-        if seq["status"] != "active":
+        if seq["status"] != ThinkingStatus.ACTIVE:
             raise ValueError(f"Thinking sequence {sequence_id} is {seq['status']}, cannot add thoughts")
 
         # Normalize thought type
@@ -103,6 +85,16 @@ class ThinkingEngine:
 
     def conclude(self, sequence_id: int, conclusion: str) -> dict:
         """Conclude a thinking sequence. Adds final thought and marks complete."""
+        # Guard: check sequence exists and is still active
+        seq = self.db.execute_one(
+            "SELECT id, status FROM thinking_sequences WHERE id = %s",
+            (sequence_id,),
+        )
+        if not seq:
+            raise ValueError(f"Thinking sequence {sequence_id} not found")
+        if seq["status"] != ThinkingStatus.ACTIVE:
+            raise ValueError(f"Thinking sequence {sequence_id} is already {seq['status']}")
+
         # Add the conclusion thought
         self.add_thought(sequence_id, conclusion, thought_type="conclusion")
 
@@ -172,7 +164,7 @@ class ThinkingEngine:
 
         Returns dict with 'total', 'limit', 'offset', and 'items' keys.
         """
-        project_id = self._resolve_project_id(project)
+        project_id = get_or_create_project(self.db,project)
 
         status_filter = " AND ts.status = %s" if status else ""
         count_params: list = [project_id]

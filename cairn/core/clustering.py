@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
@@ -14,6 +12,7 @@ from sklearn.cluster import DBSCAN
 from sklearn.manifold import TSNE
 from sklearn.metrics.pairwise import cosine_distances
 
+from cairn.core.utils import extract_json
 from cairn.embedding.engine import EmbeddingEngine
 from cairn.llm.prompts import build_cluster_summary_messages
 from cairn.storage.database import Database
@@ -384,20 +383,9 @@ class ClusterEngine:
 
     def _parse_summaries(self, raw: str, cluster_data: list[dict]) -> dict[int, dict]:
         """Parse LLM response into summary mapping. Falls back to generic on parse failure."""
-        text = raw.strip()
-        text = re.sub(r"^```(?:json)?\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
-
-        # Find JSON array
-        match = re.search(r"\[.*\]", text, re.DOTALL)
-        if not match:
-            logger.warning("No JSON array in cluster summary response")
-            return self._generic_summaries(cluster_data)
-
-        try:
-            items = json.loads(match.group())
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse cluster summary JSON")
+        items = extract_json(raw, json_type="array")
+        if items is None:
+            logger.warning("No valid JSON array in cluster summary response")
             return self._generic_summaries(cluster_data)
 
         result = {}

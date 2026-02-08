@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 
+from cairn.core.constants import TaskStatus
+from cairn.core.utils import get_or_create_project
 from cairn.storage.database import Database
 
 logger = logging.getLogger(__name__)
@@ -15,24 +17,9 @@ class TaskManager:
     def __init__(self, db: Database):
         self.db = db
 
-    def _resolve_project_id(self, project_name: str) -> int:
-        """Get or create a project by name. Returns project ID."""
-        row = self.db.execute_one(
-            "SELECT id FROM projects WHERE name = %s", (project_name,)
-        )
-        if row:
-            return row["id"]
-
-        row = self.db.execute_one(
-            "INSERT INTO projects (name) VALUES (%s) RETURNING id",
-            (project_name,),
-        )
-        self.db.commit()
-        return row["id"]
-
     def create(self, project: str, description: str) -> dict:
         """Create a new task."""
-        project_id = self._resolve_project_id(project)
+        project_id = get_or_create_project(self.db,project)
 
         row = self.db.execute_one(
             """
@@ -49,7 +36,7 @@ class TaskManager:
             "id": row["id"],
             "project": project,
             "description": description,
-            "status": "pending",
+            "status": TaskStatus.PENDING,
             "created_at": row["created_at"].isoformat(),
         }
 
@@ -70,9 +57,9 @@ class TaskManager:
 
         Returns dict with 'total', 'limit', 'offset', and 'items' keys.
         """
-        project_id = self._resolve_project_id(project)
+        project_id = get_or_create_project(self.db,project)
 
-        status_filter = "" if include_completed else " AND t.status = 'pending'"
+        status_filter = "" if include_completed else f" AND t.status = '{TaskStatus.PENDING}'"
 
         # Get total count
         count_row = self.db.execute_one(

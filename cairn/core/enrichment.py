@@ -1,11 +1,11 @@
 """LLM-powered enrichment at write time. Single call for tags, importance, type, summary."""
 
-import json
 import logging
-import re
 
+from cairn.core.constants import VALID_MEMORY_TYPES
+from cairn.core.utils import extract_json
 from cairn.llm.interface import LLMInterface
-from cairn.llm.prompts import VALID_MEMORY_TYPES, build_enrichment_messages
+from cairn.llm.prompts import build_enrichment_messages
 
 logger = logging.getLogger(__name__)
 
@@ -36,18 +36,9 @@ class Enricher:
 
     def _parse_response(self, raw: str) -> dict:
         """Parse LLM response into enrichment dict. Handles markdown fences."""
-        text = raw.strip()
-
-        # Strip markdown code fences if present
-        text = re.sub(r"^```(?:json)?\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
-
-        # Find JSON object in response
-        match = re.search(r"\{[^{}]*\}", text, re.DOTALL)
-        if not match:
-            raise ValueError(f"No JSON object found in response: {text[:200]}")
-
-        data = json.loads(match.group())
+        data = extract_json(raw, json_type="object")
+        if data is None:
+            raise ValueError(f"No JSON object found in response: {raw[:200]}")
         return self._validate(data)
 
     def _validate(self, data: dict) -> dict:

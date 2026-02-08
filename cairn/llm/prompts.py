@@ -1,9 +1,6 @@
 """Enrichment prompt template. Single LLM call for tags, importance, type, and summary."""
 
-VALID_MEMORY_TYPES = [
-    "note", "decision", "rule", "code-snippet", "learning",
-    "research", "discussion", "progress", "task", "debug", "design",
-]
+from cairn.core.constants import VALID_MEMORY_TYPES  # noqa: F401 — re-exported for backwards compat
 
 ENRICHMENT_SYSTEM_PROMPT = """\
 You are a memory classification system. Analyze the provided content and return a JSON object with exactly these fields:

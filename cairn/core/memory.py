@@ -6,6 +6,8 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from cairn.core.constants import MemoryAction
+from cairn.core.utils import get_or_create_project
 from cairn.embedding.engine import EmbeddingEngine
 from cairn.storage.database import Database
 
@@ -23,22 +25,6 @@ class MemoryStore:
         self.embedding = embedding
         self.enricher = enricher
 
-    def _resolve_project_id(self, project_name: str) -> int:
-        """Get or create a project by name. Returns project ID."""
-        row = self.db.execute_one(
-            "SELECT id FROM projects WHERE name = %s",
-            (project_name,),
-        )
-        if row:
-            return row["id"]
-
-        row = self.db.execute_one(
-            "INSERT INTO projects (name) VALUES (%s) RETURNING id",
-            (project_name,),
-        )
-        self.db.commit()
-        return row["id"]
-
     def store(
         self,
         content: str,
@@ -54,7 +40,7 @@ class MemoryStore:
 
         Returns the stored memory dict with ID.
         """
-        project_id = self._resolve_project_id(project)
+        project_id = get_or_create_project(self.db, project)
 
         # Generate embedding
         vector = self.embedding.embed(content)
@@ -201,7 +187,7 @@ class MemoryStore:
         reason: str | None = None,
     ) -> dict:
         """Update, inactivate, or reactivate a memory."""
-        if action == "inactivate":
+        if action == MemoryAction.INACTIVATE:
             self.db.execute(
                 """
                 UPDATE memories
@@ -213,7 +199,7 @@ class MemoryStore:
             self.db.commit()
             return {"id": memory_id, "action": "inactivated"}
 
-        if action == "reactivate":
+        if action == MemoryAction.REACTIVATE:
             self.db.execute(
                 """
                 UPDATE memories
@@ -225,7 +211,7 @@ class MemoryStore:
             self.db.commit()
             return {"id": memory_id, "action": "reactivated"}
 
-        if action == "update":
+        if action == MemoryAction.UPDATE:
             updates = []
             params = []
 

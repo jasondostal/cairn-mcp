@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import logging
 
+from cairn.core.constants import VALID_DOC_TYPES, VALID_LINK_TYPES
+from cairn.core.utils import get_or_create_project
 from cairn.storage.database import Database
 
 logger = logging.getLogger(__name__)
-
-VALID_DOC_TYPES = ["brief", "prd", "plan"]
-VALID_LINK_TYPES = ["related", "parent", "child", "dependency", "fork", "template"]
 
 
 class ProjectManager:
@@ -17,21 +16,6 @@ class ProjectManager:
 
     def __init__(self, db: Database):
         self.db = db
-
-    def _resolve_project_id(self, project_name: str) -> int:
-        """Get or create a project by name. Returns project ID."""
-        row = self.db.execute_one(
-            "SELECT id FROM projects WHERE name = %s", (project_name,)
-        )
-        if row:
-            return row["id"]
-
-        row = self.db.execute_one(
-            "INSERT INTO projects (name) VALUES (%s) RETURNING id",
-            (project_name,),
-        )
-        self.db.commit()
-        return row["id"]
 
     def list_all(self, limit: int | None = None, offset: int = 0) -> dict:
         """List all projects with memory counts and optional pagination.
@@ -73,7 +57,7 @@ class ProjectManager:
         if doc_type not in VALID_DOC_TYPES:
             raise ValueError(f"Invalid doc_type: {doc_type}. Must be one of: {VALID_DOC_TYPES}")
 
-        project_id = self._resolve_project_id(project)
+        project_id = get_or_create_project(self.db,project)
         row = self.db.execute_one(
             """
             INSERT INTO project_documents (project_id, doc_type, content)
@@ -94,7 +78,7 @@ class ProjectManager:
 
     def get_docs(self, project: str, doc_type: str | None = None) -> list[dict]:
         """Get documents for a project, optionally filtered by type."""
-        project_id = self._resolve_project_id(project)
+        project_id = get_or_create_project(self.db,project)
 
         if doc_type:
             rows = self.db.execute(
@@ -143,8 +127,8 @@ class ProjectManager:
         if link_type not in VALID_LINK_TYPES:
             raise ValueError(f"Invalid link_type: {link_type}. Must be one of: {VALID_LINK_TYPES}")
 
-        source_id = self._resolve_project_id(source)
-        target_id = self._resolve_project_id(target)
+        source_id = get_or_create_project(self.db,source)
+        target_id = get_or_create_project(self.db,target)
 
         self.db.execute(
             """
@@ -159,7 +143,7 @@ class ProjectManager:
 
     def get_links(self, project: str) -> list[dict]:
         """Get all links for a project (both directions)."""
-        project_id = self._resolve_project_id(project)
+        project_id = get_or_create_project(self.db,project)
 
         rows = self.db.execute(
             """
