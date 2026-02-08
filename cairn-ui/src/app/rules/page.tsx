@@ -90,8 +90,8 @@ export default function RulesPage() {
     setError(null);
     Promise.all([api.projects(), api.rules()])
       .then(([p, r]) => {
-        setProjects(p);
-        setRules(r);
+        setProjects(p.items);
+        setRules(r.items);
       })
       .catch((err) => setError(err?.message || "Failed to load rules"))
       .finally(() => setLoading(false));
@@ -101,8 +101,8 @@ export default function RulesPage() {
     setLoading(true);
     setError(null);
     api
-      .rules(selected)
-      .then(setRules)
+      .rules(selected ? { project: selected } : undefined)
+      .then((r) => setRules(r.items))
       .catch((err) => setError(err?.message || "Failed to load rules"))
       .finally(() => setLoading(false));
   }, [selected]);

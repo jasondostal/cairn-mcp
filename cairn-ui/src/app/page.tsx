@@ -78,7 +78,7 @@ export default function Dashboard() {
     data: projects,
     loading: projectsLoading,
     error: projectsError,
-  } = useFetch<Project[]>(() => api.projects());
+  } = useFetch<Project[]>(() => api.projects().then((r) => r.items));
 
   const loading = statusLoading || projectsLoading;
   const error = statusError || projectsError;

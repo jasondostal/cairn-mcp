@@ -62,38 +62,43 @@ class TaskManager:
         self.db.commit()
         return {"id": task_id, "action": "completed"}
 
-    def list_tasks(self, project: str, include_completed: bool = False) -> list[dict]:
-        """List tasks for a project."""
+    def list_tasks(
+        self, project: str, include_completed: bool = False,
+        limit: int | None = None, offset: int = 0,
+    ) -> dict:
+        """List tasks for a project with optional pagination.
+
+        Returns dict with 'total', 'limit', 'offset', and 'items' keys.
+        """
         project_id = self._resolve_project_id(project)
 
-        if include_completed:
-            rows = self.db.execute(
-                """
-                SELECT t.id, t.description, t.status, t.created_at, t.completed_at,
-                       array_agg(tml.memory_id) FILTER (WHERE tml.memory_id IS NOT NULL) as linked_memories
-                FROM tasks t
-                LEFT JOIN task_memory_links tml ON tml.task_id = t.id
-                WHERE t.project_id = %s
-                GROUP BY t.id
-                ORDER BY t.created_at DESC
-                """,
-                (project_id,),
-            )
-        else:
-            rows = self.db.execute(
-                """
-                SELECT t.id, t.description, t.status, t.created_at, t.completed_at,
-                       array_agg(tml.memory_id) FILTER (WHERE tml.memory_id IS NOT NULL) as linked_memories
-                FROM tasks t
-                LEFT JOIN task_memory_links tml ON tml.task_id = t.id
-                WHERE t.project_id = %s AND t.status = 'pending'
-                GROUP BY t.id
-                ORDER BY t.created_at DESC
-                """,
-                (project_id,),
-            )
+        status_filter = "" if include_completed else " AND t.status = 'pending'"
 
-        return [
+        # Get total count
+        count_row = self.db.execute_one(
+            f"SELECT COUNT(*) as total FROM tasks t WHERE t.project_id = %s{status_filter}",
+            (project_id,),
+        )
+        total = count_row["total"]
+
+        query = f"""
+            SELECT t.id, t.description, t.status, t.created_at, t.completed_at,
+                   array_agg(tml.memory_id) FILTER (WHERE tml.memory_id IS NOT NULL) as linked_memories
+            FROM tasks t
+            LEFT JOIN task_memory_links tml ON tml.task_id = t.id
+            WHERE t.project_id = %s{status_filter}
+            GROUP BY t.id
+            ORDER BY t.created_at DESC
+        """
+        params: list = [project_id]
+
+        if limit is not None:
+            query += " LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
+
+        rows = self.db.execute(query, tuple(params))
+
+        items = [
             {
                 "id": r["id"],
                 "description": r["description"],
@@ -104,6 +109,7 @@ class TaskManager:
             }
             for r in rows
         ]
+        return {"total": total, "limit": limit, "offset": offset, "items": items}
 
     def link_memories(self, task_id: int, memory_ids: list[int]) -> dict:
         """Link memories to a task."""

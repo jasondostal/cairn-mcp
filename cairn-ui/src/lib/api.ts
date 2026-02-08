@@ -115,17 +115,25 @@ export interface Rule {
   created_at: string;
 }
 
+export interface Paginated<T> {
+  total: number;
+  limit: number | null;
+  offset: number;
+  items: T[];
+}
+
 // --- API functions ---
 
 export const api = {
   status: () => get<Status>("/status"),
 
-  search: (q: string, opts?: { project?: string; type?: string; mode?: string; limit?: string }) =>
-    get<Memory[]>("/search", { q, ...opts }),
+  search: (q: string, opts?: { project?: string; type?: string; mode?: string; limit?: string; offset?: string }) =>
+    get<Paginated<Memory>>("/search", { q, ...opts }),
 
   memory: (id: number) => get<Memory>(`/memories/${id}`),
 
-  projects: () => get<Project[]>("/projects"),
+  projects: (opts?: { limit?: string; offset?: string }) =>
+    get<Paginated<Project>>("/projects", opts),
 
   project: (name: string) =>
     get<{ name: string; docs: Array<Record<string, unknown>>; links: Array<Record<string, unknown>> }>(
@@ -135,13 +143,14 @@ export const api = {
   clusters: (opts?: { project?: string; topic?: string }) =>
     get<ClusterResult>("/clusters", opts),
 
-  tasks: (project: string, opts?: { include_completed?: string }) =>
-    get<Task[]>("/tasks", { project, ...opts }),
+  tasks: (project: string, opts?: { include_completed?: string; limit?: string; offset?: string }) =>
+    get<Paginated<Task>>("/tasks", { project, ...opts }),
 
-  thinking: (project: string, opts?: { status?: string }) =>
-    get<ThinkingSequence[]>("/thinking", { project, ...opts }),
+  thinking: (project: string, opts?: { status?: string; limit?: string; offset?: string }) =>
+    get<Paginated<ThinkingSequence>>("/thinking", { project, ...opts }),
 
   thinkingDetail: (id: number) => get<ThinkingDetail>(`/thinking/${id}`),
 
-  rules: (project?: string) => get<Rule[]>("/rules", project ? { project } : undefined),
+  rules: (opts?: { project?: string; limit?: string; offset?: string }) =>
+    get<Paginated<Rule>>("/rules", opts),
 };

@@ -94,9 +94,9 @@ export default function TasksPage() {
     setError(null);
     api
       .projects()
-      .then((p) => {
-        setProjects(p);
-        if (p.length > 0) setSelected(p[0].name);
+      .then((r) => {
+        setProjects(r.items);
+        if (r.items.length > 0) setSelected(r.items[0].name);
       })
       .catch((err) => setError(err?.message || "Failed to load projects"))
       .finally(() => setLoading(false));
@@ -110,7 +110,7 @@ export default function TasksPage() {
       .tasks(selected, {
         include_completed: showCompleted ? "true" : undefined,
       })
-      .then(setTasks)
+      .then((r) => setTasks(r.items))
       .catch((err) => setError(err?.message || "Failed to load tasks"))
       .finally(() => setLoading(false));
   }, [selected, showCompleted]);

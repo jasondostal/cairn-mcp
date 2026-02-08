@@ -9,7 +9,7 @@ import { ErrorState } from "@/components/error-state";
 
 export default function ProjectsPage() {
   const { data: projects, loading, error } = useFetch<Project[]>(
-    () => api.projects(),
+    () => api.projects().then((r) => r.items),
     []
   );
 

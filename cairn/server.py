@@ -242,7 +242,8 @@ def rules(project: str | None = None) -> list[dict]:
     Args:
         project: Project name to get rules for. Omit for global rules only.
     """
-    return memory_store.get_rules(project)
+    result = memory_store.get_rules(project)
+    return {"result": result["items"]}
 
 
 # ============================================================
@@ -338,7 +339,7 @@ def projects(
         link_type: Relationship type for link (default 'related').
     """
     if action == "list":
-        return project_manager.list_all()
+        return project_manager.list_all()["items"]
 
     if not project:
         return {"error": "project is required for this action"}
@@ -407,7 +408,7 @@ def tasks(
         return task_manager.complete(task_id)
 
     if action == "list":
-        return task_manager.list_tasks(project, include_completed=include_completed)
+        return task_manager.list_tasks(project, include_completed=include_completed)["items"]
 
     if action == "link_memories":
         if not task_id or not memory_ids:
@@ -474,7 +475,7 @@ def think(
         return thinking_engine.get_sequence(sequence_id)
 
     if action == "list":
-        return thinking_engine.list_sequences(project)
+        return thinking_engine.list_sequences(project)["items"]
 
     return {"error": f"Unknown action: {action}"}
 

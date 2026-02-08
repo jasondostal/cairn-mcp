@@ -147,7 +147,7 @@ export default function SearchPage() {
         mode,
         limit: "100",
       });
-      setResults(data);
+      setResults(data.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Search failed");
       setResults([]);

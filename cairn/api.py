@@ -51,7 +51,7 @@ def create_api(
         return get_status(db, config)
 
     # ------------------------------------------------------------------
-    # GET /search?q=&project=&type=&mode=&limit=
+    # GET /search?q=&project=&type=&mode=&limit=&offset=
     # ------------------------------------------------------------------
     @router.get("/search")
     def api_search(
@@ -60,15 +60,19 @@ def create_api(
         type: str | None = Query(None),
         mode: str = Query("semantic"),
         limit: int = Query(10, ge=1, le=100),
+        offset: int = Query(0, ge=0),
     ):
-        return search_engine.search(
+        results = search_engine.search(
             query=q,
             project=project,
             memory_type=type,
             search_mode=mode,
-            limit=limit,
+            limit=limit + offset,
             include_full=True,
         )
+        # Search engine doesn't support native offset, so slice
+        items = results[offset:offset + limit]
+        return {"total": len(results), "limit": limit, "offset": offset, "items": items}
 
     # ------------------------------------------------------------------
     # GET /memories/:id — single memory with full content
@@ -81,11 +85,14 @@ def create_api(
         return results[0]
 
     # ------------------------------------------------------------------
-    # GET /projects — all projects with counts
+    # GET /projects?limit=&offset=
     # ------------------------------------------------------------------
     @router.get("/projects")
-    def api_projects():
-        return project_manager.list_all()
+    def api_projects(
+        limit: int | None = Query(None, ge=1, le=100),
+        offset: int = Query(0, ge=0),
+    ):
+        return project_manager.list_all(limit=limit, offset=offset)
 
     # ------------------------------------------------------------------
     # GET /projects/:name — project docs + links
@@ -118,24 +125,33 @@ def create_api(
         return {"cluster_count": len(clusters), "clusters": clusters}
 
     # ------------------------------------------------------------------
-    # GET /tasks?project=&include_completed=
+    # GET /tasks?project=&include_completed=&limit=&offset=
     # ------------------------------------------------------------------
     @router.get("/tasks")
     def api_tasks(
         project: str = Query(...),
         include_completed: bool = Query(False),
+        limit: int | None = Query(None, ge=1, le=100),
+        offset: int = Query(0, ge=0),
     ):
-        return task_manager.list_tasks(project, include_completed=include_completed)
+        return task_manager.list_tasks(
+            project, include_completed=include_completed,
+            limit=limit, offset=offset,
+        )
 
     # ------------------------------------------------------------------
-    # GET /thinking?project=&status=
+    # GET /thinking?project=&status=&limit=&offset=
     # ------------------------------------------------------------------
     @router.get("/thinking")
     def api_thinking_list(
         project: str = Query(...),
         status: str | None = Query(None),
+        limit: int | None = Query(None, ge=1, le=100),
+        offset: int = Query(0, ge=0),
     ):
-        return thinking_engine.list_sequences(project, status=status)
+        return thinking_engine.list_sequences(
+            project, status=status, limit=limit, offset=offset,
+        )
 
     # ------------------------------------------------------------------
     # GET /thinking/:id — sequence with all thoughts
@@ -148,11 +164,15 @@ def create_api(
             raise HTTPException(status_code=404, detail="Thinking sequence not found")
 
     # ------------------------------------------------------------------
-    # GET /rules?project=
+    # GET /rules?project=&limit=&offset=
     # ------------------------------------------------------------------
     @router.get("/rules")
-    def api_rules(project: str | None = Query(None)):
-        return memory_store.get_rules(project)
+    def api_rules(
+        project: str | None = Query(None),
+        limit: int | None = Query(None, ge=1, le=100),
+        offset: int = Query(0, ge=0),
+    ):
+        return memory_store.get_rules(project, limit=limit, offset=offset)
 
     app.include_router(router)
     return app

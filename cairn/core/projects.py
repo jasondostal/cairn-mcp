@@ -33,19 +33,31 @@ class ProjectManager:
         self.db.commit()
         return row["id"]
 
-    def list_all(self) -> list[dict]:
-        """List all projects with memory counts."""
-        rows = self.db.execute(
-            """
+    def list_all(self, limit: int | None = None, offset: int = 0) -> dict:
+        """List all projects with memory counts and optional pagination.
+
+        Returns dict with 'total', 'limit', 'offset', and 'items' keys.
+        """
+        count_row = self.db.execute_one("SELECT COUNT(*) as total FROM projects")
+        total = count_row["total"]
+
+        query = """
             SELECT p.id, p.name, p.created_at,
                    COUNT(m.id) FILTER (WHERE m.is_active = true) as memory_count
             FROM projects p
             LEFT JOIN memories m ON m.project_id = p.id
             GROUP BY p.id, p.name, p.created_at
             ORDER BY memory_count DESC, p.name
-            """
-        )
-        return [
+        """
+        params: list = []
+
+        if limit is not None:
+            query += " LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
+
+        rows = self.db.execute(query, tuple(params) if params else None)
+
+        items = [
             {
                 "id": r["id"],
                 "name": r["name"],
@@ -54,6 +66,7 @@ class ProjectManager:
             }
             for r in rows
         ]
+        return {"total": total, "limit": limit, "offset": offset, "items": items}
 
     def create_doc(self, project: str, doc_type: str, content: str) -> dict:
         """Create a project document (brief, PRD, or plan)."""

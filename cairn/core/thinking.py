@@ -164,38 +164,45 @@ class ThinkingEngine:
             ],
         }
 
-    def list_sequences(self, project: str, status: str | None = None) -> list[dict]:
-        """List thinking sequences for a project."""
+    def list_sequences(
+        self, project: str, status: str | None = None,
+        limit: int | None = None, offset: int = 0,
+    ) -> dict:
+        """List thinking sequences for a project with optional pagination.
+
+        Returns dict with 'total', 'limit', 'offset', and 'items' keys.
+        """
         project_id = self._resolve_project_id(project)
 
+        status_filter = " AND ts.status = %s" if status else ""
+        count_params: list = [project_id]
         if status:
-            rows = self.db.execute(
-                """
-                SELECT ts.id, ts.goal, ts.status, ts.created_at, ts.completed_at,
-                       COUNT(t.id) as thought_count
-                FROM thinking_sequences ts
-                LEFT JOIN thoughts t ON t.sequence_id = ts.id
-                WHERE ts.project_id = %s AND ts.status = %s
-                GROUP BY ts.id
-                ORDER BY ts.created_at DESC
-                """,
-                (project_id, status),
-            )
-        else:
-            rows = self.db.execute(
-                """
-                SELECT ts.id, ts.goal, ts.status, ts.created_at, ts.completed_at,
-                       COUNT(t.id) as thought_count
-                FROM thinking_sequences ts
-                LEFT JOIN thoughts t ON t.sequence_id = ts.id
-                WHERE ts.project_id = %s
-                GROUP BY ts.id
-                ORDER BY ts.created_at DESC
-                """,
-                (project_id,),
-            )
+            count_params.append(status)
 
-        return [
+        count_row = self.db.execute_one(
+            f"SELECT COUNT(*) as total FROM thinking_sequences ts WHERE ts.project_id = %s{status_filter}",
+            tuple(count_params),
+        )
+        total = count_row["total"]
+
+        query = f"""
+            SELECT ts.id, ts.goal, ts.status, ts.created_at, ts.completed_at,
+                   COUNT(t.id) as thought_count
+            FROM thinking_sequences ts
+            LEFT JOIN thoughts t ON t.sequence_id = ts.id
+            WHERE ts.project_id = %s{status_filter}
+            GROUP BY ts.id
+            ORDER BY ts.created_at DESC
+        """
+        params: list = list(count_params)
+
+        if limit is not None:
+            query += " LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
+
+        rows = self.db.execute(query, tuple(params))
+
+        items = [
             {
                 "sequence_id": r["id"],
                 "goal": r["goal"],
@@ -206,3 +213,4 @@ class ThinkingEngine:
             }
             for r in rows
         ]
+        return {"total": total, "limit": limit, "offset": offset, "items": items}

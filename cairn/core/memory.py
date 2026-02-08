@@ -264,10 +264,28 @@ class MemoryStore:
 
         raise ValueError(f"Unknown action: {action}")
 
-    def get_rules(self, project: str | None = None) -> list[dict]:
-        """Retrieve active rule-type memories for a project and __global__."""
-        rows = self.db.execute(
+    def get_rules(
+        self, project: str | None = None,
+        limit: int | None = None, offset: int = 0,
+    ) -> dict:
+        """Retrieve active rule-type memories for a project and __global__.
+
+        Returns dict with 'total', 'limit', 'offset', and 'items' keys.
+        """
+        project_param = project or "__global__"
+
+        count_row = self.db.execute_one(
             """
+            SELECT COUNT(*) as total FROM memories m
+            LEFT JOIN projects p ON m.project_id = p.id
+            WHERE m.memory_type = 'rule' AND m.is_active = true
+                AND (p.name = '__global__' OR p.name = %s)
+            """,
+            (project_param,),
+        )
+        total = count_row["total"]
+
+        query = """
             SELECT m.id, m.content, m.importance, m.tags, m.created_at,
                    p.name as project
             FROM memories m
@@ -276,11 +294,16 @@ class MemoryStore:
                 AND m.is_active = true
                 AND (p.name = '__global__' OR p.name = %s)
             ORDER BY m.importance DESC, m.created_at DESC
-            """,
-            (project or "__global__",),
-        )
+        """
+        params: list = [project_param]
 
-        return [
+        if limit is not None:
+            query += " LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
+
+        rows = self.db.execute(query, tuple(params))
+
+        items = [
             {
                 "id": r["id"],
                 "content": r["content"],
@@ -291,3 +314,4 @@ class MemoryStore:
             }
             for r in rows
         ]
+        return {"total": total, "limit": limit, "offset": offset, "items": items}

@@ -81,9 +81,9 @@ export default function ThinkingPage() {
     setError(null);
     api
       .projects()
-      .then((p) => {
-        setProjects(p);
-        if (p.length > 0) setSelected(p[0].name);
+      .then((r) => {
+        setProjects(r.items);
+        if (r.items.length > 0) setSelected(r.items[0].name);
       })
       .catch((err) => setError(err?.message || "Failed to load projects"))
       .finally(() => setLoading(false));
@@ -95,7 +95,7 @@ export default function ThinkingPage() {
     setError(null);
     api
       .thinking(selected)
-      .then(setSequences)
+      .then((r) => setSequences(r.items))
       .catch((err) => setError(err?.message || "Failed to load thinking sequences"))
       .finally(() => setLoading(false));
   }, [selected]);
