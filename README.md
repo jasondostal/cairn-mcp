@@ -431,9 +431,11 @@ Cairn includes an evaluation framework (`eval/`) for measuring search quality. C
 - **Small corpus effect** — with 50 memories and a candidate pool of `limit * 5`, the system examines a significant fraction of the entire corpus before ranking. Performance at 500+ memories is untested.
 - **RRF weights** (vector 60%, keyword 25%, tag 15%) and `k=60` are based on initial tuning, not exhaustive ablation.
 
+The eval runs **without LLM features** (no query expansion, no confidence gating) — results reflect base search quality only. Query expansion's impact on recall has not been measured separately.
+
 The eval framework supports model comparison (MiniLM-L6-v2 vs. all-mpnet-base-v2 evaluated, smaller model chosen with +1.5% recall advantage) and includes a keyword-only control to isolate embedding quality.
 
-We plan to grow the corpus, add graded relevance, and test at larger scales. Contributions to the eval set are welcome.
+We plan to grow the corpus, add graded relevance, test query expansion impact, and measure at larger scales. Contributions to the eval set are welcome.
 
 ## License
 

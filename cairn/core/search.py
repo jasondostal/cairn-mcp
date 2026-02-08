@@ -5,8 +5,20 @@ Three signals combined:
   - Keyword matching (PostgreSQL full-text search)
   - Tag matching (array overlap)
 
-RRF formula: score = 1 / (k + rank), where k = 60
-Default weights: vector 0.60, keyword 0.25, tag 0.15
+RRF formula: score = weight * (1 / (k + rank))
+
+Design notes:
+  - k=60 follows the original RRF paper (Cormack et al. 2009) and is standard
+    in the literature. Not tuned for this specific use case. Smaller k would
+    increase rank differentiation on small corpora; worth ablation testing.
+  - Weights (0.60 / 0.25 / 0.15) are based on initial tuning against the
+    eval benchmark. They are NOT the result of exhaustive grid search or
+    ablation. Vector gets the most weight because embedding similarity is the
+    strongest signal for semantic memory retrieval. Keyword and tag signals
+    compensate for embedding blind spots (exact terms, categorical matches).
+  - Candidate pool is limit * 5 per signal. On small corpora this examines a
+    large fraction of total memories, which inflates recall metrics. At scale
+    this is a reasonable efficiency tradeoff.
 """
 
 from __future__ import annotations
@@ -23,10 +35,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# RRF constant — higher k means rank differences matter less
+# RRF constant — higher k means rank differences matter less.
+# k=60 is the standard from Cormack et al. 2009. Not ablation-tested here.
 RRF_K = 60
 
-# Default signal weights
+# Default signal weights. Initial tuning, not grid-searched.
+# See module docstring for rationale and known limitations.
 DEFAULT_WEIGHTS = {
     "vector": 0.60,
     "keyword": 0.25,
