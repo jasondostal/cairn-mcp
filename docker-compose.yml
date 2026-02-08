@@ -24,7 +24,7 @@ services:
         condition: service_healthy
 
   cairn-ui:
-    build: ./cairn-ui
+    image: ghcr.io/jasondostal/cairn-mcp-ui:latest
     container_name: cairn-ui
     restart: unless-stopped
     environment:

@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.4.1** — All 5 PRD phases complete + web UI polished.
+Current: **v0.4.2** — All 5 PRD phases complete + web UI polished + CI for both images.
 
 ---
 
@@ -13,7 +13,7 @@ Tighten what's already there.
 - [x] **Pagination** — client-side `usePagination` hook + `PaginationControls`, applied to search/tasks/thinking/rules
 - [x] **Favicon + branding** — SVG cairn icon, removed default Next.js assets
 - [x] **Back-navigation** — ArrowLeft + `router.back()` on memory detail
-- [ ] **GHCR image for cairn-ui** — CI/CD builds like the MCP server image
+- [x] **GHCR image for cairn-ui** — CI/CD builds like the MCP server image
 - [x] **Health check** — `wget` healthcheck for cairn-ui in docker-compose
 - [x] **Mobile responsive** — hamburger menu + backdrop drawer on small screens
 

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-02-07
+
+### Added
+- GHCR image for cairn-ui — CI now builds and pushes `ghcr.io/jasondostal/cairn-mcp-ui` on version tags
+- `server` and `ui` jobs run in parallel in CI workflow
+
+### Changed
+- `cairn-ui` in docker-compose switched from local build to GHCR image pull
+- ROADMAP v0.4.x polish fully complete (7/8, only GHCR image was remaining)
+
 ## [0.4.1] - 2026-02-07
 
 ### Added
@@ -21,7 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Quick Start guide updated for 3-container stack (cairn, cairn-ui, cairn-db)
 - `pyproject.toml` version bumped to match release
-- ROADMAP v0.4.x polish items checked off (6/8 complete, GHCR image remaining)
+- ROADMAP v0.4.x polish items checked off (7/8 complete)
+- `cairn-ui` docker-compose switched from local build to GHCR image
+
+### CI
+- Added `ui` job to `publish.yml` — builds and pushes `ghcr.io/jasondostal/cairn-mcp-ui` on version tags
 
 ### Docs
 - README overhaul with badges, highlights, architecture diagram, and better structure
@@ -120,7 +134,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.2.0...v0.3.0
