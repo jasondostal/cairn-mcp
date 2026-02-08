@@ -134,6 +134,64 @@ Once connected, your agent can immediately use all 13 tools. Try:
 
 Cairn will store it, generate a summary, auto-tag it, and score its importance.
 
+### 4. Enable session capture (optional)
+
+Cairn can automatically capture your entire session — every tool call logged as a lightweight event (*mote*), crystallized into a cairn when the session ends. Next session, the agent starts with context instead of a blank slate.
+
+Add hooks to your project's `.claude/settings.local.json`:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CAIRN_URL=http://localhost:8000 /path/to/cairn/examples/hooks/session-start.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/path/to/cairn/examples/hooks/log-event.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CAIRN_URL=http://localhost:8000 /path/to/cairn/examples/hooks/session-end.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Replace `/path/to/cairn` with wherever you cloned the repo. Set `CAIRN_URL` to your Cairn instance. `CAIRN_PROJECT` defaults to the working directory name — override it if you want a different project name.
+
+**What happens:**
+1. **Session starts** — hook fetches recent cairns for context, creates an event log in `/tmp`
+2. **Every tool call** — hook appends a one-line JSON event to the log (local file, no HTTP, no blocking)
+3. **Session ends** — hook bundles all events and POSTs a cairn with the full event stream
+
+No hooks? No problem. The `cairns` tool works without them — the agent can call `cairns(action="set")` directly. And even without cairns, memories stored with a `session_name` are still grouped and searchable.
+
 ## REST API
 
 Read-only endpoints at `/api` — powers the web UI and works great for scripting.
