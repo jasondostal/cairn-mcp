@@ -315,3 +315,37 @@ class MemoryStore:
             for r in rows
         ]
         return {"total": total, "limit": limit, "offset": offset, "items": items}
+
+    def export_project(self, project: str) -> list[dict]:
+        """Export all active memories for a project."""
+        rows = self.db.execute(
+            """
+            SELECT m.id, m.content, m.summary, m.memory_type, m.importance,
+                   m.tags, m.auto_tags, m.related_files, m.session_name,
+                   m.created_at, m.updated_at,
+                   p.name as project
+            FROM memories m
+            LEFT JOIN projects p ON m.project_id = p.id
+            WHERE p.name = %s AND m.is_active = true
+            ORDER BY m.created_at DESC
+            """,
+            (project,),
+        )
+
+        return [
+            {
+                "id": r["id"],
+                "content": r["content"],
+                "summary": r["summary"],
+                "memory_type": r["memory_type"],
+                "importance": r["importance"],
+                "project": r["project"],
+                "tags": r["tags"],
+                "auto_tags": r["auto_tags"],
+                "related_files": r["related_files"],
+                "session_name": r["session_name"],
+                "created_at": r["created_at"].isoformat(),
+                "updated_at": r["updated_at"].isoformat(),
+            }
+            for r in rows
+        ]

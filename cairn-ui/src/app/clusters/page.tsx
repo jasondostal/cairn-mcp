@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api, type ClusterResult } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { ErrorState } from "@/components/error-state";
-import { Network } from "lucide-react";
+import { Network, Eye } from "lucide-react";
 
 type Cluster = ClusterResult["clusters"][number];
 
@@ -99,7 +101,15 @@ export default function ClustersPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Clusters</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Clusters</h1>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/clusters/visualization">
+            <Eye className="mr-1.5 h-4 w-4" />
+            Visualization
+          </Link>
+        </Button>
+      </div>
 
       <div className="flex gap-2">
         <Input

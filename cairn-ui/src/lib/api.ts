@@ -122,10 +122,51 @@ export interface Paginated<T> {
   items: T[];
 }
 
+export interface TimelineMemory {
+  id: number;
+  summary: string | null;
+  content: string;
+  memory_type: string;
+  importance: number;
+  project: string;
+  tags: string[];
+  auto_tags: string[];
+  related_files: string[];
+  is_active: boolean;
+  session_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VisualizationPoint {
+  id: number;
+  x: number;
+  y: number;
+  summary: string | null;
+  memory_type: string;
+  cluster_id: number | null;
+  cluster_label: string | null;
+}
+
+export interface VisualizationResult {
+  points: VisualizationPoint[];
+  generated_at: string;
+}
+
+export interface ExportResult {
+  project: string;
+  exported_at: string;
+  memory_count: number;
+  memories: Memory[];
+}
+
 // --- API functions ---
 
 export const api = {
   status: () => get<Status>("/status"),
+
+  timeline: (opts?: { project?: string; type?: string; days?: string; limit?: string; offset?: string }) =>
+    get<Paginated<TimelineMemory>>("/timeline", opts),
 
   search: (q: string, opts?: { project?: string; type?: string; mode?: string; limit?: string; offset?: string }) =>
     get<Paginated<Memory>>("/search", { q, ...opts }),
@@ -153,4 +194,10 @@ export const api = {
 
   rules: (opts?: { project?: string; limit?: string; offset?: string }) =>
     get<Paginated<Rule>>("/rules", opts),
+
+  clusterVisualization: (opts?: { project?: string }) =>
+    get<VisualizationResult>("/clusters/visualization", opts),
+
+  exportProject: (project: string, format: string = "json") =>
+    get<ExportResult | string>("/export", { project, format }),
 };

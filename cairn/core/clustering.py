@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from sklearn.cluster import DBSCAN
+from sklearn.manifold import TSNE
 from sklearn.metrics.pairwise import cosine_distances
 
 from cairn.embedding.engine import EmbeddingEngine
@@ -249,6 +250,76 @@ class ClusterEngine:
             })
 
         return result
+
+    # ============================================================
+    # Visualization
+    # ============================================================
+
+    def get_visualization(self, project: str | None = None) -> dict:
+        """Run t-SNE on memory embeddings to produce 2D coordinates for visualization.
+
+        Returns dict with 'points' list and 'generated_at' timestamp.
+        """
+        project_id = self._resolve_project_id(project) if project else None
+
+        # Fetch active memories with embeddings
+        if project_id:
+            rows = self.db.execute(
+                "SELECT m.id, m.embedding::text, m.summary, m.memory_type "
+                "FROM memories m "
+                "WHERE m.project_id = %s AND m.is_active = true AND m.embedding IS NOT NULL",
+                (project_id,),
+            )
+        else:
+            rows = self.db.execute(
+                "SELECT m.id, m.embedding::text, m.summary, m.memory_type "
+                "FROM memories m "
+                "WHERE m.is_active = true AND m.embedding IS NOT NULL",
+            )
+
+        if not rows:
+            return {"points": [], "generated_at": datetime.now(timezone.utc).isoformat()}
+
+        memory_ids = [r["id"] for r in rows]
+        embeddings = np.array([self._parse_vector(r["embedding"]) for r in rows])
+
+        # t-SNE needs at least 2 samples; perplexity must be < n_samples
+        n = len(embeddings)
+        if n < 2:
+            return {"points": [], "generated_at": datetime.now(timezone.utc).isoformat()}
+
+        perplexity = min(30, max(2, n - 1))
+        tsne = TSNE(n_components=2, perplexity=perplexity, random_state=42, metric="cosine")
+        coords = tsne.fit_transform(embeddings)
+
+        # Get cluster assignments for coloring
+        cluster_map: dict[int, tuple[int, str]] = {}  # memory_id -> (cluster_id, label)
+        members = self.db.execute(
+            "SELECT cm.memory_id, cm.cluster_id, c.label "
+            "FROM cluster_members cm "
+            "JOIN clusters c ON c.id = cm.cluster_id",
+        )
+        for m in members:
+            cluster_map[m["memory_id"]] = (m["cluster_id"], m["label"])
+
+        points = []
+        for i, row in enumerate(rows):
+            mid = memory_ids[i]
+            cinfo = cluster_map.get(mid)
+            points.append({
+                "id": mid,
+                "x": float(coords[i, 0]),
+                "y": float(coords[i, 1]),
+                "summary": row["summary"],
+                "memory_type": row["memory_type"],
+                "cluster_id": cinfo[0] if cinfo else None,
+                "cluster_label": cinfo[1] if cinfo else None,
+            })
+
+        return {
+            "points": points,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
 
     # ============================================================
     # Internals

@@ -12,6 +12,7 @@ import {
   Brain,
   Shield,
   Activity,
+  Clock,
   Menu,
   X,
 } from "lucide-react";
@@ -19,6 +20,7 @@ import { useState } from "react";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: Activity },
+  { href: "/timeline", label: "Timeline", icon: Clock },
   { href: "/search", label: "Search", icon: Search },
   { href: "/projects", label: "Projects", icon: FolderOpen },
   { href: "/clusters", label: "Clusters", icon: Network },
