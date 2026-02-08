@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from cairn.core.utils import get_or_create_project
 from cairn.storage.database import Database
 
 if TYPE_CHECKING:

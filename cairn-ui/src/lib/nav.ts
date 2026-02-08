@@ -1,6 +1,7 @@
 import {
   Activity,
   Clock,
+  Landmark,
   Search,
   FolderOpen,
   Network,
@@ -18,6 +19,7 @@ export interface NavItem {
 export const navItems: NavItem[] = [
   { href: "/", label: "Dashboard", icon: Activity },
   { href: "/timeline", label: "Timeline", icon: Clock },
+  { href: "/cairns", label: "Cairns", icon: Landmark },
   { href: "/search", label: "Search", icon: Search },
   { href: "/projects", label: "Projects", icon: FolderOpen },
   { href: "/clusters", label: "Clusters", icon: Network },

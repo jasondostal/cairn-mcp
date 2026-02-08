@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from cairn.core.constants import TaskStatus
-from cairn.core.utils import get_or_create_project
+from cairn.core.utils import get_or_create_project, get_project
 from cairn.storage.database import Database
 
 logger = logging.getLogger(__name__)
@@ -50,34 +50,44 @@ class TaskManager:
         return {"id": task_id, "action": "completed"}
 
     def list_tasks(
-        self, project: str, include_completed: bool = False,
+        self, project: str | None = None, include_completed: bool = False,
         limit: int | None = None, offset: int = 0,
     ) -> dict:
-        """List tasks for a project with optional pagination.
+        """List tasks for a project (or all projects) with optional pagination.
 
         Returns dict with 'total', 'limit', 'offset', and 'items' keys.
         """
-        project_id = get_or_create_project(self.db,project)
-
         status_filter = "" if include_completed else f" AND t.status = '{TaskStatus.PENDING}'"
+
+        if project is not None:
+            project_id = get_project(self.db, project)
+            if project_id is None:
+                return {"total": 0, "limit": limit, "offset": offset, "items": []}
+            where = "t.project_id = %s"
+            base_params: list = [project_id]
+        else:
+            where = "TRUE"
+            base_params = []
 
         # Get total count
         count_row = self.db.execute_one(
-            f"SELECT COUNT(*) as total FROM tasks t WHERE t.project_id = %s{status_filter}",
-            (project_id,),
+            f"SELECT COUNT(*) as total FROM tasks t WHERE {where}{status_filter}",
+            tuple(base_params),
         )
         total = count_row["total"]
 
         query = f"""
             SELECT t.id, t.description, t.status, t.created_at, t.completed_at,
+                   p.name as project,
                    array_agg(tml.memory_id) FILTER (WHERE tml.memory_id IS NOT NULL) as linked_memories
             FROM tasks t
             LEFT JOIN task_memory_links tml ON tml.task_id = t.id
-            WHERE t.project_id = %s{status_filter}
-            GROUP BY t.id
+            LEFT JOIN projects p ON t.project_id = p.id
+            WHERE {where}{status_filter}
+            GROUP BY t.id, p.name
             ORDER BY t.created_at DESC
         """
-        params: list = [project_id]
+        params: list = list(base_params)
 
         if limit is not None:
             query += " LIMIT %s OFFSET %s"
@@ -90,6 +100,7 @@ class TaskManager:
                 "id": r["id"],
                 "description": r["description"],
                 "status": r["status"],
+                "project": r["project"],
                 "linked_memories": r["linked_memories"] or [],
                 "created_at": r["created_at"].isoformat(),
                 "completed_at": r["completed_at"].isoformat() if r["completed_at"] else None,

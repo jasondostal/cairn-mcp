@@ -76,6 +76,7 @@ export interface Task {
   id: number;
   description: string;
   status: string;
+  project?: string;
   linked_memories: number[];
   created_at: string;
   completed_at: string | null;
@@ -85,6 +86,7 @@ export interface ThinkingSequence {
   sequence_id: number;
   goal: string;
   status: string;
+  project?: string;
   thought_count: number;
   created_at: string;
   completed_at: string | null;
@@ -160,6 +162,33 @@ export interface ExportResult {
   memories: Memory[];
 }
 
+export interface Cairn {
+  id: number;
+  session_name: string;
+  title: string;
+  narrative: string | null;
+  memory_count: number;
+  project?: string;
+  started_at: string;
+  set_at: string;
+  is_compressed: boolean;
+}
+
+export interface CairnStone {
+  id: number;
+  summary: string;
+  memory_type: string;
+  importance: number;
+  tags: string[];
+  created_at: string;
+}
+
+export interface CairnDetail extends Cairn {
+  project: string;
+  events: Array<Record<string, unknown>> | null;
+  stones: CairnStone[];
+}
+
 // --- API functions ---
 
 export const api = {
@@ -184,11 +213,11 @@ export const api = {
   clusters: (opts?: { project?: string; topic?: string }) =>
     get<ClusterResult>("/clusters", opts),
 
-  tasks: (project: string, opts?: { include_completed?: string; limit?: string; offset?: string }) =>
-    get<Paginated<Task>>("/tasks", { project, ...opts }),
+  tasks: (project?: string, opts?: { include_completed?: string; limit?: string; offset?: string }) =>
+    get<Paginated<Task>>("/tasks", { ...(project ? { project } : {}), ...opts }),
 
-  thinking: (project: string, opts?: { status?: string; limit?: string; offset?: string }) =>
-    get<Paginated<ThinkingSequence>>("/thinking", { project, ...opts }),
+  thinking: (project?: string, opts?: { status?: string; limit?: string; offset?: string }) =>
+    get<Paginated<ThinkingSequence>>("/thinking", { ...(project ? { project } : {}), ...opts }),
 
   thinkingDetail: (id: number) => get<ThinkingDetail>(`/thinking/${id}`),
 
@@ -197,6 +226,11 @@ export const api = {
 
   clusterVisualization: (opts?: { project?: string }) =>
     get<VisualizationResult>("/clusters/visualization", opts),
+
+  cairns: (project?: string, opts?: { limit?: string }) =>
+    get<Cairn[]>("/cairns", { ...(project ? { project } : {}), ...opts }),
+
+  cairnDetail: (id: number) => get<CairnDetail>(`/cairns/${id}`),
 
   exportProject: (project: string, format: string = "json") =>
     get<ExportResult | string>("/export", { project, format }),

@@ -7,13 +7,14 @@ import { formatDate } from "@/lib/format";
 import { useProjectSelector } from "@/lib/use-project-selector";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/error-state";
 import { ProjectSelector } from "@/components/project-selector";
 import { PaginatedList } from "@/components/paginated-list";
 import { SkeletonList } from "@/components/skeleton-list";
 import { Brain } from "lucide-react";
 
-function SequenceCard({ sequence }: { sequence: ThinkingSequence }) {
+function SequenceCard({ sequence, showProject }: { sequence: ThinkingSequence; showProject?: boolean }) {
   return (
     <Link href={`/thinking/${sequence.sequence_id}`}>
       <Card className="transition-colors hover:border-primary/30">
@@ -27,6 +28,11 @@ function SequenceCard({ sequence }: { sequence: ThinkingSequence }) {
         </CardHeader>
         <CardContent className="p-4 pt-0">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {showProject && sequence.project && (
+              <Badge variant="secondary" className="text-xs">
+                {sequence.project}
+              </Badge>
+            )}
             <Badge
               variant={
                 sequence.status === "completed" ? "secondary" : "default"
@@ -50,13 +56,13 @@ function SequenceCard({ sequence }: { sequence: ThinkingSequence }) {
   );
 }
 
-function SequencesList({ sequences }: { sequences: ThinkingSequence[] }) {
+function SequencesList({ sequences, showProject }: { sequences: ThinkingSequence[]; showProject?: boolean }) {
   return (
     <PaginatedList
       items={sequences}
       noun="sequences"
       keyExtractor={(s) => s.sequence_id}
-      renderItem={(s) => <SequenceCard sequence={s} />}
+      renderItem={(s) => <SequenceCard sequence={s} showProject={showProject} />}
     />
   );
 }
@@ -66,27 +72,46 @@ export default function ThinkingPage() {
   const [sequences, setSequences] = useState<ThinkingSequence[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
-    if (!selected) return;
+    if (!showAll && !selected) return;
     setLoading(true);
     setError(null);
     api
-      .thinking(selected)
+      .thinking(showAll ? undefined : selected)
       .then((r) => setSequences(r.items))
       .catch((err) => setError(err?.message || "Failed to load thinking sequences"))
       .finally(() => setLoading(false));
-  }, [selected]);
+  }, [selected, showAll]);
+
+  function handleShowAll() {
+    setShowAll(true);
+  }
+
+  function handleSelectProject(name: string) {
+    setShowAll(false);
+    setSelected(name);
+  }
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Thinking</h1>
 
-      <ProjectSelector
-        projects={projects}
-        selected={selected}
-        onSelect={setSelected}
-      />
+      <div className="flex gap-1 flex-wrap">
+        <Button
+          variant={showAll ? "default" : "outline"}
+          size="sm"
+          onClick={handleShowAll}
+        >
+          All
+        </Button>
+        <ProjectSelector
+          projects={projects}
+          selected={showAll ? "" : selected}
+          onSelect={handleSelectProject}
+        />
+      </div>
 
       {(loading || projectsLoading) && <SkeletonList count={4} />}
 
@@ -94,12 +119,14 @@ export default function ThinkingPage() {
 
       {!loading && !projectsLoading && !error && !projectsError && sequences.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          No thinking sequences for {selected}.
+          {showAll
+            ? "No thinking sequences yet."
+            : `No thinking sequences for ${selected}.`}
         </p>
       )}
 
       {!loading && !projectsLoading && !error && !projectsError && sequences.length > 0 && (
-        <SequencesList sequences={sequences} />
+        <SequencesList sequences={sequences} showProject={showAll} />
       )}
     </div>
   );

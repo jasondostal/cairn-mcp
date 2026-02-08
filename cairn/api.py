@@ -32,7 +32,7 @@ def create_api(svc: Services) -> FastAPI:
     cairn_manager = svc.cairn_manager
     app = FastAPI(
         title="Cairn API",
-        version="0.5.0",
+        version="0.8.0",
         description="Read-only REST API for the Cairn web UI.",
     )
 
@@ -214,13 +214,13 @@ def create_api(svc: Services) -> FastAPI:
     # ------------------------------------------------------------------
     @router.get("/tasks")
     def api_tasks(
-        project: str = Query(...),
+        project: str | None = Query(None),
         include_completed: bool = Query(False),
         limit: int | None = Query(None, ge=1, le=100),
         offset: int = Query(0, ge=0),
     ):
         return task_manager.list_tasks(
-            project, include_completed=include_completed,
+            project=project, include_completed=include_completed,
             limit=limit, offset=offset,
         )
 
@@ -229,13 +229,13 @@ def create_api(svc: Services) -> FastAPI:
     # ------------------------------------------------------------------
     @router.get("/thinking")
     def api_thinking_list(
-        project: str = Query(...),
+        project: str | None = Query(None),
         status: str | None = Query(None),
         limit: int | None = Query(None, ge=1, le=100),
         offset: int = Query(0, ge=0),
     ):
         return thinking_engine.list_sequences(
-            project, status=status, limit=limit, offset=offset,
+            project=project, status=status, limit=limit, offset=offset,
         )
 
     # ------------------------------------------------------------------
@@ -253,10 +253,10 @@ def create_api(svc: Services) -> FastAPI:
     # ------------------------------------------------------------------
     @router.get("/cairns")
     def api_cairns(
-        project: str = Query(..., description="Project name (required)"),
+        project: str | None = Query(None, description="Project name (omit for all projects)"),
         limit: int = Query(20, ge=1, le=50),
     ):
-        return cairn_manager.stack(project, limit=limit)
+        return cairn_manager.stack(project=project, limit=limit)
 
     # ------------------------------------------------------------------
     # POST /cairns — set a cairn (used by hooks)

@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from cairn.core.utils import get_or_create_project, extract_json
+from cairn.core.utils import get_or_create_project, get_project, extract_json
 
 if TYPE_CHECKING:
     from cairn.config import LLMCapabilities
@@ -72,12 +72,15 @@ class CairnManager:
         )
 
         memory_count = len(stones)
+        has_content = memory_count > 0 or (events and len(events) > 0)
+
+        # Skip empty sessions — no stones, no events, nothing to mark
+        if not has_content:
+            return {"skipped": True, "reason": "empty session", "session_name": session_name, "project": project}
 
         # Synthesize narrative via LLM (graceful degradation)
-        # Synthesize when there are stones OR events (motes from hooks)
         title = None
         narrative = None
-        has_content = memory_count > 0 or (events and len(events) > 0)
         can_synthesize = (
             self.llm is not None
             and self.capabilities is not None
@@ -147,29 +150,45 @@ class CairnManager:
             "set_at": row["set_at"].isoformat() if hasattr(row["set_at"], "isoformat") else row["set_at"],
         }
 
-    def stack(self, project: str, limit: int = 20) -> list[dict]:
-        """View the trail — cairns for a project, newest first.
+    def stack(self, project: str | None = None, limit: int = 20) -> list[dict]:
+        """View the trail — cairns for a project (or all projects), newest first.
 
         Args:
-            project: Project name.
+            project: Project name. None returns cairns across all projects.
             limit: Maximum cairns to return (default 20).
 
         Returns:
             List of cairn summaries ordered by set_at DESC.
         """
-        project_id = get_or_create_project(self.db, project)
-
-        rows = self.db.execute(
-            """
-            SELECT id, session_name, title, narrative, memory_count,
-                   started_at, set_at, is_compressed
-            FROM cairns
-            WHERE project_id = %s AND set_at IS NOT NULL
-            ORDER BY set_at DESC
-            LIMIT %s
-            """,
-            (project_id, limit),
-        )
+        if project is not None:
+            project_id = get_project(self.db, project)
+            if project_id is None:
+                return []
+            rows = self.db.execute(
+                """
+                SELECT c.id, c.session_name, c.title, c.narrative, c.memory_count,
+                       c.started_at, c.set_at, c.is_compressed, p.name as project
+                FROM cairns c
+                LEFT JOIN projects p ON c.project_id = p.id
+                WHERE c.project_id = %s AND c.set_at IS NOT NULL
+                ORDER BY c.set_at DESC
+                LIMIT %s
+                """,
+                (project_id, limit),
+            )
+        else:
+            rows = self.db.execute(
+                """
+                SELECT c.id, c.session_name, c.title, c.narrative, c.memory_count,
+                       c.started_at, c.set_at, c.is_compressed, p.name as project
+                FROM cairns c
+                LEFT JOIN projects p ON c.project_id = p.id
+                WHERE c.set_at IS NOT NULL
+                ORDER BY c.set_at DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
 
         return [
             {
@@ -178,6 +197,7 @@ class CairnManager:
                 "title": r["title"],
                 "narrative": r["narrative"],
                 "memory_count": r["memory_count"],
+                "project": r["project"],
                 "started_at": r["started_at"].isoformat() if hasattr(r["started_at"], "isoformat") else r["started_at"],
                 "set_at": r["set_at"].isoformat() if hasattr(r["set_at"], "isoformat") else r["set_at"],
                 "is_compressed": r["is_compressed"],

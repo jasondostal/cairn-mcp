@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from cairn.core.constants import VALID_DOC_TYPES, VALID_LINK_TYPES
-from cairn.core.utils import get_or_create_project
+from cairn.core.utils import get_or_create_project, get_project
 from cairn.storage.database import Database
 
 logger = logging.getLogger(__name__)
@@ -78,7 +78,9 @@ class ProjectManager:
 
     def get_docs(self, project: str, doc_type: str | None = None) -> list[dict]:
         """Get documents for a project, optionally filtered by type."""
-        project_id = get_or_create_project(self.db,project)
+        project_id = get_project(self.db, project)
+        if project_id is None:
+            return []
 
         if doc_type:
             rows = self.db.execute(
@@ -143,7 +145,9 @@ class ProjectManager:
 
     def get_links(self, project: str) -> list[dict]:
         """Get all links for a project (both directions)."""
-        project_id = get_or_create_project(self.db,project)
+        project_id = get_project(self.db, project)
+        if project_id is None:
+            return []
 
         rows = self.db.execute(
             """

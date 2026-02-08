@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from cairn.core.constants import VALID_THOUGHT_TYPES, ThinkingStatus
-from cairn.core.utils import get_or_create_project
+from cairn.core.utils import get_or_create_project, get_project
 from cairn.storage.database import Database
 
 logger = logging.getLogger(__name__)
@@ -157,33 +157,43 @@ class ThinkingEngine:
         }
 
     def list_sequences(
-        self, project: str, status: str | None = None,
+        self, project: str | None = None, status: str | None = None,
         limit: int | None = None, offset: int = 0,
     ) -> dict:
-        """List thinking sequences for a project with optional pagination.
+        """List thinking sequences for a project (or all projects) with optional pagination.
 
         Returns dict with 'total', 'limit', 'offset', and 'items' keys.
         """
-        project_id = get_or_create_project(self.db,project)
+        if project is not None:
+            project_id = get_project(self.db, project)
+            if project_id is None:
+                return {"total": 0, "limit": limit, "offset": offset, "items": []}
+            where = "ts.project_id = %s"
+            base_params: list = [project_id]
+        else:
+            where = "TRUE"
+            base_params = []
 
         status_filter = " AND ts.status = %s" if status else ""
-        count_params: list = [project_id]
+        count_params: list = list(base_params)
         if status:
             count_params.append(status)
 
         count_row = self.db.execute_one(
-            f"SELECT COUNT(*) as total FROM thinking_sequences ts WHERE ts.project_id = %s{status_filter}",
+            f"SELECT COUNT(*) as total FROM thinking_sequences ts WHERE {where}{status_filter}",
             tuple(count_params),
         )
         total = count_row["total"]
 
         query = f"""
             SELECT ts.id, ts.goal, ts.status, ts.created_at, ts.completed_at,
+                   p.name as project,
                    COUNT(t.id) as thought_count
             FROM thinking_sequences ts
             LEFT JOIN thoughts t ON t.sequence_id = ts.id
-            WHERE ts.project_id = %s{status_filter}
-            GROUP BY ts.id
+            LEFT JOIN projects p ON ts.project_id = p.id
+            WHERE {where}{status_filter}
+            GROUP BY ts.id, p.name
             ORDER BY ts.created_at DESC
         """
         params: list = list(count_params)
@@ -199,6 +209,7 @@ class ThinkingEngine:
                 "sequence_id": r["id"],
                 "goal": r["goal"],
                 "status": r["status"],
+                "project": r["project"],
                 "thought_count": r["thought_count"],
                 "created_at": r["created_at"].isoformat(),
                 "completed_at": r["completed_at"].isoformat() if r["completed_at"] else None,

@@ -56,13 +56,23 @@ def validate_search(query, limit):
         raise ValidationError(f"limit cannot exceed {MAX_LIMIT}")
 
 
-def get_or_create_project(db: Database, project_name: str) -> int:
-    """Resolve project name to ID, creating if needed. Returns project ID."""
+def get_project(db: Database, project_name: str) -> int | None:
+    """Resolve project name to ID. Returns project ID or None if not found."""
     row = db.execute_one(
         "SELECT id FROM projects WHERE name = %s", (project_name,)
     )
-    if row:
-        return row["id"]
+    return row["id"] if row else None
+
+
+def get_or_create_project(db: Database, project_name: str) -> int:
+    """Resolve project name to ID, creating if needed. Returns project ID.
+
+    Use this only on write paths (store, create, set). For read paths,
+    use get_project() to avoid creating phantom projects from typos.
+    """
+    project_id = get_project(db, project_name)
+    if project_id is not None:
+        return project_id
 
     row = db.execute_one(
         "INSERT INTO projects (name) VALUES (%s) RETURNING id",

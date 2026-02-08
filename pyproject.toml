@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cairn-mcp"
-version = "0.7.1"
+version = "0.8.0"
 description = "Semantic memory for AI agents. Store, search, and discover patterns across persistent context."
 readme = "README.md"
 license = {text = "GPL-3.0-only"}

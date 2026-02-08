@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-02-08
+
+### Added
+- **Cairns UI page** — new list page (`/cairns`) and detail page (`/cairns/:id`) for browsing the session trail. List shows title, session name, narrative preview, stone count, and compressed status. Detail page renders full narrative, linked stones (click to open memory sheet), and collapsible event timeline.
+- **"All projects" filter** — Cairns, Tasks, and Thinking list pages now support viewing across all projects. "All" button deselects the project filter; cards show a project badge when viewing all. Backend endpoints (`GET /api/cairns`, `GET /api/tasks`, `GET /api/thinking`) now accept optional `project` parameter.
+- **`get_project()` read-only lookup** — new utility function returns project ID or `None` without creating phantom projects. All read paths (cairns stack, tasks list, thinking list, project docs/links) switched from `get_or_create_project` to `get_project`.
+- **Migration 005 — partial indexes** — two partial indexes on `memories` filtered by `is_active = true`: one for timeline queries (`project_id, created_at DESC`), one for session grouping (`project_id, session_name`).
+
+### Changed
+- `CairnManager.stack()` now accepts optional `project` (returns all projects when `None`), includes project name in response
+- `TaskManager.list_tasks()` now accepts optional `project`, includes project name in response
+- `ThinkingEngine.list_sequences()` now accepts optional `project`, includes project name in response
+- `cairn-ui` package version bumped to 0.8.0
+- Cairns nav item added to sidebar (Landmark icon, between Timeline and Search)
+
+### Fixed
+- **Empty cairn noise** — `CairnManager.set()` now returns `{"skipped": true}` when session has no stones and no events, preventing noise cairns from accumulating
+- **Phantom project creation on read paths** — reading docs, links, tasks, thinking sequences, or cairns for a nonexistent project no longer silently creates an empty project row
+- Removed unused `get_or_create_project` import from `synthesis.py`
+
 ## [0.7.1] - 2026-02-08
 
 ### Added
@@ -273,7 +293,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.3...v0.6.0

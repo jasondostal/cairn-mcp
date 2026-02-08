@@ -13,7 +13,7 @@ import { PaginatedList } from "@/components/paginated-list";
 import { SkeletonList } from "@/components/skeleton-list";
 import { CheckCircle, Circle, Link2 } from "lucide-react";
 
-function TaskCard({ task }: { task: Task }) {
+function TaskCard({ task, showProject }: { task: Task; showProject?: boolean }) {
   const done = task.status === "completed";
 
   return (
@@ -28,6 +28,11 @@ function TaskCard({ task }: { task: Task }) {
           <p className="text-sm">{task.description}</p>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>#{task.id}</span>
+            {showProject && task.project && (
+              <Badge variant="secondary" className="text-xs">
+                {task.project}
+              </Badge>
+            )}
             <Badge
               variant={done ? "secondary" : "default"}
               className="text-xs"
@@ -57,13 +62,13 @@ function TaskCard({ task }: { task: Task }) {
   );
 }
 
-function TasksList({ tasks }: { tasks: Task[] }) {
+function TasksList({ tasks, showProject }: { tasks: Task[]; showProject?: boolean }) {
   return (
     <PaginatedList
       items={tasks}
       noun="tasks"
       keyExtractor={(t) => t.id}
-      renderItem={(t) => <TaskCard task={t} />}
+      renderItem={(t) => <TaskCard task={t} showProject={showProject} />}
       gap="space-y-2"
     />
   );
@@ -75,30 +80,49 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
-    if (!selected) return;
+    if (!showAll && !selected) return;
     setLoading(true);
     setError(null);
     api
-      .tasks(selected, {
+      .tasks(showAll ? undefined : selected, {
         include_completed: showCompleted ? "true" : undefined,
       })
       .then((r) => setTasks(r.items))
       .catch((err) => setError(err?.message || "Failed to load tasks"))
       .finally(() => setLoading(false));
-  }, [selected, showCompleted]);
+  }, [selected, showCompleted, showAll]);
+
+  function handleShowAll() {
+    setShowAll(true);
+  }
+
+  function handleSelectProject(name: string) {
+    setShowAll(false);
+    setSelected(name);
+  }
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Tasks</h1>
 
       <div className="flex items-center gap-2">
-        <ProjectSelector
-          projects={projects}
-          selected={selected}
-          onSelect={setSelected}
-        />
+        <div className="flex gap-1 flex-wrap">
+          <Button
+            variant={showAll ? "default" : "outline"}
+            size="sm"
+            onClick={handleShowAll}
+          >
+            All
+          </Button>
+          <ProjectSelector
+            projects={projects}
+            selected={showAll ? "" : selected}
+            onSelect={handleSelectProject}
+          />
+        </div>
         <Button
           variant={showCompleted ? "default" : "outline"}
           size="sm"
@@ -114,12 +138,14 @@ export default function TasksPage() {
 
       {!loading && !projectsLoading && !error && !projectsError && tasks.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          No tasks for {selected}.
+          {showAll
+            ? "No tasks yet."
+            : `No tasks for ${selected}.`}
         </p>
       )}
 
       {!loading && !projectsLoading && !error && !projectsError && tasks.length > 0 && (
-        <TasksList tasks={tasks} />
+        <TasksList tasks={tasks} showProject={showAll} />
       )}
     </div>
   );
