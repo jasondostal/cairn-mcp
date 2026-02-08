@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.7.0** — Cairns (episodic session memory) with automatic hook-based capture.
+Current: **v0.7.1** — Session name alignment + mote-aware narrative synthesis.
 
 ---
 
