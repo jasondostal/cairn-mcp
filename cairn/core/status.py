@@ -49,4 +49,5 @@ def get_status(db: Database, config: Config) -> dict:
             if config.llm.backend == "bedrock"
             else config.llm.ollama_model
         ),
+        "llm_capabilities": config.capabilities.active_list(),
     }

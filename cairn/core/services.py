@@ -6,12 +6,14 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from cairn.config import Config, load_config
+from cairn.config import Config, LLMCapabilities, load_config
 from cairn.core.clustering import ClusterEngine
+from cairn.core.consolidation import ConsolidationEngine
 from cairn.core.enrichment import Enricher
 from cairn.core.memory import MemoryStore
 from cairn.core.projects import ProjectManager
 from cairn.core.search import SearchEngine
+from cairn.core.synthesis import SessionSynthesizer
 from cairn.core.tasks import TaskManager
 from cairn.core.thinking import ThinkingEngine
 from cairn.embedding.engine import EmbeddingEngine
@@ -39,6 +41,8 @@ class Services:
     project_manager: ProjectManager
     task_manager: TaskManager
     thinking_engine: ThinkingEngine
+    session_synthesizer: SessionSynthesizer
+    consolidation_engine: ConsolidationEngine
 
 
 def create_services(config: Config | None = None) -> Services:
@@ -66,16 +70,20 @@ def create_services(config: Config | None = None) -> Services:
     else:
         logger.info("Enrichment disabled by config")
 
+    capabilities = config.capabilities
+
     return Services(
         config=config,
         db=db,
         embedding=embedding,
         llm=llm,
         enricher=enricher,
-        memory_store=MemoryStore(db, embedding, enricher=enricher),
-        search_engine=SearchEngine(db, embedding),
+        memory_store=MemoryStore(db, embedding, enricher=enricher, llm=llm, capabilities=capabilities),
+        search_engine=SearchEngine(db, embedding, llm=llm, capabilities=capabilities),
         cluster_engine=ClusterEngine(db, embedding, llm=llm),
         project_manager=ProjectManager(db),
         task_manager=TaskManager(db),
         thinking_engine=ThinkingEngine(db),
+        session_synthesizer=SessionSynthesizer(db, llm=llm, capabilities=capabilities),
+        consolidation_engine=ConsolidationEngine(db, embedding, llm=llm, capabilities=capabilities),
     )

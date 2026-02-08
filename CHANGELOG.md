@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-02-07
+
+### Added
+- **Query expansion** — LLM rewrites search queries with related terms and synonyms before embedding, improving recall across all three search modes
+- **Relationship extraction** — on store, vector-searches for top 5 nearest neighbors and asks LLM which are genuinely related; auto-creates typed `memory_relations` entries (extends, contradicts, implements, depends_on, related)
+- **Rule conflict detection** — when storing a `rule`-type memory, checks existing rules for contradictions via LLM; advisory only (rule is always stored), conflicts returned in response
+- **Session synthesis** — new `synthesize` MCP tool (#11) fetches all memories for a session and produces a 2-4 paragraph narrative via LLM
+- **Memory consolidation** — new `consolidate` MCP tool (#12) finds semantically similar memory pairs (>0.85 cosine), asks LLM to recommend merges/promotions/inactivations; `dry_run=True` by default
+- **Confidence gating** — post-search LLM assessment of result quality; returns confidence score, best match ID, and irrelevant IDs; off by default (high reasoning demand)
+- **`LLMCapabilities` config** — frozen dataclass with 6 independently toggleable feature flags, parsed from `CAIRN_LLM_*` env vars
+- **Status endpoint** now reports active LLM capabilities in `llm_capabilities` field
+- 6 new env vars: `CAIRN_LLM_QUERY_EXPANSION`, `CAIRN_LLM_RELATIONSHIP_EXTRACT`, `CAIRN_LLM_RULE_CONFLICT_CHECK`, `CAIRN_LLM_SESSION_SYNTHESIS`, `CAIRN_LLM_CONSOLIDATION`, `CAIRN_LLM_CONFIDENCE_GATING`
+- `tests/helpers.py` — shared `MockLLM` and `ExplodingLLM` extracted from duplicated test code
+- 25 new tests across 6 test files (query expansion, synthesis, relationship extraction, rule conflicts, consolidation, confidence gating)
+
+### Changed
+- `store` response now includes `auto_relations` (list) and `rule_conflicts` (list or null) fields
+- `search` response wraps results with `confidence` assessment when confidence gating is active
+- `SearchEngine` and `MemoryStore` constructors now accept optional `llm` and `capabilities` parameters
+- `Services` dataclass expanded with `session_synthesizer` and `consolidation_engine` fields
+- `prompts.py` expanded from 2 to 8 prompt templates with 8 builder functions
+
+### Design
+- Every LLM capability follows the same pattern: flag check → try LLM → catch failure → fall back to no-op
+- Core functionality (store, search, recall) never depends on LLM — all LLM features are additive
+- No new database migration needed — all capabilities use existing tables
+
 ## [0.5.3] - 2026-02-08
 
 ### Fixed
@@ -208,7 +235,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.3...v0.6.0
 [0.5.3]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.0...v0.5.1

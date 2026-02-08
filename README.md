@@ -14,24 +14,28 @@
 
 An MCP server that gives LLMs persistent, searchable, pattern-discovering memory. Store anything, find it later through hybrid semantic search, and let clustering surface patterns you didn't know were there.
 
-**Built for agents.** 10 MCP tools, a REST API, and a web dashboard — all from a single container.
+**Built for agents.** 12 MCP tools, a REST API, and a web dashboard — all from a single container.
 
 ## Highlights
 
-- **Hybrid search** — Vector similarity + full-text + tag matching, fused with Reciprocal Rank Fusion. 83.8% recall@10 on our eval benchmark.
+- **Hybrid search** — Vector similarity + full-text + tag matching, fused with Reciprocal Rank Fusion. 83.8% recall@10 on our eval benchmark. Optional LLM query expansion and confidence gating.
 - **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, and importance score on store. Bedrock or Ollama.
+- **Smart relationships** — On store, LLM identifies genuinely related memories and creates typed links (extends, contradicts, implements, depends_on). Rule conflict detection warns about contradictions.
 - **Pattern discovery** — DBSCAN clustering finds themes across memories. LLM writes the labels. No cron jobs — clusters refresh lazily.
+- **Session synthesis** — Synthesize all memories from a session into a coherent narrative.
+- **Memory consolidation** — Find duplicates, recommend merges and promotions, with dry-run safety.
 - **Structured thinking** — Reasoning sequences with branching, for when an agent needs to think through a problem step by step.
 - **Web dashboard** — Next.js + shadcn/ui. Timeline, search, cluster visualization, Cmd+K command palette, inline memory viewer. Dark mode.
 - **One port, everything** — MCP protocol at `/mcp`, REST API at `/api`, same process. stdio also supported.
 - **Hardened** — Input validation on all tools, non-root Docker container, t-SNE sampling cap, pinned dependencies.
+- **6 LLM capabilities** — Each independently toggleable via env vars, each with graceful degradation. Core search/store never depends on LLM.
 
 ## MCP Tools
 
 | Tool | What it does |
 |------|-------------|
-| `store` | Persist a memory with auto-enrichment (summary, tags, importance) |
-| `search` | Hybrid semantic search with project, type, and mode filters |
+| `store` | Persist a memory with auto-enrichment, relationship extraction, and rule conflict detection |
+| `search` | Hybrid semantic search with query expansion and optional confidence gating |
 | `recall` | Expand memory IDs to full content with cluster context |
 | `modify` | Update, soft-delete, or reactivate memories |
 | `rules` | Behavioral guardrails — global or per-project |
@@ -39,7 +43,9 @@ An MCP server that gives LLMs persistent, searchable, pattern-discovering memory
 | `projects` | Documents (briefs, PRDs, plans) and cross-project linking |
 | `tasks` | Task lifecycle — create, complete, list, link to memories |
 | `think` | Structured reasoning sequences with branching |
-| `status` | System health, counts, embedding model info |
+| `status` | System health, counts, embedding model info, active LLM capabilities |
+| `synthesize` | Synthesize session memories into a coherent narrative |
+| `consolidate` | Find duplicate memories, recommend merges/promotions/inactivations |
 
 ## Architecture
 
@@ -56,6 +62,7 @@ Browser                   MCP Client (Claude, etc.)         curl / scripts
 cairn-ui                  |                                                   |
                           |  core: memory, search, enrichment, clustering     |
                           |        projects, tasks, thinking                  |
+                          |        synthesis, consolidation                   |
                           |                                                   |
                           |  embedding: MiniLM-L6-v2 (local, 384-dim)        |
                           |  llm: Bedrock (Llama 90B) / Ollama fallback      |
@@ -118,7 +125,7 @@ Or add to your `.mcp.json`:
 
 ### 3. Store your first memory
 
-Once connected, your agent can immediately use all 10 tools. Try:
+Once connected, your agent can immediately use all 12 tools. Try:
 
 > "Remember that we chose PostgreSQL with pgvector for the storage layer because it gives us hybrid search without a separate vector database."
 
@@ -202,6 +209,12 @@ All via environment variables:
 | `CAIRN_HTTP_HOST` | `0.0.0.0` | HTTP bind address |
 | `CAIRN_HTTP_PORT` | `8000` | HTTP listen port |
 | `CAIRN_EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence transformer model |
+| `CAIRN_LLM_QUERY_EXPANSION` | `true` | Expand search queries with related terms |
+| `CAIRN_LLM_RELATIONSHIP_EXTRACT` | `true` | Auto-detect relationships between memories on store |
+| `CAIRN_LLM_RULE_CONFLICT_CHECK` | `true` | Check new rules for conflicts with existing rules |
+| `CAIRN_LLM_SESSION_SYNTHESIS` | `true` | Enable session narrative synthesis |
+| `CAIRN_LLM_CONSOLIDATION` | `true` | Enable memory consolidation recommendations |
+| `CAIRN_LLM_CONFIDENCE_GATING` | `false` | Post-search result quality assessment (high reasoning demand) |
 
 ## Development
 
@@ -214,7 +227,7 @@ docker compose up -d --build
 
 ### Testing
 
-30 tests across 3 suites:
+55 tests across 9 suites:
 
 ```bash
 docker exec cairn pip install pytest

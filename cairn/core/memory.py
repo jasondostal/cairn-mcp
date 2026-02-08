@@ -7,12 +7,14 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from cairn.core.constants import MemoryAction
-from cairn.core.utils import get_or_create_project
+from cairn.core.utils import extract_json, get_or_create_project
 from cairn.embedding.engine import EmbeddingEngine
 from cairn.storage.database import Database
 
 if TYPE_CHECKING:
+    from cairn.config import LLMCapabilities
     from cairn.core.enrichment import Enricher
+    from cairn.llm.interface import LLMInterface
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +22,17 @@ logger = logging.getLogger(__name__)
 class MemoryStore:
     """Handles all memory CRUD operations."""
 
-    def __init__(self, db: Database, embedding: EmbeddingEngine, enricher: Enricher | None = None):
+    def __init__(
+        self, db: Database, embedding: EmbeddingEngine, *,
+        enricher: Enricher | None = None,
+        llm: LLMInterface | None = None,
+        capabilities: LLMCapabilities | None = None,
+    ):
         self.db = db
         self.embedding = embedding
         self.enricher = enricher
+        self.llm = llm
+        self.capabilities = capabilities
 
     def store(
         self,
@@ -106,6 +115,14 @@ class MemoryStore:
                     (memory_id, related_id),
                 )
 
+        # Auto-extract relationships via LLM
+        auto_relations = self._extract_relationships(memory_id, content, vector, project_id)
+
+        # Rule conflict detection
+        rule_conflicts = None
+        if final_type == "rule":
+            rule_conflicts = self._check_rule_conflicts(content, project)
+
         self.db.commit()
 
         logger.info("Stored memory #%d (type=%s, project=%s)", memory_id, final_type, project)
@@ -119,8 +136,129 @@ class MemoryStore:
             "tags": caller_tags,
             "auto_tags": auto_tags,
             "summary": summary,
+            "auto_relations": auto_relations,
+            "rule_conflicts": rule_conflicts,
             "created_at": row["created_at"].isoformat(),
         }
+
+    def _extract_relationships(
+        self, memory_id: int, content: str, embedding: list[float], project_id: int,
+    ) -> list[dict]:
+        """Find and create relationships with similar existing memories via LLM.
+
+        Returns list of created relations, or empty list on failure/disabled.
+        """
+        can_extract = (
+            self.llm is not None
+            and self.capabilities is not None
+            and self.capabilities.relationship_extract
+        )
+        if not can_extract:
+            return []
+
+        try:
+            # Vector search for top 5 nearest neighbors (excluding self)
+            neighbors = self.db.execute(
+                """
+                SELECT m.id, m.content, m.summary
+                FROM memories m
+                WHERE m.id != %s AND m.is_active = true AND m.embedding IS NOT NULL
+                ORDER BY m.embedding <=> %s::vector
+                LIMIT 5
+                """,
+                (memory_id, str(embedding)),
+            )
+
+            if not neighbors:
+                return []
+
+            candidates = [
+                {"id": n["id"], "summary": n.get("summary") or n["content"][:300]}
+                for n in neighbors
+            ]
+
+            from cairn.llm.prompts import build_relationship_extraction_messages
+            messages = build_relationship_extraction_messages(content, candidates)
+            raw = self.llm.generate(messages, max_tokens=512)
+            relations = extract_json(raw, json_type="array")
+
+            if not relations or not isinstance(relations, list):
+                return []
+
+            valid_relation_types = {"extends", "contradicts", "implements", "depends_on", "related"}
+            created = []
+            for rel in relations:
+                if not isinstance(rel, dict):
+                    continue
+                rel_id = rel.get("id")
+                rel_type = rel.get("relation", "related")
+                if rel_id is None or rel_type not in valid_relation_types:
+                    continue
+                # Verify the ID is in our candidate set
+                candidate_ids = {c["id"] for c in candidates}
+                if rel_id not in candidate_ids:
+                    continue
+
+                self.db.execute(
+                    """
+                    INSERT INTO memory_relations (source_id, target_id, relation)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    (memory_id, rel_id, rel_type),
+                )
+                created.append({"id": rel_id, "relation": rel_type})
+
+            return created
+
+        except Exception:
+            logger.warning("Relationship extraction failed", exc_info=True)
+            return []
+
+    def _check_rule_conflicts(self, content: str, project: str) -> list[dict] | None:
+        """Check a new rule against existing rules for conflicts via LLM.
+
+        Returns list of conflicts, None if disabled/unavailable, or empty list if no conflicts.
+        """
+        can_check = (
+            self.llm is not None
+            and self.capabilities is not None
+            and self.capabilities.rule_conflict_check
+        )
+        if not can_check:
+            return None
+
+        try:
+            existing = self.get_rules(project)
+            existing_rules = existing.get("items", [])
+
+            if not existing_rules:
+                return []
+
+            from cairn.llm.prompts import build_rule_conflict_messages
+            messages = build_rule_conflict_messages(content, existing_rules)
+            raw = self.llm.generate(messages, max_tokens=512)
+            conflicts = extract_json(raw, json_type="array")
+
+            if not conflicts or not isinstance(conflicts, list):
+                return []
+
+            # Validate conflict entries
+            valid = []
+            for c in conflicts:
+                if not isinstance(c, dict):
+                    continue
+                if "rule_id" in c and "conflict" in c:
+                    valid.append({
+                        "rule_id": c["rule_id"],
+                        "conflict": c["conflict"],
+                        "severity": c.get("severity", "medium"),
+                    })
+            return valid
+
+        except Exception:
+            logger.warning("Rule conflict check failed", exc_info=True)
+            return None
 
     def recall(self, ids: list[int]) -> list[dict]:
         """Retrieve full content for one or more memory IDs."""

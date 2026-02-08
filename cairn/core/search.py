@@ -9,10 +9,17 @@ RRF formula: score = 1 / (k + rank), where k = 60
 Default weights: vector 0.60, keyword 0.25, tag 0.15
 """
 
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 
 from cairn.embedding.engine import EmbeddingEngine
 from cairn.storage.database import Database
+
+if TYPE_CHECKING:
+    from cairn.config import LLMCapabilities
+    from cairn.llm.interface import LLMInterface
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +37,15 @@ DEFAULT_WEIGHTS = {
 class SearchEngine:
     """Hybrid search over memories."""
 
-    def __init__(self, db: Database, embedding: EmbeddingEngine):
+    def __init__(
+        self, db: Database, embedding: EmbeddingEngine, *,
+        llm: LLMInterface | None = None,
+        capabilities: LLMCapabilities | None = None,
+    ):
         self.db = db
         self.embedding = embedding
+        self.llm = llm
+        self.capabilities = capabilities
 
     def search(
         self,
@@ -56,12 +69,40 @@ class SearchEngine:
         Returns:
             List of memory dicts with relevance scores.
         """
+        # Query expansion: rewrite query with richer terms before search
+        expanded = self._expand_query(query)
+
         if search_mode == "keyword":
-            return self._keyword_search(query, project, memory_type, limit, include_full)
+            return self._keyword_search(expanded, project, memory_type, limit, include_full)
         elif search_mode == "vector":
-            return self._vector_search(query, project, memory_type, limit, include_full)
+            return self._vector_search(expanded, project, memory_type, limit, include_full)
         else:
-            return self._hybrid_search(query, project, memory_type, limit, include_full)
+            return self._hybrid_search(expanded, project, memory_type, limit, include_full)
+
+    def _expand_query(self, query: str) -> str:
+        """Expand search query with related terms via LLM.
+
+        Returns the original query unchanged if LLM is unavailable, flag is off, or call fails.
+        """
+        can_expand = (
+            self.llm is not None
+            and self.capabilities is not None
+            and self.capabilities.query_expansion
+        )
+        if not can_expand:
+            return query
+
+        try:
+            from cairn.llm.prompts import build_query_expansion_messages
+            messages = build_query_expansion_messages(query)
+            expanded = self.llm.generate(messages, max_tokens=256)
+            if expanded and expanded.strip():
+                logger.debug("Query expanded: %r -> %r", query, expanded.strip())
+                return expanded.strip()
+        except Exception:
+            logger.warning("Query expansion failed, using original query", exc_info=True)
+
+        return query
 
     def _build_filters(self, project: str | None, memory_type: str | None) -> tuple[str, list]:
         """Build WHERE clause fragments for common filters."""
@@ -274,3 +315,30 @@ class SearchEngine:
             }
             results.append(result)
         return results
+
+    def assess_confidence(self, query: str, results: list[dict]) -> dict | None:
+        """Assess whether search results actually answer the query.
+
+        Returns confidence assessment dict, or None if gating is off/unavailable/fails.
+        """
+        can_gate = (
+            self.llm is not None
+            and self.capabilities is not None
+            and self.capabilities.confidence_gating
+            and results
+        )
+        if not can_gate:
+            return None
+
+        try:
+            from cairn.core.utils import extract_json
+            from cairn.llm.prompts import build_confidence_gating_messages
+            messages = build_confidence_gating_messages(query, results)
+            raw = self.llm.generate(messages, max_tokens=512)
+            assessment = extract_json(raw, json_type="object")
+            if assessment and "confidence" in assessment:
+                return assessment
+        except Exception:
+            logger.warning("Confidence gating failed", exc_info=True)
+
+        return None

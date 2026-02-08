@@ -1,8 +1,21 @@
 # Roadmap
 
-Current: **v0.5.0** — Timeline, Cmd+K, inline viewer, cluster visualization, export.
+Current: **v0.6.0** — LLM capabilities: query expansion, relationship extraction, rule conflict detection, session synthesis, memory consolidation, confidence gating.
 
 ---
+
+## v0.6.0 — LLM Capabilities ✓
+
+Make the LLM earn its keep beyond enrichment and cluster labels.
+
+- [x] **Query expansion** — LLM rewrites search queries with related terms before embedding
+- [x] **Relationship extraction** — auto-detect typed relations (extends, contradicts, implements, depends_on, related) on store
+- [x] **Rule conflict detection** — advisory check for contradictions when storing rules
+- [x] **Session synthesis** — new `synthesize` tool, LLM narrative from session memories
+- [x] **Memory consolidation** — new `consolidate` tool, find duplicates, recommend merges/promotions
+- [x] **Confidence gating** — post-search quality assessment (off by default)
+- [x] **Feature flags** — `LLMCapabilities` dataclass, 6 env vars, graceful degradation on every capability
+- [x] **25 new tests** across 6 test files + shared test helpers
 
 ## v0.4.x — Polish
 
@@ -38,6 +51,9 @@ Nice-to-haves when the core is rock solid.
 ---
 
 ## Completed
+
+### v0.6.0 — LLM Capabilities
+6 new LLM capabilities with feature flags and graceful degradation. Query expansion, relationship extraction, rule conflict detection, session synthesis, memory consolidation, confidence gating. 2 new MCP tools (12 total), 25 new tests (55 total).
 
 ### v0.1.0 — Phase 1: Core Loop
 PostgreSQL + pgvector, HNSW indexing, hybrid RRF search, 6 MCP tools, Docker Compose deployment.

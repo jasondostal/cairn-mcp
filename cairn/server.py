@@ -30,6 +30,8 @@ cluster_engine = _svc.cluster_engine
 project_manager = _svc.project_manager
 task_manager = _svc.task_manager
 thinking_engine = _svc.thinking_engine
+session_synthesizer = _svc.session_synthesizer
+consolidation_engine = _svc.consolidation_engine
 
 
 # ============================================================
@@ -147,7 +149,7 @@ def search(
         validate_search(query, limit)
         if search_mode not in VALID_SEARCH_MODES:
             return {"error": f"invalid search_mode: {search_mode}. Must be one of: {', '.join(VALID_SEARCH_MODES)}"}
-        return search_engine.search(
+        results = search_engine.search(
             query=query,
             project=project,
             memory_type=memory_type,
@@ -155,6 +157,11 @@ def search(
             limit=limit,
             include_full=include_full,
         )
+        # Confidence gating: wrap results with assessment when active
+        confidence = search_engine.assess_confidence(query, results)
+        if confidence is not None:
+            return {"results": results, "confidence": confidence}
+        return results
     except ValidationError as e:
         return {"error": str(e)}
     except Exception as e:
@@ -516,6 +523,62 @@ def status() -> dict:
         return get_status(db, config)
     except Exception as e:
         logger.exception("status failed")
+        return {"error": f"Internal error: {e}"}
+
+
+# ============================================================
+# Tool 11: synthesize
+# ============================================================
+
+@mcp.tool()
+def synthesize(
+    project: str,
+    session_name: str,
+) -> dict:
+    """Synthesize session memories into a coherent narrative.
+
+    Fetches all memories for a session and uses LLM to create a narrative summary.
+    Falls back to a structured list of memory summaries when LLM is unavailable.
+
+    Args:
+        project: Project name.
+        session_name: Session identifier to synthesize.
+    """
+    try:
+        if not project or not project.strip():
+            return {"error": "project is required"}
+        if not session_name or not session_name.strip():
+            return {"error": "session_name is required"}
+        return session_synthesizer.synthesize(project, session_name)
+    except Exception as e:
+        logger.exception("synthesize failed")
+        return {"error": f"Internal error: {e}"}
+
+
+# ============================================================
+# Tool 12: consolidate
+# ============================================================
+
+@mcp.tool()
+def consolidate(
+    project: str,
+    dry_run: bool = True,
+) -> dict:
+    """Review project memories for duplicates and recommend consolidation actions.
+
+    Finds semantically similar memory pairs (>0.85 cosine similarity), then asks LLM
+    to recommend merges, promotions to rules, or inactivations. Dry run by default.
+
+    Args:
+        project: Project name to consolidate.
+        dry_run: If True (default), only recommend. If False, apply changes.
+    """
+    try:
+        if not project or not project.strip():
+            return {"error": "project is required"}
+        return consolidation_engine.consolidate(project, dry_run=dry_run)
+    except Exception as e:
+        logger.exception("consolidate failed")
         return {"error": f"Internal error: {e}"}
 
 

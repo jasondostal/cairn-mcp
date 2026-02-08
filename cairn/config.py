@@ -37,10 +37,31 @@ class LLMConfig:
 
 
 @dataclass(frozen=True)
+class LLMCapabilities:
+    query_expansion: bool = True
+    relationship_extract: bool = True
+    rule_conflict_check: bool = True
+    session_synthesis: bool = True
+    consolidation: bool = True
+    confidence_gating: bool = False  # off by default — high reasoning demand
+
+    def active_list(self) -> list[str]:
+        """Return names of enabled capabilities."""
+        return [
+            name for name in (
+                "query_expansion", "relationship_extract", "rule_conflict_check",
+                "session_synthesis", "consolidation", "confidence_gating",
+            )
+            if getattr(self, name)
+        ]
+
+
+@dataclass(frozen=True)
 class Config:
     db: DatabaseConfig = field(default_factory=DatabaseConfig)
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
+    capabilities: LLMCapabilities = field(default_factory=LLMCapabilities)
     enrichment_enabled: bool = True
     transport: str = "stdio"  # "stdio" or "http"
     http_host: str = "0.0.0.0"
@@ -66,6 +87,14 @@ def load_config() -> Config:
             bedrock_region=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
             ollama_url=os.getenv("CAIRN_OLLAMA_URL", "http://localhost:11434"),
             ollama_model=os.getenv("CAIRN_OLLAMA_MODEL", "qwen2.5-coder:7b"),
+        ),
+        capabilities=LLMCapabilities(
+            query_expansion=os.getenv("CAIRN_LLM_QUERY_EXPANSION", "true").lower() in ("true", "1", "yes"),
+            relationship_extract=os.getenv("CAIRN_LLM_RELATIONSHIP_EXTRACT", "true").lower() in ("true", "1", "yes"),
+            rule_conflict_check=os.getenv("CAIRN_LLM_RULE_CONFLICT_CHECK", "true").lower() in ("true", "1", "yes"),
+            session_synthesis=os.getenv("CAIRN_LLM_SESSION_SYNTHESIS", "true").lower() in ("true", "1", "yes"),
+            consolidation=os.getenv("CAIRN_LLM_CONSOLIDATION", "true").lower() in ("true", "1", "yes"),
+            confidence_gating=os.getenv("CAIRN_LLM_CONFIDENCE_GATING", "false").lower() in ("true", "1", "yes"),
         ),
         enrichment_enabled=os.getenv("CAIRN_ENRICHMENT_ENABLED", "true").lower() in ("true", "1", "yes"),
         transport=os.getenv("CAIRN_TRANSPORT", "stdio"),
