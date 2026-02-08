@@ -29,13 +29,14 @@ def _make_memory_rows(n: int = 4) -> list[dict]:
         if i % 2 == 0:
             base = rng.randn(dim)
             base /= np.linalg.norm(base)
+            current = base
         else:
-            # Add small noise to base so similarity > 0.85
-            vec = base + rng.randn(dim) * 0.05
+            # Very small noise to guarantee cosine similarity > 0.85
+            vec = base + rng.randn(dim) * 0.005
             vec /= np.linalg.norm(vec)
-            base = vec
+            current = vec
 
-        embedding_str = "[" + ",".join(str(x) for x in base) + "]"
+        embedding_str = "[" + ",".join(str(x) for x in current) + "]"
         rows.append({
             "id": i + 1,
             "content": f"Memory {i + 1} content.",
