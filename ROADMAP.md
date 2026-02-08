@@ -8,14 +8,14 @@ Current: **v0.4.0** — All 5 PRD phases complete + web UI live.
 
 Tighten what's already there.
 
-- [ ] **Active nav highlighting** — sidebar should indicate the current page
-- [ ] **Error states** — show proper error UI when API calls fail (not just empty pages)
-- [ ] **Pagination** — projects, rules, tasks, and search results need paging for large datasets
-- [ ] **Favicon + branding** — replace default Next.js icon
-- [ ] **Back-navigation** — memory detail needs a way back to search results
+- [x] **Active nav highlighting** — `SidebarNav` component, `usePathname()` active state
+- [x] **Error states** — reusable `ErrorState` component + `useFetch` hook, all pages
+- [x] **Pagination** — client-side `usePagination` hook + `PaginationControls`, applied to search/tasks/thinking/rules
+- [x] **Favicon + branding** — SVG cairn icon, removed default Next.js assets
+- [x] **Back-navigation** — ArrowLeft + `router.back()` on memory detail
 - [ ] **GHCR image for cairn-ui** — CI/CD builds like the MCP server image
-- [ ] **Health check** — add healthcheck to cairn-ui in docker-compose
-- [ ] **Mobile responsive** — sidebar breaks on small screens, needs collapsible/drawer layout
+- [x] **Health check** — `wget` healthcheck for cairn-ui in docker-compose
+- [x] **Mobile responsive** — hamburger menu + backdrop drawer on small screens
 
 ## v0.5.0 — Features
 

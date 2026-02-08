@@ -74,11 +74,12 @@ curl -O https://raw.githubusercontent.com/jasondostal/cairn-mcp/main/docker-comp
 docker compose up -d
 ```
 
-This starts two containers:
+This starts three containers:
 - **cairn** — MCP server + REST API on port 8000
+- **cairn-ui** — Web dashboard on port 3000
 - **cairn-db** — PostgreSQL 16 with pgvector
 
-Migrations run automatically. Ready in seconds.
+Migrations run automatically. The UI builds from source on first `up` (takes ~1 min). Ready in seconds after that.
 
 ### 2. Connect your agent
 
