@@ -1,6 +1,6 @@
-# Cairn Hooks for Claude Code
+# Cairn Session Hooks
 
-Automatic session capture using Claude Code lifecycle hooks. Three scripts, zero manual effort.
+Automatic session capture using lifecycle hooks. Three scripts, zero manual effort.
 
 ## What it does
 
@@ -71,6 +71,16 @@ Each tier is additive. If hooks aren't installed, Tier 2 still works. If the age
 - `jq` (JSON processing)
 - `curl` (HTTP calls to Cairn API)
 - Cairn MCP server running and accessible
+
+## Agent compatibility
+
+These hooks are confirmed working with **Claude Code** but are agent-agnostic by design. They're just bash scripts that read JSON from stdin and talk to a REST API via curl. Any AI coding agent with lifecycle hooks (or equivalent session start/end events) can use them — just wire up the same triggers:
+
+- **SessionStart** → `session-start.sh` (pass `{"session_id": "...", "cwd": "..."}` on stdin)
+- **PostToolUse** → `log-event.sh` (pass `{"session_id": "...", "tool_name": "...", "tool_input": {...}}` on stdin)
+- **SessionEnd** → `session-end.sh` (pass `{"session_id": "..."}` on stdin)
+
+The only requirement is a unique `session_id` per session and `jq` + `curl` on the system.
 
 ## Customization
 

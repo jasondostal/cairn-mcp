@@ -1,8 +1,18 @@
 # Roadmap
 
-Current: **v0.7.1** — Session name alignment + mote-aware narrative synthesis.
+Current: **v0.8.0** — Cairns UI page, all-projects filter, backend hygiene.
 
 ---
+
+## v0.8.0 — Cairns UI + Backend Hygiene ✓
+
+Cairns in the browser. Cross-project orientation at boot.
+
+- [x] **Cairns UI page** — timeline view in cairn-ui with narrative, memory count, compress action
+- [x] **All-projects filter** — cairn stack, task list, and thinking sequences accept optional project (omit = all)
+- [x] **`get_project()` read-only lookup** — no phantom project creation on read paths
+- [x] **Migration 005** — partial indexes for performance
+- [x] **Cross-project boot** — session-start hook fetches cairns across all projects, not just active
 
 ## v0.7.0 — Cairns (Episodic Session Memory) ✓
 
@@ -65,6 +75,9 @@ Nice-to-haves when the core is rock solid.
 ---
 
 ## Completed
+
+### v0.8.0 — Cairns UI + Backend Hygiene
+Cairns UI page in cairn-ui, all-projects filter on cairn stack/tasks/thinking, read-only project lookup, migration 005 (partial indexes), cross-project boot in session-start hook.
 
 ### v0.7.0 — Cairns (Episodic Session Memory)
 Cairns MCP tool, CairnManager, migration 004, REST endpoints (including first write endpoint), hook scripts for automatic session capture. Motes — every tool call logged as a lightweight event, crystallized into a cairn at session end. Three-tier graceful degradation. 13 new tests (68 total).
