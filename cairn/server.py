@@ -5,17 +5,7 @@ from contextlib import asynccontextmanager
 
 from mcp.server.fastmcp import FastMCP
 
-from cairn.config import load_config
-from cairn.storage.database import Database
-from cairn.embedding.engine import EmbeddingEngine
-from cairn.core.memory import MemoryStore
-from cairn.core.search import SearchEngine
-from cairn.core.clustering import ClusterEngine
-from cairn.core.projects import ProjectManager
-from cairn.core.tasks import TaskManager
-from cairn.core.thinking import ThinkingEngine
-from cairn.llm import get_llm
-from cairn.core.enrichment import Enricher
+from cairn.core.services import create_services
 from cairn.core.status import get_status
 
 # Configure logging
@@ -25,32 +15,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cairn")
 
-# Load configuration
-config = load_config()
-
-# Initialize components
-db = Database(config.db)
-embedding = EmbeddingEngine(config.embedding)
-
-# LLM enrichment (optional, graceful if disabled)
-llm = None
-enricher = None
-if config.enrichment_enabled:
-    try:
-        llm = get_llm(config.llm)
-        enricher = Enricher(llm)
-        logger.info("Enrichment enabled: %s", config.llm.backend)
-    except Exception:
-        logger.warning("Failed to initialize LLM, enrichment disabled", exc_info=True)
-else:
-    logger.info("Enrichment disabled by config")
-
-memory_store = MemoryStore(db, embedding, enricher=enricher)
-search_engine = SearchEngine(db, embedding)
-cluster_engine = ClusterEngine(db, embedding, llm=llm)
-project_manager = ProjectManager(db)
-task_manager = TaskManager(db)
-thinking_engine = ThinkingEngine(db)
+# Initialize all services via factory
+_svc = create_services()
+config = _svc.config
+db = _svc.db
+memory_store = _svc.memory_store
+search_engine = _svc.search_engine
+cluster_engine = _svc.cluster_engine
+project_manager = _svc.project_manager
+task_manager = _svc.task_manager
+thinking_engine = _svc.thinking_engine
 
 
 # ============================================================
@@ -272,7 +246,7 @@ def insights(
     # Check staleness and recluster if needed
     reclustered = False
     if cluster_engine.is_stale(project):
-        result = cluster_engine.run_clustering(project)
+        cluster_engine.run_clustering(project)
         reclustered = True
 
     # Fetch clusters
@@ -283,25 +257,13 @@ def insights(
         limit=limit,
     )
 
-    # Get last run info
-    project_id = cluster_engine._resolve_project_id(project) if project else None
-    if project_id:
-        last_run = db.execute_one(
-            "SELECT created_at FROM clustering_runs "
-            "WHERE project_id = %s ORDER BY created_at DESC LIMIT 1",
-            (project_id,),
-        )
-    else:
-        last_run = db.execute_one(
-            "SELECT created_at FROM clustering_runs "
-            "WHERE project_id IS NULL ORDER BY created_at DESC LIMIT 1",
-        )
+    last_run = cluster_engine.get_last_run(project)
 
     return {
         "status": "reclustered" if reclustered else "cached",
         "cluster_count": len(clusters),
         "clusters": clusters,
-        "last_clustered_at": last_run["created_at"].isoformat() if last_run else None,
+        "last_clustered_at": last_run["created_at"] if last_run else None,
     }
 
 
@@ -527,16 +489,7 @@ def main():
         mcp_app.router.lifespan_context = combined_lifespan
 
         # Build REST API and mount as sub-app at /api
-        api = create_api(
-            db=db,
-            config=config,
-            memory_store=memory_store,
-            search_engine=search_engine,
-            cluster_engine=cluster_engine,
-            project_manager=project_manager,
-            task_manager=task_manager,
-            thinking_engine=thinking_engine,
-        )
+        api = create_api(_svc)
         mcp_app.mount("/api", api)
 
         logger.info("Starting Cairn (HTTP on %s:%d — MCP at /mcp, API at /api)", config.http_host, config.http_port)

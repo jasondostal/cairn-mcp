@@ -320,6 +320,27 @@ class ClusterEngine:
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
+    def get_last_run(self, project: str | None = None) -> dict | None:
+        """Get the last clustering run info for a project (or globally).
+
+        Returns dict with 'created_at' ISO string, or None if never run.
+        """
+        project_id = self._resolve_project_id(project) if project else None
+        if project_id:
+            run = self.db.execute_one(
+                "SELECT created_at FROM clustering_runs "
+                "WHERE project_id = %s ORDER BY created_at DESC LIMIT 1",
+                (project_id,),
+            )
+        else:
+            run = self.db.execute_one(
+                "SELECT created_at FROM clustering_runs "
+                "WHERE project_id IS NULL ORDER BY created_at DESC LIMIT 1",
+            )
+        if not run:
+            return None
+        return {"created_at": run["created_at"].isoformat()}
+
     # ============================================================
     # Internals
     # ============================================================

@@ -4,11 +4,11 @@ services:
     container_name: cairn
     restart: unless-stopped
     environment:
-      CAIRN_DB_HOST: cairn-db
-      CAIRN_DB_PORT: "5432"
-      CAIRN_DB_NAME: cairn
-      CAIRN_DB_USER: cairn
-      CAIRN_DB_PASS: cairn-dev-password
+      CAIRN_DB_HOST: "${CAIRN_DB_HOST:-cairn-db}"
+      CAIRN_DB_PORT: "${CAIRN_DB_PORT:-5432}"
+      CAIRN_DB_NAME: "${CAIRN_DB_NAME:-cairn}"
+      CAIRN_DB_USER: "${CAIRN_DB_USER:-cairn}"
+      CAIRN_DB_PASS: "${CAIRN_DB_PASS:-cairn-dev-password}"
       CAIRN_LLM_BACKEND: "${CAIRN_LLM_BACKEND:-bedrock}"
       CAIRN_BEDROCK_MODEL: "${CAIRN_BEDROCK_MODEL:-us.meta.llama3-2-90b-instruct-v1:0}"
       CAIRN_OLLAMA_URL: "${CAIRN_OLLAMA_URL:-http://host.docker.internal:11434}"
@@ -45,9 +45,9 @@ services:
     container_name: cairn-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: cairn
-      POSTGRES_USER: cairn
-      POSTGRES_PASSWORD: cairn-dev-password
+      POSTGRES_DB: "${CAIRN_DB_NAME:-cairn}"
+      POSTGRES_USER: "${CAIRN_DB_USER:-cairn}"
+      POSTGRES_PASSWORD: "${CAIRN_DB_PASS:-cairn-dev-password}"
     volumes:
       - cairn-pgdata:/var/lib/postgresql/data
     healthcheck:

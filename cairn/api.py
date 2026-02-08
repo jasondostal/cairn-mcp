@@ -9,27 +9,26 @@ from fastapi import FastAPI, APIRouter, Query, Path, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
+from cairn.core.services import Services
 from cairn.core.status import get_status
 
 logger = logging.getLogger(__name__)
 
 
-def create_api(
-    *,
-    db,
-    config,
-    memory_store,
-    search_engine,
-    cluster_engine,
-    project_manager,
-    task_manager,
-    thinking_engine,
-) -> FastAPI:
+def create_api(svc: Services) -> FastAPI:
     """Build the read-only REST API as a FastAPI app.
 
     Designed to be mounted as a sub-app on the MCP Starlette parent.
     No lifespan needed — the parent handles DB lifecycle.
     """
+    db = svc.db
+    config = svc.config
+    memory_store = svc.memory_store
+    search_engine = svc.search_engine
+    cluster_engine = svc.cluster_engine
+    project_manager = svc.project_manager
+    task_manager = svc.task_manager
+    thinking_engine = svc.thinking_engine
     app = FastAPI(
         title="Cairn API",
         version="0.5.0",
