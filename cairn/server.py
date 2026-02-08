@@ -5,8 +5,13 @@ from contextlib import asynccontextmanager
 
 from mcp.server.fastmcp import FastMCP
 
+from cairn.core.constants import (
+    MAX_CONTENT_SIZE, MAX_LIMIT, MAX_NAME_LENGTH, MAX_RECALL_IDS,
+    VALID_MEMORY_TYPES, VALID_SEARCH_MODES, MemoryAction,
+)
 from cairn.core.services import create_services
 from cairn.core.status import get_status
+from cairn.core.utils import ValidationError, validate_search, validate_store
 
 # Configure logging
 logging.basicConfig(
@@ -88,6 +93,10 @@ def store(
         related_files: File paths related to this memory for code context searches.
         related_ids: IDs of related memories to link.
     """
+    try:
+        validate_store(content, project, memory_type, importance, tags, session_name)
+    except ValidationError as e:
+        return {"error": str(e)}
     return memory_store.store(
         content=content,
         project=project,
@@ -131,6 +140,12 @@ def search(
         limit: Maximum results to return (default 10).
         include_full: Return full content (True) or summaries only (False, default).
     """
+    try:
+        validate_search(query, limit)
+    except ValidationError as e:
+        return {"error": str(e)}
+    if search_mode not in VALID_SEARCH_MODES:
+        return {"error": f"invalid search_mode: {search_mode}. Must be one of: {', '.join(VALID_SEARCH_MODES)}"}
     return search_engine.search(
         query=query,
         project=project,
@@ -155,8 +170,10 @@ def recall(ids: list[int]) -> list[dict]:
     Args:
         ids: List of memory IDs to retrieve (max 10 per call).
     """
-    if len(ids) > 10:
-        return {"error": "Maximum 10 IDs per recall. Batch into multiple calls."}
+    if not ids:
+        return {"error": "ids list is required and cannot be empty"}
+    if len(ids) > MAX_RECALL_IDS:
+        return {"error": f"Maximum {MAX_RECALL_IDS} IDs per recall. Batch into multiple calls."}
     return memory_store.recall(ids)
 
 
@@ -190,6 +207,14 @@ def modify(
         tags: New tags - replaces existing (update only).
         reason: Reason for inactivation (required for inactivate).
     """
+    if action not in MemoryAction.ALL:
+        return {"error": f"invalid action: {action}. Must be one of: {', '.join(sorted(MemoryAction.ALL))}"}
+    if content is not None and len(content) > MAX_CONTENT_SIZE:
+        return {"error": f"content exceeds {MAX_CONTENT_SIZE} character limit"}
+    if memory_type is not None and memory_type not in VALID_MEMORY_TYPES:
+        return {"error": f"invalid memory_type: {memory_type}"}
+    if importance is not None and not (0.0 <= importance <= 1.0):
+        return {"error": "importance must be between 0.0 and 1.0"}
     return memory_store.modify(
         memory_id=id,
         action=action,

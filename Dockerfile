@@ -21,12 +21,21 @@ COPY cairn/ cairn/
 # Install the package (torch already present, skips CUDA pull)
 RUN pip install --no-cache-dir .
 
-# Pre-download the embedding model at build time (cached in image)
+# Non-root user for runtime security
+RUN useradd --create-home --shell /bin/bash cairn \
+    && chown -R cairn:cairn /app
+
+# Pre-download the embedding model as the cairn user
+ENV HF_HOME=/home/cairn/.cache/huggingface
+USER cairn
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
-# Auto-run migrations on container start
+# Auto-run migrations on container start (copy as root, then switch back)
+USER root
 COPY entrypoint.sh .
-RUN chmod +x entrypoint.sh
+RUN chmod +x entrypoint.sh && chown cairn:cairn entrypoint.sh
+
+USER cairn
 ENTRYPOINT ["./entrypoint.sh"]
 
 # Default: run the MCP server (transport controlled by CAIRN_TRANSPORT env var)

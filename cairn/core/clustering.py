@@ -28,6 +28,9 @@ logger = logging.getLogger(__name__)
 DBSCAN_EPS = 0.65
 DBSCAN_MIN_SAMPLES = 3
 
+# t-SNE is O(n^2) — cap input to avoid OOM on large memory sets
+TSNE_MAX_SAMPLES = 500
+
 # Staleness thresholds
 STALENESS_HOURS = 24
 STALENESS_GROWTH_RATIO = 0.20  # 20% memory growth triggers recluster
@@ -279,6 +282,15 @@ class ClusterEngine:
         if not rows:
             return {"points": [], "generated_at": datetime.now(timezone.utc).isoformat()}
 
+        # Sample down if too many memories (t-SNE is O(n^2))
+        total_available = len(rows)
+        sampled = False
+        if total_available > TSNE_MAX_SAMPLES:
+            rng = np.random.default_rng(42)
+            indices = rng.choice(total_available, size=TSNE_MAX_SAMPLES, replace=False)
+            rows = [rows[i] for i in sorted(indices)]
+            sampled = True
+
         memory_ids = [r["id"] for r in rows]
         embeddings = np.array([self._parse_vector(r["embedding"]) for r in rows])
 
@@ -315,10 +327,15 @@ class ClusterEngine:
                 "cluster_label": cinfo[1] if cinfo else None,
             })
 
-        return {
+        result = {
             "points": points,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
+        if sampled:
+            result["sampled"] = True
+            result["total_memories"] = total_available
+            result["sampled_count"] = TSNE_MAX_SAMPLES
+        return result
 
     def get_last_run(self, project: str | None = None) -> dict | None:
         """Get the last clustering run info for a project (or globally).
