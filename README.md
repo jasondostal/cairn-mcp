@@ -14,7 +14,7 @@
 
 An MCP server that gives LLMs persistent, searchable, pattern-discovering memory with session history. Store anything, find it later through hybrid semantic search, mark sessions as trail markers, and let clustering surface patterns you didn't know were there.
 
-**Built for agents.** 13 MCP tools, a REST API, and a web dashboard — all from a single container.
+**Built for agents.** 13 MCP tools, a REST API, and a web dashboard — three containers, one `docker compose up`.
 
 ## Highlights
 
@@ -90,7 +90,81 @@ This starts three containers:
 - **cairn-ui** — Web dashboard on port 3000
 - **cairn-db** — PostgreSQL 16 with pgvector
 
-Migrations run automatically. The UI builds from source on first `up` (takes ~1 min). Ready in seconds after that.
+Migrations run automatically. Ready in under a minute.
+
+<details>
+<summary>docker-compose.yml</summary>
+
+```yaml
+services:
+  cairn:
+    image: ghcr.io/jasondostal/cairn-mcp:latest
+    container_name: cairn
+    restart: unless-stopped
+    environment:
+      CAIRN_DB_HOST: "${CAIRN_DB_HOST:-cairn-db}"
+      CAIRN_DB_PORT: "${CAIRN_DB_PORT:-5432}"
+      CAIRN_DB_NAME: "${CAIRN_DB_NAME:-cairn}"
+      CAIRN_DB_USER: "${CAIRN_DB_USER:-cairn}"
+      CAIRN_DB_PASS: "${CAIRN_DB_PASS:-cairn-dev-password}"
+      CAIRN_LLM_BACKEND: "${CAIRN_LLM_BACKEND:-bedrock}"
+      CAIRN_BEDROCK_MODEL: "${CAIRN_BEDROCK_MODEL:-us.meta.llama3-2-90b-instruct-v1:0}"
+      CAIRN_OLLAMA_URL: "${CAIRN_OLLAMA_URL:-http://host.docker.internal:11434}"
+      CAIRN_OLLAMA_MODEL: "${CAIRN_OLLAMA_MODEL:-qwen2.5-coder:7b}"
+      CAIRN_TRANSPORT: "${CAIRN_TRANSPORT:-http}"
+    ports:
+      - "${CAIRN_HTTP_PORT:-8000}:8000"
+    # Uncomment to mount AWS credentials for Bedrock:
+    # volumes:
+    #   - ~/.aws/credentials:/home/cairn/.aws/credentials:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/status')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      cairn-db:
+        condition: service_healthy
+
+  cairn-ui:
+    image: ghcr.io/jasondostal/cairn-mcp-ui:latest
+    container_name: cairn-ui
+    restart: unless-stopped
+    environment:
+      CAIRN_API_URL: http://cairn:8000
+    ports:
+      - "${CAIRN_UI_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      - cairn
+
+  cairn-db:
+    image: pgvector/pgvector:pg16
+    container_name: cairn-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${CAIRN_DB_NAME:-cairn}"
+      POSTGRES_USER: "${CAIRN_DB_USER:-cairn}"
+      POSTGRES_PASSWORD: "${CAIRN_DB_PASS:-cairn-dev-password}"
+    volumes:
+      - cairn-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cairn"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  cairn-pgdata:
+```
+
+</details>
 
 ### 2. Connect your agent
 
