@@ -24,6 +24,7 @@ An MCP server that gives LLMs persistent, searchable, pattern-discovering memory
 - **Structured thinking** — Reasoning sequences with branching, for when an agent needs to think through a problem step by step.
 - **Web dashboard** — Next.js + shadcn/ui. Timeline, search, cluster visualization, Cmd+K command palette, inline memory viewer. Dark mode.
 - **One port, everything** — MCP protocol at `/mcp`, REST API at `/api`, same process. stdio also supported.
+- **Hardened** — Input validation on all tools, non-root Docker container, t-SNE sampling cap, pinned dependencies.
 
 ## MCP Tools
 

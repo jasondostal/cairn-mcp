@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-02-08
+
+### Added
+- **Input validation** on MCP tools — content size limit (100KB), string length bounds (255 chars), enum validation for `memory_type`, `action`, `search_mode`, limit clamping (max 100)
+- **Non-root Docker user** — container runs as `cairn:1000` instead of root; `HF_HOME` set for model cache ownership
+- **t-SNE sampling cap** — visualization randomly samples down to 500 points when memory count exceeds threshold, preventing O(n^2) OOM; response includes `sampled`, `total_memories`, `sampled_count` flags
+- **Dependency lockfile** — `requirements.lock` pinned from production container for reproducible builds
+- `ValidationError` exception class and `validate_store()` / `validate_search()` helpers in `cairn/core/utils.py`
+- Input limit constants in `cairn/core/constants.py` (`MAX_CONTENT_SIZE`, `MAX_LIMIT`, `VALID_SEARCH_MODES`, etc.)
+
 ## [0.5.1] - 2026-02-08
 
 ### Changed
@@ -180,7 +190,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.2...v0.4.3
