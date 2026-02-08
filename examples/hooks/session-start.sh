@@ -20,16 +20,21 @@ CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 CAIRN_URL="${CAIRN_URL:-http://localhost:8002}"
 CAIRN_PROJECT="${CAIRN_PROJECT:-$(basename "${CWD:-$(pwd)}")}"
 
+# Build session_name from date + session ID (last 8 chars for readability)
+SHORT_ID="${SESSION_ID: -8}"
+SESSION_NAME="$(date -u +%Y-%m-%d)-${SHORT_ID}"
+
 # Session event log — one JSONL file per session
 EVENT_LOG="/tmp/cairn-events-${SESSION_ID}.jsonl"
 echo "" > "$EVENT_LOG"
 
-# Log the session start event
+# Log the session start event (includes session_name so session-end.sh can read it back)
 jq -nc --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
        --arg type "session_start" \
        --arg session "$SESSION_ID" \
        --arg project "$CAIRN_PROJECT" \
-       '{ts: $ts, type: $type, session: $session, project: $project}' >> "$EVENT_LOG"
+       --arg session_name "$SESSION_NAME" \
+       '{ts: $ts, type: $type, session: $session, project: $project, session_name: $session_name}' >> "$EVENT_LOG"
 
 # Fetch recent cairns for context
 CAIRNS=$(curl -sf "${CAIRN_URL}/api/cairns?project=${CAIRN_PROJECT}&limit=3" 2>/dev/null || echo "[]")
@@ -37,12 +42,14 @@ CAIRNS=$(curl -sf "${CAIRN_URL}/api/cairns?project=${CAIRN_PROJECT}&limit=3" 2>/
 # Build context output for Claude
 CAIRN_COUNT=$(echo "$CAIRNS" | jq 'length' 2>/dev/null || echo "0")
 
-if [ "$CAIRN_COUNT" -gt 0 ]; then
-    CONTEXT="Recent session history for ${CAIRN_PROJECT}:\n"
-    CONTEXT+=$(echo "$CAIRNS" | jq -r '.[] | "- [\(.set_at // "unknown")] \(.title // "Untitled") (\(.memory_count) stones)\n  \(.narrative // "No narrative")\n"' 2>/dev/null || echo "")
+CONTEXT="Session name for this session: ${SESSION_NAME}\nUse this as session_name when storing memories via cairn.\n\n"
 
-    # Output context — Claude Code adds stdout from SessionStart hooks to context
-    echo "$CONTEXT"
+if [ "$CAIRN_COUNT" -gt 0 ]; then
+    CONTEXT+="Recent session history for ${CAIRN_PROJECT}:\n"
+    CONTEXT+=$(echo "$CAIRNS" | jq -r '.[] | "- [\(.set_at // "unknown")] \(.title // "Untitled") (\(.memory_count) stones)\n  \(.narrative // "No narrative")\n"' 2>/dev/null || echo "")
 fi
+
+# Output context — Claude Code adds stdout from SessionStart hooks to context
+echo "$CONTEXT"
 
 exit 0

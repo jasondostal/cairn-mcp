@@ -22,9 +22,17 @@ CAIRN_PROJECT="${CAIRN_PROJECT:-$(basename "${CWD:-$(pwd)}")}"
 
 EVENT_LOG="/tmp/cairn-events-${SESSION_ID}.jsonl"
 
-# Build session_name from date + session ID (last 8 chars for readability)
-SHORT_ID="${SESSION_ID: -8}"
-SESSION_NAME="$(date -u +%Y-%m-%d)-${SHORT_ID}"
+# Read session_name from the first event (session_start) in the log.
+# This ensures start and end use the exact same value, even across midnight.
+SESSION_NAME=""
+if [ -f "$EVENT_LOG" ]; then
+    SESSION_NAME=$(grep -v '^$' "$EVENT_LOG" | head -1 | jq -r '.session_name // empty' 2>/dev/null || true)
+fi
+# Fallback: recompute if event log is missing or has no session_name
+if [ -z "$SESSION_NAME" ]; then
+    SHORT_ID="${SESSION_ID: -8}"
+    SESSION_NAME="$(date -u +%Y-%m-%d)-${SHORT_ID}"
+fi
 
 # Read events from log file (JSONL → JSON array)
 EVENTS="[]"

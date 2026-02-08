@@ -12,19 +12,32 @@
 
 ---
 
-An MCP server that gives LLMs persistent, searchable, pattern-discovering memory with session history. Store anything, find it later through hybrid semantic search, mark sessions as trail markers, and let clustering surface patterns you didn't know were there.
+An MCP server that gives AI agents persistent memory with three-tier knowledge capture: everything from deliberate decisions to ambient tool activity is remembered, organized, and surfaced automatically. Hybrid semantic search, pattern discovery, and session continuity — so agents never start from zero.
 
 **Built for agents.** 13 MCP tools, a REST API, and a web dashboard — three containers, one `docker compose up`.
 
+## Three-Tier Knowledge Capture
+
+Most agent memory systems require the agent to explicitly decide what's worth remembering. Cairn captures knowledge at three levels simultaneously, with each tier working independently:
+
+| Tier | How it works | Agent effort | What's captured |
+|------|-------------|-------------|----------------|
+| **Tier 3: Hook-automated** | Claude Code lifecycle hooks silently log every tool call as a *mote* (lightweight event). At session end, the full event stream is crystallized into a cairn with an LLM-synthesized narrative. | Zero | Everything — files read, edits made, commands run, searches performed |
+| **Tier 2: Tool-assisted** | Agent calls `cairns(action="set")` at session end to mark a trail marker. Works without hooks. | One tool call | All memories stored during the session |
+| **Tier 1: Organic** | Agent stores memories via behavioral rules — decisions, learnings, dead ends. Works without cairns. | Per-insight | Deliberate observations the agent deems important |
+
+The tiers are additive and degrade gracefully. With all three active, a session produces: a rich narrative synthesized from both the mote timeline *and* stored memories, linked trail markers for next session's context, and individually searchable memories with auto-enrichment. Remove the hooks? Tier 2 and 1 still work. Agent forgets to set a cairn? The organic memories are still there.
+
+**Next session, the agent walks the trail back.** Session-start hooks load recent cairn narratives into context — the agent picks up where the last one left off, not from a blank slate.
+
 ## Highlights
 
+- **Three-tier capture** — Ambient motes + session cairns + organic memories. See above.
 - **Hybrid search** — Vector similarity + full-text + tag matching, fused with Reciprocal Rank Fusion. 83.8% recall@10 on our eval benchmark. Optional LLM query expansion and confidence gating.
 - **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, and importance score on store. Bedrock or Ollama.
 - **Smart relationships** — On store, LLM identifies genuinely related memories and creates typed links (extends, contradicts, implements, depends_on). Rule conflict detection warns about contradictions.
 - **Pattern discovery** — DBSCAN clustering finds themes across memories. LLM writes the labels. No cron jobs — clusters refresh lazily.
-- **Session memory (cairns)** — Set a marker at the end of a session. Next session, walk the trail back. LLM synthesizes a narrative for each cairn. No more cold starts.
-- **Automatic session capture (hooks)** — Optional Claude Code hook scripts silently log every tool call during a session as a lightweight event (a *mote*), then crystallize the full event stream into a cairn when the session ends. The agent doesn't have to decide what's worth remembering — everything is captured organically, and the cairn's narrative distills what mattered. Three-tier graceful degradation: hooks capture automatically, the cairns tool works without hooks, and organic memory rules work without either.
-- **Session synthesis** — Synthesize all memories from a session into a coherent narrative.
+- **Session continuity** — Cairns mark the trail. Motes capture what happened. Narratives synthesize why it mattered. Next session starts with context, not a cold start.
 - **Memory consolidation** — Find duplicates, recommend merges and promotions, with dry-run safety.
 - **Structured thinking** — Reasoning sequences with branching, for when an agent needs to think through a problem step by step.
 - **Web dashboard** — Next.js + shadcn/ui. Timeline, search, cluster visualization, Cmd+K command palette, inline memory viewer. Dark mode.

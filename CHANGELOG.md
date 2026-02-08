@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Session name alignment** — `session-start.sh` now computes and outputs the session_name to agent context (e.g., `"Session name for this session: 2026-02-08-8045a3"`), and writes it into the event log's first entry. `session-end.sh` reads session_name from the event log instead of recomputing, eliminating midnight-drift mismatches. Organic memory rule (#507) updated to reference hook-provided session_name.
+- **Mote-aware narrative synthesis** — cairn narratives now synthesize from both stored memories (stones) AND the mote event stream (tool calls captured by hooks). New `CAIRN_MOTE_NARRATIVE_SYSTEM_PROMPT` produces richer narratives that weave the timeline of what happened with the agent's deliberate observations. Sessions with zero organic memories but rich tool activity now get meaningful narratives instead of empty cairns.
+- 2 new tests for mote-aware narrative synthesis (events-only synthesis, combined stones+events prompt selection)
+
+### Changed
+- `build_cairn_narrative_messages()` now accepts optional `events` parameter; when present, switches to mote-aware prompt and appends a summarized event timeline (capped at 50 events)
+- `CairnManager.set()` now triggers LLM synthesis when events are present, even if no stones match the session
+
+### Fixed
+- **Empty cairn bug** — cairns created by hooks were empty because `session-end.sh` recomputed session_name (could differ from what `session-start.sh` told the agent). Now both hooks share the same value via the event log.
+
 ## [0.7.0] - 2026-02-08
 
 ### Added

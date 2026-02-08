@@ -74,18 +74,22 @@ class CairnManager:
         memory_count = len(stones)
 
         # Synthesize narrative via LLM (graceful degradation)
+        # Synthesize when there are stones OR events (motes from hooks)
         title = None
         narrative = None
+        has_content = memory_count > 0 or (events and len(events) > 0)
         can_synthesize = (
             self.llm is not None
             and self.capabilities is not None
             and self.capabilities.session_synthesis
-            and memory_count > 0
+            and has_content
         )
 
         if can_synthesize:
             try:
-                messages = build_cairn_narrative_messages(stones, project, session_name)
+                messages = build_cairn_narrative_messages(
+                    stones, project, session_name, events=events,
+                )
                 raw = self.llm.generate(messages, max_tokens=1024)
                 if raw and raw.strip():
                     parsed = extract_json(raw, json_type="object")

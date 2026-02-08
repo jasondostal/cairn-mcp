@@ -350,9 +350,41 @@ Rules for the narrative:
 
 Return ONLY the JSON object. No markdown fences, no explanation, no extra text."""
 
+CAIRN_MOTE_NARRATIVE_SYSTEM_PROMPT = """\
+You are a session narrative synthesizer. You are given two sources of information about a \
+working session:
+
+1. **Stones** — explicitly stored memories (decisions, learnings, notes). May be empty.
+2. **Motes** — a timeline of tool calls and events captured by hooks during the session.
+
+Synthesize both sources into a coherent narrative. The motes reveal what actually happened \
+(files read, edits made, commands run); the stones capture what the agent considered important \
+enough to remember. Together they tell the full story.
+
+Return a JSON object:
+
+{
+  "title": "Short session title (5-10 words)",
+  "narrative": "2-4 paragraph narrative of the session."
+}
+
+Rules for the title:
+- 5-10 words, descriptive of the session's main arc.
+- Focus on what was accomplished or decided, not process.
+
+Rules for the narrative:
+- Write in past tense, third person.
+- Weave the mote timeline and stone insights into a single coherent arc.
+- Focus on what was attempted, what was learned, what was decided.
+- Highlight key decisions, blockers, and breakthroughs.
+- 2-4 paragraphs.
+
+Return ONLY the JSON object. No markdown fences, no explanation, no extra text."""
+
 
 def build_cairn_narrative_messages(
     memories: list[dict], project: str, session_name: str,
+    events: list[dict] | None = None,
 ) -> list[dict]:
     """Build messages for cairn narrative synthesis.
 
@@ -360,6 +392,8 @@ def build_cairn_narrative_messages(
         memories: Chronological list of memory dicts (stones) with 'content', 'summary', etc.
         project: Project name for context.
         session_name: Session identifier.
+        events: Optional list of mote events from hooks. When present, the mote-aware
+                prompt is used and the event timeline is appended to the user content.
     """
     memory_lines = []
     for m in memories:
@@ -371,12 +405,52 @@ def build_cairn_narrative_messages(
         f"Project: {project}\n"
         f"Session: {session_name}\n"
         f"Stone count: {len(memories)}\n\n"
-        f"Stones (chronological):\n" + "\n".join(memory_lines)
+        f"Stones (chronological):\n" + ("\n".join(memory_lines) if memory_lines else "  (none)")
     )
+
+    # Choose prompt based on whether events are available
+    if events:
+        # Limit to last 50 events to avoid context overflow
+        trimmed = events[-50:] if len(events) > 50 else events
+        event_lines = []
+        for e in trimmed:
+            ts = e.get("ts", "")
+            etype = e.get("type", "unknown")
+            # Build a concise one-liner per event
+            detail = _summarize_event(e)
+            event_lines.append(f"  [{ts}] {etype}: {detail}")
+
+        user_content += (
+            f"\n\nMote timeline ({len(events)} events"
+            + (f", showing last 50" if len(events) > 50 else "")
+            + f"):\n" + "\n".join(event_lines)
+        )
+        system_prompt = CAIRN_MOTE_NARRATIVE_SYSTEM_PROMPT
+    else:
+        system_prompt = CAIRN_NARRATIVE_SYSTEM_PROMPT
+
     return [
-        {"role": "system", "content": CAIRN_NARRATIVE_SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_content},
     ]
+
+
+def _summarize_event(event: dict) -> str:
+    """Produce a concise one-liner for a mote event."""
+    etype = event.get("type", "")
+    if etype == "tool_call":
+        tool = event.get("tool", "unknown")
+        # Include key detail fields if present
+        path = event.get("path") or event.get("file_path") or ""
+        return f"{tool}" + (f" {path}" if path else "")
+    if etype in ("session_start", "session_end"):
+        return event.get("project", event.get("reason", ""))
+    # Generic: show all keys except ts/type
+    extras = {k: v for k, v in event.items() if k not in ("ts", "type")}
+    if extras:
+        parts = [f"{k}={v}" for k, v in list(extras.items())[:3]]
+        return ", ".join(parts)
+    return ""
 
 
 def build_confidence_gating_messages(

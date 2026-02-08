@@ -180,6 +180,84 @@ class TestCairnSet:
         insert_call = db.execute_one.call_args_list[2]
         assert insert_call[0][1][4] is not None  # events param is not None
 
+    def test_set_with_events_triggers_llm_even_without_stones(self):
+        """When events (motes) are provided but no stones exist, LLM synthesis still runs."""
+        db = _make_db()
+
+        db.execute_one.side_effect = [
+            {"id": 1},   # project lookup
+            None,         # no existing cairn
+            {             # INSERT RETURNING
+                "id": 10,
+                "title": "Hook Session: Codebase Exploration",
+                "narrative": "The session explored the codebase via tool calls.",
+                "memory_count": 0,
+                "started_at": datetime(2026, 2, 8, 14, 0, 0, tzinfo=timezone.utc),
+                "set_at": datetime(2026, 2, 8, 14, 0, 0, tzinfo=timezone.utc),
+            },
+        ]
+        db.execute.return_value = []  # no stones
+
+        llm = MagicMock()
+        llm.generate.return_value = '{"title": "Hook Session: Codebase Exploration", "narrative": "The session explored the codebase via tool calls."}'
+
+        caps = LLMCapabilities(session_synthesis=True)
+        manager = CairnManager(db, llm=llm, capabilities=caps)
+
+        events = [
+            {"type": "session_start", "ts": "2026-02-08T12:00:00Z", "project": "test-project", "session_name": "hook-session"},
+            {"type": "tool_call", "tool": "Read", "ts": "2026-02-08T12:01:00Z", "path": "src/main.py"},
+            {"type": "tool_call", "tool": "Grep", "ts": "2026-02-08T12:02:00Z"},
+            {"type": "session_end", "ts": "2026-02-08T12:05:00Z", "reason": "user_exit"},
+        ]
+        result = manager.set("test-project", "hook-session", events=events)
+
+        assert result["id"] == 10
+        # LLM was called even though there were 0 stones
+        llm.generate.assert_called_once()
+        # Verify the messages passed to LLM contain mote-aware content
+        messages = llm.generate.call_args[0][0]
+        assert "Mote timeline" in messages[1]["content"]
+        assert "tool_call" in messages[1]["content"]
+
+    def test_set_with_events_and_stones_uses_mote_prompt(self):
+        """When both events and stones are present, mote-aware prompt is used."""
+        db = _make_db()
+        stones = [_make_stone(1, "Decided to use PostgreSQL")]
+
+        db.execute_one.side_effect = [
+            {"id": 1},
+            None,
+            {
+                "id": 10,
+                "title": "Database Setup with PostgreSQL",
+                "narrative": "The session set up PostgreSQL.",
+                "memory_count": 1,
+                "started_at": datetime(2026, 2, 8, 12, 0, 0, tzinfo=timezone.utc),
+                "set_at": datetime(2026, 2, 8, 14, 0, 0, tzinfo=timezone.utc),
+            },
+        ]
+        db.execute.return_value = stones
+
+        llm = MagicMock()
+        llm.generate.return_value = '{"title": "Database Setup with PostgreSQL", "narrative": "The session set up PostgreSQL."}'
+
+        caps = LLMCapabilities(session_synthesis=True)
+        manager = CairnManager(db, llm=llm, capabilities=caps)
+
+        events = [
+            {"type": "tool_call", "tool": "Read", "ts": "2026-02-08T12:01:00Z", "path": "docker-compose.yml"},
+        ]
+        result = manager.set("test-project", "test-session", events=events)
+
+        llm.generate.assert_called_once()
+        messages = llm.generate.call_args[0][0]
+        # System prompt should be the mote-aware variant
+        assert "Motes" in messages[0]["content"]
+        # User content should have both stones and motes
+        assert "Stones (chronological):" in messages[1]["content"]
+        assert "Mote timeline" in messages[1]["content"]
+
 
 class TestCairnStack:
     """Tests for CairnManager.stack()."""
