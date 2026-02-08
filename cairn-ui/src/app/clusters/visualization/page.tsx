@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type VisualizationPoint } from "@/lib/api";
 import { useMemorySheet } from "@/lib/use-memory-sheet";
-import { Input } from "@/components/ui/input";
+import { useProjectSelector } from "@/lib/use-project-selector";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/error-state";
+import { ProjectSelector } from "@/components/project-selector";
 import { MemorySheet } from "@/components/memory-sheet";
 
 // Deterministic color palette for clusters
@@ -23,23 +24,38 @@ function getColor(clusterId: number | null, clusterIds: number[]): string {
   return CLUSTER_COLORS[idx % CLUSTER_COLORS.length];
 }
 
+const CANVAS_HEIGHT = 500;
+const PADDING = 40;
+const POINT_RADIUS = 5;
+
 export default function ClusterVisualizationPage() {
   const [points, setPoints] = useState<VisualizationPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [project, setProject] = useState("");
   const [hoveredPoint, setHoveredPoint] = useState<VisualizationPoint | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const { sheetId, sheetOpen, setSheetOpen, openSheet } = useMemorySheet();
+  const [project, setProject] = useState("");
+  const { projects } = useProjectSelector();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  function load() {
+  // Zoom/pan state
+  const transformRef = useRef({ x: 0, y: 0, scale: 1 });
+  const isDraggingRef = useRef(false);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+
+  function load(proj?: string) {
+    const p = proj ?? project;
     setLoading(true);
     setError(null);
     api
-      .clusterVisualization({ project: project || undefined })
-      .then((data) => setPoints(data.points))
+      .clusterVisualization({ project: p || undefined })
+      .then((data) => {
+        setPoints(data.points);
+        // Reset transform on new data
+        transformRef.current = { x: 0, y: 0, scale: 1 };
+      })
       .catch((err) => setError(err?.message || "Failed to load visualization"))
       .finally(() => setLoading(false));
   }
@@ -48,6 +64,12 @@ export default function ClusterVisualizationPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function handleProjectSelect(name: string) {
+    const next = name === project ? "" : name;
+    setProject(next);
+    load(next);
+  }
 
   // Get unique cluster IDs for consistent color mapping
   const clusterIds = Array.from(
@@ -61,9 +83,6 @@ export default function ClusterVisualizationPage() {
   const yMax = points.length ? Math.max(...points.map((p) => p.y)) : 1;
   const xRange = xMax - xMin || 1;
   const yRange = yMax - yMin || 1;
-
-  const PADDING = 40;
-  const POINT_RADIUS = 5;
 
   const toCanvasCoords = useCallback(
     (x: number, y: number, width: number, height: number) => ({
@@ -82,23 +101,27 @@ export default function ClusterVisualizationPage() {
     if (!container) return;
 
     const width = container.clientWidth;
-    const height = 500;
     const dpr = window.devicePixelRatio || 1;
 
     canvas.width = width * dpr;
-    canvas.height = height * dpr;
+    canvas.height = CANVAS_HEIGHT * dpr;
     canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
+    canvas.style.height = `${CANVAS_HEIGHT}px`;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, width, height);
+    ctx.clearRect(0, 0, width, CANVAS_HEIGHT);
+
+    const t = transformRef.current;
+    ctx.save();
+    ctx.translate(t.x, t.y);
+    ctx.scale(t.scale, t.scale);
 
     // Draw points
     for (const point of points) {
-      const { cx, cy } = toCanvasCoords(point.x, point.y, width, height);
+      const { cx, cy } = toCanvasCoords(point.x, point.y, width, CANVAS_HEIGHT);
       const color = getColor(point.cluster_id, clusterIds);
 
       ctx.beginPath();
@@ -115,23 +138,42 @@ export default function ClusterVisualizationPage() {
     }
 
     ctx.globalAlpha = 1.0;
+    ctx.restore();
   }, [points, clusterIds, hoveredPoint, toCanvasCoords]);
+
+  function canvasToData(clientX: number, clientY: number) {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: clientX, y: clientY };
+    const rect = canvas.getBoundingClientRect();
+    const t = transformRef.current;
+    return {
+      x: (clientX - rect.left - t.x) / t.scale,
+      y: (clientY - rect.top - t.y) / t.scale,
+    };
+  }
 
   function handleMouseMove(e: React.MouseEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current;
     if (!canvas || points.length === 0) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const width = rect.width;
-    const height = rect.height;
+    if (isDraggingRef.current) {
+      const t = transformRef.current;
+      t.x += e.clientX - dragStartRef.current.x;
+      t.y += e.clientY - dragStartRef.current.y;
+      dragStartRef.current = { x: e.clientX, y: e.clientY };
+      // Trigger redraw
+      setHoveredPoint((prev) => prev); // force re-render
+      return;
+    }
+
+    const { x: mx, y: my } = canvasToData(e.clientX, e.clientY);
+    const width = canvas.getBoundingClientRect().width;
 
     let closest: VisualizationPoint | null = null;
     let minDist = Infinity;
 
     for (const point of points) {
-      const { cx, cy } = toCanvasCoords(point.x, point.y, width, height);
+      const { cx, cy } = toCanvasCoords(point.x, point.y, width, CANVAS_HEIGHT);
       const dist = Math.sqrt((mx - cx) ** 2 + (my - cy) ** 2);
       if (dist < 15 && dist < minDist) {
         minDist = dist;
@@ -145,10 +187,42 @@ export default function ClusterVisualizationPage() {
     }
   }
 
-  function handleClick() {
-    if (hoveredPoint) {
-      openSheet(hoveredPoint.id);
-    }
+  function handleMouseDown(e: React.MouseEvent<HTMLCanvasElement>) {
+    isDraggingRef.current = true;
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+  }
+
+  function handleMouseUp() {
+    isDraggingRef.current = false;
+  }
+
+  function handleClick(e: React.MouseEvent<HTMLCanvasElement>) {
+    const dx = e.clientX - dragStartRef.current.x;
+    const dy = e.clientY - dragStartRef.current.y;
+    if (dx * dx + dy * dy > 25) return;
+    if (hoveredPoint) openSheet(hoveredPoint.id);
+  }
+
+  function handleWheel(e: React.WheelEvent<HTMLCanvasElement>) {
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    const t = transformRef.current;
+    const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+    const newScale = Math.max(0.1, Math.min(5, t.scale * zoomFactor));
+    const ratio = newScale / t.scale;
+
+    t.x = mx - ratio * (mx - t.x);
+    t.y = my - ratio * (my - t.y);
+    t.scale = newScale;
+
+    // Trigger redraw
+    setHoveredPoint((prev) => prev);
   }
 
   // Build legend
@@ -168,14 +242,25 @@ export default function ClusterVisualizationPage() {
         </Button>
       </div>
 
-      <div className="flex gap-2">
-        <Input
-          placeholder="Filter by project"
-          value={project}
-          onChange={(e) => setProject(e.target.value)}
-          className="w-48"
+      {/* Project selector buttons */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant={project === "" ? "default" : "outline"}
+          size="sm"
+          onClick={() => {
+            if (project !== "") {
+              setProject("");
+              load("");
+            }
+          }}
+        >
+          All
+        </Button>
+        <ProjectSelector
+          projects={projects}
+          selected={project}
+          onSelect={handleProjectSelect}
         />
-        <Button onClick={load}>Apply</Button>
       </div>
 
       {loading && <Skeleton className="h-[500px]" />}
@@ -185,24 +270,37 @@ export default function ClusterVisualizationPage() {
       )}
 
       {!loading && !error && points.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          No memories with embeddings to visualize.
-        </p>
+        <div className="flex h-[300px] items-center justify-center rounded-lg border border-border bg-card">
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground">
+              No memories with embeddings to visualize.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Store some memories first, then come back to see the scatter plot.
+            </p>
+          </div>
+        </div>
       )}
 
       {!loading && !error && points.length > 0 && (
         <>
           <div
             ref={containerRef}
-            className="relative rounded-lg border border-border bg-card"
+            className="relative overflow-hidden rounded-lg border border-border bg-card"
           >
             <canvas
               ref={canvasRef}
               onMouseMove={handleMouseMove}
-              onMouseLeave={() => setHoveredPoint(null)}
+              onMouseDown={handleMouseDown}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={() => {
+                handleMouseUp();
+                setHoveredPoint(null);
+              }}
               onClick={handleClick}
-              className="w-full cursor-crosshair"
-              style={{ height: 500 }}
+              onWheel={handleWheel}
+              className="w-full cursor-grab active:cursor-grabbing"
+              style={{ height: CANVAS_HEIGHT }}
             />
 
             {/* Tooltip */}

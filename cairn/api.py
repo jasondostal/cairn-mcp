@@ -299,6 +299,126 @@ def create_api(svc: Services) -> FastAPI:
         return memory_store.get_rules(project, limit=limit, offset=offset)
 
     # ------------------------------------------------------------------
+    # GET /graph?project=&relation_type=&min_importance=
+    # ------------------------------------------------------------------
+    @router.get("/graph")
+    def api_graph(
+        project: str | None = Query(None),
+        relation_type: str | None = Query(None),
+        min_importance: float = Query(0.0, ge=0.0, le=1.0),
+    ):
+        NODE_CAP = 500
+
+        # Build edge query with filters
+        edge_where = ["m1.is_active = true", "m2.is_active = true"]
+        edge_params: list = []
+
+        if project:
+            edge_where.append("(p1.name = %s OR p2.name = %s)")
+            edge_params.extend([project, project])
+        if relation_type:
+            edge_where.append("mr.relation = %s")
+            edge_params.append(relation_type)
+        if min_importance > 0:
+            edge_where.append("(m1.importance >= %s OR m2.importance >= %s)")
+            edge_params.extend([min_importance, min_importance])
+
+        edge_clause = " AND ".join(edge_where)
+
+        edges_raw = db.execute(
+            f"""
+            SELECT mr.source_id, mr.target_id, mr.relation, mr.created_at
+            FROM memory_relations mr
+            JOIN memories m1 ON mr.source_id = m1.id
+            JOIN memories m2 ON mr.target_id = m2.id
+            LEFT JOIN projects p1 ON m1.project_id = p1.id
+            LEFT JOIN projects p2 ON m2.project_id = p2.id
+            WHERE {edge_clause}
+            ORDER BY mr.created_at DESC
+            LIMIT 2000
+            """,
+            tuple(edge_params),
+        )
+
+        # Collect unique node IDs
+        node_ids: set[int] = set()
+        edges = []
+        for row in edges_raw:
+            node_ids.add(row["source_id"])
+            node_ids.add(row["target_id"])
+            edges.append({
+                "source": row["source_id"],
+                "target": row["target_id"],
+                "relation": row["relation"] or "related",
+                "created_at": row["created_at"].isoformat(),
+            })
+
+        if not node_ids:
+            return {
+                "nodes": [],
+                "edges": [],
+                "stats": {"node_count": 0, "edge_count": 0, "relation_types": {}},
+            }
+
+        # Cap nodes by importance if too many
+        id_list = list(node_ids)
+        if len(id_list) > NODE_CAP:
+            placeholders = ",".join(["%s"] * len(id_list))
+            top_nodes = db.execute(
+                f"""
+                SELECT id FROM memories
+                WHERE id IN ({placeholders})
+                ORDER BY importance DESC
+                LIMIT %s
+                """,
+                tuple(id_list) + (NODE_CAP,),
+            )
+            id_list = [r["id"] for r in top_nodes]
+            node_ids = set(id_list)
+            edges = [e for e in edges if e["source"] in node_ids and e["target"] in node_ids]
+
+        # Fetch node details
+        placeholders = ",".join(["%s"] * len(id_list))
+        nodes_raw = db.execute(
+            f"""
+            SELECT m.id, m.summary, m.memory_type, m.importance, m.created_at,
+                   p.name as project
+            FROM memories m
+            LEFT JOIN projects p ON m.project_id = p.id
+            WHERE m.id IN ({placeholders})
+            """,
+            tuple(id_list),
+        )
+
+        nodes = [
+            {
+                "id": r["id"],
+                "summary": r["summary"] or f"Memory #{r['id']}",
+                "memory_type": r["memory_type"],
+                "importance": float(r["importance"]),
+                "project": r["project"],
+                "created_at": r["created_at"].isoformat(),
+            }
+            for r in nodes_raw
+        ]
+
+        # Stats
+        relation_counts: dict[str, int] = {}
+        for e in edges:
+            rel = e["relation"]
+            relation_counts[rel] = relation_counts.get(rel, 0) + 1
+
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "stats": {
+                "node_count": len(nodes),
+                "edge_count": len(edges),
+                "relation_types": relation_counts,
+            },
+        }
+
+    # ------------------------------------------------------------------
     # GET /export?project=&format=
     # ------------------------------------------------------------------
     @router.get("/export")

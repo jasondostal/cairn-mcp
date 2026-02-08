@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, type ClusterResult } from "@/lib/api";
 import { formatDate } from "@/lib/format";
+import { useProjectSelector } from "@/lib/use-project-selector";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ErrorState } from "@/components/error-state";
 import { MemoryTypeBadge } from "@/components/memory-type-badge";
+import { ProjectSelector } from "@/components/project-selector";
 import { SkeletonList } from "@/components/skeleton-list";
 import { Network, Eye } from "lucide-react";
 
@@ -78,15 +80,20 @@ export default function ClustersPage() {
   const [data, setData] = useState<ClusterResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [project, setProject] = useState("");
   const [topic, setTopic] = useState("");
+  const [project, setProject] = useState("");
+  const {
+    projects,
+    loading: projectsLoading,
+  } = useProjectSelector();
 
-  function load() {
+  function load(proj?: string) {
+    const p = proj ?? project;
     setLoading(true);
     setError(null);
     api
       .clusters({
-        project: project || undefined,
+        project: p || undefined,
         topic: topic || undefined,
       })
       .then(setData)
@@ -98,6 +105,13 @@ export default function ClustersPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function handleProjectSelect(name: string) {
+    // Toggle: clicking the same project deselects (shows all)
+    const next = name === project ? "" : name;
+    setProject(next);
+    load(next);
+  }
 
   return (
     <div className="space-y-6">
@@ -111,32 +125,57 @@ export default function ClustersPage() {
         </Button>
       </div>
 
-      <div className="flex gap-2">
-        <Input
-          placeholder="Filter by project"
-          value={project}
-          onChange={(e) => setProject(e.target.value)}
-          className="w-48"
-        />
-        <Input
-          placeholder="Filter by topic"
-          value={topic}
-          onChange={(e) => setTopic(e.target.value)}
-          className="w-48"
-        />
-        <button
-          onClick={load}
-          className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          Apply
-        </button>
+      {/* Project selector buttons */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant={project === "" ? "default" : "outline"}
+            size="sm"
+            onClick={() => {
+              if (project !== "") {
+                setProject("");
+                load("");
+              }
+            }}
+          >
+            All
+          </Button>
+          <ProjectSelector
+            projects={projects}
+            selected={project}
+            onSelect={handleProjectSelect}
+          />
+        </div>
+        <div className="flex gap-2">
+          <Input
+            placeholder="Filter by topic"
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+            className="w-48"
+          />
+          <Button onClick={() => load()} size="sm">Apply</Button>
+        </div>
       </div>
 
       {loading && <SkeletonList count={4} height="h-32" />}
 
       {error && <ErrorState message="Failed to load clusters" detail={error} />}
 
-      {!loading && !error && data && (
+      {!loading && !error && data && data.cluster_count === 0 && (
+        <div className="flex h-[200px] items-center justify-center rounded-lg border border-border bg-card">
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground">
+              No clusters found.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Clustering needs 10+ memories in a project. Try selecting a
+              specific project or storing more memories.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!loading && !error && data && data.cluster_count > 0 && (
         <>
           <p className="text-sm text-muted-foreground">
             {data.cluster_count} cluster{data.cluster_count !== 1 && "s"}

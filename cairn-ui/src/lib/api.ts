@@ -155,6 +155,32 @@ export interface VisualizationResult {
   generated_at: string;
 }
 
+export interface GraphNode {
+  id: number;
+  summary: string;
+  memory_type: string;
+  importance: number;
+  project: string;
+  created_at: string;
+}
+
+export interface GraphEdge {
+  source: number;
+  target: number;
+  relation: string;
+  created_at: string;
+}
+
+export interface GraphResult {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  stats: {
+    node_count: number;
+    edge_count: number;
+    relation_types: Record<string, number>;
+  };
+}
+
 export interface ExportResult {
   project: string;
   exported_at: string;
@@ -231,6 +257,9 @@ export const api = {
     get<Cairn[]>("/cairns", { ...(project ? { project } : {}), ...opts }),
 
   cairnDetail: (id: number) => get<CairnDetail>(`/cairns/${id}`),
+
+  graph: (opts?: { project?: string; relation_type?: string; min_importance?: string }) =>
+    get<GraphResult>("/graph", opts),
 
   exportProject: (project: string, format: string = "json") =>
     get<ExportResult | string>("/export", { project, format }),
