@@ -29,6 +29,7 @@ def create_api(svc: Services) -> FastAPI:
     project_manager = svc.project_manager
     task_manager = svc.task_manager
     thinking_engine = svc.thinking_engine
+    cairn_manager = svc.cairn_manager
     app = FastAPI(
         title="Cairn API",
         version="0.5.0",
@@ -246,6 +247,26 @@ def create_api(svc: Services) -> FastAPI:
             return thinking_engine.get_sequence(sequence_id)
         except ValueError:
             raise HTTPException(status_code=404, detail="Thinking sequence not found")
+
+    # ------------------------------------------------------------------
+    # GET /cairns?project=&limit=
+    # ------------------------------------------------------------------
+    @router.get("/cairns")
+    def api_cairns(
+        project: str = Query(..., description="Project name (required)"),
+        limit: int = Query(20, ge=1, le=50),
+    ):
+        return cairn_manager.stack(project, limit=limit)
+
+    # ------------------------------------------------------------------
+    # GET /cairns/:id — single cairn with full detail + linked stones
+    # ------------------------------------------------------------------
+    @router.get("/cairns/{cairn_id}")
+    def api_cairn_detail(cairn_id: int = Path(...)):
+        try:
+            return cairn_manager.get(cairn_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Cairn not found")
 
     # ------------------------------------------------------------------
     # GET /rules?project=&limit=&offset=

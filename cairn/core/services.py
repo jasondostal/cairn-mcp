@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from cairn.config import Config, LLMCapabilities, load_config
+from cairn.core.cairns import CairnManager
 from cairn.core.clustering import ClusterEngine
 from cairn.core.consolidation import ConsolidationEngine
 from cairn.core.enrichment import Enricher
@@ -43,6 +44,7 @@ class Services:
     thinking_engine: ThinkingEngine
     session_synthesizer: SessionSynthesizer
     consolidation_engine: ConsolidationEngine
+    cairn_manager: CairnManager
 
 
 def create_services(config: Config | None = None) -> Services:
@@ -86,4 +88,5 @@ def create_services(config: Config | None = None) -> Services:
         thinking_engine=ThinkingEngine(db),
         session_synthesizer=SessionSynthesizer(db, llm=llm, capabilities=capabilities),
         consolidation_engine=ConsolidationEngine(db, embedding, llm=llm, capabilities=capabilities),
+        cairn_manager=CairnManager(db, llm=llm, capabilities=capabilities),
     )

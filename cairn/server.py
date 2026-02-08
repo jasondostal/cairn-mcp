@@ -6,8 +6,9 @@ from contextlib import asynccontextmanager
 from mcp.server.fastmcp import FastMCP
 
 from cairn.core.constants import (
-    MAX_CONTENT_SIZE, MAX_LIMIT, MAX_NAME_LENGTH, MAX_RECALL_IDS,
-    VALID_MEMORY_TYPES, VALID_SEARCH_MODES, MemoryAction,
+    MAX_CAIRN_STACK, MAX_CONTENT_SIZE, MAX_LIMIT, MAX_NAME_LENGTH,
+    MAX_RECALL_IDS, VALID_MEMORY_TYPES, VALID_SEARCH_MODES,
+    CairnAction, MemoryAction,
 )
 from cairn.core.services import create_services
 from cairn.core.status import get_status
@@ -32,6 +33,7 @@ task_manager = _svc.task_manager
 thinking_engine = _svc.thinking_engine
 session_synthesizer = _svc.session_synthesizer
 consolidation_engine = _svc.consolidation_engine
+cairn_manager = _svc.cairn_manager
 
 
 # ============================================================
@@ -579,6 +581,75 @@ def consolidate(
         return consolidation_engine.consolidate(project, dry_run=dry_run)
     except Exception as e:
         logger.exception("consolidate failed")
+        return {"error": f"Internal error: {e}"}
+
+
+# ============================================================
+# Tool 13: cairns
+# ============================================================
+
+@mcp.tool()
+def cairns(
+    action: str,
+    project: str | None = None,
+    session_name: str | None = None,
+    cairn_id: int | None = None,
+    events: list | None = None,
+    limit: int = 20,
+) -> dict | list[dict]:
+    """Set, view, and manage episodic session markers (cairns).
+
+    A cairn marks the end of a session. It links all stones (memories) from that
+    session into a navigable trail marker with an LLM-synthesized narrative.
+
+    Actions:
+    - 'set': Set a cairn at the end of a session. Links stones, synthesizes narrative.
+    - 'stack': View the trail — cairns for a project, newest first.
+    - 'get': Examine a single cairn with full detail and linked stones.
+    - 'compress': Clear event detail, keep narrative. For storage management.
+
+    Args:
+        action: One of 'set', 'stack', 'get', 'compress'.
+        project: Project name (required for set, stack).
+        session_name: Session identifier (required for set). Must match memories' session_name.
+        cairn_id: Cairn ID (required for get, compress).
+        events: Optional ordered event log for set (from hooks). Stored as JSONB.
+        limit: Maximum cairns to return for stack (default 20, max 50).
+    """
+    try:
+        if action not in CairnAction.ALL:
+            return {"error": f"invalid action: {action}. Must be one of: {', '.join(sorted(CairnAction.ALL))}"}
+
+        if action == CairnAction.SET:
+            if not project or not project.strip():
+                return {"error": "project is required for set"}
+            if not session_name or not session_name.strip():
+                return {"error": "session_name is required for set"}
+            if len(session_name) > MAX_NAME_LENGTH:
+                return {"error": f"session_name exceeds {MAX_NAME_LENGTH} character limit"}
+            return cairn_manager.set(project, session_name, events=events)
+
+        if action == CairnAction.STACK:
+            if not project or not project.strip():
+                return {"error": "project is required for stack"}
+            stack_limit = min(limit, MAX_CAIRN_STACK)
+            return cairn_manager.stack(project, limit=stack_limit)
+
+        if action == CairnAction.GET:
+            if not cairn_id:
+                return {"error": "cairn_id is required for get"}
+            return cairn_manager.get(cairn_id)
+
+        if action == CairnAction.COMPRESS:
+            if not cairn_id:
+                return {"error": "cairn_id is required for compress"}
+            return cairn_manager.compress(cairn_id)
+
+        return {"error": f"Unknown action: {action}"}
+    except ValueError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        logger.exception("cairns failed")
         return {"error": f"Internal error: {e}"}
 
 

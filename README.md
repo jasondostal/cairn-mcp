@@ -1,6 +1,6 @@
 <p align="center">
   <strong>Cairn</strong><br>
-  <em>Semantic memory for AI agents</em>
+  <em>Persistent memory for AI agents</em>
 </p>
 
 <p align="center">
@@ -12,9 +12,9 @@
 
 ---
 
-An MCP server that gives LLMs persistent, searchable, pattern-discovering memory. Store anything, find it later through hybrid semantic search, and let clustering surface patterns you didn't know were there.
+An MCP server that gives LLMs persistent, searchable, pattern-discovering memory with session history. Store anything, find it later through hybrid semantic search, mark sessions as trail markers, and let clustering surface patterns you didn't know were there.
 
-**Built for agents.** 12 MCP tools, a REST API, and a web dashboard — all from a single container.
+**Built for agents.** 13 MCP tools, a REST API, and a web dashboard — all from a single container.
 
 ## Highlights
 
@@ -22,13 +22,14 @@ An MCP server that gives LLMs persistent, searchable, pattern-discovering memory
 - **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, and importance score on store. Bedrock or Ollama.
 - **Smart relationships** — On store, LLM identifies genuinely related memories and creates typed links (extends, contradicts, implements, depends_on). Rule conflict detection warns about contradictions.
 - **Pattern discovery** — DBSCAN clustering finds themes across memories. LLM writes the labels. No cron jobs — clusters refresh lazily.
+- **Session memory (cairns)** — Set a marker at the end of a session. Next session, walk the trail back. LLM synthesizes a narrative for each cairn. No more cold starts.
 - **Session synthesis** — Synthesize all memories from a session into a coherent narrative.
 - **Memory consolidation** — Find duplicates, recommend merges and promotions, with dry-run safety.
 - **Structured thinking** — Reasoning sequences with branching, for when an agent needs to think through a problem step by step.
 - **Web dashboard** — Next.js + shadcn/ui. Timeline, search, cluster visualization, Cmd+K command palette, inline memory viewer. Dark mode.
 - **One port, everything** — MCP protocol at `/mcp`, REST API at `/api`, same process. stdio also supported.
 - **Hardened** — Input validation on all tools, non-root Docker container, t-SNE sampling cap, pinned dependencies.
-- **6 LLM capabilities** — Each independently toggleable via env vars, each with graceful degradation. Core search/store never depends on LLM.
+- **6 LLM capabilities** — Each independently toggleable via env vars, each with graceful degradation. Core search/store/cairns never depends on LLM.
 
 ## MCP Tools
 
@@ -46,6 +47,7 @@ An MCP server that gives LLMs persistent, searchable, pattern-discovering memory
 | `status` | System health, counts, embedding model info, active LLM capabilities |
 | `synthesize` | Synthesize session memories into a coherent narrative |
 | `consolidate` | Find duplicate memories, recommend merges/promotions/inactivations |
+| `cairns` | Session markers — set at session end, walk the trail back, compress old ones |
 
 ## Architecture
 
@@ -61,7 +63,7 @@ Browser                   MCP Client (Claude, etc.)         curl / scripts
 +------+                  |  cairn.api     (read-only FastAPI endpoints)      |
 cairn-ui                  |                                                   |
                           |  core: memory, search, enrichment, clustering     |
-                          |        projects, tasks, thinking                  |
+                          |        projects, tasks, thinking, cairns          |
                           |        synthesis, consolidation                   |
                           |                                                   |
                           |  embedding: MiniLM-L6-v2 (local, 384-dim)        |
@@ -70,7 +72,7 @@ cairn-ui                  |                                                   |
                           +---------------------------------------------------+
                               |
                               v
-                          PostgreSQL 16 + pgvector (13 tables, 3 migrations)
+                          PostgreSQL 16 + pgvector (14 tables, 4 migrations)
 ```
 
 ## Quick Start
@@ -125,7 +127,7 @@ Or add to your `.mcp.json`:
 
 ### 3. Store your first memory
 
-Once connected, your agent can immediately use all 12 tools. Try:
+Once connected, your agent can immediately use all 13 tools. Try:
 
 > "Remember that we chose PostgreSQL with pgvector for the storage layer because it gives us hybrid search without a separate vector database."
 
@@ -148,6 +150,8 @@ Read-only endpoints at `/api` — powers the web UI and works great for scriptin
 | `GET /api/thinking/:id` | Sequence detail with all thoughts |
 | `GET /api/rules?project=` | Behavioral rules |
 | `GET /api/timeline?project=&type=&days=` | Memory activity feed |
+| `GET /api/cairns?project=` | Session trail — cairns newest first |
+| `GET /api/cairns/:id` | Single cairn with linked memories |
 | `GET /api/clusters/visualization?project=` | t-SNE 2D coordinates for scatter plot |
 | `GET /api/export?project=&format=` | Export project memories (JSON or Markdown) |
 
@@ -227,7 +231,7 @@ docker compose up -d --build
 
 ### Testing
 
-55 tests across 9 suites:
+68 tests across 10 suites:
 
 ```bash
 docker exec cairn pip install pytest
@@ -237,13 +241,14 @@ docker exec cairn python -m pytest tests/ -v
 
 ### Database Schema
 
-13 tables across 3 migrations:
+14 tables across 4 migrations:
 
 | Migration | Tables |
 |-----------|--------|
 | **001 Core** | `projects`, `memories`, `memory_related_files`, `memory_related_memories` |
 | **002 Clustering** | `clusters`, `cluster_members`, `clustering_runs` |
 | **003 Phase 4** | `project_documents`, `project_links`, `tasks`, `task_memory_links`, `thinking_sequences`, `thoughts` |
+| **004 Cairns** | `cairns` + `cairn_id` FK on `memories` |
 
 ## License
 

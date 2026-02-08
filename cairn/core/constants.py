@@ -35,6 +35,22 @@ class MemoryAction:
 
 
 # ============================================================
+# Cairns (Episodic)
+# ============================================================
+
+class CairnAction:
+    SET = "set"
+    STACK = "stack"
+    GET = "get"
+    COMPRESS = "compress"
+
+    ALL = {SET, STACK, GET, COMPRESS}
+
+
+MAX_CAIRN_STACK = 50  # max cairns returned by stack
+
+
+# ============================================================
 # Tasks
 # ============================================================
 

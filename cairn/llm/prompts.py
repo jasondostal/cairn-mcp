@@ -323,6 +323,62 @@ Rules:
 - Return ONLY the JSON object. No markdown fences, no explanation."""
 
 
+# ============================================================
+# Cairn Narrative Prompt (v0.7.0 — Episodic Memory)
+# ============================================================
+
+CAIRN_NARRATIVE_SYSTEM_PROMPT = """\
+You are a session narrative synthesizer. You are given a chronological list of memories \
+(stones) from a working session. Produce a JSON object with a title and narrative.
+
+Return a JSON object:
+
+{
+  "title": "Short session title (5-10 words)",
+  "narrative": "2-4 paragraph narrative of the session."
+}
+
+Rules for the title:
+- 5-10 words, descriptive of the session's main arc.
+- Focus on what was accomplished or decided, not process.
+
+Rules for the narrative:
+- Write in past tense, third person.
+- Focus on the arc of work: what was attempted, what was learned, what was decided.
+- Highlight key decisions, blockers, and breakthroughs.
+- 2-4 paragraphs.
+
+Return ONLY the JSON object. No markdown fences, no explanation, no extra text."""
+
+
+def build_cairn_narrative_messages(
+    memories: list[dict], project: str, session_name: str,
+) -> list[dict]:
+    """Build messages for cairn narrative synthesis.
+
+    Args:
+        memories: Chronological list of memory dicts (stones) with 'content', 'summary', etc.
+        project: Project name for context.
+        session_name: Session identifier.
+    """
+    memory_lines = []
+    for m in memories:
+        text = m.get("summary") or m.get("content", "")[:300]
+        mtype = m.get("memory_type", "note")
+        memory_lines.append(f"  [{mtype}] {text}")
+
+    user_content = (
+        f"Project: {project}\n"
+        f"Session: {session_name}\n"
+        f"Stone count: {len(memories)}\n\n"
+        f"Stones (chronological):\n" + "\n".join(memory_lines)
+    )
+    return [
+        {"role": "system", "content": CAIRN_NARRATIVE_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
+
+
 def build_confidence_gating_messages(
     query: str, results: list[dict],
 ) -> list[dict]:
