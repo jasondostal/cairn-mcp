@@ -39,7 +39,7 @@ def create_api(svc: Services) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],  # Tighten when Authentik is wired
-        allow_methods=["GET"],
+        allow_methods=["GET", "POST"],
         allow_headers=["*"],
     )
 
@@ -257,6 +257,25 @@ def create_api(svc: Services) -> FastAPI:
         limit: int = Query(20, ge=1, le=50),
     ):
         return cairn_manager.stack(project, limit=limit)
+
+    # ------------------------------------------------------------------
+    # POST /cairns — set a cairn (used by hooks)
+    # ------------------------------------------------------------------
+    @router.post("/cairns")
+    def api_set_cairn(body: dict):
+        project = body.get("project")
+        session_name = body.get("session_name")
+        events = body.get("events")
+
+        if not project:
+            raise HTTPException(status_code=400, detail="project is required")
+        if not session_name:
+            raise HTTPException(status_code=400, detail="session_name is required")
+
+        result = cairn_manager.set(project, session_name, events=events)
+        if "error" in result:
+            raise HTTPException(status_code=409, detail=result["error"])
+        return result
 
     # ------------------------------------------------------------------
     # GET /cairns/:id — single cairn with full detail + linked stones
