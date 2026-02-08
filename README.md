@@ -83,19 +83,26 @@ Migrations run automatically. The UI builds from source on first `up` (takes ~1 
 
 ### 2. Connect your agent
 
-**HTTP** (recommended — supports multiple concurrent clients):
+**Claude Code** (HTTP — recommended):
+
+```bash
+claude mcp add --transport http cairn http://localhost:8000/mcp
+```
+
+Or add to your `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "cairn": {
+      "type": "http",
       "url": "http://localhost:8000/mcp"
     }
   }
 }
 ```
 
-**stdio** (single-client, same host):
+**Other MCP clients** (stdio — single-client, same host):
 
 ```json
 {
