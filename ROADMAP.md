@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.4.2** — All 5 PRD phases complete + web UI polished + CI for both images.
+Current: **v0.4.3** — All 5 PRD phases complete + web UI polished + CI for both images + server-side pagination.
 
 ---
 
@@ -10,7 +10,7 @@ Tighten what's already there.
 
 - [x] **Active nav highlighting** — `SidebarNav` component, `usePathname()` active state
 - [x] **Error states** — reusable `ErrorState` component + `useFetch` hook, all pages
-- [x] **Pagination** — client-side `usePagination` hook + `PaginationControls`, applied to search/tasks/thinking/rules
+- [x] **Pagination** — server-side `limit`/`offset` on all list endpoints + client-side `usePagination` hook + `PaginationControls`
 - [x] **Favicon + branding** — SVG cairn icon, removed default Next.js assets
 - [x] **Back-navigation** — ArrowLeft + `router.back()` on memory detail
 - [x] **GHCR image for cairn-ui** — CI/CD builds like the MCP server image

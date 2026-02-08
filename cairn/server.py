@@ -243,7 +243,7 @@ def rules(project: str | None = None) -> list[dict]:
         project: Project name to get rules for. Omit for global rules only.
     """
     result = memory_store.get_rules(project)
-    return {"result": result["items"]}
+    return result["items"]
 
 
 # ============================================================

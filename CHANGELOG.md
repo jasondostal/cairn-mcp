@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-02-07
+
+### Added
+- **Server-side pagination** for all list endpoints — `tasks`, `thinking`, `projects`, `rules`, and `search` now accept `limit`/`offset` params and return `{total, limit, offset, items}` response shape
+- UI updated to consume paginated API responses
+
+### Fixed
+- `rules` MCP tool returning wrapped `{"result": items}` instead of plain items list
+
+### Changed
+- Core methods (`get_rules`, `list_tasks`, `list_sequences`, `list_projects`) refactored for consistent paginated response shape
+- MCP tools extract `items` only to preserve backward compatibility with Claude clients
+
 ## [0.4.2] - 2026-02-07
 
 ### Added
@@ -134,7 +147,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.3.0...v0.4.0
