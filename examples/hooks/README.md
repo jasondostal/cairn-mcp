@@ -12,6 +12,8 @@ Automatic session capture using lifecycle hooks. Three scripts, zero manual effo
 
 Events are captured locally during the session (no HTTP calls per tool use — just file appends). At session end, everything gets bundled into a cairn with the full event log attached.
 
+Event logs are stored in `~/.cairn/events/` by default (created automatically). Override with `CAIRN_EVENT_DIR` to use a different location.
+
 ## Setup
 
 1. Copy `settings.json` into your project's `.claude/settings.json` (or merge with existing):
@@ -30,8 +32,9 @@ cp examples/hooks/settings.json .claude/settings.json
 3. Set environment variables (optional — defaults work for local setup):
 
 ```bash
-export CAIRN_URL="http://localhost:8002"    # default
-export CAIRN_PROJECT="my-project"           # default: cwd basename
+export CAIRN_URL="http://localhost:8000"      # default
+export CAIRN_PROJECT="my-project"             # default: cwd basename
+export CAIRN_EVENT_DIR="$HOME/.cairn/events"  # default
 ```
 
 ## How it works
@@ -41,7 +44,7 @@ SessionStart
     │
     ├─ Fetch recent cairns via GET /api/cairns?project=...
     ├─ Output context for Claude to load
-    └─ Create /tmp/cairn-events-{session_id}.jsonl
+    └─ Create ~/.cairn/events/cairn-events-{session_id}.jsonl
          │
          │  ┌─────────────────────────────────┐
          ├──│ PostToolUse (async, every tool)  │

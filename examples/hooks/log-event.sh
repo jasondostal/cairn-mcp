@@ -12,7 +12,8 @@ INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // "unknown"')
 
-EVENT_LOG="/tmp/cairn-events-${SESSION_ID}.jsonl"
+CAIRN_EVENT_DIR="${CAIRN_EVENT_DIR:-${HOME}/.cairn/events}"
+EVENT_LOG="${CAIRN_EVENT_DIR}/cairn-events-${SESSION_ID}.jsonl"
 
 # Don't log if no session or no log file
 [ -z "$SESSION_ID" ] && exit 0

@@ -33,7 +33,7 @@ The tiers are additive and degrade gracefully. With all three active, a session 
 ## Highlights
 
 - **Three-tier capture** — Ambient motes + session cairns + organic memories. See above.
-- **Hybrid search** — Vector similarity + full-text + tag matching, fused with Reciprocal Rank Fusion. 83.8% recall@10 on our eval benchmark. Optional LLM query expansion and confidence gating.
+- **Hybrid search** — Vector similarity + full-text + tag matching, fused with Reciprocal Rank Fusion. [83.8% recall@10](#search-quality) on our internal benchmark (50-memory synthetic corpus, 25 hand-labeled queries). Optional LLM query expansion.
 - **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, and importance score on store. Bedrock or Ollama.
 - **Smart relationships** — On store, LLM identifies genuinely related memories and creates typed links (extends, contradicts, implements, depends_on). Rule conflict detection warns about contradictions.
 - **Pattern discovery** — DBSCAN clustering finds themes across memories. LLM writes the labels. No cron jobs — clusters refresh lazily.
@@ -81,13 +81,26 @@ cairn-ui                  |                                                   |
                           |        synthesis, consolidation                   |
                           |                                                   |
                           |  embedding: MiniLM-L6-v2 (local, 384-dim)        |
-                          |  llm: Bedrock (Llama 90B) / Ollama fallback      |
+                          |  llm: Bedrock (Llama 90B) or Ollama (local)       |
                           |  storage: PostgreSQL 16 + pgvector (HNSW)        |
                           +---------------------------------------------------+
                               |
                               v
                           PostgreSQL 16 + pgvector (14 tables, 4 migrations)
 ```
+
+## Prerequisites
+
+Cairn needs an **LLM backend** for enrichment, relationship extraction, and session narrative synthesis. Choose one:
+
+| Backend | Setup | Best for |
+|---------|-------|----------|
+| **Ollama** (default) | Install [Ollama](https://ollama.com), pull a model (`ollama pull qwen2.5-coder:7b`). Cairn connects to `host.docker.internal:11434`. | Local development, no cloud dependency |
+| **AWS Bedrock** | Set `CAIRN_LLM_BACKEND=bedrock`, mount or export AWS credentials. Requires model access in your AWS account. | Production, larger models |
+
+**No LLM? Cairn still works.** Core features — store, search, recall, cairns, rules — function without an LLM. You lose auto-enrichment (summaries, tags, importance scoring), relationship extraction, and session narrative synthesis. Memories are still embedded and searchable.
+
+> **Security note:** The default `docker-compose.yml` ships with a development database password (`cairn-dev-password`). This is intentional for quick local setup. For any network-exposed deployment, override it: `CAIRN_DB_PASS=your-secure-password docker compose up -d`
 
 ## Quick Start
 
@@ -120,7 +133,7 @@ services:
       CAIRN_DB_NAME: "${CAIRN_DB_NAME:-cairn}"
       CAIRN_DB_USER: "${CAIRN_DB_USER:-cairn}"
       CAIRN_DB_PASS: "${CAIRN_DB_PASS:-cairn-dev-password}"
-      CAIRN_LLM_BACKEND: "${CAIRN_LLM_BACKEND:-bedrock}"
+      CAIRN_LLM_BACKEND: "${CAIRN_LLM_BACKEND:-ollama}"
       CAIRN_BEDROCK_MODEL: "${CAIRN_BEDROCK_MODEL:-us.meta.llama3-2-90b-instruct-v1:0}"
       CAIRN_OLLAMA_URL: "${CAIRN_OLLAMA_URL:-http://host.docker.internal:11434}"
       CAIRN_OLLAMA_MODEL: "${CAIRN_OLLAMA_MODEL:-qwen2.5-coder:7b}"
@@ -273,9 +286,11 @@ Add hooks to your project's `.claude/settings.local.json`:
 Replace `/path/to/cairn` with wherever you cloned the repo. Set `CAIRN_URL` to your Cairn instance. `CAIRN_PROJECT` defaults to the working directory name — override it if you want a different project name.
 
 **What happens:**
-1. **Session starts** — hook fetches recent cairns for context, creates an event log in `/tmp`
+1. **Session starts** — hook fetches recent cairns for context, creates an event log in `~/.cairn/events/`
 2. **Every tool call** — hook appends a one-line JSON event to the log (local file, no HTTP, no blocking)
 3. **Session ends** — hook bundles all events and POSTs a cairn with the full event stream
+
+Override the event log directory with `CAIRN_EVENT_DIR`. Requires `jq` and `curl`.
 
 No hooks? No problem. The `cairns` tool works without them — the agent can call `cairns(action="set")` directly. And even without cairns, memories stored with a `session_name` are still grouped and searchable.
 
@@ -351,7 +366,7 @@ All via environment variables:
 | `CAIRN_DB_NAME` | `cairn` | Database name |
 | `CAIRN_DB_USER` | `cairn` | Database user |
 | `CAIRN_DB_PASS` | *(required)* | Database password |
-| `CAIRN_LLM_BACKEND` | `bedrock` | `bedrock` or `ollama` |
+| `CAIRN_LLM_BACKEND` | `ollama` | `ollama` or `bedrock` |
 | `CAIRN_BEDROCK_MODEL` | `us.meta.llama3-2-90b-instruct-v1:0` | Bedrock model ID |
 | `CAIRN_OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama API URL |
 | `CAIRN_OLLAMA_MODEL` | `qwen2.5-coder:7b` | Ollama model name |
@@ -364,7 +379,7 @@ All via environment variables:
 | `CAIRN_LLM_RULE_CONFLICT_CHECK` | `true` | Check new rules for conflicts with existing rules |
 | `CAIRN_LLM_SESSION_SYNTHESIS` | `true` | Enable session narrative synthesis |
 | `CAIRN_LLM_CONSOLIDATION` | `true` | Enable memory consolidation recommendations |
-| `CAIRN_LLM_CONFIDENCE_GATING` | `false` | Post-search result quality assessment (high reasoning demand) |
+| `CAIRN_LLM_CONFIDENCE_GATING` | `false` | Post-search quality assessment — returns a confidence score but does not filter results (caller decides). High reasoning demand. |
 
 ## Development
 
@@ -395,6 +410,30 @@ docker exec cairn python -m pytest tests/ -v
 | **002 Clustering** | `clusters`, `cluster_members`, `clustering_runs` |
 | **003 Phase 4** | `project_documents`, `project_links`, `tasks`, `task_memory_links`, `thinking_sequences`, `thoughts` |
 | **004 Cairns** | `cairns` + `cairn_id` FK on `memories` |
+
+## Search Quality
+
+Cairn includes an evaluation framework (`eval/`) for measuring search quality. Current results on our internal benchmark:
+
+| Metric | Score |
+|--------|-------|
+| Recall@10 | 83.8% |
+| Precision@5 | 72.0% |
+| MRR | 0.81 |
+| NDCG@10 | 0.78 |
+
+**Methodology and limitations:**
+
+- **Corpus:** 50 synthetic memories, fabricated to cover diverse topic areas. Not derived from real usage data.
+- **Queries:** 25 hand-labeled queries with binary relevance judgments (relevant / not relevant), authored by the developer.
+- **No graded relevance** — a partially-relevant result scores the same as irrelevant (0). This inflates recall and obscures ranking quality.
+- **No error bars** — 25 queries is a small sample. The true recall likely has a wide confidence interval.
+- **Small corpus effect** — with 50 memories and a candidate pool of `limit * 5`, the system examines a significant fraction of the entire corpus before ranking. Performance at 500+ memories is untested.
+- **RRF weights** (vector 60%, keyword 25%, tag 15%) and `k=60` are based on initial tuning, not exhaustive ablation.
+
+The eval framework supports model comparison (MiniLM-L6-v2 vs. all-mpnet-base-v2 evaluated, smaller model chosen with +1.5% recall advantage) and includes a keyword-only control to isolate embedding quality.
+
+We plan to grow the corpus, add graded relevance, and test at larger scales. Contributions to the eval set are welcome.
 
 ## License
 

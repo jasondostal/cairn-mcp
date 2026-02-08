@@ -17,10 +17,11 @@ INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 
-CAIRN_URL="${CAIRN_URL:-http://localhost:8002}"
+CAIRN_URL="${CAIRN_URL:-http://localhost:8000}"
 CAIRN_PROJECT="${CAIRN_PROJECT:-$(basename "${CWD:-$(pwd)}")}"
 
-EVENT_LOG="/tmp/cairn-events-${SESSION_ID}.jsonl"
+CAIRN_EVENT_DIR="${CAIRN_EVENT_DIR:-${HOME}/.cairn/events}"
+EVENT_LOG="${CAIRN_EVENT_DIR}/cairn-events-${SESSION_ID}.jsonl"
 
 # Read session_name from the first event (session_start) in the log.
 # This ensures start and end use the exact same value, even across midnight.

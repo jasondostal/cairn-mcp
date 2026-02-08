@@ -17,7 +17,7 @@ INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 
-CAIRN_URL="${CAIRN_URL:-http://localhost:8002}"
+CAIRN_URL="${CAIRN_URL:-http://localhost:8000}"
 CAIRN_PROJECT="${CAIRN_PROJECT:-$(basename "${CWD:-$(pwd)}")}"
 
 # Build session_name from date + session ID (last 8 chars for readability)
@@ -25,7 +25,9 @@ SHORT_ID="${SESSION_ID: -8}"
 SESSION_NAME="$(date -u +%Y-%m-%d)-${SHORT_ID}"
 
 # Session event log — one JSONL file per session
-EVENT_LOG="/tmp/cairn-events-${SESSION_ID}.jsonl"
+CAIRN_EVENT_DIR="${CAIRN_EVENT_DIR:-${HOME}/.cairn/events}"
+mkdir -p "$CAIRN_EVENT_DIR"
+EVENT_LOG="${CAIRN_EVENT_DIR}/cairn-events-${SESSION_ID}.jsonl"
 echo "" > "$EVENT_LOG"
 
 # Log the session start event (includes session_name so session-end.sh can read it back)

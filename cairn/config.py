@@ -25,7 +25,7 @@ class EmbeddingConfig:
 
 @dataclass(frozen=True)
 class LLMConfig:
-    backend: str = "bedrock"  # "bedrock" or "ollama"
+    backend: str = "ollama"  # "ollama" or "bedrock"
 
     # Bedrock settings
     bedrock_model: str = "us.meta.llama3-2-90b-instruct-v1:0"
@@ -82,7 +82,7 @@ def load_config() -> Config:
             model=os.getenv("CAIRN_EMBEDDING_MODEL", "all-MiniLM-L6-v2"),
         ),
         llm=LLMConfig(
-            backend=os.getenv("CAIRN_LLM_BACKEND", "bedrock"),
+            backend=os.getenv("CAIRN_LLM_BACKEND", "ollama"),
             bedrock_model=os.getenv("CAIRN_BEDROCK_MODEL", "us.meta.llama3-2-90b-instruct-v1:0"),
             bedrock_region=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
             ollama_url=os.getenv("CAIRN_OLLAMA_URL", "http://localhost:11434"),

@@ -9,7 +9,7 @@ services:
       CAIRN_DB_NAME: "${CAIRN_DB_NAME:-cairn}"
       CAIRN_DB_USER: "${CAIRN_DB_USER:-cairn}"
       CAIRN_DB_PASS: "${CAIRN_DB_PASS:-cairn-dev-password}"
-      CAIRN_LLM_BACKEND: "${CAIRN_LLM_BACKEND:-bedrock}"
+      CAIRN_LLM_BACKEND: "${CAIRN_LLM_BACKEND:-ollama}"
       CAIRN_BEDROCK_MODEL: "${CAIRN_BEDROCK_MODEL:-us.meta.llama3-2-90b-instruct-v1:0}"
       CAIRN_OLLAMA_URL: "${CAIRN_OLLAMA_URL:-http://host.docker.internal:11434}"
       CAIRN_OLLAMA_MODEL: "${CAIRN_OLLAMA_MODEL:-qwen2.5-coder:7b}"
