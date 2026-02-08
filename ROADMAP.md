@@ -1,8 +1,20 @@
 # Roadmap
 
-Current: **v0.8.0** — Cairns UI page, all-projects filter, backend hygiene.
+Current: **v0.9.0** — Hardening, connection pooling, configurable CORS, honest eval.
 
 ---
+
+## v0.9.0 — Hardening ✓
+
+Stand taller. Fix what the red team found.
+
+- [x] **Connection pooling** — `psycopg_pool.ConnectionPool` with thread-local tracking, auto-recovery from INERROR state
+- [x] **Configurable CORS** — `CAIRN_CORS_ORIGINS` env var, defaults to `*`, lock down behind reverse proxy
+- [x] **Default LLM → Ollama** — free, local, runs on commodity hardware. Bedrock still supported.
+- [x] **Persistent event logs** — `~/.cairn/events/` via `CAIRN_EVENT_DIR` instead of `/tmp`
+- [x] **Eval transparency** — qualified 83.8% recall claim, documented methodology and limitations
+- [x] **RRF documentation** — k=60 origin, weight rationale, candidate pool inflation noted
+- [x] **Hook port fix** — 8002 → 8000
 
 ## v0.8.0 — Cairns UI + Backend Hygiene ✓
 
@@ -75,6 +87,9 @@ Nice-to-haves when the core is rock solid.
 ---
 
 ## Completed
+
+### v0.9.0 — Hardening
+Connection pooling (psycopg_pool), configurable CORS origins, default LLM switched to Ollama, persistent event logs, eval transparency, RRF documentation, hook port fix.
 
 ### v0.8.0 — Cairns UI + Backend Hygiene
 Cairns UI page in cairn-ui, all-projects filter on cairn stack/tasks/thinking, read-only project lookup, migration 005 (partial indexes), cross-project boot in session-start hook.

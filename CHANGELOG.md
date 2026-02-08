@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-02-08
+
+### Added
+- **Connection pooling** — `psycopg_pool.ConnectionPool` replaces single shared connection, with thread-local tracking and auto-recovery from failed transactions. Fixes potential race condition under concurrent REST API requests.
+- **Configurable CORS origins** — `CAIRN_CORS_ORIGINS` env var (comma-separated). Defaults to `*` for backwards compatibility; set to specific origins when behind a reverse proxy.
+- **Persistent event logs** — hook scripts now write to `~/.cairn/events/` (configurable via `CAIRN_EVENT_DIR`) instead of `/tmp`
+- **Search quality documentation** — new "Search Quality" section in README with eval methodology, limitations, and honest assessment of the benchmark
+
+### Changed
+- **Default LLM backend** — switched from `bedrock` to `ollama` across config, docker-compose, and .env.example. Ollama is free, local, and runs on commodity hardware. Bedrock still fully supported.
+- RRF module docstring documents k=60 origin (Cormack et al. 2009), weight rationale, and known limitations
+- Eval claim in README qualified: "83.8% recall@10 on our internal benchmark (50-memory synthetic corpus, 25 hand-labeled queries)"
+- Confidence gating description clarified as advisory (returns a confidence score but does not filter results)
+
+### Fixed
+- Hook scripts default port corrected from 8002 to 8000
+
+### Dependencies
+- Added `psycopg_pool>=3.1` to project dependencies
+
 ## [0.8.0] - 2026-02-08
 
 ### Added
@@ -293,7 +313,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.6.0...v0.7.0

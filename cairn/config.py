@@ -66,6 +66,13 @@ class Config:
     transport: str = "stdio"  # "stdio" or "http"
     http_host: str = "0.0.0.0"
     http_port: int = 8000
+    cors_origins: list[str] = field(default_factory=lambda: ["*"])
+
+
+def _parse_cors_origins(raw: str) -> list[str]:
+    """Parse comma-separated CORS origins. '*' means allow all."""
+    origins = [o.strip() for o in raw.split(",") if o.strip()]
+    return origins or ["*"]
 
 
 def load_config() -> Config:
@@ -100,4 +107,5 @@ def load_config() -> Config:
         transport=os.getenv("CAIRN_TRANSPORT", "stdio"),
         http_host=os.getenv("CAIRN_HTTP_HOST", "0.0.0.0"),
         http_port=int(os.getenv("CAIRN_HTTP_PORT", "8000")),
+        cors_origins=_parse_cors_origins(os.getenv("CAIRN_CORS_ORIGINS", "*")),
     )

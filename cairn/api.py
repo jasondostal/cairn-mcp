@@ -32,13 +32,13 @@ def create_api(svc: Services) -> FastAPI:
     cairn_manager = svc.cairn_manager
     app = FastAPI(
         title="Cairn API",
-        version="0.8.0",
+        version="0.9.0",
         description="Read-only REST API for the Cairn web UI.",
     )
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Tighten when Authentik is wired
+        allow_origins=config.cors_origins,
         allow_methods=["GET", "POST"],
         allow_headers=["*"],
     )
