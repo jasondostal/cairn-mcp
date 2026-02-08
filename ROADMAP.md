@@ -1,8 +1,22 @@
 # Roadmap
 
-Current: **v0.6.0** — LLM capabilities: query expansion, relationship extraction, rule conflict detection, session synthesis, memory consolidation, confidence gating.
+Current: **v0.7.0** — Cairns (episodic session memory) with automatic hook-based capture.
 
 ---
+
+## v0.7.0 — Cairns (Episodic Session Memory) ✓
+
+Session history that builds itself.
+
+- [x] **Cairns table + migration** — 14th table, cairn_id FK on memories, zero breaking changes
+- [x] **CairnManager** — set, stack, get, compress operations
+- [x] **`cairns` MCP tool (#13)** — set markers, walk the trail, inspect, compress
+- [x] **REST endpoints** — GET /api/cairns, GET /api/cairns/:id, POST /api/cairns
+- [x] **Hook scripts** — session-start.sh, log-event.sh, session-end.sh for Claude Code lifecycle hooks
+- [x] **Motes (event stream)** — every tool call silently logged to /tmp JSONL, bundled into cairn at session end
+- [x] **Three-tier degradation** — hooks → organic rules → raw memories. Each tier works without the ones above it
+- [x] **LLM narrative synthesis** — cairn title and narrative generated from session memories, toggleable via env var
+- [x] **13 new tests** (68 total across 13 suites)
 
 ## v0.6.0 — LLM Capabilities ✓
 
@@ -51,6 +65,9 @@ Nice-to-haves when the core is rock solid.
 ---
 
 ## Completed
+
+### v0.7.0 — Cairns (Episodic Session Memory)
+Cairns MCP tool, CairnManager, migration 004, REST endpoints (including first write endpoint), hook scripts for automatic session capture. Motes — every tool call logged as a lightweight event, crystallized into a cairn at session end. Three-tier graceful degradation. 13 new tests (68 total).
 
 ### v0.6.0 — LLM Capabilities
 6 new LLM capabilities with feature flags and graceful degradation. Query expansion, relationship extraction, rule conflict detection, session synthesis, memory consolidation, confidence gating. 2 new MCP tools (12 total), 25 new tests (55 total).

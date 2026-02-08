@@ -23,6 +23,7 @@ An MCP server that gives LLMs persistent, searchable, pattern-discovering memory
 - **Smart relationships** — On store, LLM identifies genuinely related memories and creates typed links (extends, contradicts, implements, depends_on). Rule conflict detection warns about contradictions.
 - **Pattern discovery** — DBSCAN clustering finds themes across memories. LLM writes the labels. No cron jobs — clusters refresh lazily.
 - **Session memory (cairns)** — Set a marker at the end of a session. Next session, walk the trail back. LLM synthesizes a narrative for each cairn. No more cold starts.
+- **Automatic session capture (hooks)** — Optional Claude Code hook scripts silently log every tool call during a session as a lightweight event (a *mote*), then crystallize the full event stream into a cairn when the session ends. The agent doesn't have to decide what's worth remembering — everything is captured organically, and the cairn's narrative distills what mattered. Three-tier graceful degradation: hooks capture automatically, the cairns tool works without hooks, and organic memory rules work without either.
 - **Session synthesis** — Synthesize all memories from a session into a coherent narrative.
 - **Memory consolidation** — Find duplicates, recommend merges and promotions, with dry-run safety.
 - **Structured thinking** — Reasoning sequences with branching, for when an agent needs to think through a problem step by step.
@@ -231,7 +232,7 @@ docker compose up -d --build
 
 ### Testing
 
-68 tests across 10 suites:
+68 tests across 13 suites:
 
 ```bash
 docker exec cairn pip install pytest

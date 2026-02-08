@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-02-08
+
+### Added
+- **Cairns — episodic session memory** — new `cairns` MCP tool (#13) and `CairnManager` for setting, stacking, inspecting, and compressing session markers. Each cairn links to all memories from a session, with LLM-synthesized narrative and title. Walk the trail back on next session start — no more cold starts.
+- **Hook scripts for automatic session capture** — three shell scripts in `examples/hooks/` that wire into Claude Code's lifecycle hooks:
+  - `session-start.sh` (SessionStart) — fetches recent cairn context, initializes a JSONL event log for the session
+  - `log-event.sh` (PostToolUse) — silently appends every tool call to the event log with compact summaries. No HTTP calls, no blocking — just a local file append. These are **motes**: tiny, ephemeral observations that accumulate naturally during a session.
+  - `session-end.sh` (SessionEnd) — bundles the event stream and POSTs a cairn via REST API with all events attached
+- **`POST /api/cairns`** — write endpoint for hook-based cairn creation (REST API was previously read-only)
+- **`GET /api/cairns`** and **`GET /api/cairns/:id`** — REST endpoints for browsing the session trail
+- **Migration 004** — `cairns` table (id, project_id, session_name, title, narrative, events JSONB, memory_count, started_at, set_at, is_compressed) + `cairn_id` FK column on `memories` table
+- **`CAIRN_LLM_CAIRN_SYNTHESIS`** env var — toggleable LLM narrative generation for cairns, with graceful degradation
+- 13 new unit tests for cairn functionality
+
+### Design
+- **Three-tier graceful degradation** for session capture:
+  - **Tier 3 (Hook-automated):** Claude Code hooks silently capture every tool call as a mote, then crystallize the session into a cairn at exit. Zero agent effort. This is the full vision.
+  - **Tier 2 (Tool-assisted):** Agent calls `cairns(action="set")` at session end. Works without hooks.
+  - **Tier 1 (Organic):** Agent follows rules, stores memories with `session_name`, synthesizes manually. Works without cairns tool.
+- **Motes are ephemeral by design** — they live in `/tmp` as JSONL, not in PostgreSQL. A session's motes flow into the cairn's `events` JSONB at session end, then the temp file is cleaned up. Lightweight capture, permanent crystallization.
+- Set-only model — cairns are created retroactively from existing session memories, no active session tracking needed
+- `cairns` table is 14th table, 4th migration. Zero breaking changes to existing schema.
+
 ## [0.6.0] - 2026-02-07
 
 ### Added
@@ -235,7 +258,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.3...v0.6.0
 [0.5.3]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.1...v0.5.2
