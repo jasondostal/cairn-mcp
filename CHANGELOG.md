@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-02-08
+
+### Changed
+- **Services container** — new `cairn/core/services.py` with `Services` dataclass and `create_services()` factory; server.py init collapsed from 25 lines to single factory call
+- **Centralized constants** — new `cairn/core/constants.py` extracts enums (`MemoryAction`, `TaskStatus`, `ThinkingStatus`) and valid-type lists from 6 scattered modules
+- **Shared utilities** — new `cairn/core/utils.py` with `get_or_create_project()`, `extract_json()`, `strip_markdown_fences()` eliminating ~360 lines of duplication
+- `create_api()` accepts `Services` object instead of 8 keyword arguments
+- `insights` tool now calls `ClusterEngine.get_last_run()` instead of raw DB queries (layer violation fix)
+- Docker Compose credentials use `${VAR:-default}` env var substitution for `.env` override
+
+### Fixed
+- Thinking sequence `conclude()` now guards against double-conclude (raises `ValueError` if already completed)
+
+### Removed
+- Dead root `server.py` (88 lines) — Docker runs `cairn.server`, not this file
+
 ## [0.5.0] - 2026-02-08
 
 ### Added
@@ -164,7 +180,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.1...v0.4.2
