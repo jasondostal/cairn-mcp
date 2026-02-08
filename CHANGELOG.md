@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-02-07
+
+### Added
+- **Active nav highlighting** — extracted `SidebarNav` component with `usePathname()` active state
+- **Mobile responsive layout** — hamburger menu + backdrop drawer on small screens
+- **Error states** — reusable `ErrorState` component + `useFetch` hook, applied to all pages
+- **Client-side pagination** — `usePagination` hook (20 items/page) + `PaginationControls` component
+- **Favicon** — SVG cairn icon, removed all default Next.js assets
+- **Back-navigation** — ArrowLeft + `router.back()` on memory detail page
+- **Health check** — `wget` healthcheck for `cairn-ui` in docker-compose
+
+### Changed
+- Quick Start guide updated for 3-container stack (cairn, cairn-ui, cairn-db)
+- `pyproject.toml` version bumped to match release
+- ROADMAP v0.4.x polish items checked off (6/8 complete, GHCR image remaining)
+
+### Docs
+- README overhaul with badges, highlights, architecture diagram, and better structure
+- Added ROADMAP.md with v0.4.x polish and v0.5.0 feature plans
+
 ## [0.4.0] - 2026-02-07
 
 ### Added
@@ -100,7 +120,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.1.0...v0.2.0

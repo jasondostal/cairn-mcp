@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.4.0** — All 5 PRD phases complete + web UI live.
+Current: **v0.4.1** — All 5 PRD phases complete + web UI polished.
 
 ---
 
