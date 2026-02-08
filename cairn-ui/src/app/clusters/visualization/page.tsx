@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type VisualizationPoint } from "@/lib/api";
+import { useMemorySheet } from "@/lib/use-memory-sheet";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,8 +30,7 @@ export default function ClusterVisualizationPage() {
   const [project, setProject] = useState("");
   const [hoveredPoint, setHoveredPoint] = useState<VisualizationPoint | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
-  const [sheetId, setSheetId] = useState<number | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const { sheetId, sheetOpen, setSheetOpen, openSheet } = useMemorySheet();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -147,8 +147,7 @@ export default function ClusterVisualizationPage() {
 
   function handleClick() {
     if (hoveredPoint) {
-      setSheetId(hoveredPoint.id);
-      setSheetOpen(true);
+      openSheet(hoveredPoint.id);
     }
   }
 

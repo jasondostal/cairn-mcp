@@ -2,6 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { api, type ThinkingDetail } from "@/lib/api";
+import { formatDate, formatTimeFull } from "@/lib/format";
 import { useFetch } from "@/lib/use-fetch";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -54,7 +55,7 @@ function ThoughtCard({
               </Badge>
             )}
             <span className="text-xs text-muted-foreground">
-              {new Date(thought.created_at).toLocaleTimeString()}
+              {formatTimeFull(thought.created_at)}
             </span>
           </div>
           <p className="whitespace-pre-wrap text-sm leading-relaxed">
@@ -108,7 +109,7 @@ export default function ThinkingDetailPage() {
           <span>·</span>
           <span>{detail.thoughts.length} thoughts</span>
           <span>·</span>
-          <span>{new Date(detail.created_at).toLocaleDateString()}</span>
+          <span>{formatDate(detail.created_at)}</span>
         </div>
       </div>
 

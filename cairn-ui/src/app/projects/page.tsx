@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { api, type Project } from "@/lib/api";
+import { formatDate } from "@/lib/format";
 import { useFetch } from "@/lib/use-fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/error-state";
+import { SkeletonList } from "@/components/skeleton-list";
 
 export default function ProjectsPage() {
   const { data: projects, loading, error } = useFetch<Project[]>(
@@ -17,11 +18,7 @@ export default function ProjectsPage() {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-semibold">Projects</h1>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-24" />
-          ))}
-        </div>
+        <SkeletonList count={8} gap="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4" />
       </div>
     );
   }
@@ -57,7 +54,7 @@ export default function ProjectsPage() {
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {new Date(p.created_at).toLocaleDateString()}
+                  {formatDate(p.created_at)}
                 </p>
               </CardContent>
             </Card>

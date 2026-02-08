@@ -2,39 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { api, type TimelineMemory } from "@/lib/api";
+import { formatRelativeDate, formatTime } from "@/lib/format";
+import { useMemorySheet } from "@/lib/use-memory-sheet";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/error-state";
 import { MemorySheet } from "@/components/memory-sheet";
-import { Star, Tag } from "lucide-react";
+import { MemoryTypeBadge } from "@/components/memory-type-badge";
+import { ImportanceBadge } from "@/components/importance-badge";
+import { TagList } from "@/components/tag-list";
+import { SkeletonList } from "@/components/skeleton-list";
 
 function groupByDate(items: TimelineMemory[]): Map<string, TimelineMemory[]> {
   const groups = new Map<string, TimelineMemory[]>();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
 
   for (const item of items) {
-    const date = new Date(item.created_at);
-    date.setHours(0, 0, 0, 0);
-
-    let label: string;
-    if (date.getTime() === today.getTime()) {
-      label = "Today";
-    } else if (date.getTime() === yesterday.getTime()) {
-      label = "Yesterday";
-    } else {
-      label = date.toLocaleDateString(undefined, {
-        weekday: "long",
-        month: "short",
-        day: "numeric",
-      });
-    }
-
+    const label = formatRelativeDate(item.created_at);
     const group = groups.get(label) ?? [];
     group.push(item);
     groups.set(label, group);
@@ -63,18 +47,13 @@ function TimelineCard({
       <CardContent className="space-y-2 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono text-xs">
-              {memory.memory_type}
-            </Badge>
+            <MemoryTypeBadge type={memory.memory_type} />
             <span className="text-xs text-muted-foreground">
               {memory.project}
             </span>
           </div>
-          <div className="flex items-center gap-0.5 shrink-0">
-            <Star className="h-3 w-3 text-muted-foreground" />
-            <span className="font-mono text-xs text-muted-foreground">
-              {memory.importance.toFixed(2)}
-            </span>
+          <div className="shrink-0">
+            <ImportanceBadge importance={memory.importance} />
           </div>
         </div>
 
@@ -86,25 +65,13 @@ function TimelineCard({
           {content}
         </p>
 
-        {memory.tags.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <Tag className="h-3 w-3 text-muted-foreground" />
-            {memory.tags.map((t) => (
-              <Badge key={t} variant="secondary" className="text-xs">
-                {t}
-              </Badge>
-            ))}
-          </div>
-        )}
+        <TagList tags={memory.tags} />
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>#{memory.id}</span>
           <span>&middot;</span>
           <span>
-            {new Date(memory.created_at).toLocaleTimeString(undefined, {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            {formatTime(memory.created_at)}
           </span>
         </div>
       </CardContent>
@@ -119,13 +86,7 @@ export default function TimelinePage() {
   const [project, setProject] = useState("");
   const [type, setType] = useState("");
   const [days, setDays] = useState("7");
-  const [sheetId, setSheetId] = useState<number | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
-
-  function openSheet(id: number) {
-    setSheetId(id);
-    setSheetOpen(true);
-  }
+  const { sheetId, sheetOpen, setSheetOpen, openSheet } = useMemorySheet();
 
   function load() {
     setLoading(true);
@@ -176,13 +137,7 @@ export default function TimelinePage() {
         <Button onClick={load}>Apply</Button>
       </div>
 
-      {loading && (
-        <div className="space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-24" />
-          ))}
-        </div>
-      )}
+      {loading && <SkeletonList count={5} />}
 
       {error && <ErrorState message="Failed to load timeline" detail={error} />}
 

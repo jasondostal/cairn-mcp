@@ -2,15 +2,19 @@
 
 import { useState } from "react";
 import { api, type Memory } from "@/lib/api";
+import { formatDate } from "@/lib/format";
+import { useMemorySheet } from "@/lib/use-memory-sheet";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/error-state";
 import { MemorySheet } from "@/components/memory-sheet";
-import { usePagination, PaginationControls } from "@/components/pagination";
-import { Search, FileText, Tag, Star } from "lucide-react";
+import { MemoryTypeBadge } from "@/components/memory-type-badge";
+import { ImportanceBadge } from "@/components/importance-badge";
+import { TagList } from "@/components/tag-list";
+import { SkeletonList } from "@/components/skeleton-list";
+import { PaginatedList } from "@/components/paginated-list";
+import { Search, FileText } from "lucide-react";
 
 function MemoryCard({ memory, onSelect }: { memory: Memory; onSelect?: (id: number) => void }) {
   const content =
@@ -26,9 +30,7 @@ function MemoryCard({ memory, onSelect }: { memory: Memory; onSelect?: (id: numb
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono text-xs">
-              {memory.memory_type}
-            </Badge>
+            <MemoryTypeBadge type={memory.memory_type} />
             <span className="text-xs text-muted-foreground">
               {memory.project}
             </span>
@@ -39,12 +41,7 @@ function MemoryCard({ memory, onSelect }: { memory: Memory; onSelect?: (id: numb
                 {(memory.score * 100).toFixed(0)}%
               </span>
             )}
-            <div className="flex items-center gap-0.5">
-              <Star className="h-3 w-3 text-muted-foreground" />
-              <span className="font-mono text-xs text-muted-foreground">
-                {memory.importance.toFixed(2)}
-              </span>
-            </div>
+            <ImportanceBadge importance={memory.importance} />
           </div>
         </div>
 
@@ -56,16 +53,7 @@ function MemoryCard({ memory, onSelect }: { memory: Memory; onSelect?: (id: numb
           {content}
         </p>
 
-        {memory.tags.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <Tag className="h-3 w-3 text-muted-foreground" />
-            {memory.tags.map((t) => (
-              <Badge key={t} variant="secondary" className="text-xs">
-                {t}
-              </Badge>
-            ))}
-          </div>
-        )}
+        <TagList tags={memory.tags} />
 
         {memory.related_files.length > 0 && (
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -84,7 +72,7 @@ function MemoryCard({ memory, onSelect }: { memory: Memory; onSelect?: (id: numb
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>#{memory.id}</span>
           <span>&middot;</span>
-          <span>{new Date(memory.created_at).toLocaleDateString()}</span>
+          <span>{formatDate(memory.created_at)}</span>
           {memory.cluster && (
             <>
               <span>&middot;</span>
@@ -98,30 +86,13 @@ function MemoryCard({ memory, onSelect }: { memory: Memory; onSelect?: (id: numb
 }
 
 function ResultsList({ results, onSelect }: { results: Memory[]; onSelect: (id: number) => void }) {
-  const { page, totalPages, pageItems, setPage } = usePagination(results, 20);
-
   return (
-    <div className="space-y-3">
-      <PaginationControls
-        page={page}
-        totalPages={totalPages}
-        onPageChange={setPage}
-        total={results.length}
-        noun="results"
-      />
-      {pageItems.map((m) => (
-        <MemoryCard key={m.id} memory={m} onSelect={onSelect} />
-      ))}
-      {totalPages > 1 && (
-        <PaginationControls
-          page={page}
-          totalPages={totalPages}
-          onPageChange={setPage}
-          total={results.length}
-          noun="results"
-        />
-      )}
-    </div>
+    <PaginatedList
+      items={results}
+      noun="results"
+      keyExtractor={(m) => m.id}
+      renderItem={(m) => <MemoryCard memory={m} onSelect={onSelect} />}
+    />
   );
 }
 
@@ -134,13 +105,7 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sheetId, setSheetId] = useState<number | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
-
-  function openSheet(id: number) {
-    setSheetId(id);
-    setSheetOpen(true);
-  }
+  const { sheetId, sheetOpen, setSheetOpen, openSheet } = useMemorySheet();
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -213,13 +178,7 @@ export default function SearchPage() {
         </div>
       </form>
 
-      {loading && (
-        <div className="space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-32" />
-          ))}
-        </div>
-      )}
+      {loading && <SkeletonList count={5} height="h-32" />}
 
       {error && <ErrorState message="Search failed" detail={error} />}
 

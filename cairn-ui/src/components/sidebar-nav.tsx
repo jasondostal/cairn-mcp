@@ -3,38 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { navItems } from "@/lib/nav";
 import {
   Database,
-  Search,
-  FolderOpen,
-  Network,
-  ListTodo,
-  Brain,
-  Shield,
-  Activity,
-  Clock,
   Menu,
   X,
 } from "lucide-react";
 import { useState } from "react";
-
-const nav = [
-  { href: "/", label: "Dashboard", icon: Activity },
-  { href: "/timeline", label: "Timeline", icon: Clock },
-  { href: "/search", label: "Search", icon: Search },
-  { href: "/projects", label: "Projects", icon: FolderOpen },
-  { href: "/clusters", label: "Clusters", icon: Network },
-  { href: "/tasks", label: "Tasks", icon: ListTodo },
-  { href: "/thinking", label: "Thinking", icon: Brain },
-  { href: "/rules", label: "Rules", icon: Shield },
-];
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
 
   return (
     <>
-      {nav.map(({ href, label, icon: Icon }) => {
+      {navItems.map(({ href, label, icon: Icon }) => {
         const active =
           href === "/" ? pathname === "/" : pathname.startsWith(href);
         return (

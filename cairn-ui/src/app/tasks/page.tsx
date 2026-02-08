@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, type Task, type Project } from "@/lib/api";
+import { api, type Task } from "@/lib/api";
+import { formatDate } from "@/lib/format";
+import { useProjectSelector } from "@/lib/use-project-selector";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/error-state";
-import { usePagination, PaginationControls } from "@/components/pagination";
+import { ProjectSelector } from "@/components/project-selector";
+import { PaginatedList } from "@/components/paginated-list";
+import { SkeletonList } from "@/components/skeleton-list";
 import { CheckCircle, Circle, Link2 } from "lucide-react";
 
 function TaskCard({ task }: { task: Task }) {
@@ -32,12 +35,12 @@ function TaskCard({ task }: { task: Task }) {
               {task.status}
             </Badge>
             <span>
-              {new Date(task.created_at).toLocaleDateString()}
+              {formatDate(task.created_at)}
             </span>
             {task.completed_at && (
               <span>
                 completed{" "}
-                {new Date(task.completed_at).toLocaleDateString()}
+                {formatDate(task.completed_at)}
               </span>
             )}
           </div>
@@ -55,52 +58,23 @@ function TaskCard({ task }: { task: Task }) {
 }
 
 function TasksList({ tasks }: { tasks: Task[] }) {
-  const { page, totalPages, pageItems, setPage } = usePagination(tasks, 20);
-
   return (
-    <div className="space-y-2">
-      <PaginationControls
-        page={page}
-        totalPages={totalPages}
-        onPageChange={setPage}
-        total={tasks.length}
-        noun="tasks"
-      />
-      {pageItems.map((t) => (
-        <TaskCard key={t.id} task={t} />
-      ))}
-      {totalPages > 1 && (
-        <PaginationControls
-          page={page}
-          totalPages={totalPages}
-          onPageChange={setPage}
-          total={tasks.length}
-          noun="tasks"
-        />
-      )}
-    </div>
+    <PaginatedList
+      items={tasks}
+      noun="tasks"
+      keyExtractor={(t) => t.id}
+      renderItem={(t) => <TaskCard task={t} />}
+      gap="space-y-2"
+    />
   );
 }
 
 export default function TasksPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [selected, setSelected] = useState("");
+  const { projects, selected, setSelected, loading: projectsLoading, error: projectsError } = useProjectSelector();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
-
-  useEffect(() => {
-    setError(null);
-    api
-      .projects()
-      .then((r) => {
-        setProjects(r.items);
-        if (r.items.length > 0) setSelected(r.items[0].name);
-      })
-      .catch((err) => setError(err?.message || "Failed to load projects"))
-      .finally(() => setLoading(false));
-  }, []);
 
   useEffect(() => {
     if (!selected) return;
@@ -120,18 +94,11 @@ export default function TasksPage() {
       <h1 className="text-2xl font-semibold">Tasks</h1>
 
       <div className="flex items-center gap-2">
-        <div className="flex gap-1 flex-wrap">
-          {projects.map((p) => (
-            <Button
-              key={p.id}
-              variant={selected === p.name ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSelected(p.name)}
-            >
-              {p.name}
-            </Button>
-          ))}
-        </div>
+        <ProjectSelector
+          projects={projects}
+          selected={selected}
+          onSelect={setSelected}
+        />
         <Button
           variant={showCompleted ? "default" : "outline"}
           size="sm"
@@ -141,23 +108,17 @@ export default function TasksPage() {
         </Button>
       </div>
 
-      {loading && (
-        <div className="space-y-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-20" />
-          ))}
-        </div>
-      )}
+      {(loading || projectsLoading) && <SkeletonList count={4} height="h-20" />}
 
-      {error && <ErrorState message="Failed to load tasks" detail={error} />}
+      {(error || projectsError) && <ErrorState message="Failed to load tasks" detail={error || projectsError || undefined} />}
 
-      {!loading && !error && tasks.length === 0 && (
+      {!loading && !projectsLoading && !error && !projectsError && tasks.length === 0 && (
         <p className="text-sm text-muted-foreground">
           No tasks for {selected}.
         </p>
       )}
 
-      {!loading && !error && tasks.length > 0 && (
+      {!loading && !projectsLoading && !error && !projectsError && tasks.length > 0 && (
         <TasksList tasks={tasks} />
       )}
     </div>

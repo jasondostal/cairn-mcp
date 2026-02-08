@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, type Memory } from "@/lib/api";
+import { formatDateTime } from "@/lib/format";
 import {
   Sheet,
   SheetContent,
@@ -12,7 +13,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Star, Tag, FileText, Network } from "lucide-react";
+import { MemoryTypeBadge } from "@/components/memory-type-badge";
+import { ImportanceBadge } from "@/components/importance-badge";
+import { Tag, FileText, Network } from "lucide-react";
 
 interface MemorySheetProps {
   memoryId: number | null;
@@ -62,9 +65,7 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
           <>
             <SheetHeader>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="font-mono text-xs">
-                  {memory.memory_type}
-                </Badge>
+                <MemoryTypeBadge type={memory.memory_type} />
                 <span className="text-xs text-muted-foreground">
                   #{memory.id}
                 </span>
@@ -74,19 +75,14 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
               </SheetTitle>
               <SheetDescription>
                 {memory.project} &middot;{" "}
-                {new Date(memory.created_at).toLocaleString()}
+                {formatDateTime(memory.created_at)}
               </SheetDescription>
             </SheetHeader>
 
             <div className="space-y-4 px-4 pb-4">
               {/* Stats */}
               <div className="flex items-center gap-4 text-sm">
-                <div className="flex items-center gap-1">
-                  <Star className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="font-mono text-xs">
-                    {memory.importance.toFixed(2)}
-                  </span>
-                </div>
+                <ImportanceBadge importance={memory.importance} />
                 {!memory.is_active && (
                   <Badge variant="destructive" className="text-xs">
                     Inactive
@@ -173,8 +169,8 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
                 {memory.session_name && (
                   <p>Session: {memory.session_name}</p>
                 )}
-                <p>Created: {new Date(memory.created_at).toLocaleString()}</p>
-                <p>Updated: {new Date(memory.updated_at).toLocaleString()}</p>
+                <p>Created: {formatDateTime(memory.created_at)}</p>
+                <p>Updated: {formatDateTime(memory.updated_at)}</p>
                 {memory.inactive_reason && (
                   <p>Inactive reason: {memory.inactive_reason}</p>
                 )}

@@ -2,6 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { api, type Memory } from "@/lib/api";
+import { formatDate } from "@/lib/format";
 import { useFetch } from "@/lib/use-fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -100,7 +101,7 @@ export default function MemoryDetail() {
             <div>
               <p className="text-xs text-muted-foreground">Created</p>
               <p className="text-sm font-medium">
-                {new Date(memory.created_at).toLocaleDateString()}
+                {formatDate(memory.created_at)}
               </p>
             </div>
           </CardContent>

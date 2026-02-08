@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, type ClusterResult } from "@/lib/api";
+import { formatDate } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { ErrorState } from "@/components/error-state";
+import { MemoryTypeBadge } from "@/components/memory-type-badge";
+import { SkeletonList } from "@/components/skeleton-list";
 import { Network, Eye } from "lucide-react";
 
 type Cluster = ClusterResult["clusters"][number];
@@ -57,9 +59,7 @@ function ClusterCard({ cluster }: { cluster: Cluster }) {
                 <span className="font-mono text-xs text-muted-foreground">
                   #{m.id}
                 </span>{" "}
-                <Badge variant="outline" className="text-xs mr-1">
-                  {m.memory_type}
-                </Badge>
+                <MemoryTypeBadge type={m.memory_type} />{" "}
                 {m.summary}
               </div>
             ))}
@@ -67,7 +67,7 @@ function ClusterCard({ cluster }: { cluster: Cluster }) {
         )}
 
         <p className="text-xs text-muted-foreground">
-          {new Date(cluster.created_at).toLocaleDateString()}
+          {formatDate(cluster.created_at)}
         </p>
       </CardContent>
     </Card>
@@ -132,13 +132,7 @@ export default function ClustersPage() {
         </button>
       </div>
 
-      {loading && (
-        <div className="space-y-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-32" />
-          ))}
-        </div>
-      )}
+      {loading && <SkeletonList count={4} height="h-32" />}
 
       {error && <ErrorState message="Failed to load clusters" detail={error} />}
 

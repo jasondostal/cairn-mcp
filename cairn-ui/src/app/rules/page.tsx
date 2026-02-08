@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { api, type Rule, type Project } from "@/lib/api";
+import { formatDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/error-state";
-import { usePagination, PaginationControls } from "@/components/pagination";
-import { Shield, Star } from "lucide-react";
+import { ImportanceBadge } from "@/components/importance-badge";
+import { PaginatedList } from "@/components/paginated-list";
+import { SkeletonList } from "@/components/skeleton-list";
+import { Shield } from "lucide-react";
 
 function RuleCard({ rule }: { rule: Rule }) {
   return (
@@ -21,11 +23,8 @@ function RuleCard({ rule }: { rule: Rule }) {
               {rule.project}
             </Badge>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <Star className="h-3 w-3 text-muted-foreground" />
-            <span className="font-mono text-xs text-muted-foreground">
-              {rule.importance.toFixed(2)}
-            </span>
+          <div className="shrink-0">
+            <ImportanceBadge importance={rule.importance} />
           </div>
         </div>
 
@@ -44,7 +43,7 @@ function RuleCard({ rule }: { rule: Rule }) {
         )}
 
         <p className="text-xs text-muted-foreground">
-          #{rule.id} · {new Date(rule.created_at).toLocaleDateString()}
+          #{rule.id} · {formatDate(rule.created_at)}
         </p>
       </CardContent>
     </Card>
@@ -52,30 +51,13 @@ function RuleCard({ rule }: { rule: Rule }) {
 }
 
 function RulesList({ rules }: { rules: Rule[] }) {
-  const { page, totalPages, pageItems, setPage } = usePagination(rules, 20);
-
   return (
-    <div className="space-y-3">
-      <PaginationControls
-        page={page}
-        totalPages={totalPages}
-        onPageChange={setPage}
-        total={rules.length}
-        noun="rules"
-      />
-      {pageItems.map((r) => (
-        <RuleCard key={r.id} rule={r} />
-      ))}
-      {totalPages > 1 && (
-        <PaginationControls
-          page={page}
-          totalPages={totalPages}
-          onPageChange={setPage}
-          total={rules.length}
-          noun="rules"
-        />
-      )}
-    </div>
+    <PaginatedList
+      items={rules}
+      noun="rules"
+      keyExtractor={(r) => r.id}
+      renderItem={(r) => <RuleCard rule={r} />}
+    />
   );
 }
 
@@ -131,13 +113,7 @@ export default function RulesPage() {
         ))}
       </div>
 
-      {loading && (
-        <div className="space-y-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-24" />
-          ))}
-        </div>
-      )}
+      {loading && <SkeletonList count={4} />}
 
       {error && <ErrorState message="Failed to load rules" detail={error} />}
 

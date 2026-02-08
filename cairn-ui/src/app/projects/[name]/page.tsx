@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { formatDate } from "@/lib/format";
 import { useFetch } from "@/lib/use-fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -139,7 +140,7 @@ export default function ProjectDetailPage() {
                   </p>
                   {doc.created_at ? (
                     <p className="mt-2 text-xs text-muted-foreground">
-                      {new Date(doc.created_at as string).toLocaleDateString()}
+                      {formatDate(doc.created_at as string)}
                     </p>
                   ) : null}
                 </CardContent>
