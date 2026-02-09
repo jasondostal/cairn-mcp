@@ -1,0 +1,24 @@
+# Homepage (gethomepage.dev) service widget for Cairn
+# Add this to your Homepage services.yaml
+#
+# Requires: Cairn API accessible from your Homepage container
+# Docs: https://gethomepage.dev/configs/service-widgets/#custom-api
+
+- AI:
+    - Cairn:
+        icon: https://raw.githubusercontent.com/jasondostal/cairn-mcp/main/images/cairn-mark-clean.svg
+        href: https://cairn.yourdomain.com
+        description: Semantic memory for AI agents
+        widget:
+          type: customapi
+          url: http://cairn:8000/api/status
+          mappings:
+            - field: memories
+              label: Memories
+            - field: cairns
+              label: Cairns
+            - field: projects
+              label: Projects
+            - field: status
+              label: Status
+              format: text
