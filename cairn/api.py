@@ -32,7 +32,7 @@ def create_api(svc: Services) -> FastAPI:
     cairn_manager = svc.cairn_manager
     app = FastAPI(
         title="Cairn API",
-        version="0.9.0",
+        version="0.11.0",
         description="Read-only REST API for the Cairn web UI.",
     )
 
@@ -273,8 +273,6 @@ def create_api(svc: Services) -> FastAPI:
             raise HTTPException(status_code=400, detail="session_name is required")
 
         result = cairn_manager.set(project, session_name, events=events)
-        if "error" in result:
-            raise HTTPException(status_code=409, detail=result["error"])
         return result
 
     # ------------------------------------------------------------------

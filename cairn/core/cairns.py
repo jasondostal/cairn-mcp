@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -51,13 +52,14 @@ class CairnManager:
 
         project_id = get_or_create_project(self.db, project)
 
-        # Check for existing cairn (idempotent — don't double-set)
+        # Check for existing cairn — upsert semantics allow both agent (MCP)
+        # and hook (REST POST) to contribute to the same cairn without conflict.
         existing = self.db.execute_one(
-            "SELECT id FROM cairns WHERE project_id = %s AND session_name = %s",
+            "SELECT id, events IS NOT NULL AS has_events, title, narrative, memory_count FROM cairns WHERE project_id = %s AND session_name = %s",
             (project_id, session_name),
         )
         if existing:
-            return {"error": f"Cairn already exists for session '{session_name}' in project '{project}' (id={existing['id']})"}
+            return self._merge_existing(existing, project, project_id, session_name, events)
 
         # Fetch session stones
         stones = self.db.execute(
@@ -139,6 +141,7 @@ class CairnManager:
                 (cairn_id, stone_ids),
             )
 
+        self._archive_events(session_name, events)
         self.db.commit()
 
         return {
@@ -149,6 +152,127 @@ class CairnManager:
             "started_at": row["started_at"].isoformat() if hasattr(row["started_at"], "isoformat") else row["started_at"],
             "set_at": row["set_at"].isoformat() if hasattr(row["set_at"], "isoformat") else row["set_at"],
         }
+
+    def _merge_existing(
+        self, existing: dict, project: str, project_id: int,
+        session_name: str, events: list | None,
+    ) -> dict:
+        """Handle upsert when a cairn already exists for this session.
+
+        Three cases:
+        1. Caller has events, existing has none → update with events + re-synthesize
+        2. Caller has events, existing already has them → return existing (true idempotent)
+        3. Caller has no events → return existing info (agent calling after hook)
+        """
+        from cairn.llm.prompts import build_cairn_narrative_messages
+
+        cairn_id = existing["id"]
+        has_existing_events = existing["has_events"]
+
+        # Case 2 & 3: nothing new to contribute
+        if not events or has_existing_events:
+            return {
+                "id": cairn_id,
+                "title": existing["title"],
+                "narrative": existing["narrative"],
+                "memory_count": existing["memory_count"],
+                "status": "already_exists",
+            }
+
+        # Case 1: caller brings events, existing cairn has none — merge them in
+        # Re-fetch stones for narrative re-synthesis
+        stones = self.db.execute(
+            """
+            SELECT m.id, m.content, m.summary, m.memory_type, m.importance,
+                   m.tags, m.auto_tags, m.created_at
+            FROM memories m
+            WHERE m.project_id = %s AND m.session_name = %s AND m.is_active = true
+            ORDER BY m.created_at ASC
+            """,
+            (project_id, session_name),
+        )
+
+        memory_count = len(stones)
+
+        # Re-synthesize narrative with stones + events
+        title = None
+        narrative = None
+        can_synthesize = (
+            self.llm is not None
+            and self.capabilities is not None
+            and self.capabilities.session_synthesis
+        )
+
+        if can_synthesize:
+            try:
+                messages = build_cairn_narrative_messages(
+                    stones, project, session_name, events=events,
+                )
+                raw = self.llm.generate(messages, max_tokens=1024)
+                if raw and raw.strip():
+                    parsed = extract_json(raw, json_type="object")
+                    if parsed:
+                        title = parsed.get("title")
+                        narrative = parsed.get("narrative")
+                    else:
+                        narrative = raw.strip()
+            except Exception:
+                logger.warning("Cairn narrative re-synthesis failed during merge", exc_info=True)
+
+        # Update the cairn row with events (and new narrative if synthesis succeeded)
+        if title and narrative:
+            self.db.execute(
+                """
+                UPDATE cairns SET events = %s::jsonb, title = %s, narrative = %s,
+                       memory_count = %s
+                WHERE id = %s
+                """,
+                (_json_or_none(events), title, narrative, memory_count, cairn_id),
+            )
+        else:
+            # At minimum, attach the events even if synthesis failed
+            self.db.execute(
+                "UPDATE cairns SET events = %s::jsonb, memory_count = %s WHERE id = %s",
+                (_json_or_none(events), memory_count, cairn_id),
+            )
+
+        self._archive_events(session_name, events)
+        self.db.commit()
+
+        # Re-read for response
+        row = self.db.execute_one(
+            "SELECT id, title, narrative, memory_count, started_at, set_at FROM cairns WHERE id = %s",
+            (cairn_id,),
+        )
+
+        return {
+            "id": row["id"],
+            "title": row["title"],
+            "narrative": row["narrative"],
+            "memory_count": row["memory_count"],
+            "started_at": row["started_at"].isoformat() if hasattr(row["started_at"], "isoformat") else row["started_at"],
+            "set_at": row["set_at"].isoformat() if hasattr(row["set_at"], "isoformat") else row["set_at"],
+            "status": "merged",
+        }
+
+    def _archive_events(self, session_name: str, events: list | None) -> None:
+        """Write raw events to the file-based archive if configured."""
+        if not events:
+            return
+
+        import json
+        archive_dir = os.environ.get("CAIRN_EVENT_ARCHIVE_DIR")
+        if not archive_dir:
+            return
+
+        try:
+            os.makedirs(archive_dir, exist_ok=True)
+            path = os.path.join(archive_dir, f"cairn-events-{session_name}.jsonl")
+            with open(path, "w") as f:
+                for event in events:
+                    f.write(json.dumps(event) + "\n")
+        except Exception:
+            logger.warning("Failed to archive events to %s", archive_dir, exc_info=True)
 
     def stack(self, project: str | None = None, limit: int = 20) -> list[dict]:
         """View the trail — cairns for a project (or all projects), newest first.

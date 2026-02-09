@@ -5,7 +5,7 @@
 # What it does:
 #   1. Reads the session event log (JSONL → JSON array)
 #   2. POSTs to /api/cairns to set the cairn with events attached
-#   3. Cleans up the temp event log
+#   3. Archives the event log to ~/.cairn/events/archive/
 #
 # Configuration (env vars):
 #   CAIRN_URL      — Cairn API base URL (default: http://localhost:8002)
@@ -67,8 +67,10 @@ RESULT=$(curl -sf -X POST "${CAIRN_URL}/api/cairns" \
     -d "$PAYLOAD" \
     2>/dev/null || echo '{"error": "failed to reach cairn"}')
 
-# Clean up event log
-rm -f "$EVENT_LOG"
+# Archive event log (preserve for replay/debugging)
+ARCHIVE_DIR="${CAIRN_EVENT_DIR}/archive"
+mkdir -p "$ARCHIVE_DIR"
+mv "$EVENT_LOG" "$ARCHIVE_DIR/" 2>/dev/null || true
 
 # Log result to stderr (visible in debug mode)
 echo "Cairn set for session ${SESSION_NAME} (${EVENT_COUNT} events): $(echo "$RESULT" | jq -r '.title // .error // "unknown"' 2>/dev/null)" >&2

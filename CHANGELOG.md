@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-02-09
+
+### Fixed
+- **Race condition in cairn set** — the agent (via MCP) and session-end hook (via REST POST) could both try to set a cairn for the same session. The first one succeeded; the second got a 409 error and its events were lost. `CairnManager.set()` now uses upsert semantics: whichever path arrives second merges its data (events, narrative re-synthesis) into the existing cairn. No more empty cairns.
+- **Events deleted on POST** — `session-end.sh` deleted the event log after POSTing, even on failure. Events are now archived to `~/.cairn/events/archive/` instead of deleted.
+
+### Added
+- **Server-side event archive** — `CAIRN_EVENT_ARCHIVE_DIR` env var enables writing raw JSONL events to a file-based archive on cairn set. Docker Compose mounts a `cairn-events` volume at `/data/events` by default.
+- **Setup script** — `scripts/setup-hooks.sh` interactively checks dependencies, tests Cairn connectivity, creates event directories, and generates a ready-to-paste Claude Code settings.json snippet. Includes optional pipeline test.
+- **Hooks documentation overhaul** — `examples/hooks/README.md` rewritten with Quick Start guides for both Claude Code and other MCP clients, environment variable table, verification steps, troubleshooting section, and updated architecture diagram showing the upsert flow.
+
+### Changed
+- `POST /api/cairns` no longer returns 409 on duplicate session — returns the existing/merged cairn instead
+- `CairnManager.set()` returns `status: "already_exists"` or `status: "merged"` when updating an existing cairn
+- Docker Compose adds `cairn-events` named volume mounted at `/data/events` on the cairn service
+
 ## [0.10.0] - 2026-02-08
 
 ### Added
@@ -323,7 +339,9 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.10.0...v0.11.0
+[0.10.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.7.0...v0.7.1

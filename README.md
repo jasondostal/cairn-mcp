@@ -138,10 +138,13 @@ services:
       CAIRN_OLLAMA_URL: "${CAIRN_OLLAMA_URL:-http://host.docker.internal:11434}"
       CAIRN_OLLAMA_MODEL: "${CAIRN_OLLAMA_MODEL:-qwen2.5-coder:7b}"
       CAIRN_TRANSPORT: "${CAIRN_TRANSPORT:-http}"
+      CAIRN_EVENT_ARCHIVE_DIR: "${CAIRN_EVENT_ARCHIVE_DIR:-/data/events}"
     ports:
       - "${CAIRN_HTTP_PORT:-8000}:8000"
+    volumes:
+      - cairn-events:/data/events
     # Uncomment to mount AWS credentials for Bedrock:
-    # volumes:
+    # volumes (append to above):
     #   - ~/.aws/credentials:/home/cairn/.aws/credentials:ro
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/status')\""]
@@ -188,6 +191,7 @@ services:
 
 volumes:
   cairn-pgdata:
+  cairn-events:
 ```
 
 </details>
@@ -238,59 +242,21 @@ Cairn will store it, generate a summary, auto-tag it, and score its importance.
 
 Cairn can automatically capture your entire session — every tool call logged as a lightweight event (*mote*), crystallized into a cairn when the session ends. Next session, the agent starts with context instead of a blank slate.
 
-Add hooks to your project's `.claude/settings.local.json`:
+**Quick setup:**
 
-```json
-{
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "startup|resume",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "CAIRN_URL=http://localhost:8000 /path/to/cairn/examples/hooks/session-start.sh",
-            "timeout": 15
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/path/to/cairn/examples/hooks/log-event.sh",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "CAIRN_URL=http://localhost:8000 /path/to/cairn/examples/hooks/session-end.sh",
-            "timeout": 30
-          }
-        ]
-      }
-    ]
-  }
-}
+```bash
+git clone https://github.com/jasondostal/cairn-mcp.git
+./cairn-mcp/scripts/setup-hooks.sh
 ```
 
-Replace `/path/to/cairn` with wherever you cloned the repo. Set `CAIRN_URL` to your Cairn instance. `CAIRN_PROJECT` defaults to the working directory name — override it if you want a different project name.
+The setup script checks dependencies (`jq`, `curl`), tests Cairn connectivity, creates event directories, and generates a ready-to-paste Claude Code settings.json snippet. See [`examples/hooks/README.md`](examples/hooks/README.md) for manual setup, other MCP clients, verification steps, and troubleshooting.
 
 **What happens:**
 1. **Session starts** — hook fetches recent cairns for context, creates an event log in `~/.cairn/events/`
 2. **Every tool call** — hook appends a one-line JSON event to the log (local file, no HTTP, no blocking)
-3. **Session ends** — hook bundles all events and POSTs a cairn with the full event stream
+3. **Session ends** — hook bundles all events and POSTs a cairn with the full event stream. Events are archived to `~/.cairn/events/archive/`.
 
-Override the event log directory with `CAIRN_EVENT_DIR`. Requires `jq` and `curl`.
+The agent (via MCP tool) and the hook (via REST POST) can both set a cairn for the same session — whichever arrives first creates it, the second merges in what was missing. No race conditions.
 
 No hooks? No problem. The `cairns` tool works without them — the agent can call `cairns(action="set")` directly. And even without cairns, memories stored with a `session_name` are still grouped and searchable.
 
@@ -373,6 +339,7 @@ All via environment variables:
 | `CAIRN_TRANSPORT` | `stdio` | `stdio` or `http` |
 | `CAIRN_HTTP_HOST` | `0.0.0.0` | HTTP bind address |
 | `CAIRN_HTTP_PORT` | `8000` | HTTP listen port |
+| `CAIRN_EVENT_ARCHIVE_DIR` | *(disabled)* | File path for event archive (e.g. `/data/events`). Events written as JSONL after cairn set. |
 | `CAIRN_EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence transformer model |
 | `CAIRN_LLM_QUERY_EXPANSION` | `true` | Expand search queries with related terms |
 | `CAIRN_LLM_RELATIONSHIP_EXTRACT` | `true` | Auto-detect relationships between memories on store |

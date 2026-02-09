@@ -67,6 +67,7 @@ class Config:
     http_host: str = "0.0.0.0"
     http_port: int = 8000
     cors_origins: list[str] = field(default_factory=lambda: ["*"])
+    event_archive_dir: str | None = None  # File-based event archive (e.g. /data/events)
 
 
 def _parse_cors_origins(raw: str) -> list[str]:
@@ -108,4 +109,5 @@ def load_config() -> Config:
         http_host=os.getenv("CAIRN_HTTP_HOST", "0.0.0.0"),
         http_port=int(os.getenv("CAIRN_HTTP_PORT", "8000")),
         cors_origins=_parse_cors_origins(os.getenv("CAIRN_CORS_ORIGINS", "*")),
+        event_archive_dir=os.getenv("CAIRN_EVENT_ARCHIVE_DIR") or None,
     )
