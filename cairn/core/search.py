@@ -26,6 +26,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from cairn.core.constants import CONTRADICTION_PENALTY
 from cairn.embedding.engine import EmbeddingEngine
 from cairn.storage.database import Database
 
@@ -159,6 +160,13 @@ class SearchEngine:
             [str(query_vector)] + params + [str(query_vector), limit],
         )
 
+        # Apply contradiction penalty and re-sort
+        scored = {r["id"]: r["score"] for r in rows}
+        penalized = self._apply_contradiction_penalty(scored)
+        for r in rows:
+            r["score"] = penalized[r["id"]]
+        rows.sort(key=lambda r: r["score"], reverse=True)
+
         return self._format_results(rows, include_full)
 
     def _keyword_search(
@@ -183,6 +191,13 @@ class SearchEngine:
             """,
             [query] + params + [query, limit],
         )
+
+        # Apply contradiction penalty and re-sort
+        scored = {r["id"]: r["score"] for r in rows}
+        penalized = self._apply_contradiction_penalty(scored)
+        for r in rows:
+            r["score"] = penalized[r["id"]]
+        rows.sort(key=lambda r: r["score"], reverse=True)
 
         return self._format_results(rows, include_full)
 
@@ -274,6 +289,9 @@ class SearchEngine:
                 score += DEFAULT_WEIGHTS["tag"] * (1.0 / (RRF_K + tag_ranks[memory_id]))
             scored[memory_id] = score
 
+        # Penalize contradicted memories before ranking
+        scored = self._apply_contradiction_penalty(scored)
+
         # Sort by fused score, take top N
         top_ids = sorted(scored, key=scored.get, reverse=True)[:limit]
 
@@ -304,6 +322,37 @@ class SearchEngine:
                 results.append(r)
 
         return self._format_results(results, include_full, prescored=True)
+
+    def _apply_contradiction_penalty(self, scored: dict[int, float]) -> dict[int, float]:
+        """Penalize memories that have incoming contradiction relations.
+
+        Memories with a 'contradicts' relation targeting them get their score
+        multiplied by CONTRADICTION_PENALTY (0.5), meaning they need to be 2x
+        more relevant to outrank their replacement.
+        """
+        if not scored:
+            return scored
+
+        all_ids = list(scored.keys())
+        placeholders = ",".join(["%s"] * len(all_ids))
+        rows = self.db.execute(
+            f"""
+            SELECT DISTINCT target_id
+            FROM memory_relations
+            WHERE target_id IN ({placeholders})
+                AND relation = 'contradicts'
+            """,
+            tuple(all_ids),
+        )
+
+        contradicted = {r["target_id"] for r in rows}
+        if not contradicted:
+            return scored
+
+        return {
+            mid: score * CONTRADICTION_PENALTY if mid in contradicted else score
+            for mid, score in scored.items()
+        }
 
     def _format_results(
         self, rows: list[dict], include_full: bool, prescored: bool = False,

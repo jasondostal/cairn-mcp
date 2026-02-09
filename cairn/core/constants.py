@@ -25,6 +25,10 @@ MAX_RECALL_IDS = 10
 MAX_LIMIT = 100
 VALID_SEARCH_MODES = ["semantic", "keyword", "vector"]
 
+# Contradiction handling
+CONTRADICTION_PENALTY = 0.5          # score multiplier for contradicted memories in search
+CONTRADICTION_ESCALATION_THRESHOLD = 0.7  # min importance to trigger conflict escalation on store
+
 
 class MemoryAction:
     UPDATE = "update"

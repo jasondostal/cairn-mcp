@@ -33,7 +33,7 @@ The tiers are additive and degrade gracefully. With all three active, a session 
 ## Highlights
 
 - **Three-tier capture** — Ambient motes + session cairns + organic memories. See above.
-- **Hybrid search** — Vector similarity + full-text + tag matching, fused with Reciprocal Rank Fusion. [83.8% recall@10](#search-quality) on our internal benchmark (50-memory synthetic corpus, 25 hand-labeled queries). Optional LLM query expansion.
+- **Hybrid search** — Vector similarity + full-text + tag matching, fused with Reciprocal Rank Fusion. [83.8% recall@10](#search-quality) on our internal benchmark (50-memory synthetic corpus, 25 hand-labeled queries). Optional LLM query expansion. Contradiction-aware ranking automatically demotes memories that have been superseded.
 - **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, and importance score on store. Bedrock or Ollama.
 - **Smart relationships** — On store, LLM identifies genuinely related memories and creates typed links (extends, contradicts, implements, depends_on). Rule conflict detection warns about contradictions.
 - **Pattern discovery** — DBSCAN clustering finds themes across memories. LLM writes the labels. No cron jobs — clusters refresh lazily.
@@ -371,7 +371,7 @@ docker compose up -d --build
 
 ### Testing
 
-87 tests across 14 suites:
+94 tests across 16 suites:
 
 ```bash
 docker exec cairn pip install pytest

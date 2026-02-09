@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from cairn.core.constants import MemoryAction
+from cairn.core.constants import CONTRADICTION_ESCALATION_THRESHOLD, MemoryAction
 from cairn.core.utils import extract_json, get_or_create_project
 from cairn.embedding.engine import EmbeddingEngine
 from cairn.storage.database import Database
@@ -118,6 +118,9 @@ class MemoryStore:
         # Auto-extract relationships via LLM
         auto_relations = self._extract_relationships(memory_id, content, vector, project_id)
 
+        # Escalate high-importance contradictions
+        conflicts = self._escalate_contradictions(auto_relations)
+
         # Rule conflict detection
         rule_conflicts = None
         if final_type == "rule":
@@ -137,6 +140,7 @@ class MemoryStore:
             "auto_tags": auto_tags,
             "summary": summary,
             "auto_relations": auto_relations,
+            "conflicts": conflicts,
             "rule_conflicts": rule_conflicts,
             "created_at": row["created_at"].isoformat(),
         }
@@ -214,6 +218,39 @@ class MemoryStore:
         except Exception:
             logger.warning("Relationship extraction failed", exc_info=True)
             return []
+
+    def _escalate_contradictions(self, auto_relations: list[dict]) -> list[dict]:
+        """Check auto_relations for contradicts entries against high-importance memories.
+
+        Returns a list of conflict dicts for contradicted memories above the
+        importance threshold, or an empty list.
+        """
+        contradicted_ids = [
+            r["id"] for r in auto_relations if r.get("relation") == "contradicts"
+        ]
+        if not contradicted_ids:
+            return []
+
+        placeholders = ",".join(["%s"] * len(contradicted_ids))
+        rows = self.db.execute(
+            f"""
+            SELECT id, summary, importance, memory_type
+            FROM memories
+            WHERE id IN ({placeholders})
+            """,
+            tuple(contradicted_ids),
+        )
+
+        conflicts = []
+        for r in rows:
+            if r["importance"] >= CONTRADICTION_ESCALATION_THRESHOLD:
+                conflicts.append({
+                    "id": r["id"],
+                    "summary": r["summary"] or f"Memory #{r['id']}",
+                    "importance": float(r["importance"]),
+                    "action": "Consider inactivating — may be superseded by this memory",
+                })
+        return conflicts
 
     def _check_rule_conflicts(self, content: str, project: str) -> list[dict] | None:
         """Check a new rule against existing rules for conflicts via LLM.

@@ -1,8 +1,17 @@
 # Roadmap
 
-Current: **v0.12.0** — Streaming event pipeline with incremental digestion.
+Current: **v0.13.0** — Organic memory correction via contradiction awareness.
 
 ---
+
+## v0.13.0 — Organic Memory Correction ✓
+
+Memories aren't stale because they're old — they're stale because something newer says they're wrong.
+
+- [x] **Contradiction escalation on store** — high-importance contradictions surfaced in `conflicts` response field
+- [x] **Contradiction-aware search ranking** — contradicted memories penalized 0.5x across all search modes
+- [x] **Thinking conclusion dupe rule** — global rule prevents storing conclusion text as separate memories
+- [x] **7 new tests** (94 total across 16 suites)
 
 ## v0.12.0 — Event Pipeline v2 ✓
 
@@ -117,6 +126,9 @@ Nice-to-haves when the core is rock solid.
 ---
 
 ## Completed
+
+### v0.13.0 — Organic Memory Correction
+Contradiction-aware store and search. Store escalates high-importance contradictions in `conflicts` field. Search penalizes contradicted memories 0.5x across all modes. Thinking conclusion dupe rule. 7 new tests (94 total).
 
 ### v0.12.0 — Event Pipeline v2
 Streaming event pipeline: CAPTURE → SHIP → DIGEST → CRYSTALLIZE. Events captured with full fidelity, shipped in batches of 25 via `POST /api/events/ingest`, digested by background DigestWorker into rolling LLM summaries, crystallized into cairn narratives. Pipeline v1 fallback for backward compatibility. 17 new tests (87 total).

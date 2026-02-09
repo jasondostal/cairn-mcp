@@ -34,7 +34,7 @@ def create_api(svc: Services) -> FastAPI:
     cairn_manager = svc.cairn_manager
     app = FastAPI(
         title="Cairn API",
-        version="0.12.0",
+        version="0.13.0",
         description="Read-only REST API for the Cairn web UI.",
     )
 

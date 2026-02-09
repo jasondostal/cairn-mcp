@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-02-09
+
+### Added
+- **Contradiction escalation on store** — when relationship extraction detects a `contradicts` relation against a high-importance memory (>= 0.7), the store response includes a `conflicts` list with the contradicted memory's summary, importance, and a suggested action. Piggybacks on existing `relationship_extract` capability — no new flag needed.
+- **Contradiction-aware search ranking** — memories with incoming `contradicts` relations get their search score multiplied by 0.5 (configurable via `CONTRADICTION_PENALTY`). Applied consistently across all three search modes (hybrid, keyword, vector). A contradicted memory needs to be 2x more relevant to outrank its replacement.
+- **Thinking conclusion dupe rule** — global behavioral rule (#567) prevents storing thinking sequence conclusions as separate memories, which was creating duplicates found during consolidation.
+- 7 new tests (94 total across 16 suites): 4 for contradiction escalation, 3 for contradiction-aware search
+
+### Design
+- Memories aren't stale because they're old — they're stale because something newer says they're wrong. The `contradicts` relation already existed in `memory_relations` (v0.6.0); v0.13.0 makes it actionable: loud at store time (conflicts list), quiet at search time (score penalty).
+- No new database migration, no new LLM capability flag, no new env vars. Pure logic on existing infrastructure.
+
 ## [0.12.0] - 2026-02-09
 
 ### Added
@@ -363,7 +375,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.9.0...v0.10.0
