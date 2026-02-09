@@ -16,13 +16,14 @@ services:
       CAIRN_CORS_ORIGINS: "${CAIRN_CORS_ORIGINS:-*}"
       CAIRN_TRANSPORT: "${CAIRN_TRANSPORT:-http}"
       CAIRN_EVENT_ARCHIVE_DIR: "${CAIRN_EVENT_ARCHIVE_DIR:-/data/events}"
+      # AWS credentials for Bedrock (ignored when using Ollama)
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
     ports:
       - "${CAIRN_HTTP_PORT:-8000}:8000"
     volumes:
       - cairn-events:/data/events
-    # Uncomment to mount AWS credentials for Bedrock:
-    # volumes (append to above):
-    #   - ~/.aws/credentials:/home/cairn/.aws/credentials:ro
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/status')\""]
       interval: 15s

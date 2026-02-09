@@ -139,6 +139,9 @@ services:
       CAIRN_OLLAMA_MODEL: "${CAIRN_OLLAMA_MODEL:-qwen2.5-coder:7b}"
       CAIRN_TRANSPORT: "${CAIRN_TRANSPORT:-http}"
       CAIRN_EVENT_ARCHIVE_DIR: "${CAIRN_EVENT_ARCHIVE_DIR:-/data/events}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
     ports:
       - "${CAIRN_HTTP_PORT:-8000}:8000"
     volumes:
@@ -334,6 +337,9 @@ All via environment variables:
 | `CAIRN_DB_PASS` | *(required)* | Database password |
 | `CAIRN_LLM_BACKEND` | `ollama` | `ollama` or `bedrock` |
 | `CAIRN_BEDROCK_MODEL` | `us.meta.llama3-2-90b-instruct-v1:0` | Bedrock model ID |
+| `AWS_ACCESS_KEY_ID` | *(empty)* | AWS access key for Bedrock |
+| `AWS_SECRET_ACCESS_KEY` | *(empty)* | AWS secret key for Bedrock |
+| `AWS_DEFAULT_REGION` | `us-east-1` | AWS region for Bedrock |
 | `CAIRN_OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama API URL |
 | `CAIRN_OLLAMA_MODEL` | `qwen2.5-coder:7b` | Ollama model name |
 | `CAIRN_TRANSPORT` | `stdio` | `stdio` or `http` |

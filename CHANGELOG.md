@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Hooks documentation overhaul** — `examples/hooks/README.md` rewritten with Quick Start guides for both Claude Code and other MCP clients, environment variable table, verification steps, troubleshooting section, and updated architecture diagram showing the upsert flow.
 
 ### Changed
+- **AWS credentials via environment variables** — `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_DEFAULT_REGION` are now passed as env vars in docker-compose instead of mounting `~/.aws` as a volume. Simpler, consistent with how all other config is handled. Just add them to your `.env` file.
 - `POST /api/cairns` no longer returns 409 on duplicate session — returns the existing/merged cairn instead
 - `CairnManager.set()` returns `status: "already_exists"` or `status: "merged"` when updating an existing cairn
 - Docker Compose adds `cairn-events` named volume mounted at `/data/events` on the cairn service
