@@ -453,6 +453,150 @@ def _summarize_event(event: dict) -> str:
     return ""
 
 
+# ============================================================
+# Event Digest Prompt (v0.12.0 — Pipeline v2)
+# ============================================================
+
+EVENT_DIGEST_SYSTEM_PROMPT = """\
+You are writing a work log entry for a colleague picking up this work tomorrow. \
+You are given a batch of tool interactions from an AI coding session.
+
+Focus on:
+- What TOPICS were worked on (not what tools were called)
+- What was DISCOVERED (important findings, state of the system)
+- What CHANGED (files edited, configs deployed, services restarted)
+- What FAILED or was abandoned (dead-end investigations)
+
+Rules:
+- Write 2-4 sentences in past tense.
+- Be specific: mention file names, service names, error messages when relevant.
+- Do NOT list tool names or count tool calls. Describe the work, not the tooling.
+- Return ONLY the work log text. No JSON, no markdown, no headers."""
+
+
+def build_event_digest_messages(
+    events: list[dict], project: str, session_name: str, batch_number: int,
+) -> list[dict]:
+    """Build messages for event batch digest.
+
+    Args:
+        events: List of raw event dicts from a single batch.
+        project: Project name for context.
+        session_name: Session identifier.
+        batch_number: Which batch this is (for ordering context).
+    """
+    event_lines = []
+    for e in events:
+        ts = e.get("ts", "")
+        tool = e.get("tool_name", e.get("tool", ""))
+        # Show tool_input keys for context
+        tool_input = e.get("tool_input", {})
+        if isinstance(tool_input, dict):
+            input_hint = ", ".join(f"{k}={str(v)[:80]}" for k, v in list(tool_input.items())[:5])
+        else:
+            input_hint = str(tool_input)[:200]
+        # Show tool_response hint (first 200 chars)
+        response = e.get("tool_response", "")
+        response_hint = str(response)[:200] if response else ""
+
+        line = f"  [{ts}] {tool}"
+        if input_hint:
+            line += f" | {input_hint}"
+        if response_hint:
+            line += f" → {response_hint}"
+        event_lines.append(line)
+
+    user_content = (
+        f"Project: {project}\n"
+        f"Session: {session_name}\n"
+        f"Batch: {batch_number}\n"
+        f"Event count: {len(events)}\n\n"
+        f"Tool interactions:\n" + "\n".join(event_lines)
+    )
+
+    return [
+        {"role": "system", "content": EVENT_DIGEST_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
+
+
+# ============================================================
+# Cairn Digest Narrative Prompt (v0.12.0 — Pipeline v2)
+# ============================================================
+
+CAIRN_DIGEST_NARRATIVE_SYSTEM_PROMPT = """\
+You are a session narrative synthesizer. You are given two sources of information about a \
+working session:
+
+1. **Stones** — explicitly stored memories (decisions, learnings, notes). May be empty.
+2. **Digests** — pre-summarized work log entries from incremental event processing. Each \
+digest covers a batch of tool interactions and captures what was worked on, discovered, \
+changed, or abandoned.
+
+Synthesize both sources into a coherent narrative. The digests reveal the arc of work \
+(what was explored, what changed, what broke); the stones capture what the agent considered \
+important enough to remember explicitly.
+
+Return a JSON object:
+
+{
+  "title": "Short session title (5-10 words)",
+  "narrative": "2-4 paragraph narrative of the session."
+}
+
+Rules for the title:
+- 5-10 words, descriptive of the session's main arc.
+- Focus on what was accomplished or decided, not process.
+
+Rules for the narrative:
+- Write in past tense, third person.
+- Weave the digests and stone insights into a single coherent arc.
+- Focus on what was attempted, what was learned, what was decided.
+- Highlight key decisions, blockers, and breakthroughs.
+- 2-4 paragraphs.
+
+Return ONLY the JSON object. No markdown fences, no explanation, no extra text."""
+
+
+def build_cairn_digest_narrative_messages(
+    memories: list[dict], project: str, session_name: str,
+    digests: list[dict],
+) -> list[dict]:
+    """Build messages for cairn narrative synthesis from pre-digested event batches.
+
+    Args:
+        memories: Chronological list of memory dicts (stones).
+        project: Project name for context.
+        session_name: Session identifier.
+        digests: List of dicts with 'batch_number' and 'digest' text from session_events.
+    """
+    memory_lines = []
+    for m in memories:
+        text = m.get("summary") or m.get("content", "")[:300]
+        mtype = m.get("memory_type", "note")
+        memory_lines.append(f"  [{mtype}] {text}")
+
+    digest_lines = []
+    for d in digests:
+        batch = d.get("batch_number", "?")
+        text = d.get("digest", "(no digest)")
+        digest_lines.append(f"  [Batch {batch}] {text}")
+
+    user_content = (
+        f"Project: {project}\n"
+        f"Session: {session_name}\n"
+        f"Stone count: {len(memories)}\n"
+        f"Digest count: {len(digests)}\n\n"
+        f"Stones (chronological):\n" + ("\n".join(memory_lines) if memory_lines else "  (none)")
+        + f"\n\nWork log digests (chronological):\n" + ("\n".join(digest_lines) if digest_lines else "  (none)")
+    )
+
+    return [
+        {"role": "system", "content": CAIRN_DIGEST_NARRATIVE_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
+
+
 def build_confidence_gating_messages(
     query: str, results: list[dict],
 ) -> list[dict]:

@@ -43,7 +43,7 @@ The tiers are additive and degrade gracefully. With all three active, a session 
 - **Web dashboard** — Next.js + shadcn/ui. Timeline, search, cluster visualization, knowledge graph, Cmd+K command palette, inline memory viewer. Dark mode.
 - **One port, everything** — MCP protocol at `/mcp`, REST API at `/api`, same process. stdio also supported.
 - **Hardened** — Input validation on all tools, non-root Docker container, t-SNE sampling cap, pinned dependencies.
-- **6 LLM capabilities** — Each independently toggleable via env vars, each with graceful degradation. Core search/store/cairns never depends on LLM.
+- **7 LLM capabilities** — Each independently toggleable via env vars, each with graceful degradation. Core search/store/cairns never depends on LLM.
 
 ## MCP Tools
 
@@ -74,11 +74,11 @@ Browser                   MCP Client (Claude, etc.)         curl / scripts
 | Next | --/api proxy-->  |  /mcp  (MCP protocol)          /api  (REST API)  |
 | .js  |                  |                                                   |
 | UI   |                  |  cairn.server  (MCP tool definitions)             |
-+------+                  |  cairn.api     (read-only FastAPI endpoints)      |
++------+                  |  cairn.api     (FastAPI endpoints)                |
 cairn-ui                  |                                                   |
                           |  core: memory, search, enrichment, clustering     |
                           |        projects, tasks, thinking, cairns          |
-                          |        synthesis, consolidation                   |
+                          |        synthesis, consolidation, digest           |
                           |                                                   |
                           |  embedding: MiniLM-L6-v2 (local, 384-dim)        |
                           |  llm: Bedrock (Llama 90B) or Ollama (local)       |
@@ -86,7 +86,7 @@ cairn-ui                  |                                                   |
                           +---------------------------------------------------+
                               |
                               v
-                          PostgreSQL 16 + pgvector (14 tables, 4 migrations)
+                          PostgreSQL 16 + pgvector (15 tables, 6 migrations)
 ```
 
 ## Prerequisites
@@ -254,10 +254,11 @@ git clone https://github.com/jasondostal/cairn-mcp.git
 
 The setup script checks dependencies (`jq`, `curl`), tests Cairn connectivity, creates event directories, and generates a ready-to-paste Claude Code settings.json snippet. See [`examples/hooks/README.md`](examples/hooks/README.md) for manual setup, other MCP clients, verification steps, and troubleshooting.
 
-**What happens:**
+**What happens (Pipeline v2):**
 1. **Session starts** — hook fetches recent cairns for context, creates an event log in `~/.cairn/events/`
-2. **Every tool call** — hook appends a one-line JSON event to the log (local file, no HTTP, no blocking)
-3. **Session ends** — hook bundles all events and POSTs a cairn with the full event stream. Events are archived to `~/.cairn/events/archive/`.
+2. **Every tool call** — hook captures full `tool_input` and `tool_response` (capped at 2000 chars), appends to the log. Every 25 events, a batch is shipped to `POST /api/events/ingest` in the background.
+3. **Between batches** — DigestWorker on the server digests each batch into a 2-4 sentence LLM summary, producing rolling context.
+4. **Session ends** — hook ships any remaining events, then POSTs a cairn. The server synthesizes a narrative from the pre-digested summaries — not raw events. Events are archived to `~/.cairn/events/archive/`.
 
 The agent (via MCP tool) and the hook (via REST POST) can both set a cairn for the same session — whichever arrives first creates it, the second merges in what was missing. No race conditions.
 
@@ -265,7 +266,7 @@ No hooks? No problem. The `cairns` tool works without them — the agent can cal
 
 ## REST API
 
-Read-only endpoints at `/api` — powers the web UI and works great for scripting.
+REST endpoints at `/api` — powers the web UI, hook scripts, and scripting.
 
 | Endpoint | Description |
 |----------|-------------|
@@ -282,8 +283,12 @@ Read-only endpoints at `/api` — powers the web UI and works great for scriptin
 | `GET /api/timeline?project=&type=&days=` | Memory activity feed |
 | `GET /api/cairns?project=` | Session trail — cairns newest first |
 | `GET /api/cairns/:id` | Single cairn with linked memories |
+| `POST /api/cairns` | Set a cairn (used by session-end hook) |
+| `GET /api/events?session_name=&project=` | Event batches with digest status |
+| `POST /api/events/ingest` | Ship event batch (202 Accepted, idempotent) |
 | `GET /api/clusters/visualization?project=` | t-SNE 2D coordinates for scatter plot |
 | `GET /api/export?project=&format=` | Export project memories (JSON or Markdown) |
+| `GET /api/graph?project=&relation_type=` | Knowledge graph nodes and edges |
 
 ```bash
 curl http://localhost:8000/api/status
@@ -353,6 +358,7 @@ All via environment variables:
 | `CAIRN_LLM_SESSION_SYNTHESIS` | `true` | Enable session narrative synthesis |
 | `CAIRN_LLM_CONSOLIDATION` | `true` | Enable memory consolidation recommendations |
 | `CAIRN_LLM_CONFIDENCE_GATING` | `false` | Post-search quality assessment — returns a confidence score but does not filter results (caller decides). High reasoning demand. |
+| `CAIRN_LLM_EVENT_DIGEST` | `true` | Digest event batches into rolling LLM summaries for richer cairn narratives |
 
 ## Development
 
@@ -365,7 +371,7 @@ docker compose up -d --build
 
 ### Testing
 
-68 tests across 13 suites:
+87 tests across 14 suites:
 
 ```bash
 docker exec cairn pip install pytest
@@ -375,7 +381,7 @@ docker exec cairn python -m pytest tests/ -v
 
 ### Database Schema
 
-14 tables across 4 migrations:
+15 tables across 6 migrations:
 
 | Migration | Tables |
 |-----------|--------|
@@ -383,6 +389,8 @@ docker exec cairn python -m pytest tests/ -v
 | **002 Clustering** | `clusters`, `cluster_members`, `clustering_runs` |
 | **003 Phase 4** | `project_documents`, `project_links`, `tasks`, `task_memory_links`, `thinking_sequences`, `thoughts` |
 | **004 Cairns** | `cairns` + `cairn_id` FK on `memories` |
+| **005 Indexes** | Partial indexes on `memories` for timeline and session queries |
+| **006 Events** | `session_events` — streaming event batches with LLM digests |
 
 ## Search Quality
 

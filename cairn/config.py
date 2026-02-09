@@ -44,6 +44,7 @@ class LLMCapabilities:
     session_synthesis: bool = True
     consolidation: bool = True
     confidence_gating: bool = False  # off by default — high reasoning demand
+    event_digest: bool = True  # digest event batches via LLM
 
     def active_list(self) -> list[str]:
         """Return names of enabled capabilities."""
@@ -51,6 +52,7 @@ class LLMCapabilities:
             name for name in (
                 "query_expansion", "relationship_extract", "rule_conflict_check",
                 "session_synthesis", "consolidation", "confidence_gating",
+                "event_digest",
             )
             if getattr(self, name)
         ]
@@ -103,6 +105,7 @@ def load_config() -> Config:
             session_synthesis=os.getenv("CAIRN_LLM_SESSION_SYNTHESIS", "true").lower() in ("true", "1", "yes"),
             consolidation=os.getenv("CAIRN_LLM_CONSOLIDATION", "true").lower() in ("true", "1", "yes"),
             confidence_gating=os.getenv("CAIRN_LLM_CONFIDENCE_GATING", "false").lower() in ("true", "1", "yes"),
+            event_digest=os.getenv("CAIRN_LLM_EVENT_DIGEST", "true").lower() in ("true", "1", "yes"),
         ),
         enrichment_enabled=os.getenv("CAIRN_ENRICHMENT_ENABLED", "true").lower() in ("true", "1", "yes"),
         transport=os.getenv("CAIRN_TRANSPORT", "stdio"),

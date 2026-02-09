@@ -34,11 +34,31 @@ class CairnManager:
         self.llm = llm
         self.capabilities = capabilities
 
+    def _fetch_digests(self, project_id: int, session_name: str) -> list[dict]:
+        """Query session_events for digested batches belonging to this session.
+
+        Returns:
+            List of dicts with batch_number, digest text. Only includes rows
+            where digest is not NULL. Ordered by batch_number ASC.
+        """
+        return self.db.execute(
+            """
+            SELECT batch_number, digest
+            FROM session_events
+            WHERE project_id = %s AND session_name = %s AND digest IS NOT NULL
+            ORDER BY batch_number ASC
+            """,
+            (project_id, session_name),
+        )
+
     def set(self, project: str, session_name: str, events: list | None = None) -> dict:
         """Set a cairn at the end of a session.
 
         Fetches all stones with matching session_name, synthesizes a title
         and narrative, creates the cairn record, and links the stones.
+
+        Pipeline v2: if digested event batches exist in session_events, uses them
+        for narrative synthesis instead of raw events.
 
         Args:
             project: Project name.
@@ -48,7 +68,7 @@ class CairnManager:
         Returns:
             Dict with cairn details: id, title, narrative, memory_count, set_at.
         """
-        from cairn.llm.prompts import build_cairn_narrative_messages
+        from cairn.llm.prompts import build_cairn_narrative_messages, build_cairn_digest_narrative_messages
 
         project_id = get_or_create_project(self.db, project)
 
@@ -74,9 +94,13 @@ class CairnManager:
         )
 
         memory_count = len(stones)
-        has_content = memory_count > 0 or (events and len(events) > 0)
 
-        # Skip empty sessions — no stones, no events, nothing to mark
+        # Check for Pipeline v2 digests
+        digests = self._fetch_digests(project_id, session_name)
+
+        has_content = memory_count > 0 or (events and len(events) > 0) or len(digests) > 0
+
+        # Skip empty sessions — no stones, no events, no digests, nothing to mark
         if not has_content:
             return {"skipped": True, "reason": "empty session", "session_name": session_name, "project": project}
 
@@ -92,9 +116,16 @@ class CairnManager:
 
         if can_synthesize:
             try:
-                messages = build_cairn_narrative_messages(
-                    stones, project, session_name, events=events,
-                )
+                if digests:
+                    # Pipeline v2: use pre-digested event summaries
+                    messages = build_cairn_digest_narrative_messages(
+                        stones, project, session_name, digests=digests,
+                    )
+                else:
+                    # Pipeline v1 fallback: use raw events
+                    messages = build_cairn_narrative_messages(
+                        stones, project, session_name, events=events,
+                    )
                 raw = self.llm.generate(messages, max_tokens=1024)
                 if raw and raw.strip():
                     parsed = extract_json(raw, json_type="object")
@@ -164,7 +195,7 @@ class CairnManager:
         2. Caller has events, existing already has them → return existing (true idempotent)
         3. Caller has no events → return existing info (agent calling after hook)
         """
-        from cairn.llm.prompts import build_cairn_narrative_messages
+        from cairn.llm.prompts import build_cairn_narrative_messages, build_cairn_digest_narrative_messages
 
         cairn_id = existing["id"]
         has_existing_events = existing["has_events"]
@@ -194,7 +225,10 @@ class CairnManager:
 
         memory_count = len(stones)
 
-        # Re-synthesize narrative with stones + events
+        # Check for Pipeline v2 digests
+        digests = self._fetch_digests(project_id, session_name)
+
+        # Re-synthesize narrative with stones + events/digests
         title = None
         narrative = None
         can_synthesize = (
@@ -205,9 +239,14 @@ class CairnManager:
 
         if can_synthesize:
             try:
-                messages = build_cairn_narrative_messages(
-                    stones, project, session_name, events=events,
-                )
+                if digests:
+                    messages = build_cairn_digest_narrative_messages(
+                        stones, project, session_name, digests=digests,
+                    )
+                else:
+                    messages = build_cairn_narrative_messages(
+                        stones, project, session_name, events=events,
+                    )
                 raw = self.llm.generate(messages, max_tokens=1024)
                 if raw and raw.strip():
                     parsed = extract_json(raw, json_type="object")

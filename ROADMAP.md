@@ -1,8 +1,30 @@
 # Roadmap
 
-Current: **v0.10.0** — Knowledge graph visualization, cluster UX improvements.
+Current: **v0.12.0** — Streaming event pipeline with incremental digestion.
 
 ---
+
+## v0.12.0 — Event Pipeline v2 ✓
+
+CAPTURE → SHIP → DIGEST → CRYSTALLIZE. Events flow, not batch.
+
+- [x] **Streaming event ingestion** — `POST /api/events/ingest` accepts batches of 25, idempotent upsert, 202 Accepted
+- [x] **DigestWorker** — background daemon thread digests event batches into rolling LLM summaries
+- [x] **Digest-aware cairn synthesis** — narratives built from pre-digested summaries instead of raw events
+- [x] **Migration 006** — `session_events` table with partial index for undigested batch polling
+- [x] **Hook rewrite** — dumb pipe capture (full tool_input + tool_response), incremental shipping, `.offset` sidecar
+- [x] **Pipeline v1 fallback** — old hooks still work, new hooks degrade gracefully against old server
+- [x] **`CAIRN_LLM_EVENT_DIGEST`** — independently toggleable via env var
+- [x] **17 new tests** (87 total across 14 suites)
+
+## v0.11.0 — Upsert Cairns + Event Archive ✓
+
+No more race conditions. No more lost events.
+
+- [x] **Cairn upsert semantics** — agent and hook can both set a cairn for the same session, second merges into first
+- [x] **Server-side event archive** — `CAIRN_EVENT_ARCHIVE_DIR` env var for file-based JSONL archive
+- [x] **Setup script** — `scripts/setup-hooks.sh` for interactive hook installation
+- [x] **Hooks documentation overhaul** — rewritten README with Quick Start, troubleshooting, architecture diagram
 
 ## v0.10.0 — Knowledge Graph ✓
 
@@ -96,6 +118,12 @@ Nice-to-haves when the core is rock solid.
 
 ## Completed
 
+### v0.12.0 — Event Pipeline v2
+Streaming event pipeline: CAPTURE → SHIP → DIGEST → CRYSTALLIZE. Events captured with full fidelity, shipped in batches of 25 via `POST /api/events/ingest`, digested by background DigestWorker into rolling LLM summaries, crystallized into cairn narratives. Pipeline v1 fallback for backward compatibility. 17 new tests (87 total).
+
+### v0.11.0 — Upsert Cairns + Event Archive
+Cairn upsert semantics eliminate race condition between agent and hook. Server-side event archive via `CAIRN_EVENT_ARCHIVE_DIR`. Setup script for interactive hook installation. Hooks documentation overhaul.
+
 ### v0.10.0 — Knowledge Graph
 Interactive d3-force knowledge graph at `/graph`. Nodes colored by memory type, edges by relation type. Zoom/pan/drag, hover tooltips, click-to-view. Graph REST endpoint with project and relation_type filters. Cluster page UX improvements.
 
@@ -121,7 +149,7 @@ LLM auto-enrichment (Bedrock + Ollama), HTTP transport, eval framework with reca
 Clustering, projects, tasks, thinking, REST API (FastAPI inside MCP Starlette), README, CHANGELOG, LICENSE.
 
 ### v0.4.0 — Web UI
-Next.js 16 + shadcn/ui dashboard. 7 pages: Dashboard, Search, Projects, Clusters, Tasks, Thinking, Rules. Production Dockerfile. Authentik auth. SWAG proxy. Live at cairn.witekdivers.com.
+Next.js 16 + shadcn/ui dashboard. 7 pages: Dashboard, Search, Projects, Clusters, Tasks, Thinking, Rules. Production Dockerfile. Authentik auth. SWAG proxy.
 
 ### v0.5.0 — Features
 Timeline, Cmd+K command palette, inline memory viewer (Sheet), cluster visualization (t-SNE scatter plot), project export (JSON/Markdown). 3 new API endpoints, 5 new UI pages/components.

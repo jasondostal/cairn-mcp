@@ -9,8 +9,10 @@ from fastapi import FastAPI, APIRouter, Query, Path, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
+from cairn.core.constants import MAX_EVENT_BATCH_SIZE
 from cairn.core.services import Services
 from cairn.core.status import get_status
+from cairn.core.utils import get_or_create_project
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +34,7 @@ def create_api(svc: Services) -> FastAPI:
     cairn_manager = svc.cairn_manager
     app = FastAPI(
         title="Cairn API",
-        version="0.11.0",
+        version="0.12.0",
         description="Read-only REST API for the Cairn web UI.",
     )
 
@@ -456,6 +458,104 @@ def create_api(svc: Services) -> FastAPI:
             "exported_at": datetime.now(timezone.utc).isoformat(),
             "memory_count": len(memories),
             "memories": memories,
+        }
+
+    # ------------------------------------------------------------------
+    # POST /events/ingest — ingest a batch of session events (from hooks)
+    # ------------------------------------------------------------------
+    @router.post("/events/ingest", status_code=202)
+    def api_events_ingest(body: dict):
+        project = body.get("project")
+        session_name = body.get("session_name")
+        batch_number = body.get("batch_number")
+        events = body.get("events", [])
+
+        if not project:
+            raise HTTPException(status_code=400, detail="project is required")
+        if not session_name:
+            raise HTTPException(status_code=400, detail="session_name is required")
+        if batch_number is None:
+            raise HTTPException(status_code=400, detail="batch_number is required")
+        if not isinstance(events, list) or len(events) == 0:
+            raise HTTPException(status_code=400, detail="events must be a non-empty array")
+        if len(events) > MAX_EVENT_BATCH_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"batch exceeds max size of {MAX_EVENT_BATCH_SIZE} events",
+            )
+
+        import json
+        project_id = get_or_create_project(db, project)
+
+        # Upsert: if batch already exists, return idempotent response
+        existing = db.execute_one(
+            "SELECT id FROM session_events WHERE project_id = %s AND session_name = %s AND batch_number = %s",
+            (project_id, session_name, batch_number),
+        )
+        if existing:
+            return {"status": "already_ingested", "batch_id": existing["id"]}
+
+        row = db.execute_one(
+            """
+            INSERT INTO session_events (project_id, session_name, batch_number, raw_events, event_count)
+            VALUES (%s, %s, %s, %s::jsonb, %s)
+            RETURNING id
+            """,
+            (project_id, session_name, batch_number, json.dumps(events), len(events)),
+        )
+        db.commit()
+
+        return {"status": "ingested", "batch_id": row["id"], "event_count": len(events)}
+
+    # ------------------------------------------------------------------
+    # GET /events?session_name=&project= — list event batches with digest status
+    # ------------------------------------------------------------------
+    @router.get("/events")
+    def api_events(
+        session_name: str = Query(..., description="Session name"),
+        project: str | None = Query(None),
+    ):
+        where = ["se.session_name = %s"]
+        params: list = [session_name]
+
+        if project:
+            where.append("p.name = %s")
+            params.append(project)
+
+        where_clause = " AND ".join(where)
+
+        rows = db.execute(
+            f"""
+            SELECT se.id, se.session_name, se.batch_number, se.event_count,
+                   se.digest, se.digested_at, se.created_at, p.name as project
+            FROM session_events se
+            LEFT JOIN projects p ON se.project_id = p.id
+            WHERE {where_clause}
+            ORDER BY se.batch_number ASC
+            """,
+            tuple(params),
+        )
+
+        items = [
+            {
+                "id": r["id"],
+                "session_name": r["session_name"],
+                "batch_number": r["batch_number"],
+                "event_count": r["event_count"],
+                "digest": r["digest"],
+                "digested": r["digest"] is not None,
+                "digested_at": r["digested_at"].isoformat() if r["digested_at"] else None,
+                "project": r["project"],
+                "created_at": r["created_at"].isoformat(),
+            }
+            for r in rows
+        ]
+
+        return {
+            "session_name": session_name,
+            "batch_count": len(items),
+            "digested_count": sum(1 for i in items if i["digested"]),
+            "items": items,
         }
 
     app.include_router(router)

@@ -50,7 +50,8 @@ class TestCairnSet:
                 "set_at": datetime(2026, 2, 8, 14, 0, 0, tzinfo=timezone.utc),
             },
         ]
-        db.execute.return_value = stones  # session stones query
+        # execute: stones query, digests query (empty), UPDATE memories
+        db.execute.side_effect = [stones, [], None]
 
         manager = CairnManager(db)
         result = manager.set("test-project", "test-session")
@@ -61,19 +62,25 @@ class TestCairnSet:
         assert result["narrative"] is None
         db.commit.assert_called_once()
 
-    def test_set_rejects_duplicate_session(self):
-        """Setting a cairn for an existing session returns error."""
+    def test_set_returns_existing_cairn(self):
+        """Setting a cairn for an existing session returns existing info."""
         db = _make_db()
         db.execute_one.side_effect = [
             {"id": 1},  # project lookup
-            {"id": 5},  # existing cairn found
+            {           # existing cairn found
+                "id": 5,
+                "has_events": False,
+                "title": "Existing Session",
+                "narrative": "Already done.",
+                "memory_count": 2,
+            },
         ]
 
         manager = CairnManager(db)
         result = manager.set("test-project", "test-session")
 
-        assert "error" in result
-        assert "already exists" in result["error"]
+        assert result["status"] == "already_exists"
+        assert result["id"] == 5
 
     def test_set_with_llm_synthesizes_narrative(self):
         """When LLM is available, cairn gets title and narrative."""
@@ -92,7 +99,7 @@ class TestCairnSet:
                 "set_at": datetime(2026, 2, 8, 14, 0, 0, tzinfo=timezone.utc),
             },
         ]
-        db.execute.return_value = stones
+        db.execute.side_effect = [stones, [], None]  # stones, no digests, UPDATE
 
         llm = MagicMock()
         llm.generate.return_value = '{"title": "PostgreSQL Integration and Connection Pooling", "narrative": "The session focused on database setup."}'
@@ -121,7 +128,7 @@ class TestCairnSet:
                 "set_at": datetime(2026, 2, 8, 14, 0, 0, tzinfo=timezone.utc),
             },
         ]
-        db.execute.return_value = stones
+        db.execute.side_effect = [stones, [], None]  # stones, no digests, UPDATE
 
         manager = CairnManager(db)  # no LLM
         result = manager.set("test-project", "my-session")
@@ -131,27 +138,19 @@ class TestCairnSet:
         assert "Session:" in result["title"]
 
     def test_set_empty_session(self):
-        """Setting a cairn with no stones still works."""
+        """Setting a cairn with no stones and no digests skips."""
         db = _make_db()
 
         db.execute_one.side_effect = [
             {"id": 1},
             None,
-            {
-                "id": 10,
-                "title": "Empty session: ghost-session",
-                "narrative": None,
-                "memory_count": 0,
-                "started_at": datetime(2026, 2, 8, 14, 0, 0, tzinfo=timezone.utc),
-                "set_at": datetime(2026, 2, 8, 14, 0, 0, tzinfo=timezone.utc),
-            },
         ]
-        db.execute.return_value = []  # no stones
+        db.execute.side_effect = [[], []]  # no stones, no digests
 
         manager = CairnManager(db)
         result = manager.set("test-project", "ghost-session")
 
-        assert result["memory_count"] == 0
+        assert result.get("skipped") is True
 
     def test_set_with_events(self):
         """Events (hook data) are passed through to the cairn."""
@@ -169,7 +168,7 @@ class TestCairnSet:
                 "set_at": datetime(2026, 2, 8, 14, 0, 0, tzinfo=timezone.utc),
             },
         ]
-        db.execute.return_value = []
+        db.execute.side_effect = [[], []]  # no stones, no digests
 
         manager = CairnManager(db)
         events = [{"type": "tool_call", "tool": "store", "ts": "2026-02-08T12:00:00Z"}]
@@ -196,7 +195,7 @@ class TestCairnSet:
                 "set_at": datetime(2026, 2, 8, 14, 0, 0, tzinfo=timezone.utc),
             },
         ]
-        db.execute.return_value = []  # no stones
+        db.execute.side_effect = [[], []]  # no stones, no digests
 
         llm = MagicMock()
         llm.generate.return_value = '{"title": "Hook Session: Codebase Exploration", "narrative": "The session explored the codebase via tool calls."}'
@@ -237,7 +236,7 @@ class TestCairnSet:
                 "set_at": datetime(2026, 2, 8, 14, 0, 0, tzinfo=timezone.utc),
             },
         ]
-        db.execute.return_value = stones
+        db.execute.side_effect = [stones, [], None]  # stones, no digests, UPDATE
 
         llm = MagicMock()
         llm.generate.return_value = '{"title": "Database Setup with PostgreSQL", "narrative": "The session set up PostgreSQL."}'
@@ -259,6 +258,83 @@ class TestCairnSet:
         assert "Mote timeline" in messages[1]["content"]
 
 
+class TestCairnSetWithDigests:
+    """Tests for CairnManager.set() with Pipeline v2 digests."""
+
+    def test_set_uses_digests_when_available(self):
+        """When session_events have digests, cairn uses digest narrative prompt."""
+        db = _make_db()
+        stones = [_make_stone(1, "Decided to use streaming pipeline")]
+
+        digests = [
+            {"batch_number": 0, "digest": "Explored the codebase structure and read key configuration files."},
+            {"batch_number": 1, "digest": "Edited the server module to add event ingestion endpoint."},
+        ]
+
+        db.execute_one.side_effect = [
+            {"id": 1},   # project lookup
+            None,         # no existing cairn
+            {             # INSERT RETURNING
+                "id": 10,
+                "title": "Implemented Streaming Event Pipeline",
+                "narrative": "The session implemented a streaming event pipeline.",
+                "memory_count": 1,
+                "started_at": datetime(2026, 2, 9, 12, 0, 0, tzinfo=timezone.utc),
+                "set_at": datetime(2026, 2, 9, 14, 0, 0, tzinfo=timezone.utc),
+            },
+        ]
+        # execute: stones, digests, UPDATE memories
+        db.execute.side_effect = [stones, digests, None]
+
+        llm = MagicMock()
+        llm.generate.return_value = '{"title": "Implemented Streaming Event Pipeline", "narrative": "The session implemented a streaming event pipeline."}'
+
+        caps = LLMCapabilities(session_synthesis=True)
+        manager = CairnManager(db, llm=llm, capabilities=caps)
+        result = manager.set("test-project", "test-session")
+
+        assert result["id"] == 10
+        llm.generate.assert_called_once()
+        # Verify the digest narrative prompt was used (contains "Work log digests")
+        messages = llm.generate.call_args[0][0]
+        assert "digests" in messages[0]["content"].lower() or "Work log digests" in messages[1]["content"]
+
+    def test_set_falls_back_to_raw_events_when_no_digests(self):
+        """When no digests exist, cairn falls back to raw events (Pipeline v1)."""
+        db = _make_db()
+        stones = [_make_stone(1)]
+
+        db.execute_one.side_effect = [
+            {"id": 1},   # project lookup
+            None,         # no existing cairn
+            {             # INSERT RETURNING
+                "id": 10,
+                "title": "Session: test-session",
+                "narrative": "Explored the codebase.",
+                "memory_count": 1,
+                "started_at": datetime(2026, 2, 9, 12, 0, 0, tzinfo=timezone.utc),
+                "set_at": datetime(2026, 2, 9, 14, 0, 0, tzinfo=timezone.utc),
+            },
+        ]
+        # No digests available
+        db.execute.side_effect = [stones, [], None]  # stones, empty digests, UPDATE
+
+        events = [{"type": "tool_call", "tool": "Read", "ts": "2026-02-09T12:00:00Z"}]
+
+        llm = MagicMock()
+        llm.generate.return_value = '{"title": "Session: test-session", "narrative": "Explored the codebase."}'
+
+        caps = LLMCapabilities(session_synthesis=True)
+        manager = CairnManager(db, llm=llm, capabilities=caps)
+        result = manager.set("test-project", "test-session", events=events)
+
+        assert result["id"] == 10
+        llm.generate.assert_called_once()
+        # Verify the mote timeline prompt was used (Pipeline v1 fallback)
+        messages = llm.generate.call_args[0][0]
+        assert "Mote timeline" in messages[1]["content"] or "Motes" in messages[0]["content"]
+
+
 class TestCairnStack:
     """Tests for CairnManager.stack()."""
 
@@ -269,6 +345,7 @@ class TestCairnStack:
             {
                 "id": 3, "session_name": "session-3", "title": "Third",
                 "narrative": "Third session", "memory_count": 5,
+                "project": "test-project",
                 "started_at": datetime(2026, 2, 8, 12, 0, 0, tzinfo=timezone.utc),
                 "set_at": datetime(2026, 2, 8, 14, 0, 0, tzinfo=timezone.utc),
                 "is_compressed": False,
@@ -276,6 +353,7 @@ class TestCairnStack:
             {
                 "id": 2, "session_name": "session-2", "title": "Second",
                 "narrative": "Second session", "memory_count": 3,
+                "project": "test-project",
                 "started_at": datetime(2026, 2, 7, 12, 0, 0, tzinfo=timezone.utc),
                 "set_at": datetime(2026, 2, 7, 14, 0, 0, tzinfo=timezone.utc),
                 "is_compressed": False,

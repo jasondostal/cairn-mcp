@@ -34,6 +34,7 @@ thinking_engine = _svc.thinking_engine
 session_synthesizer = _svc.session_synthesizer
 consolidation_engine = _svc.consolidation_engine
 cairn_manager = _svc.cairn_manager
+digest_worker = _svc.digest_worker
 
 
 # ============================================================
@@ -45,10 +46,12 @@ async def lifespan(server: FastMCP):
     """Connect to database and run migrations on startup, clean up on shutdown."""
     db.connect()
     db.run_migrations()
+    digest_worker.start()
     logger.info("Cairn started. Embedding model: %s", config.embedding.model)
     try:
         yield {}
     finally:
+        digest_worker.stop()
         db.close()
         logger.info("Cairn stopped.")
 
@@ -675,11 +678,13 @@ def main():
         async def combined_lifespan(app):
             db.connect()
             db.run_migrations()
+            digest_worker.start()
             logger.info("Cairn started. Embedding: %s", config.embedding.model)
             try:
                 async with _mcp_lifespan(app) as state:
                     yield state
             finally:
+                digest_worker.stop()
                 db.close()
                 logger.info("Cairn stopped.")
 

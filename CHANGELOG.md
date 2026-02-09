@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-02-09
+
+### Added
+- **Event Pipeline v2 (CAPTURE → SHIP → DIGEST → CRYSTALLIZE)** — events are now captured with full fidelity, shipped incrementally in batches of 25, digested by LLM into rolling summaries, and crystallized into cairn narratives. Long sessions no longer break narrative synthesis.
+- **`POST /api/events/ingest`** (202 Accepted) — streaming event ingestion endpoint. Idempotent upsert on `(project, session_name, batch_number)`. Validates batch size (max 200 events).
+- **`GET /api/events`** — list event batches with digest status for debugging and UI consumption.
+- **DigestWorker** — background daemon thread polls for undigested event batches, processes them through LLM one at a time, backs off on error (3x poll interval, capped at 60s). Graceful degradation: LLM failure leaves batch undigested, retries on next cycle.
+- **Migration 006** — `session_events` table with UNIQUE constraint on `(project_id, session_name, batch_number)` for idempotent re-shipping. Partial index on `digest IS NULL` for efficient polling.
+- **`CAIRN_LLM_EVENT_DIGEST`** env var — toggleable event batch digestion (default: `true`)
+- **Digest-aware cairn narratives** — `CairnManager.set()` queries `session_events` for pre-digested summaries. When digests exist, uses a dedicated prompt that works with structured summaries instead of raw events. Falls back to raw events (Pipeline v1) when no digests are available.
+- 17 new tests: 15 for DigestWorker (capability matrix, batch processing, lifecycle, immediate digestion) + 2 for digest-aware cairn synthesis
+
+### Changed
+- **Hook scripts rewritten for Pipeline v2:**
+  - `session-start.sh` — initializes `.offset` sidecar file alongside event log
+  - `log-event.sh` — rewritten as a dumb pipe: captures full `tool_input` (JSON) and `tool_response` (capped at 2000 chars), ships batches of 25 via background `curl POST /api/events/ingest`, `.offset` sidecar tracks shipped vs unshipped
+  - `session-end.sh` — ships remaining unshipped events as final batch, POSTs to `/api/cairns` without events payload (server pulls digests from `session_events`), falls back to Pipeline v1 when `/api/events/ingest` returns 404
+- `Services` dataclass expanded with `digest_worker` field
+- Server lifespans (stdio + HTTP) now start/stop DigestWorker alongside migrations
+
+### Backward Compatibility
+- **Old hooks + new server:** session-end.sh ships raw events via POST /api/cairns → CairnManager finds no digests → falls back to raw events prompt. Zero breakage.
+- **New hooks + old server:** POST /api/events/ingest returns 404, curl fails silently. Cairn set works from stones only. Degraded but functional.
+
 ## [0.11.0] - 2026-02-09
 
 ### Fixed
@@ -266,8 +290,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `CAIRN_API_URL` set at Docker build time so Next.js rewrites resolve correctly in standalone mode
 
 ### Infrastructure
-- SWAG reverse proxy config for `cairn.witekdivers.com`
-- Authentik forward auth (proxy provider, forward_single mode)
+- Reverse proxy configuration (SWAG + Authentik forward auth)
 - Dark mode by default
 
 ## [0.3.0] - 2026-02-07
@@ -340,7 +363,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.8.0...v0.9.0

@@ -28,7 +28,9 @@ SESSION_NAME="$(date -u +%Y-%m-%d)-${SHORT_ID}"
 CAIRN_EVENT_DIR="${CAIRN_EVENT_DIR:-${HOME}/.cairn/events}"
 mkdir -p "$CAIRN_EVENT_DIR"
 EVENT_LOG="${CAIRN_EVENT_DIR}/cairn-events-${SESSION_ID}.jsonl"
+OFFSET_FILE="${EVENT_LOG}.offset"
 echo "" > "$EVENT_LOG"
+echo "0" > "$OFFSET_FILE"
 
 # Log the session start event (includes session_name so session-end.sh can read it back)
 jq -nc --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \

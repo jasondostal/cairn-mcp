@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Cairn Hook: PostToolUse
-# Appends a lightweight event record to the session log.
-# Runs async — no blocking, no HTTP calls. Just a local file append.
+# Cairn Hook: PostToolUse (Pipeline v2)
+# Dumb pipe: capture full event → append to JSONL → ship batch when threshold reached.
 #
-# Captures: tool name, timestamp, and a compact summary of the action.
-# The full event log gets bundled into the cairn at session end.
+# Captures: tool_name, tool_input (full JSON), tool_response (capped at 2000 chars)
+# Ships batches of 25 events via background curl to POST /api/events/ingest.
+# The .offset sidecar tracks what's been shipped.
 
 set -euo pipefail
 
@@ -14,45 +14,75 @@ TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // "unknown"')
 
 CAIRN_EVENT_DIR="${CAIRN_EVENT_DIR:-${HOME}/.cairn/events}"
 EVENT_LOG="${CAIRN_EVENT_DIR}/cairn-events-${SESSION_ID}.jsonl"
+OFFSET_FILE="${EVENT_LOG}.offset"
 
 # Don't log if no session or no log file
 [ -z "$SESSION_ID" ] && exit 0
 [ ! -f "$EVENT_LOG" ] && exit 0
 
-# Extract a compact summary based on tool type
-case "$TOOL_NAME" in
-    Bash)
-        SUMMARY=$(echo "$INPUT" | jq -r '.tool_input.command // "" | .[0:120]')
-        ;;
-    Read)
-        SUMMARY=$(echo "$INPUT" | jq -r '.tool_input.file_path // ""')
-        ;;
-    Edit|Write)
-        SUMMARY=$(echo "$INPUT" | jq -r '.tool_input.file_path // ""')
-        ;;
-    Glob)
-        SUMMARY=$(echo "$INPUT" | jq -r '.tool_input.pattern // ""')
-        ;;
-    Grep)
-        SUMMARY=$(echo "$INPUT" | jq -r '.tool_input.pattern // ""')
-        ;;
-    mcp__cairn__*)
-        ACTION=$(echo "$INPUT" | jq -r '.tool_input.action // .tool_input.query // "" | .[0:120]')
-        SUMMARY="cairn: ${TOOL_NAME##mcp__cairn__} ${ACTION}"
-        ;;
-    Task)
-        SUMMARY=$(echo "$INPUT" | jq -r '.tool_input.description // "" | .[0:120]')
-        ;;
-    *)
-        SUMMARY=$(echo "$INPUT" | jq -r '.tool_input | keys | join(", ") | .[0:80]' 2>/dev/null || echo "")
-        ;;
-esac
+CAIRN_URL="${CAIRN_URL:-http://localhost:8000}"
+BATCH_SIZE="${CAIRN_EVENT_BATCH_SIZE:-25}"
+
+# Capture full event: tool_name, tool_input (full JSON), tool_response (capped)
+TOOL_INPUT=$(echo "$INPUT" | jq -c '.tool_input // {}')
+TOOL_RESPONSE=$(echo "$INPUT" | jq -r '.tool_response // "" | tostring | .[0:2000]')
 
 # Append event as a single JSON line
 jq -nc --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
        --arg type "tool_use" \
-       --arg tool "$TOOL_NAME" \
-       --arg summary "$SUMMARY" \
-       '{ts: $ts, type: $type, tool: $tool, summary: $summary}' >> "$EVENT_LOG"
+       --arg tool_name "$TOOL_NAME" \
+       --argjson tool_input "$TOOL_INPUT" \
+       --arg tool_response "$TOOL_RESPONSE" \
+       '{ts: $ts, type: $type, tool_name: $tool_name, tool_input: $tool_input, tool_response: $tool_response}' >> "$EVENT_LOG"
+
+# Count non-empty lines in the log (total events)
+TOTAL_LINES=$(grep -c -v '^$' "$EVENT_LOG" 2>/dev/null || echo "0")
+
+# Read shipped offset (how many lines have been shipped)
+SHIPPED=0
+if [ -f "$OFFSET_FILE" ]; then
+    SHIPPED=$(cat "$OFFSET_FILE" 2>/dev/null || echo "0")
+fi
+
+UNSHIPPED=$((TOTAL_LINES - SHIPPED))
+
+# Ship a batch if we've accumulated enough unshipped events
+if [ "$UNSHIPPED" -ge "$BATCH_SIZE" ]; then
+    # Read session_name from first event
+    SESSION_NAME=$(grep -v '^$' "$EVENT_LOG" | head -1 | jq -r '.session_name // empty' 2>/dev/null || true)
+    if [ -z "$SESSION_NAME" ]; then
+        SHORT_ID="${SESSION_ID: -8}"
+        SESSION_NAME="$(date -u +%Y-%m-%d)-${SHORT_ID}"
+    fi
+
+    # Read project from first event
+    PROJECT=$(grep -v '^$' "$EVENT_LOG" | head -1 | jq -r '.project // empty' 2>/dev/null || true)
+    CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
+    PROJECT="${PROJECT:-$(basename "${CWD:-$(pwd)}")}"
+
+    # Calculate batch number (0-indexed)
+    BATCH_NUMBER=$((SHIPPED / BATCH_SIZE))
+
+    # Extract the unshipped events (skip first SHIPPED lines, take BATCH_SIZE)
+    EVENTS=$(grep -v '^$' "$EVENT_LOG" | tail -n +"$((SHIPPED + 1))" | head -n "$BATCH_SIZE" | jq -s '.')
+
+    # Build payload
+    PAYLOAD=$(jq -nc \
+        --arg project "$PROJECT" \
+        --arg session_name "$SESSION_NAME" \
+        --argjson batch_number "$BATCH_NUMBER" \
+        --argjson events "$EVENTS" \
+        '{project: $project, session_name: $session_name, batch_number: $batch_number, events: $events}')
+
+    # Ship in background — non-blocking, fire-and-forget
+    # Only update offset on success (curl exit code 0)
+    (
+        if curl -sf -X POST "${CAIRN_URL}/api/events/ingest" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" >/dev/null 2>&1; then
+            echo "$((SHIPPED + BATCH_SIZE))" > "$OFFSET_FILE"
+        fi
+    ) &
+fi
 
 exit 0
