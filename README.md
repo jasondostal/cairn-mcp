@@ -40,7 +40,7 @@ The tiers are additive and degrade gracefully. With all three active, a session 
 - **Session continuity** — Cairns mark the trail. Motes capture what happened. Narratives synthesize why it mattered. Next session starts with context, not a cold start.
 - **Memory consolidation** — Find duplicates, recommend merges and promotions, with dry-run safety.
 - **Structured thinking** — Reasoning sequences with branching, for when an agent needs to think through a problem step by step.
-- **Web dashboard** — Next.js + shadcn/ui. Timeline, search, cluster visualization, Cmd+K command palette, inline memory viewer. Dark mode.
+- **Web dashboard** — Next.js + shadcn/ui. Timeline, search, cluster visualization, knowledge graph, Cmd+K command palette, inline memory viewer. Dark mode.
 - **One port, everything** — MCP protocol at `/mcp`, REST API at `/api`, same process. stdio also supported.
 - **Hardened** — Input validation on all tools, non-root Docker container, t-SNE sampling cap, pinned dependencies.
 - **6 LLM capabilities** — Each independently toggleable via env vars, each with graceful degradation. Core search/store/cairns never depends on LLM.

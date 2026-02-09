@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-02-08
+
+### Added
+- **Knowledge graph visualization** — interactive d3-force graph at `/graph`. Nodes are memories (colored by type, sized by importance), edges are relationships (colored by relation type). Zoom, pan, drag nodes, hover tooltips, click to open memory sheet. Filter by project and relation type (extends, contradicts, implements, depends_on, related).
+- **Graph REST endpoint** — `GET /api/graph?project=&relation_type=` returns nodes, edges, and stats for the relationship graph.
+
+### Improved
+- **Cluster list page** — better card layout with expandable sample memories, confidence badges
+- **Cluster visualization** — improved scatter plot controls, better hover states and legend
+
 ## [0.9.0] - 2026-02-08
 
 ### Added

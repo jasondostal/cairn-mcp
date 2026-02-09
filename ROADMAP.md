@@ -1,8 +1,16 @@
 # Roadmap
 
-Current: **v0.9.0** — Hardening, connection pooling, configurable CORS, honest eval.
+Current: **v0.10.0** — Knowledge graph visualization, cluster UX improvements.
 
 ---
+
+## v0.10.0 — Knowledge Graph ✓
+
+See the shape of your memory.
+
+- [x] **Knowledge graph visualization** — d3-force interactive graph at `/graph`, nodes by type, edges by relation
+- [x] **Graph REST endpoint** — `GET /api/graph` with project and relation_type filters
+- [x] **Cluster UX improvements** — better card layout, expandable samples, improved scatter plot
 
 ## v0.9.0 — Hardening ✓
 
@@ -87,6 +95,9 @@ Nice-to-haves when the core is rock solid.
 ---
 
 ## Completed
+
+### v0.10.0 — Knowledge Graph
+Interactive d3-force knowledge graph at `/graph`. Nodes colored by memory type, edges by relation type. Zoom/pan/drag, hover tooltips, click-to-view. Graph REST endpoint with project and relation_type filters. Cluster page UX improvements.
 
 ### v0.9.0 — Hardening
 Connection pooling (psycopg_pool), configurable CORS origins, default LLM switched to Ollama, persistent event logs, eval transparency, RRF documentation, hook port fix.
