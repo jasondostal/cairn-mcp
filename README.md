@@ -1,6 +1,5 @@
 <p align="center">
-  <strong>Cairn</strong><br>
-  <em>Persistent memory for AI agents</em>
+  <img src="images/cairn-readme-banner.png" alt="Cairn — semantic memory for AI agents" width="800">
 </p>
 
 <p align="center">

@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { navItems } from "@/lib/nav";
 import {
-  Database,
   Menu,
   X,
 } from "lucide-react";
@@ -48,7 +47,7 @@ export function SidebarNav() {
       {/* Mobile header */}
       <header className="flex h-14 items-center justify-between border-b border-border bg-card px-4 md:hidden">
         <div className="flex items-center gap-2">
-          <Database className="h-5 w-5 text-primary" />
+          <img src="/cairn-mark-trail.svg" alt="Cairn" className="h-5 w-5" />
           <span className="text-lg font-semibold tracking-tight">Cairn</span>
         </div>
         <button
@@ -79,7 +78,7 @@ export function SidebarNav() {
       {/* Desktop sidebar */}
       <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-card md:flex">
         <div className="flex h-14 items-center gap-2 border-b border-border px-4">
-          <Database className="h-5 w-5 text-primary" />
+          <img src="/cairn-mark-trail.svg" alt="Cairn" className="h-5 w-5" />
           <span className="text-lg font-semibold tracking-tight">Cairn</span>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-2">
