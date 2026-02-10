@@ -27,7 +27,7 @@ motes/
 mcp-work/
 eval/
 tests/
-scripts/
+scripts/*.sh
 cairn-ui/
 
 # Misc
