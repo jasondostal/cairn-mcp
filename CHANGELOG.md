@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-02-10
+
+### Changed
+- **HDBSCAN replaces DBSCAN for clustering** — DBSCAN with eps=0.65 collapsed 560 memories into a single mega-cluster. HDBSCAN auto-tunes density thresholds, producing meaningful topic clusters (11 clusters on 561 memories in testing). No new dependencies — uses `sklearn.cluster.HDBSCAN` (scikit-learn >= 1.3). Default params: `min_cluster_size=5`, `min_samples=3`, `metric="cosine"`.
+- **Confidence scores from HDBSCAN probabilities** — cluster confidence is now derived from HDBSCAN's per-point membership probabilities (mean of member probabilities) instead of the arbitrary `1 - avg_distance/eps` formula. More principled, better range.
+- **No precomputed distance matrix** — HDBSCAN works directly on embeddings with cosine metric, eliminating the O(n²) distance matrix construction step.
+
 ## [0.18.1] - 2026-02-10
 
 ### Fixed

@@ -288,7 +288,7 @@ def insights(
 ) -> dict:
     """Discover patterns across stored memories using semantic clustering.
 
-    Uses DBSCAN to group semantically similar memories into clusters, then
+    Uses HDBSCAN to group semantically similar memories into clusters, then
     generates labels and summaries for each cluster. Clustering runs lazily:
     only when stale (>24h, >20% growth, or first run).
 

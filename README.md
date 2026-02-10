@@ -28,7 +28,7 @@ Three containers. One `docker compose up`. 13 MCP tools, a REST API, a web dashb
 - **Smart ingestion** — Text, URLs, or both. Auto-classifies, chunks large documents, deduplicates, and routes. One endpoint, many doorways.
 - **Hybrid search** — Vector similarity + full-text + tag matching via Reciprocal Rank Fusion. [83.8% recall@10](#search-quality). Contradiction-aware ranking.
 - **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, importance score, and relationship links on store.
-- **Pattern discovery** — DBSCAN clustering finds themes across memories. LLM writes the labels. Clusters refresh lazily.
+- **Pattern discovery** — HDBSCAN clustering finds themes across memories. LLM writes the labels. Clusters refresh lazily.
 - **Web dashboard** — 11 pages. Timeline with activity heatmap, search with score breakdowns, knowledge graph, thinking trees, Cmd+K, keyboard nav, dark mode.
 - **Three containers, done** — MCP at `/mcp`, REST at `/api`, same process. PostgreSQL + pgvector. Bring your own LLM — Ollama, Bedrock, Gemini, or anything OpenAI-compatible.
 
@@ -249,7 +249,7 @@ No hooks? No problem. The `cairns` tool works without them — the agent can cal
 | `recall` | Expand memory IDs to full content with cluster context |
 | `modify` | Update, soft-delete, or reactivate memories |
 | `rules` | Behavioral guardrails — global or per-project |
-| `insights` | DBSCAN clustering with LLM-generated pattern summaries |
+| `insights` | HDBSCAN clustering with LLM-generated pattern summaries |
 | `projects` | Documents (briefs, PRDs, plans, primers, writeups, guides) and cross-project linking |
 | `tasks` | Task lifecycle — create, complete, list, link to memories |
 | `think` | Structured reasoning sequences with branching |

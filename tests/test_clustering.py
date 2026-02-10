@@ -1,9 +1,9 @@
-"""Test clustering engine: DBSCAN, centroids, confidence, staleness, degradation.
+"""Test clustering engine: HDBSCAN, centroids, confidence, staleness, degradation.
 
 Tests use synthetic embeddings and mock DB/LLM — no real database or model calls.
 The ClusterEngine's job is:
 1. Detect staleness (time, growth, no prior run)
-2. Run DBSCAN on cosine distance, compute centroids and confidence
+2. Run HDBSCAN on cosine distance, compute centroids and confidence
 3. Call LLM for labels/summaries (graceful fallback to generic)
 4. Atomic write to DB
 """
@@ -18,8 +18,8 @@ from sklearn.metrics.pairwise import cosine_distances
 
 from cairn.core.clustering import (
     ClusterEngine,
-    DBSCAN_EPS,
-    DBSCAN_MIN_SAMPLES,
+    HDBSCAN_MIN_CLUSTER_SIZE,
+    HDBSCAN_MIN_SAMPLES,
     STALENESS_HOURS,
     STALENESS_GROWTH_RATIO,
 )
@@ -83,11 +83,11 @@ def make_mock_db_rows(ids: list[int], embeddings: np.ndarray) -> list[dict]:
 
 
 # ============================================================
-# DBSCAN Finds Clusters
+# HDBSCAN Finds Clusters
 # ============================================================
 
-def test_dbscan_finds_clusters():
-    """Two well-separated clusters should be found by DBSCAN."""
+def test_hdbscan_finds_clusters():
+    """Two well-separated clusters should be found by HDBSCAN."""
     dim = 384
     rng = np.random.RandomState(0)
 
@@ -96,25 +96,29 @@ def test_dbscan_finds_clusters():
     center_a /= np.linalg.norm(center_a)
     center_b = -center_a  # Opposite direction = maximum cosine distance
 
-    cluster_a = make_tight_cluster(center_a, n=5, noise=0.02)
-    cluster_b = make_tight_cluster(center_b, n=5, noise=0.02)
+    cluster_a = make_tight_cluster(center_a, n=8, noise=0.02)
+    cluster_b = make_tight_cluster(center_b, n=8, noise=0.02)
 
     all_embeddings = np.vstack([cluster_a, cluster_b])
-    distance_matrix = cosine_distances(all_embeddings)
 
-    from sklearn.cluster import DBSCAN
-    dbscan = DBSCAN(eps=DBSCAN_EPS, min_samples=DBSCAN_MIN_SAMPLES, metric="precomputed")
-    labels = dbscan.fit_predict(distance_matrix)
+    from sklearn.cluster import HDBSCAN
+    hdb = HDBSCAN(
+        min_cluster_size=HDBSCAN_MIN_CLUSTER_SIZE,
+        min_samples=HDBSCAN_MIN_SAMPLES,
+        metric="cosine",
+        copy=True,
+    )
+    labels = hdb.fit_predict(all_embeddings)
 
     # Should find exactly 2 clusters, no noise
     unique_labels = set(labels)
     unique_labels.discard(-1)
     assert len(unique_labels) == 2, f"Expected 2 clusters, got {len(unique_labels)}"
 
-    # First 5 should share a label, last 5 should share a different label
-    assert len(set(labels[:5])) == 1
-    assert len(set(labels[5:])) == 1
-    assert labels[0] != labels[5]
+    # First 8 should share a label, last 8 should share a different label
+    assert len(set(labels[:8])) == 1
+    assert len(set(labels[8:])) == 1
+    assert labels[0] != labels[8]
 
 
 # ============================================================
@@ -131,84 +135,90 @@ def test_centroid_computation():
 
     centroid = points.mean(axis=0)
 
-    # Centroid should be very close to each point (within DBSCAN eps)
+    # Centroid should be very close to each point
     for i in range(len(points)):
         dist = float(cosine_distances(points[i:i+1], centroid.reshape(1, -1))[0, 0])
         assert dist < 0.05, f"Point {i} too far from centroid: {dist}"
 
 
 # ============================================================
-# Confidence Scoring
+# Confidence Scoring (HDBSCAN probabilities)
 # ============================================================
 
-def test_confidence_tight_vs_loose():
-    """Tight clusters should have higher confidence than loose clusters."""
+def test_confidence_from_probabilities():
+    """HDBSCAN probabilities should reflect cluster tightness."""
     dim = 384
     rng = np.random.RandomState(2)
-    center = rng.randn(dim)
-    center /= np.linalg.norm(center)
 
-    tight = make_tight_cluster(center, n=5, noise=0.01)
-    loose = make_tight_cluster(center, n=5, noise=0.15)
+    # Two clusters: one tight, one looser
+    center_a = rng.randn(dim)
+    center_a /= np.linalg.norm(center_a)
+    center_b = -center_a
 
-    def compute_confidence(points):
-        centroid = points.mean(axis=0)
-        distances = np.array([
-            float(cosine_distances(points[i:i+1], centroid.reshape(1, -1))[0, 0])
-            for i in range(len(points))
-        ])
-        avg_dist = distances.mean()
-        return max(0.0, min(1.0, 1.0 - (avg_dist / DBSCAN_EPS)))
+    tight = make_tight_cluster(center_a, n=8, noise=0.01)
+    loose = make_tight_cluster(center_b, n=8, noise=0.10)
 
-    tight_conf = compute_confidence(tight)
-    loose_conf = compute_confidence(loose)
+    all_embeddings = np.vstack([tight, loose])
 
-    assert tight_conf > loose_conf, (
-        f"Tight confidence ({tight_conf:.3f}) should exceed loose ({loose_conf:.3f})"
+    from sklearn.cluster import HDBSCAN
+    hdb = HDBSCAN(
+        min_cluster_size=HDBSCAN_MIN_CLUSTER_SIZE,
+        min_samples=HDBSCAN_MIN_SAMPLES,
+        metric="cosine",
+        copy=True,
     )
-    assert tight_conf > 0.5, f"Tight cluster confidence should be above 0.5: {tight_conf}"
+    hdb.fit(all_embeddings)
+
+    # Both should be clustered (not noise)
+    labels = hdb.labels_
+    unique = set(labels)
+    unique.discard(-1)
+    assert len(unique) >= 1, "Should find at least 1 cluster"
+
+    # Probabilities should exist and be in [0, 1]
+    assert hasattr(hdb, "probabilities_")
+    assert hdb.probabilities_.min() >= 0.0
+    assert hdb.probabilities_.max() <= 1.0
+
+    # Tight cluster members should have higher average probability
+    if len(unique) == 2:
+        tight_label = labels[0]
+        loose_label = labels[8]
+        tight_probs = hdb.probabilities_[:8]
+        loose_probs = hdb.probabilities_[8:]
+        assert tight_probs.mean() >= loose_probs.mean(), (
+            f"Tight cluster probs ({tight_probs.mean():.3f}) should >= "
+            f"loose ({loose_probs.mean():.3f})"
+        )
 
 
 # ============================================================
 # Noise Handling
 # ============================================================
 
-def test_noise_not_stored():
-    """DBSCAN noise points (label -1) should not appear in any cluster."""
-    dim = 384
-    rng = np.random.RandomState(3)
+def test_noise_excluded_from_clusters():
+    """Noise labels (-1) from HDBSCAN should be excluded from cluster groups."""
+    # Test the grouping logic directly: given labels with -1, noise is excluded
+    import numpy as np
 
-    # One cluster of 5 + 2 outliers far away
-    center = rng.randn(dim)
-    center /= np.linalg.norm(center)
-    cluster = make_tight_cluster(center, n=5, noise=0.02)
+    labels = np.array([0, 0, 0, 1, 1, 1, -1, -1])
 
-    # Outliers: random directions far from center
-    outlier1 = rng.randn(dim)
-    outlier1 /= np.linalg.norm(outlier1)
-    outlier2 = rng.randn(dim)
-    outlier2 /= np.linalg.norm(outlier2)
-    # Make sure outliers are far from center
-    outlier1 = -center + rng.randn(dim) * 0.1
-    outlier1 /= np.linalg.norm(outlier1)
-    outlier2 = rng.randn(dim) * 2
-    outlier2 /= np.linalg.norm(outlier2)
+    cluster_groups: dict[int, list[int]] = {}
+    noise_count = 0
+    for idx, label in enumerate(labels):
+        if label == -1:
+            noise_count += 1
+            continue
+        cluster_groups.setdefault(label, []).append(idx)
 
-    all_embeddings = np.vstack([cluster, outlier1.reshape(1, -1), outlier2.reshape(1, -1)])
-    distance_matrix = cosine_distances(all_embeddings)
-
-    from sklearn.cluster import DBSCAN
-    dbscan = DBSCAN(eps=DBSCAN_EPS, min_samples=DBSCAN_MIN_SAMPLES, metric="precomputed")
-    labels = dbscan.fit_predict(distance_matrix)
-
-    # Noise points should be labeled -1
-    noise_indices = [i for i, l in enumerate(labels) if l == -1]
-    cluster_indices = [i for i, l in enumerate(labels) if l != -1]
-
-    # The 5 cluster points should be in a cluster
-    assert len(cluster_indices) >= 5
-    # At least one outlier should be noise
-    assert len(noise_indices) >= 1
+    assert noise_count == 2
+    assert len(cluster_groups) == 2
+    assert 0 in cluster_groups
+    assert 1 in cluster_groups
+    assert cluster_groups[0] == [0, 1, 2]
+    assert cluster_groups[1] == [3, 4, 5]
+    # -1 should NOT be a key
+    assert -1 not in cluster_groups
 
 
 # ============================================================

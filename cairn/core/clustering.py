@@ -1,4 +1,4 @@
-"""Clustering engine. DBSCAN on memory embeddings, LLM-generated summaries, lazy reclustering."""
+"""Clustering engine. HDBSCAN on memory embeddings, LLM-generated summaries, lazy reclustering."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 import numpy as np
-from sklearn.cluster import DBSCAN
+from sklearn.cluster import HDBSCAN
 from sklearn.manifold import TSNE
 from sklearn.metrics.pairwise import cosine_distances
 
@@ -22,11 +22,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# DBSCAN parameters
-# MiniLM-L6-v2 cosine distances for topically similar short texts: 0.4-0.8
-# Cross-topic distances: 0.7-1.0. eps=0.65 captures coherent clusters.
-DBSCAN_EPS = 0.65
-DBSCAN_MIN_SAMPLES = 3
+# HDBSCAN parameters — auto-tunes density, no eps needed.
+# min_cluster_size=5: minimum members for a real cluster
+# min_samples=3: conservative core-point density (lower = more clusters, higher = tighter)
+HDBSCAN_MIN_CLUSTER_SIZE = 5
+HDBSCAN_MIN_SAMPLES = 3
 
 # t-SNE is O(n^2) — cap input to avoid OOM on large memory sets
 TSNE_MAX_SAMPLES = 500
@@ -37,7 +37,7 @@ STALENESS_GROWTH_RATIO = 0.20  # 20% memory growth triggers recluster
 
 
 class ClusterEngine:
-    """DBSCAN clustering with LLM-generated summaries and lazy reclustering."""
+    """HDBSCAN clustering with LLM-generated summaries and lazy reclustering."""
 
     def __init__(self, db: Database, embedding: EmbeddingInterface, llm: LLMInterface | None = None):
         self.db = db
@@ -88,7 +88,7 @@ class ClusterEngine:
     # ============================================================
 
     def run_clustering(self, project: str | None = None) -> dict:
-        """Run DBSCAN clustering for a project (or globally).
+        """Run HDBSCAN clustering for a project (or globally).
 
         Returns dict with cluster_count, noise_count, memory_count, duration_ms.
         """
@@ -111,7 +111,7 @@ class ClusterEngine:
         memory_count = len(rows)
 
         # Not enough memories to cluster
-        if memory_count < DBSCAN_MIN_SAMPLES:
+        if memory_count < HDBSCAN_MIN_CLUSTER_SIZE:
             self._record_run(project_id, memory_count, 0, 0, start)
             return {"cluster_count": 0, "noise_count": 0, "memory_count": memory_count,
                     "duration_ms": self._elapsed_ms(start)}
@@ -120,10 +120,14 @@ class ClusterEngine:
         memory_ids = [r["id"] for r in rows]
         embeddings = np.array([self._parse_vector(r["embedding"]) for r in rows])
 
-        # DBSCAN on cosine distance
-        distance_matrix = cosine_distances(embeddings)
-        dbscan = DBSCAN(eps=DBSCAN_EPS, min_samples=DBSCAN_MIN_SAMPLES, metric="precomputed")
-        labels = dbscan.fit_predict(distance_matrix)
+        # HDBSCAN on cosine metric — no precomputed distance matrix needed
+        hdb = HDBSCAN(
+            min_cluster_size=HDBSCAN_MIN_CLUSTER_SIZE,
+            min_samples=HDBSCAN_MIN_SAMPLES,
+            metric="cosine",
+            copy=True,
+        )
+        labels = hdb.fit_predict(embeddings)
 
         # Group memories by cluster label (skip noise = -1)
         cluster_groups: dict[int, list[int]] = {}  # label -> list of row indices
@@ -140,14 +144,16 @@ class ClusterEngine:
             member_vecs = embeddings[member_indices]
             centroid = member_vecs.mean(axis=0)
 
-            # Distances from centroid
+            # Distances from centroid (still useful for DB storage and display)
             distances = np.array([
                 float(cosine_distances(member_vecs[i:i+1], centroid.reshape(1, -1))[0, 0])
                 for i in range(len(member_indices))
             ])
             avg_distance = float(distances.mean())
-            # Confidence: inverse of avg distance, normalized. Max cosine distance = 2.0
-            confidence = max(0.0, min(1.0, 1.0 - (avg_distance / DBSCAN_EPS)))
+
+            # Confidence from HDBSCAN membership probabilities (0-1 per point)
+            member_probs = hdb.probabilities_[member_indices]
+            confidence = float(member_probs.mean())
 
             cluster_data.append({
                 "label_id": label,
