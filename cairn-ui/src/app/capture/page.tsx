@@ -249,7 +249,7 @@ function CaptureForm() {
         {slashActive && slashCommands.length > 0 && (
           <div
             ref={slashMenuRef}
-            className="absolute left-0 bottom-full mb-1 z-50 w-64 rounded-md border bg-popover p-1 shadow-md"
+            className="absolute left-0 top-full mt-1 z-50 w-64 rounded-md border bg-popover p-1 shadow-md"
           >
             {slashCommands.slice(0, 8).map((cmd, i) => (
               <button

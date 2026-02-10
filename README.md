@@ -40,6 +40,10 @@ The tiers are additive and degrade gracefully. With all three active, a session 
 - **Memory consolidation** — Find duplicates, recommend merges and promotions, with dry-run safety.
 - **Structured thinking** — Reasoning sequences with branching, for when an agent needs to think through a problem step by step.
 - **Quick capture** — Human-facing capture UI with slash commands (`/decision`, `/cairn`), URL extraction via trafilatura, browser bookmarklet, and iOS Shortcut support. Keyboard-first, Tana-inspired. All capture surfaces feed into the same smart ingestion pipeline.
+
+<p align="center">
+  <img src="images/cairn-capture-screenshot.jpg" alt="Cairn capture page with slash commands" width="700">
+</p>
 - **Smart ingestion** — `POST /api/ingest` accepts text, URLs, or both. Auto-classifies content, chunks large documents, deduplicates, and routes to docs or memories. One endpoint, many doorways.
 - **Web dashboard** — Next.js + shadcn/ui. Timeline, search, cluster visualization, knowledge graph, Cmd+K command palette, inline memory viewer, capture page. Dark mode.
 - **One port, everything** — MCP protocol at `/mcp`, REST API at `/api`, same process. stdio also supported.
