@@ -181,6 +181,16 @@ export interface GraphResult {
   };
 }
 
+export interface Document {
+  id: number;
+  project: string;
+  doc_type: string;
+  title: string | null;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ExportResult {
   project: string;
   exported_at: string;
@@ -260,6 +270,11 @@ export const api = {
 
   graph: (opts?: { project?: string; relation_type?: string; min_importance?: string }) =>
     get<GraphResult>("/graph", opts),
+
+  docs: (opts?: { project?: string; doc_type?: string; limit?: string; offset?: string }) =>
+    get<Paginated<Document>>("/docs", opts),
+
+  doc: (id: number) => get<Document>(`/docs/${id}`),
 
   exportProject: (project: string, format: string = "json") =>
     get<ExportResult | string>("/export", { project, format }),

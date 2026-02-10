@@ -337,6 +337,7 @@ def projects(
     doc_type: str | None = None,
     content: str | None = None,
     doc_id: int | None = None,
+    title: str | None = None,
     target: str | None = None,
     link_type: str = "related",
 ) -> dict | list[dict]:
@@ -344,7 +345,7 @@ def projects(
 
     Actions:
     - 'list': List all projects with memory counts.
-    - 'create_doc': Create a project document (brief, PRD, or plan).
+    - 'create_doc': Create a project document (brief, PRD, plan, primer, writeup, or guide).
     - 'get_docs': Get documents for a project, optionally filtered by type.
     - 'update_doc': Update an existing document's content.
     - 'link': Link two projects together.
@@ -353,9 +354,10 @@ def projects(
     Args:
         action: One of 'list', 'create_doc', 'get_docs', 'update_doc', 'link', 'get_links'.
         project: Project name (required for all actions except 'list').
-        doc_type: Document type: 'brief', 'prd', or 'plan' (for create_doc, optional for get_docs).
+        doc_type: Document type: 'brief', 'prd', 'plan', 'primer', 'writeup', or 'guide' (for create_doc, optional for get_docs).
         content: Document content (required for create_doc, update_doc).
         doc_id: Document ID (required for update_doc).
+        title: Optional document title (for create_doc, update_doc).
         target: Target project name (required for link).
         link_type: Relationship type for link (default 'related').
     """
@@ -369,7 +371,7 @@ def projects(
         if action == "create_doc":
             if not doc_type or not content:
                 return {"error": "doc_type and content are required for create_doc"}
-            return project_manager.create_doc(project, doc_type, content)
+            return project_manager.create_doc(project, doc_type, content, title=title)
 
         if action == "get_docs":
             return project_manager.get_docs(project, doc_type=doc_type)
@@ -377,7 +379,7 @@ def projects(
         if action == "update_doc":
             if not doc_id or not content:
                 return {"error": "doc_id and content are required for update_doc"}
-            return project_manager.update_doc(doc_id, content)
+            return project_manager.update_doc(doc_id, content, title=title)
 
         if action == "link":
             if not target:

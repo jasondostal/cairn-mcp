@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-02-10
+
+### Added
+- **Docs browser** — new `/docs` list page and `/docs/:id` reading view in the web UI. Browse, filter, and read project documents with full rendered markdown (GFM tables, task lists, strikethrough) without leaving Cairn.
+- **Expanded doc types** — `VALID_DOC_TYPES` extended from `[brief, prd, plan]` to include `primer`, `writeup`, and `guide`. Covers real usage beyond planning docs.
+- **Cross-project doc listing** — `ProjectManager.list_all_docs()` returns docs across all projects with optional project/type filters and pagination. Powers the new REST endpoint and UI.
+- **Single doc fetch** — `ProjectManager.get_doc(doc_id)` retrieves a document by ID with project name joined.
+- **Document titles** — Migration 007 adds `title` column to `project_documents`. MCP `projects` tool and `create_doc`/`update_doc` accept optional `title` parameter. UI falls back to first `# heading` from content when title is NULL.
+- **REST endpoints** — `GET /api/docs` (list with project/type/limit/offset filters) and `GET /api/docs/:id` (single doc with full content).
+- **`DocTypeBadge` component** — color-coded badge for doc types (blue/purple/amber/green/teal/orange). Follows `MemoryTypeBadge` pattern.
+- **Docs nav entry** — FileText icon between Projects and Clusters in the sidebar.
+- `react-markdown` + `remark-gfm` dependencies for markdown rendering in the detail view.
+- `@tailwindcss/typography` for `prose` classes on the reading view.
+
+### Changed
+- FastAPI Swagger UI moved from `/docs` to `/swagger` to avoid collision with the new docs endpoint.
+- API version bumped to 0.14.0.
+- `cairn-ui` package version bumped to 0.14.0.
+
 ## [0.13.0] - 2026-02-09
 
 ### Added
@@ -375,7 +394,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.10.0...v0.11.0

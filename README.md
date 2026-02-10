@@ -54,7 +54,7 @@ The tiers are additive and degrade gracefully. With all three active, a session 
 | `modify` | Update, soft-delete, or reactivate memories |
 | `rules` | Behavioral guardrails — global or per-project |
 | `insights` | DBSCAN clustering with LLM-generated pattern summaries |
-| `projects` | Documents (briefs, PRDs, plans) and cross-project linking |
+| `projects` | Documents (briefs, PRDs, plans, primers, writeups, guides) and cross-project linking |
 | `tasks` | Task lifecycle — create, complete, list, link to memories |
 | `think` | Structured reasoning sequences with branching |
 | `status` | System health, counts, embedding model info, active LLM capabilities |
@@ -85,7 +85,7 @@ cairn-ui                  |                                                   |
                           +---------------------------------------------------+
                               |
                               v
-                          PostgreSQL 16 + pgvector (15 tables, 6 migrations)
+                          PostgreSQL 16 + pgvector (15 tables, 7 migrations)
 ```
 
 ## Prerequisites
@@ -274,6 +274,8 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting.
 | `GET /api/memories/:id` | Single memory with cluster context |
 | `GET /api/projects` | All projects with memory counts |
 | `GET /api/projects/:name` | Project docs and links |
+| `GET /api/docs?project=&doc_type=` | Browse documents across projects |
+| `GET /api/docs/:id` | Single document with full content |
 | `GET /api/clusters?project=&topic=` | Clusters with member lists |
 | `GET /api/tasks?project=` | Tasks for a project |
 | `GET /api/thinking?project=&status=` | Thinking sequences |
@@ -298,7 +300,7 @@ curl "http://localhost:8000/api/search?q=architecture&limit=5"
 
 A full dashboard for browsing your agent's memory. Built with Next.js 16, shadcn/ui, and Tailwind CSS 4.
 
-**9 pages:** Dashboard / Timeline / Search / Projects / Clusters / Cluster Visualization / Tasks / Thinking / Rules
+**10 pages:** Dashboard / Timeline / Search / Projects / Docs / Clusters / Cluster Visualization / Tasks / Thinking / Rules
 
 **Plus:** Cmd+K command palette (global), inline memory viewer (Sheet slide-over), project export
 
@@ -380,7 +382,7 @@ docker exec cairn python -m pytest tests/ -v
 
 ### Database Schema
 
-15 tables across 6 migrations:
+15 tables across 7 migrations:
 
 | Migration | Tables |
 |-----------|--------|
@@ -390,6 +392,7 @@ docker exec cairn python -m pytest tests/ -v
 | **004 Cairns** | `cairns` + `cairn_id` FK on `memories` |
 | **005 Indexes** | Partial indexes on `memories` for timeline and session queries |
 | **006 Events** | `session_events` — streaming event batches with LLM digests |
+| **007 Doc Title** | `title` column on `project_documents` |
 
 ## Search Quality
 

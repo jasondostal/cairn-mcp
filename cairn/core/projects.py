@@ -52,19 +52,19 @@ class ProjectManager:
         ]
         return {"total": total, "limit": limit, "offset": offset, "items": items}
 
-    def create_doc(self, project: str, doc_type: str, content: str) -> dict:
-        """Create a project document (brief, PRD, or plan)."""
+    def create_doc(self, project: str, doc_type: str, content: str, title: str | None = None) -> dict:
+        """Create a project document."""
         if doc_type not in VALID_DOC_TYPES:
             raise ValueError(f"Invalid doc_type: {doc_type}. Must be one of: {VALID_DOC_TYPES}")
 
-        project_id = get_or_create_project(self.db,project)
+        project_id = get_or_create_project(self.db, project)
         row = self.db.execute_one(
             """
-            INSERT INTO project_documents (project_id, doc_type, content)
-            VALUES (%s, %s, %s)
+            INSERT INTO project_documents (project_id, doc_type, content, title)
+            VALUES (%s, %s, %s, %s)
             RETURNING id, created_at
             """,
-            (project_id, doc_type, content),
+            (project_id, doc_type, content, title),
         )
         self.db.commit()
 
@@ -73,6 +73,7 @@ class ProjectManager:
             "id": row["id"],
             "project": project,
             "doc_type": doc_type,
+            "title": title,
             "created_at": row["created_at"].isoformat(),
         }
 
@@ -85,7 +86,7 @@ class ProjectManager:
         if doc_type:
             rows = self.db.execute(
                 """
-                SELECT id, doc_type, content, created_at, updated_at
+                SELECT id, doc_type, title, content, created_at, updated_at
                 FROM project_documents
                 WHERE project_id = %s AND doc_type = %s
                 ORDER BY created_at DESC
@@ -95,7 +96,7 @@ class ProjectManager:
         else:
             rows = self.db.execute(
                 """
-                SELECT id, doc_type, content, created_at, updated_at
+                SELECT id, doc_type, title, content, created_at, updated_at
                 FROM project_documents
                 WHERE project_id = %s
                 ORDER BY doc_type, created_at DESC
@@ -108,6 +109,7 @@ class ProjectManager:
                 "id": r["id"],
                 "project": project,
                 "doc_type": r["doc_type"],
+                "title": r["title"],
                 "content": r["content"],
                 "created_at": r["created_at"].isoformat(),
                 "updated_at": r["updated_at"].isoformat(),
@@ -115,12 +117,102 @@ class ProjectManager:
             for r in rows
         ]
 
-    def update_doc(self, doc_id: int, content: str) -> dict:
-        """Update a project document's content."""
-        self.db.execute(
-            "UPDATE project_documents SET content = %s, updated_at = NOW() WHERE id = %s",
-            (content, doc_id),
+    def list_all_docs(
+        self,
+        project: str | None = None,
+        doc_type: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> dict:
+        """List docs across all projects with optional filters and pagination."""
+        where = []
+        params: list = []
+
+        if project:
+            where.append("p.name = %s")
+            params.append(project)
+        if doc_type:
+            where.append("d.doc_type = %s")
+            params.append(doc_type)
+
+        where_clause = (" WHERE " + " AND ".join(where)) if where else ""
+
+        count_row = self.db.execute_one(
+            f"""
+            SELECT COUNT(*) as total
+            FROM project_documents d
+            JOIN projects p ON d.project_id = p.id
+            {where_clause}
+            """,
+            tuple(params) if params else None,
         )
+        total = count_row["total"]
+
+        query = f"""
+            SELECT d.id, d.doc_type, d.title, d.content, d.created_at, d.updated_at,
+                   p.name as project
+            FROM project_documents d
+            JOIN projects p ON d.project_id = p.id
+            {where_clause}
+            ORDER BY d.updated_at DESC
+        """
+        query_params = list(params)
+        if limit is not None:
+            query += " LIMIT %s OFFSET %s"
+            query_params.extend([limit, offset])
+
+        rows = self.db.execute(query, tuple(query_params) if query_params else None)
+
+        items = [
+            {
+                "id": r["id"],
+                "project": r["project"],
+                "doc_type": r["doc_type"],
+                "title": r["title"],
+                "content": r["content"],
+                "created_at": r["created_at"].isoformat(),
+                "updated_at": r["updated_at"].isoformat(),
+            }
+            for r in rows
+        ]
+        return {"total": total, "limit": limit, "offset": offset, "items": items}
+
+    def get_doc(self, doc_id: int) -> dict | None:
+        """Get a single document by ID with project name."""
+        row = self.db.execute_one(
+            """
+            SELECT d.id, d.doc_type, d.title, d.content, d.created_at, d.updated_at,
+                   p.name as project
+            FROM project_documents d
+            JOIN projects p ON d.project_id = p.id
+            WHERE d.id = %s
+            """,
+            (doc_id,),
+        )
+        if row is None:
+            return None
+        return {
+            "id": row["id"],
+            "project": row["project"],
+            "doc_type": row["doc_type"],
+            "title": row["title"],
+            "content": row["content"],
+            "created_at": row["created_at"].isoformat(),
+            "updated_at": row["updated_at"].isoformat(),
+        }
+
+    def update_doc(self, doc_id: int, content: str, title: str | None = None) -> dict:
+        """Update a project document's content and optionally its title."""
+        if title is not None:
+            self.db.execute(
+                "UPDATE project_documents SET content = %s, title = %s, updated_at = NOW() WHERE id = %s",
+                (content, title, doc_id),
+            )
+        else:
+            self.db.execute(
+                "UPDATE project_documents SET content = %s, updated_at = NOW() WHERE id = %s",
+                (content, doc_id),
+            )
         self.db.commit()
         return {"id": doc_id, "action": "updated"}
 

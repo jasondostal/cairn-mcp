@@ -34,8 +34,10 @@ def create_api(svc: Services) -> FastAPI:
     cairn_manager = svc.cairn_manager
     app = FastAPI(
         title="Cairn API",
-        version="0.13.0",
+        version="0.14.0",
         description="Read-only REST API for the Cairn web UI.",
+        docs_url="/swagger",
+        redoc_url=None,
     )
 
     app.add_middleware(
@@ -180,6 +182,30 @@ def create_api(svc: Services) -> FastAPI:
         docs = project_manager.get_docs(name)
         links = project_manager.get_links(name)
         return {"name": name, "docs": docs, "links": links}
+
+    # ------------------------------------------------------------------
+    # GET /docs?project=&doc_type=&limit=&offset=
+    # ------------------------------------------------------------------
+    @router.get("/docs")
+    def api_docs(
+        project: str | None = Query(None),
+        doc_type: str | None = Query(None),
+        limit: int | None = Query(None, ge=1, le=100),
+        offset: int = Query(0, ge=0),
+    ):
+        return project_manager.list_all_docs(
+            project=project, doc_type=doc_type, limit=limit, offset=offset,
+        )
+
+    # ------------------------------------------------------------------
+    # GET /docs/:id — single document with full content
+    # ------------------------------------------------------------------
+    @router.get("/docs/{doc_id}")
+    def api_doc_detail(doc_id: int = Path(...)):
+        doc = project_manager.get_doc(doc_id)
+        if doc is None:
+            raise HTTPException(status_code=404, detail="Document not found")
+        return doc
 
     # ------------------------------------------------------------------
     # GET /clusters/visualization?project=
