@@ -27,7 +27,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from cairn.core.constants import CONTRADICTION_PENALTY
-from cairn.embedding.engine import EmbeddingEngine
+from cairn.embedding.interface import EmbeddingInterface
 from cairn.storage.database import Database
 
 if TYPE_CHECKING:
@@ -53,7 +53,7 @@ class SearchEngine:
     """Hybrid search over memories."""
 
     def __init__(
-        self, db: Database, embedding: EmbeddingEngine, *,
+        self, db: Database, embedding: EmbeddingInterface, *,
         llm: LLMInterface | None = None,
         capabilities: LLMCapabilities | None = None,
     ):
@@ -279,15 +279,21 @@ class SearchEngine:
             return []
 
         scored = {}
+        score_components = {}  # memory_id -> {vector, keyword, tag}
         for memory_id in all_ids:
             score = 0.0
+            components = {"vector": 0.0, "keyword": 0.0, "tag": 0.0}
             if memory_id in vector_ranks:
-                score += DEFAULT_WEIGHTS["vector"] * (1.0 / (RRF_K + vector_ranks[memory_id]))
+                components["vector"] = DEFAULT_WEIGHTS["vector"] * (1.0 / (RRF_K + vector_ranks[memory_id]))
+                score += components["vector"]
             if memory_id in keyword_ranks:
-                score += DEFAULT_WEIGHTS["keyword"] * (1.0 / (RRF_K + keyword_ranks[memory_id]))
+                components["keyword"] = DEFAULT_WEIGHTS["keyword"] * (1.0 / (RRF_K + keyword_ranks[memory_id]))
+                score += components["keyword"]
             if memory_id in tag_ranks:
-                score += DEFAULT_WEIGHTS["tag"] * (1.0 / (RRF_K + tag_ranks[memory_id]))
+                components["tag"] = DEFAULT_WEIGHTS["tag"] * (1.0 / (RRF_K + tag_ranks[memory_id]))
+                score += components["tag"]
             scored[memory_id] = score
+            score_components[memory_id] = components
 
         # Penalize contradicted memories before ranking
         scored = self._apply_contradiction_penalty(scored)
@@ -319,6 +325,9 @@ class SearchEngine:
             if memory_id in row_map:
                 r = row_map[memory_id]
                 r["score"] = round(scored[memory_id], 6)
+                r["score_components"] = {
+                    k: round(v, 6) for k, v in score_components.get(memory_id, {}).items()
+                }
                 results.append(r)
 
         return self._format_results(results, include_full, prescored=True)
@@ -376,6 +385,8 @@ class SearchEngine:
                 "created_at": r["created_at"].isoformat() if hasattr(r["created_at"], "isoformat") else r["created_at"],
                 "score": r.get("score", 0.0) if prescored else r.get("score", 0.0),
             }
+            if r.get("score_components"):
+                result["score_components"] = r["score_components"]
             results.append(result)
         return results
 

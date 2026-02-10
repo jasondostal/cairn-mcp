@@ -12,7 +12,7 @@ import { ErrorState } from "@/components/error-state";
 import { ProjectSelector } from "@/components/project-selector";
 import { SkeletonList } from "@/components/skeleton-list";
 import { DocTypeBadge } from "@/components/doc-type-badge";
-import { FileText } from "lucide-react";
+import { FileText, LayoutList, LayoutGrid } from "lucide-react";
 
 const DOC_TYPES = ["brief", "prd", "plan", "primer", "writeup", "guide"] as const;
 
@@ -28,6 +28,26 @@ function stripMarkdown(text: string): string {
     .replace(/[*_`~\[\]]/g, "")
     .replace(/\n+/g, " ")
     .trim();
+}
+
+function DocDenseRow({ doc, showProject }: { doc: Document; showProject?: boolean }) {
+  const title = extractTitle(doc);
+  return (
+    <Link
+      href={`/docs/${doc.id}`}
+      className="flex items-center gap-3 px-3 py-2 hover:bg-accent/50 transition-colors text-sm"
+    >
+      <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <span className="flex-1 truncate">{title}</span>
+      <DocTypeBadge type={doc.doc_type} />
+      {showProject && (
+        <Badge variant="secondary" className="text-xs shrink-0">{doc.project}</Badge>
+      )}
+      <span className="text-xs text-muted-foreground shrink-0">
+        {formatDate(doc.updated_at)}
+      </span>
+    </Link>
+  );
 }
 
 function DocCard({ doc, showProject }: { doc: Document; showProject?: boolean }) {
@@ -73,6 +93,7 @@ export default function DocsPage() {
   const [error, setError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(true);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [dense, setDense] = useState(true);
 
   useEffect(() => {
     if (!showAll && !selected) return;
@@ -99,7 +120,18 @@ export default function DocsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Docs</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Docs</h1>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0"
+          onClick={() => setDense(!dense)}
+          title={dense ? "Card view" : "Dense view"}
+        >
+          {dense ? <LayoutGrid className="h-4 w-4" /> : <LayoutList className="h-4 w-4" />}
+        </Button>
+      </div>
 
       <div className="flex gap-1 flex-wrap">
         <Button
@@ -147,11 +179,19 @@ export default function DocsPage() {
       )}
 
       {!loading && !projectsLoading && !error && !projectsError && docs.length > 0 && (
-        <div className="space-y-2">
-          {docs.map((d) => (
-            <DocCard key={d.id} doc={d} showProject={showAll} />
-          ))}
-        </div>
+        dense ? (
+          <div className="rounded-md border border-border divide-y divide-border">
+            {docs.map((d) => (
+              <DocDenseRow key={d.id} doc={d} showProject={showAll} />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {docs.map((d) => (
+              <DocCard key={d.id} doc={d} showProject={showAll} />
+            ))}
+          </div>
+        )
       )}
     </div>
   );

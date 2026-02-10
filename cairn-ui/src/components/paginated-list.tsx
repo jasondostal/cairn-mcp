@@ -7,7 +7,7 @@ interface PaginatedListProps<T> {
   perPage?: number;
   noun: string;
   keyExtractor: (item: T) => string | number;
-  renderItem: (item: T) => React.ReactNode;
+  renderItem: (item: T, index: number) => React.ReactNode;
   gap?: string;
 }
 
@@ -30,8 +30,8 @@ export function PaginatedList<T>({
         total={items.length}
         noun={noun}
       />
-      {pageItems.map((item) => (
-        <div key={keyExtractor(item)}>{renderItem(item)}</div>
+      {pageItems.map((item, i) => (
+        <div key={keyExtractor(item)}>{renderItem(item, (page - 1) * perPage + i)}</div>
       ))}
       {totalPages > 1 && (
         <PaginationControls

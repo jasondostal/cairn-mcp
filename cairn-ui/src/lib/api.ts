@@ -52,6 +52,14 @@ export interface Project {
   created_at: string;
 }
 
+export interface MemoryRelation {
+  id: number;
+  relation: string;
+  direction: "incoming" | "outgoing";
+  summary: string;
+  memory_type: string;
+}
+
 export interface Memory {
   id: number;
   content: string;
@@ -68,7 +76,9 @@ export interface Memory {
   created_at: string;
   updated_at: string;
   cluster: { id: number; label: string; size: number } | null;
+  relations?: MemoryRelation[];
   score?: number;
+  score_components?: { vector: number; keyword: number; tag: number };
 }
 
 export interface ClusterResult {

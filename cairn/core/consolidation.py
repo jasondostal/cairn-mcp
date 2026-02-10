@@ -9,7 +9,7 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
 from cairn.core.utils import extract_json
-from cairn.embedding.engine import EmbeddingEngine
+from cairn.embedding.interface import EmbeddingInterface
 from cairn.storage.database import Database
 
 if TYPE_CHECKING:
@@ -26,7 +26,7 @@ class ConsolidationEngine:
     """Review project memories for duplicates and recommend merges/promotions/inactivations."""
 
     def __init__(
-        self, db: Database, embedding: EmbeddingEngine, *,
+        self, db: Database, embedding: EmbeddingInterface, *,
         llm: LLMInterface | None = None,
         capabilities: LLMCapabilities | None = None,
     ):

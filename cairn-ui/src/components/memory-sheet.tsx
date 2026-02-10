@@ -15,7 +15,15 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MemoryTypeBadge } from "@/components/memory-type-badge";
 import { ImportanceBadge } from "@/components/importance-badge";
-import { Tag, FileText, Network } from "lucide-react";
+
+const RELATION_COLORS: Record<string, string> = {
+  extends: "text-blue-400",
+  contradicts: "text-red-400",
+  implements: "text-green-400",
+  depends_on: "text-amber-400",
+  related: "text-muted-foreground",
+};
+import { Tag, FileText, Network, ArrowRight, ArrowLeft } from "lucide-react";
 
 interface MemorySheetProps {
   memoryId: number | null;
@@ -139,6 +147,52 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
                         <p key={f} className="font-mono text-xs text-muted-foreground">
                           {f}
                         </p>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Relations */}
+              {memory.relations && memory.relations.length > 0 && (
+                <>
+                  <Separator />
+                  <div>
+                    <h3 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                      <Network className="h-3 w-3" /> Relations
+                    </h3>
+                    <div className="space-y-2">
+                      {memory.relations.map((rel, i) => (
+                        <div
+                          key={`${rel.id}-${rel.relation}-${i}`}
+                          className="flex items-start gap-2 text-sm group cursor-pointer hover:bg-accent/50 rounded-md p-1.5 -mx-1.5 transition-colors"
+                          onClick={() => {
+                            onOpenChange(false);
+                            setTimeout(() => {
+                              window.location.href = `/memories/${rel.id}`;
+                            }, 150);
+                          }}
+                        >
+                          {rel.direction === "outgoing" ? (
+                            <ArrowRight className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                          ) : (
+                            <ArrowLeft className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-xs font-medium ${RELATION_COLORS[rel.relation] || "text-muted-foreground"}`}>
+                                {rel.relation.replace("_", " ")}
+                              </span>
+                              <MemoryTypeBadge type={rel.memory_type} />
+                              <span className="text-xs text-muted-foreground">
+                                #{rel.id}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {rel.summary}
+                            </p>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </div>

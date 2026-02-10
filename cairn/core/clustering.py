@@ -13,7 +13,7 @@ from sklearn.manifold import TSNE
 from sklearn.metrics.pairwise import cosine_distances
 
 from cairn.core.utils import extract_json
-from cairn.embedding.engine import EmbeddingEngine
+from cairn.embedding.interface import EmbeddingInterface
 from cairn.llm.prompts import build_cluster_summary_messages
 from cairn.storage.database import Database
 
@@ -39,7 +39,7 @@ STALENESS_GROWTH_RATIO = 0.20  # 20% memory growth triggers recluster
 class ClusterEngine:
     """DBSCAN clustering with LLM-generated summaries and lazy reclustering."""
 
-    def __init__(self, db: Database, embedding: EmbeddingEngine, llm: LLMInterface | None = None):
+    def __init__(self, db: Database, embedding: EmbeddingInterface, llm: LLMInterface | None = None):
         self.db = db
         self.embedding = embedding
         self.llm = llm
@@ -231,7 +231,7 @@ class ClusterEngine:
         result = []
         for c in clusters:
             members = self.db.execute(
-                "SELECT cm.memory_id, cm.distance, m.summary "
+                "SELECT cm.memory_id, cm.distance, m.summary, m.memory_type "
                 "FROM cluster_members cm "
                 "JOIN memories m ON cm.memory_id = m.id "
                 "WHERE cm.cluster_id = %s ORDER BY cm.distance",
@@ -239,14 +239,18 @@ class ClusterEngine:
             )
             result.append({
                 "id": c["id"],
-                "label": c["label"],
-                "summary": c["summary"],
+                "label": c["label"] or f"Cluster #{c['id']}",
+                "summary": c["summary"] or "",
                 "member_count": c["member_count"],
                 "confidence": c["confidence"],
                 "created_at": c["created_at"].isoformat(),
                 "member_ids": [m["memory_id"] for m in members],
                 "sample_memories": [
-                    {"id": m["memory_id"], "summary": m["summary"], "distance": m["distance"]}
+                    {
+                        "id": m["memory_id"],
+                        "summary": m["summary"] or f"Memory #{m['memory_id']}",
+                        "memory_type": m["memory_type"],
+                    }
                     for m in members[:5]
                 ],
             })

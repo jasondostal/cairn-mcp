@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from cairn.core.constants import CONTRADICTION_ESCALATION_THRESHOLD, MemoryAction
 from cairn.core.utils import extract_json, get_or_create_project
-from cairn.embedding.engine import EmbeddingEngine
+from cairn.embedding.interface import EmbeddingInterface
 from cairn.storage.database import Database
 
 if TYPE_CHECKING:
@@ -23,7 +23,7 @@ class MemoryStore:
     """Handles all memory CRUD operations."""
 
     def __init__(
-        self, db: Database, embedding: EmbeddingEngine, *,
+        self, db: Database, embedding: EmbeddingInterface, *,
         enricher: Enricher | None = None,
         llm: LLMInterface | None = None,
         capabilities: LLMCapabilities | None = None,
@@ -335,6 +335,45 @@ class MemoryStore:
             tuple(ids),
         )
 
+        # Fetch relations for all requested IDs in one query
+        all_relations = {}
+        if ids:
+            rel_placeholders = ",".join(["%s"] * len(ids))
+            rel_rows = self.db.execute(
+                f"""
+                SELECT mr.source_id, mr.target_id, mr.relation,
+                       m.summary as target_summary, m.memory_type as target_type
+                FROM memory_relations mr
+                JOIN memories m ON m.id = mr.target_id
+                WHERE mr.source_id IN ({rel_placeholders})
+                UNION ALL
+                SELECT mr.source_id, mr.target_id, mr.relation,
+                       m.summary as target_summary, m.memory_type as target_type
+                FROM memory_relations mr
+                JOIN memories m ON m.id = mr.source_id
+                WHERE mr.target_id IN ({rel_placeholders})
+                """,
+                tuple(ids) + tuple(ids),
+            )
+            for rr in rel_rows:
+                for mid in ids:
+                    if rr["source_id"] == mid:
+                        all_relations.setdefault(mid, []).append({
+                            "id": rr["target_id"],
+                            "relation": rr["relation"] or "related",
+                            "direction": "outgoing",
+                            "summary": rr["target_summary"] or f"Memory #{rr['target_id']}",
+                            "memory_type": rr["target_type"],
+                        })
+                    elif rr["target_id"] == mid:
+                        all_relations.setdefault(mid, []).append({
+                            "id": rr["source_id"],
+                            "relation": rr["relation"] or "related",
+                            "direction": "incoming",
+                            "summary": rr["target_summary"] or f"Memory #{rr['source_id']}",
+                            "memory_type": rr["target_type"],
+                        })
+
         results = []
         for r in rows:
             entry = {
@@ -353,6 +392,7 @@ class MemoryStore:
                 "created_at": r["created_at"].isoformat(),
                 "updated_at": r["updated_at"].isoformat(),
                 "cluster": None,
+                "relations": all_relations.get(r["id"], []),
             }
             if r["cluster_id"] is not None:
                 entry["cluster"] = {

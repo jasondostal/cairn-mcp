@@ -19,7 +19,8 @@ from cairn.core.search import SearchEngine
 from cairn.core.synthesis import SessionSynthesizer
 from cairn.core.tasks import TaskManager
 from cairn.core.thinking import ThinkingEngine
-from cairn.embedding.engine import EmbeddingEngine
+from cairn.embedding import get_embedding_engine
+from cairn.embedding.interface import EmbeddingInterface
 from cairn.llm import get_llm
 from cairn.storage.database import Database
 
@@ -35,7 +36,7 @@ class Services:
 
     config: Config
     db: Database
-    embedding: EmbeddingEngine
+    embedding: EmbeddingInterface
     llm: LLMInterface | None
     enricher: Enricher | None
     memory_store: MemoryStore
@@ -61,7 +62,7 @@ def create_services(config: Config | None = None) -> Services:
         config = load_config()
 
     db = Database(config.db)
-    embedding = EmbeddingEngine(config.embedding)
+    embedding = get_embedding_engine(config.embedding)
 
     # LLM enrichment (optional, graceful if disabled)
     llm = None

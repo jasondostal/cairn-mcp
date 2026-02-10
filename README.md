@@ -29,8 +29,8 @@ Three containers. One `docker compose up`. 13 MCP tools, a REST API, a web dashb
 - **Hybrid search** — Vector similarity + full-text + tag matching via Reciprocal Rank Fusion. [83.8% recall@10](#search-quality). Contradiction-aware ranking.
 - **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, importance score, and relationship links on store.
 - **Pattern discovery** — DBSCAN clustering finds themes across memories. LLM writes the labels. Clusters refresh lazily.
-- **Web dashboard** — 11 pages. Timeline, search, clusters, knowledge graph, Cmd+K, dark mode.
-- **Three containers, done** — MCP at `/mcp`, REST at `/api`, same process. PostgreSQL + pgvector. No exotic dependencies.
+- **Web dashboard** — 11 pages. Timeline with activity heatmap, search with score breakdowns, knowledge graph, thinking trees, Cmd+K, keyboard nav, dark mode.
+- **Three containers, done** — MCP at `/mcp`, REST at `/api`, same process. PostgreSQL + pgvector. Bring your own LLM — Ollama, Bedrock, Gemini, or anything OpenAI-compatible.
 
 ## Quick Start
 
@@ -67,8 +67,13 @@ services:
       CAIRN_BEDROCK_MODEL: "${CAIRN_BEDROCK_MODEL:-us.meta.llama3-2-90b-instruct-v1:0}"
       CAIRN_OLLAMA_URL: "${CAIRN_OLLAMA_URL:-http://host.docker.internal:11434}"
       CAIRN_OLLAMA_MODEL: "${CAIRN_OLLAMA_MODEL:-qwen2.5-coder:7b}"
+      CAIRN_CORS_ORIGINS: "${CAIRN_CORS_ORIGINS:-*}"
+      CAIRN_AUTH_ENABLED: "${CAIRN_AUTH_ENABLED:-false}"
+      CAIRN_API_KEY: "${CAIRN_API_KEY:-}"
+      CAIRN_AUTH_HEADER: "${CAIRN_AUTH_HEADER:-X-API-Key}"
       CAIRN_TRANSPORT: "${CAIRN_TRANSPORT:-http}"
       CAIRN_EVENT_ARCHIVE_DIR: "${CAIRN_EVENT_ARCHIVE_DIR:-/data/events}"
+      # AWS credentials for Bedrock (ignored when using Ollama)
       AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
       AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
       AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
@@ -95,10 +100,11 @@ services:
     restart: unless-stopped
     environment:
       CAIRN_API_URL: http://cairn:8000
+      CAIRN_API_KEY: "${CAIRN_API_KEY:-}"
     ports:
       - "${CAIRN_UI_PORT:-3000}:3000"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))\""]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -178,11 +184,15 @@ Cairn needs an **LLM backend** for enrichment, relationship extraction, and sess
 | Backend | Setup | Best for |
 |---------|-------|----------|
 | **Ollama** (default) | Install [Ollama](https://ollama.com), pull a model (`ollama pull qwen2.5-coder:7b`). Cairn connects to `host.docker.internal:11434`. | Local development, no cloud dependency |
-| **AWS Bedrock** | Set `CAIRN_LLM_BACKEND=bedrock`, mount or export AWS credentials. Requires model access in your AWS account. | Production, larger models |
+| **AWS Bedrock** | Set `CAIRN_LLM_BACKEND=bedrock`, export AWS credentials. Requires model access in your AWS account. | Production, larger models |
+| **Google Gemini** | Set `CAIRN_LLM_BACKEND=gemini`, add `CAIRN_GEMINI_API_KEY`. Free tier available. | Quick start, no infrastructure |
+| **OpenAI-compatible** | Set `CAIRN_LLM_BACKEND=openai`, add `CAIRN_OPENAI_API_KEY` and optionally `CAIRN_OPENAI_BASE_URL`. | OpenAI, Groq, Together, Mistral, LM Studio, vLLM — anything that speaks the OpenAI chat format |
+
+The LLM backend is pluggable. Custom providers can be registered via `register_llm_provider(name, factory_fn)` in Python. Gemini and OpenAI implementations use zero external SDKs — just `urllib` with built-in retry logic.
 
 **No LLM? Cairn still works.** Core features — store, search, recall, cairns, rules — function without an LLM. You lose auto-enrichment (summaries, tags, importance scoring), relationship extraction, and session narrative synthesis. Memories are still embedded and searchable.
 
-> **Security note:** The default `docker-compose.yml` ships with a development database password (`cairn-dev-password`). This is intentional for quick local setup. For any network-exposed deployment, override it: `CAIRN_DB_PASS=your-secure-password docker compose up -d`
+> **Security note:** The default `docker-compose.yml` ships with a development database password (`cairn-dev-password`). This is intentional for quick local setup. For any network-exposed deployment, override it: `CAIRN_DB_PASS=your-secure-password docker compose up -d`. You can also enable API key auth: set `CAIRN_AUTH_ENABLED=true` and `CAIRN_API_KEY=your-secret` to protect all `/api` routes.
 
 ---
 
@@ -251,9 +261,9 @@ No hooks? No problem. The `cairns` tool works without them — the agent can cal
 </details>
 
 <details>
-<summary><strong>REST API</strong> — 21 endpoints</summary>
+<summary><strong>REST API</strong> — 25 endpoints</summary>
 
-REST endpoints at `/api` — powers the web UI, hook scripts, and scripting.
+REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Optional API key auth when `CAIRN_AUTH_ENABLED=true`.
 
 | Endpoint | Description |
 |----------|-------------|
@@ -276,6 +286,9 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting.
 | `GET /api/events?session_name=&project=` | Event batches with digest status |
 | `POST /api/events/ingest` | Ship event batch (202 Accepted, idempotent) |
 | `POST /api/ingest` | Smart ingestion — text, URL, or both. Classify, chunk, dedup, route. |
+| `POST /api/ingest/doc` | Create a single project document |
+| `POST /api/ingest/docs` | Batch create multiple documents (partial success) |
+| `POST /api/ingest/memory` | Store a memory via REST (full pipeline) |
 | `GET /api/bookmarklet.js` | Browser bookmarklet script for one-click capture |
 | `GET /api/clusters/visualization?project=` | t-SNE 2D coordinates for scatter plot |
 | `GET /api/export?project=&format=` | Export project memories (JSON or Markdown) |
@@ -306,8 +319,8 @@ cairn-ui          |                                                             
                   |        projects, tasks, thinking, cairns                     |
                   |        synthesis, consolidation, digest                      |
                   |                                                               |
-                  |  embedding: MiniLM-L6-v2 (local, 384-dim)                    |
-                  |  llm: Bedrock (Llama 90B) or Ollama (local)                   |
+                  |  embedding: MiniLM-L6-v2 (local, 384-dim, pluggable)         |
+                  |  llm: Ollama, Bedrock, Gemini, OpenAI-compat (pluggable)     |
                   |  storage: PostgreSQL 16 + pgvector (HNSW)                    |
                   +---------------------------------------------------------------+
                       |
@@ -344,25 +357,38 @@ All via environment variables:
 | `CAIRN_DB_NAME` | `cairn` | Database name |
 | `CAIRN_DB_USER` | `cairn` | Database user |
 | `CAIRN_DB_PASS` | *(required)* | Database password |
-| `CAIRN_LLM_BACKEND` | `ollama` | `ollama` or `bedrock` |
+| `CAIRN_LLM_BACKEND` | `ollama` | `ollama`, `bedrock`, `gemini`, or `openai` |
+| `CAIRN_OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama API URL |
+| `CAIRN_OLLAMA_MODEL` | `qwen2.5-coder:7b` | Ollama model name |
 | `CAIRN_BEDROCK_MODEL` | `us.meta.llama3-2-90b-instruct-v1:0` | Bedrock model ID |
 | `AWS_ACCESS_KEY_ID` | *(empty)* | AWS access key for Bedrock |
 | `AWS_SECRET_ACCESS_KEY` | *(empty)* | AWS secret key for Bedrock |
 | `AWS_DEFAULT_REGION` | `us-east-1` | AWS region for Bedrock |
-| `CAIRN_OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama API URL |
-| `CAIRN_OLLAMA_MODEL` | `qwen2.5-coder:7b` | Ollama model name |
+| `CAIRN_GEMINI_MODEL` | `gemini-2.0-flash` | Google Gemini model name |
+| `CAIRN_GEMINI_API_KEY` | *(empty)* | Gemini API key |
+| `CAIRN_OPENAI_BASE_URL` | `https://api.openai.com` | OpenAI-compatible API base URL |
+| `CAIRN_OPENAI_MODEL` | `gpt-4o-mini` | OpenAI-compatible model name |
+| `CAIRN_OPENAI_API_KEY` | *(empty)* | OpenAI-compatible API key |
 | `CAIRN_TRANSPORT` | `stdio` | `stdio` or `http` |
 | `CAIRN_HTTP_HOST` | `0.0.0.0` | HTTP bind address |
 | `CAIRN_HTTP_PORT` | `8000` | HTTP listen port |
-| `CAIRN_EVENT_ARCHIVE_DIR` | *(disabled)* | File path for event archive (e.g. `/data/events`). Events written as JSONL after cairn set. |
+| `CAIRN_CORS_ORIGINS` | `*` | Comma-separated CORS origins, or `*` for all |
+| `CAIRN_AUTH_ENABLED` | `false` | Enable API key authentication on `/api` routes |
+| `CAIRN_API_KEY` | *(empty)* | API key (required when auth enabled) |
+| `CAIRN_AUTH_HEADER` | `X-API-Key` | Header name to check for API key (configurable for auth proxy compatibility) |
+| `CAIRN_EVENT_ARCHIVE_DIR` | *(disabled)* | File path for event archive (e.g. `/data/events`) |
+| `CAIRN_EMBEDDING_BACKEND` | `local` | Embedding provider (`local` for SentenceTransformer, or custom registered name) |
 | `CAIRN_EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence transformer model |
+| `CAIRN_EMBEDDING_DIMENSIONS` | `384` | Embedding vector dimensions |
+| `CAIRN_INGEST_CHUNK_SIZE` | `512` | Tokens per chunk for document ingestion |
+| `CAIRN_INGEST_CHUNK_OVERLAP` | `64` | Overlap tokens between chunks |
 | `CAIRN_LLM_QUERY_EXPANSION` | `true` | Expand search queries with related terms |
 | `CAIRN_LLM_RELATIONSHIP_EXTRACT` | `true` | Auto-detect relationships between memories on store |
 | `CAIRN_LLM_RULE_CONFLICT_CHECK` | `true` | Check new rules for conflicts with existing rules |
 | `CAIRN_LLM_SESSION_SYNTHESIS` | `true` | Enable session narrative synthesis |
 | `CAIRN_LLM_CONSOLIDATION` | `true` | Enable memory consolidation recommendations |
-| `CAIRN_LLM_CONFIDENCE_GATING` | `false` | Post-search quality assessment — returns a confidence score but does not filter results (caller decides). High reasoning demand. |
-| `CAIRN_LLM_EVENT_DIGEST` | `true` | Digest event batches into rolling LLM summaries for richer cairn narratives |
+| `CAIRN_LLM_CONFIDENCE_GATING` | `false` | Post-search quality assessment (advisory, high reasoning demand) |
+| `CAIRN_LLM_EVENT_DIGEST` | `true` | Digest event batches into rolling LLM summaries |
 
 </details>
 
@@ -378,7 +404,7 @@ docker compose up -d --build
 
 ### Testing
 
-94 tests across 16 suites:
+Tests (run inside container or local venv):
 
 ```bash
 docker exec cairn pip install pytest

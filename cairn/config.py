@@ -19,13 +19,14 @@ class DatabaseConfig:
 
 @dataclass(frozen=True)
 class EmbeddingConfig:
+    backend: str = "local"  # "local" (SentenceTransformer) or registered provider name
     model: str = "all-MiniLM-L6-v2"
     dimensions: int = 384
 
 
 @dataclass(frozen=True)
 class LLMConfig:
-    backend: str = "ollama"  # "ollama" or "bedrock"
+    backend: str = "ollama"  # "ollama", "bedrock", "gemini", "openai", or registered name
 
     # Bedrock settings
     bedrock_model: str = "us.meta.llama3-2-90b-instruct-v1:0"
@@ -34,6 +35,15 @@ class LLMConfig:
     # Ollama settings
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5-coder:7b"
+
+    # Gemini settings
+    gemini_model: str = "gemini-2.0-flash"
+    gemini_api_key: str = ""
+
+    # OpenAI-compatible settings (works with OpenAI, Groq, Together, Mistral, LM Studio, vLLM)
+    openai_base_url: str = "https://api.openai.com"
+    openai_model: str = "gpt-4o-mini"
+    openai_api_key: str = ""
 
 
 @dataclass(frozen=True)
@@ -59,11 +69,19 @@ class LLMCapabilities:
 
 
 @dataclass(frozen=True)
+class AuthConfig:
+    enabled: bool = False
+    api_key: str | None = None  # Static API key (checked via X-API-Key header)
+    header_name: str = "X-API-Key"  # Header to check for auth token
+
+
+@dataclass(frozen=True)
 class Config:
     db: DatabaseConfig = field(default_factory=DatabaseConfig)
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     capabilities: LLMCapabilities = field(default_factory=LLMCapabilities)
+    auth: AuthConfig = field(default_factory=AuthConfig)
     enrichment_enabled: bool = True
     transport: str = "stdio"  # "stdio" or "http"
     http_host: str = "0.0.0.0"
@@ -91,7 +109,9 @@ def load_config() -> Config:
             password=os.getenv("CAIRN_DB_PASS", "cairn"),
         ),
         embedding=EmbeddingConfig(
+            backend=os.getenv("CAIRN_EMBEDDING_BACKEND", "local"),
             model=os.getenv("CAIRN_EMBEDDING_MODEL", "all-MiniLM-L6-v2"),
+            dimensions=int(os.getenv("CAIRN_EMBEDDING_DIMENSIONS", "384")),
         ),
         llm=LLMConfig(
             backend=os.getenv("CAIRN_LLM_BACKEND", "ollama"),
@@ -99,6 +119,11 @@ def load_config() -> Config:
             bedrock_region=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
             ollama_url=os.getenv("CAIRN_OLLAMA_URL", "http://localhost:11434"),
             ollama_model=os.getenv("CAIRN_OLLAMA_MODEL", "qwen2.5-coder:7b"),
+            gemini_model=os.getenv("CAIRN_GEMINI_MODEL", "gemini-2.0-flash"),
+            gemini_api_key=os.getenv("CAIRN_GEMINI_API_KEY", ""),
+            openai_base_url=os.getenv("CAIRN_OPENAI_BASE_URL", "https://api.openai.com"),
+            openai_model=os.getenv("CAIRN_OPENAI_MODEL", "gpt-4o-mini"),
+            openai_api_key=os.getenv("CAIRN_OPENAI_API_KEY", ""),
         ),
         capabilities=LLMCapabilities(
             query_expansion=os.getenv("CAIRN_LLM_QUERY_EXPANSION", "true").lower() in ("true", "1", "yes"),
@@ -108,6 +133,11 @@ def load_config() -> Config:
             consolidation=os.getenv("CAIRN_LLM_CONSOLIDATION", "true").lower() in ("true", "1", "yes"),
             confidence_gating=os.getenv("CAIRN_LLM_CONFIDENCE_GATING", "false").lower() in ("true", "1", "yes"),
             event_digest=os.getenv("CAIRN_LLM_EVENT_DIGEST", "true").lower() in ("true", "1", "yes"),
+        ),
+        auth=AuthConfig(
+            enabled=os.getenv("CAIRN_AUTH_ENABLED", "false").lower() in ("true", "1", "yes"),
+            api_key=os.getenv("CAIRN_API_KEY") or None,
+            header_name=os.getenv("CAIRN_AUTH_HEADER", "X-API-Key"),
         ),
         enrichment_enabled=os.getenv("CAIRN_ENRICHMENT_ENABLED", "true").lower() in ("true", "1", "yes"),
         transport=os.getenv("CAIRN_TRANSPORT", "stdio"),

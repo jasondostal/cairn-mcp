@@ -2,20 +2,125 @@
 
 import { useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { useFetch } from "@/lib/use-fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/error-state";
-import { Download } from "lucide-react";
+import { DocTypeBadge } from "@/components/doc-type-badge";
+import { Download, LayoutList, LayoutGrid, FileText } from "lucide-react";
 
 interface ProjectDetail {
   name: string;
   docs: Array<Record<string, unknown>>;
   links: Array<Record<string, unknown>>;
+}
+
+function ProjectDocs({ docs }: { docs: Array<Record<string, unknown>> }) {
+  const [dense, setDense] = useState(true);
+  const [filter, setFilter] = useState("");
+
+  const filtered = docs.filter((doc) => {
+    if (!filter) return true;
+    const f = filter.toLowerCase();
+    const title = (doc.title as string) || "";
+    const type = (doc.doc_type as string) || "";
+    const content = (doc.content as string) || "";
+    return (
+      title.toLowerCase().includes(f) ||
+      type.toLowerCase().includes(f) ||
+      content.toLowerCase().includes(f)
+    );
+  });
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-medium text-muted-foreground">
+          Documents ({filtered.length}{filter ? ` of ${docs.length}` : ""})
+        </h2>
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder="Filter..."
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="h-7 w-32 text-xs"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={() => setDense(!dense)}
+            title={dense ? "Expanded view" : "Dense view"}
+          >
+            {dense ? <LayoutGrid className="h-3.5 w-3.5" /> : <LayoutList className="h-3.5 w-3.5" />}
+          </Button>
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {docs.length === 0 ? "No documents yet." : "No documents match filter."}
+        </p>
+      ) : dense ? (
+        <div className="rounded-md border border-border divide-y divide-border">
+          {filtered.map((doc, i) => {
+            const title = (doc.title as string) || (doc.content as string)?.match(/^#\s+(.+)$/m)?.[1] || `Untitled ${doc.doc_type}`;
+            return (
+              <Link
+                key={i}
+                href={doc.id ? `/docs/${doc.id}` : "#"}
+                className="flex items-center gap-3 px-3 py-2 hover:bg-accent/50 transition-colors text-sm"
+              >
+                <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <span className="flex-1 truncate">{title}</span>
+                <DocTypeBadge type={(doc.doc_type as string) || "doc"} />
+                {doc.created_at ? (
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {formatDate(doc.created_at as string)}
+                  </span>
+                ) : null}
+              </Link>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((doc, i) => (
+            <Card key={i}>
+              <CardHeader className="p-4 pb-2">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-sm font-medium">
+                    {(doc.doc_type as string) || "Document"}
+                  </CardTitle>
+                  {doc.doc_type ? (
+                    <Badge variant="outline" className="text-xs">
+                      {String(doc.doc_type)}
+                    </Badge>
+                  ) : null}
+                </div>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <p className="whitespace-pre-wrap text-sm font-mono leading-relaxed">
+                  {(doc.content as string) || "\u2014"}
+                </p>
+                {doc.created_at ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {formatDate(doc.created_at as string)}
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ExportButton({ project }: { project: string }) {
@@ -112,43 +217,7 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Documents */}
-      <div>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-          Documents ({project.docs.length})
-        </h2>
-        {project.docs.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No documents yet.</p>
-        ) : (
-          <div className="space-y-3">
-            {project.docs.map((doc, i) => (
-              <Card key={i}>
-                <CardHeader className="p-4 pb-2">
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-sm font-medium">
-                      {(doc.doc_type as string) || "Document"}
-                    </CardTitle>
-                    {doc.doc_type ? (
-                      <Badge variant="outline" className="text-xs">
-                        {String(doc.doc_type)}
-                      </Badge>
-                    ) : null}
-                  </div>
-                </CardHeader>
-                <CardContent className="p-4 pt-0">
-                  <p className="whitespace-pre-wrap text-sm font-mono leading-relaxed">
-                    {(doc.content as string) || "—"}
-                  </p>
-                  {doc.created_at ? (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {formatDate(doc.created_at as string)}
-                    </p>
-                  ) : null}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
+      <ProjectDocs docs={project.docs} />
 
       {/* Links */}
       <div>

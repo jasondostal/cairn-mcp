@@ -4,6 +4,8 @@ import { useState } from "react";
 import { api, type Memory } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { useMemorySheet } from "@/lib/use-memory-sheet";
+import { useKeyboardNav } from "@/lib/use-keyboard-nav";
+import { useProjectSelector } from "@/lib/use-project-selector";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,11 +14,60 @@ import { MemorySheet } from "@/components/memory-sheet";
 import { MemoryTypeBadge } from "@/components/memory-type-badge";
 import { ImportanceBadge } from "@/components/importance-badge";
 import { TagList } from "@/components/tag-list";
+import { ProjectSelector } from "@/components/project-selector";
 import { SkeletonList } from "@/components/skeleton-list";
 import { PaginatedList } from "@/components/paginated-list";
 import { Search, FileText } from "lucide-react";
 
-function MemoryCard({ memory, onSelect }: { memory: Memory; onSelect?: (id: number) => void }) {
+const MEMORY_TYPES = [
+  "note", "decision", "rule", "code-snippet", "learning",
+  "research", "discussion", "progress", "task", "debug", "design",
+] as const;
+
+function ScoreBreakdown({ score, components }: { score: number; components?: { vector: number; keyword: number; tag: number } }) {
+  const [showBreakdown, setShowBreakdown] = useState(false);
+  const pct = (v: number) => score > 0 ? ((v / score) * 100).toFixed(0) : "0";
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setShowBreakdown(true)}
+      onMouseLeave={() => setShowBreakdown(false)}
+    >
+      <span className="font-mono text-xs text-muted-foreground cursor-help">
+        {(score * 100).toFixed(0)}%
+      </span>
+      {showBreakdown && components && (
+        <div className="absolute right-0 top-full z-50 mt-1 rounded-md border border-border bg-popover px-3 py-2 shadow-md whitespace-nowrap">
+          <p className="text-xs font-medium mb-1.5">Score breakdown</p>
+          <div className="space-y-1">
+            {[
+              { label: "Vector", value: components.vector, color: "bg-blue-500" },
+              { label: "Keyword", value: components.keyword, color: "bg-amber-500" },
+              { label: "Tag", value: components.tag, color: "bg-emerald-500" },
+            ].map((s) => (
+              <div key={s.label} className="flex items-center gap-2 text-xs">
+                <div className={`h-2 w-2 rounded-full ${s.color}`} />
+                <span className="text-muted-foreground w-14">{s.label}</span>
+                <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${s.color}`}
+                    style={{ width: `${pct(s.value)}%` }}
+                  />
+                </div>
+                <span className="font-mono text-muted-foreground w-8 text-right">
+                  {pct(s.value)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MemoryCard({ memory, onSelect, isActive }: { memory: Memory; onSelect?: (id: number) => void; isActive?: boolean }) {
   const content =
     memory.content.length > 300
       ? memory.content.slice(0, 300) + "…"
@@ -24,7 +75,7 @@ function MemoryCard({ memory, onSelect }: { memory: Memory; onSelect?: (id: numb
 
   return (
     <Card
-      className="transition-colors hover:border-primary/30 cursor-pointer"
+      className={`transition-colors hover:border-primary/30 cursor-pointer ${isActive ? "border-primary/50 bg-accent/30" : ""}`}
       onClick={() => onSelect?.(memory.id)}
     >
       <CardContent className="space-y-3 p-4">
@@ -37,9 +88,7 @@ function MemoryCard({ memory, onSelect }: { memory: Memory; onSelect?: (id: numb
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {memory.score !== undefined && (
-              <span className="font-mono text-xs text-muted-foreground">
-                {(memory.score * 100).toFixed(0)}%
-              </span>
+              <ScoreBreakdown score={memory.score} components={memory.score_components} />
             )}
             <ImportanceBadge importance={memory.importance} />
           </div>
@@ -86,20 +135,32 @@ function MemoryCard({ memory, onSelect }: { memory: Memory; onSelect?: (id: numb
 }
 
 function ResultsList({ results, onSelect }: { results: Memory[]; onSelect: (id: number) => void }) {
+  const { activeIndex } = useKeyboardNav({
+    itemCount: results.length,
+    onSelect: (i) => onSelect(results[i].id),
+  });
+
   return (
     <PaginatedList
       items={results}
       noun="results"
       keyExtractor={(m) => m.id}
-      renderItem={(m) => <MemoryCard memory={m} onSelect={onSelect} />}
+      renderItem={(m, i) => (
+        <MemoryCard
+          memory={m}
+          onSelect={onSelect}
+          isActive={i === activeIndex}
+        />
+      )}
     />
   );
 }
 
 export default function SearchPage() {
+  const { projects, selected, setSelected } = useProjectSelector();
   const [query, setQuery] = useState("");
-  const [project, setProject] = useState("");
-  const [type, setType] = useState("");
+  const [showAllProjects, setShowAllProjects] = useState(true);
+  const [type, setType] = useState<string | null>(null);
   const [mode, setMode] = useState("semantic");
   const [results, setResults] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(false);
@@ -115,8 +176,8 @@ export default function SearchPage() {
     setError(null);
     try {
       const data = await api.search(query, {
-        project: project || undefined,
-        type: type || undefined,
+        project: showAllProjects ? undefined : selected || undefined,
+        type: type ?? undefined,
         mode,
         limit: "100",
       });
@@ -149,19 +210,49 @@ export default function SearchPage() {
           </Button>
         </div>
 
-        <div className="flex gap-2 flex-wrap">
-          <Input
-            placeholder="Project filter"
-            value={project}
-            onChange={(e) => setProject(e.target.value)}
-            className="w-40"
+        {/* Project filter */}
+        <div className="flex gap-1 flex-wrap">
+          <Button
+            type="button"
+            variant={showAllProjects ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowAllProjects(true)}
+          >
+            All
+          </Button>
+          <ProjectSelector
+            projects={projects}
+            selected={showAllProjects ? "" : selected}
+            onSelect={(name) => { setShowAllProjects(false); setSelected(name); }}
           />
-          <Input
-            placeholder="Type filter"
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            className="w-40"
-          />
+        </div>
+
+        {/* Type filter */}
+        <div className="flex gap-1 flex-wrap">
+          <Button
+            type="button"
+            variant={type === null ? "default" : "outline"}
+            size="sm"
+            onClick={() => setType(null)}
+          >
+            All types
+          </Button>
+          {MEMORY_TYPES.map((t) => (
+            <Button
+              key={t}
+              type="button"
+              variant={type === t ? "default" : "outline"}
+              size="sm"
+              onClick={() => setType(t)}
+            >
+              {t}
+            </Button>
+          ))}
+        </div>
+
+        {/* Search mode */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Mode</span>
           <div className="flex gap-1">
             {["semantic", "keyword", "vector"].map((m) => (
               <Button

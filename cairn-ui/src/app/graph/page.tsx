@@ -124,7 +124,7 @@ export default function GraphPage() {
         memory_type: n.memory_type,
         importance: n.importance,
         project: n.project,
-        radius: 4 + n.importance * 6,
+        radius: 5 + n.importance * 8,
         x: width / 2 + (Math.random() - 0.5) * 200,
         y: CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * 200,
       };

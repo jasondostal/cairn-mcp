@@ -14,6 +14,9 @@ services:
       CAIRN_OLLAMA_URL: "${CAIRN_OLLAMA_URL:-http://host.docker.internal:11434}"
       CAIRN_OLLAMA_MODEL: "${CAIRN_OLLAMA_MODEL:-qwen2.5-coder:7b}"
       CAIRN_CORS_ORIGINS: "${CAIRN_CORS_ORIGINS:-*}"
+      CAIRN_AUTH_ENABLED: "${CAIRN_AUTH_ENABLED:-false}"
+      CAIRN_API_KEY: "${CAIRN_API_KEY:-}"
+      CAIRN_AUTH_HEADER: "${CAIRN_AUTH_HEADER:-X-API-Key}"
       CAIRN_TRANSPORT: "${CAIRN_TRANSPORT:-http}"
       CAIRN_EVENT_ARCHIVE_DIR: "${CAIRN_EVENT_ARCHIVE_DIR:-/data/events}"
       # AWS credentials for Bedrock (ignored when using Ollama)
@@ -40,6 +43,7 @@ services:
     restart: unless-stopped
     environment:
       CAIRN_API_URL: http://cairn:8000
+      CAIRN_API_KEY: "${CAIRN_API_KEY:-}"
     ports:
       - "${CAIRN_UI_PORT:-3000}:3000"
     healthcheck:

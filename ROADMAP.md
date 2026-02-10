@@ -1,8 +1,63 @@
 # Roadmap
 
-Current: **v0.13.0** — Organic memory correction via contradiction awareness.
+Current: **v0.18.0** — Pluggable providers, API auth, UI polish.
 
 ---
+
+## v0.18.0 — Open Architecture + Dashboard Polish ✓
+
+Bring your own LLM. Lock down the API. Make the dashboard feel alive.
+
+- [x] **Pluggable LLM providers** — factory + registry pattern. Built-in: Ollama, Bedrock, Gemini, OpenAI-compatible (covers Groq, Together, Mistral, LM Studio, vLLM). Custom providers via `register_llm_provider()`.
+- [x] **Pluggable embedding providers** — same factory/registry pattern. Built-in: local SentenceTransformer.
+- [x] **Optional API key auth** — lightweight middleware, off by default. Configurable header for auth proxy compatibility (Authentik, Caddy, nginx). Health/swagger endpoints exempt. MCP unaffected.
+- [x] **Memory relations in API** — search results and memory detail include incoming/outgoing relationship data
+- [x] **Search score transparency** — vector/keyword/tag score components exposed per result
+- [x] **Thinking tree visualization** — hierarchical tree with collapsible branches, color-coded thought types
+- [x] **Keyboard navigation** — j/k and arrow keys on Search/Timeline, Enter to open, Esc to clear
+- [x] **Activity heatmap** — 52-day GitHub-style contribution graph on Timeline
+- [x] **Dense/compact views** — toggle on Docs, Tasks, Timeline pages
+- [x] **Toast notifications** — Sonner-based feedback for background operations
+- [x] **Capture inline entities** — @mentions → project, #hashtags → tags, URLs → URL field
+- [x] **Search score breakdown hover** — color-coded vector/keyword/tag contribution tooltip
+- [x] **Next.js auth middleware** — API key injected server-side on proxied requests
+
+## v0.17.0 — Human Capture Surfaces ✓
+
+Agents remember. Now humans can too.
+
+- [x] **Capture UI** — `/capture` page with slash commands, keyboard-first, remembers last project
+- [x] **URL extraction** — paste a URL, get readable text via trafilatura
+- [x] **Browser bookmarklet** — one-click capture from any page
+- [x] **iOS Shortcut support** — share sheet → Cairn
+- [x] **Memory type on ingest** — thread `memory_type` through the full pipeline
+
+## v0.16.0 — Smart Ingestion Pipeline ✓
+
+One endpoint, many doorways.
+
+- [x] **Unified `POST /api/ingest`** — classify, chunk, dedup, route in one call
+- [x] **Chonkie chunking** — markdown-aware splitting for large documents
+- [x] **LLM content classification** — auto-route to doc, memory, or both
+- [x] **Content-hash dedup** — idempotent re-ingestion
+- [x] **Chunk→doc linkage** — `source_doc_id` traces chunks back to parent
+
+## v0.15.0 — Content Ingestion Endpoints ✓
+
+REST write endpoints for humans and scripts.
+
+- [x] **`POST /api/ingest/doc`** — single document creation
+- [x] **`POST /api/ingest/docs`** — batch document creation with partial success
+- [x] **`POST /api/ingest/memory`** — store memory via REST (full pipeline)
+
+## v0.14.0 — Docs Browser ✓
+
+Read your docs without leaving Cairn.
+
+- [x] **Docs browser** — `/docs` list + detail with rendered markdown (GFM tables, task lists)
+- [x] **Expanded doc types** — primer, writeup, guide added to brief/prd/plan
+- [x] **Document titles** — migration 007, auto-fallback to first heading
+- [x] **Swagger moved** — `/docs` → `/swagger` to avoid collision
 
 ## v0.13.0 — Organic Memory Correction ✓
 
@@ -78,90 +133,3 @@ Session history that builds itself.
 - [x] **Three-tier degradation** — hooks → organic rules → raw memories. Each tier works without the ones above it
 - [x] **LLM narrative synthesis** — cairn title and narrative generated from session memories, toggleable via env var
 - [x] **13 new tests** (68 total across 13 suites)
-
-## v0.6.0 — LLM Capabilities ✓
-
-Make the LLM earn its keep beyond enrichment and cluster labels.
-
-- [x] **Query expansion** — LLM rewrites search queries with related terms before embedding
-- [x] **Relationship extraction** — auto-detect typed relations (extends, contradicts, implements, depends_on, related) on store
-- [x] **Rule conflict detection** — advisory check for contradictions when storing rules
-- [x] **Session synthesis** — new `synthesize` tool, LLM narrative from session memories
-- [x] **Memory consolidation** — new `consolidate` tool, find duplicates, recommend merges/promotions
-- [x] **Confidence gating** — post-search quality assessment (off by default)
-- [x] **Feature flags** — `LLMCapabilities` dataclass, 6 env vars, graceful degradation on every capability
-- [x] **25 new tests** across 6 test files + shared test helpers
-
-## v0.4.x — Polish
-
-Tighten what's already there.
-
-- [x] **Active nav highlighting** — `SidebarNav` component, `usePathname()` active state
-- [x] **Error states** — reusable `ErrorState` component + `useFetch` hook, all pages
-- [x] **Pagination** — server-side `limit`/`offset` on all list endpoints + client-side `usePagination` hook + `PaginationControls`
-- [x] **Favicon + branding** — SVG cairn icon, removed default Next.js assets
-- [x] **Back-navigation** — ArrowLeft + `router.back()` on memory detail
-- [x] **GHCR image for cairn-ui** — CI/CD builds like the MCP server image
-- [x] **Health check** — `wget` healthcheck for cairn-ui in docker-compose
-- [x] **Mobile responsive** — hamburger menu + backdrop drawer on small screens
-
-## v0.5.0 — Features ✓
-
-Make the UI worth opening every day.
-
-- [x] **Memory timeline / activity feed** — reverse-chronological stream with date grouping, project/type/days filters
-- [x] **Command palette (Cmd+K)** — global shortcut, page navigation + debounced memory search
-- [x] **Inline memory viewer** — Sheet slide-over with full memory detail from search/timeline
-- [x] **Cluster visualization** — t-SNE scatter plot with cluster coloring, tooltips, click-to-view
-- [x] **Export** — JSON/Markdown download from project detail page
-
-## Stretch
-
-Nice-to-haves when the core is rock solid.
-
-- [ ] **Temporal analysis** — track how clusters evolve between clustering runs
-- [ ] **PyPI publication** — `pip install cairn-mcp`
-- [ ] **Blog post / writeup** — the build story, from GRIMOIRE to Cairn
-
----
-
-## Completed
-
-### v0.13.0 — Organic Memory Correction
-Contradiction-aware store and search. Store escalates high-importance contradictions in `conflicts` field. Search penalizes contradicted memories 0.5x across all modes. Thinking conclusion dupe rule. 7 new tests (94 total).
-
-### v0.12.0 — Event Pipeline v2
-Streaming event pipeline: CAPTURE → SHIP → DIGEST → CRYSTALLIZE. Events captured with full fidelity, shipped in batches of 25 via `POST /api/events/ingest`, digested by background DigestWorker into rolling LLM summaries, crystallized into cairn narratives. Pipeline v1 fallback for backward compatibility. 17 new tests (87 total).
-
-### v0.11.0 — Upsert Cairns + Event Archive
-Cairn upsert semantics eliminate race condition between agent and hook. Server-side event archive via `CAIRN_EVENT_ARCHIVE_DIR`. Setup script for interactive hook installation. Hooks documentation overhaul.
-
-### v0.10.0 — Knowledge Graph
-Interactive d3-force knowledge graph at `/graph`. Nodes colored by memory type, edges by relation type. Zoom/pan/drag, hover tooltips, click-to-view. Graph REST endpoint with project and relation_type filters. Cluster page UX improvements.
-
-### v0.9.0 — Hardening
-Connection pooling (psycopg_pool), configurable CORS origins, default LLM switched to Ollama, persistent event logs, eval transparency, RRF documentation, hook port fix.
-
-### v0.8.0 — Cairns UI + Backend Hygiene
-Cairns UI page in cairn-ui, all-projects filter on cairn stack/tasks/thinking, read-only project lookup, migration 005 (partial indexes), cross-project boot in session-start hook.
-
-### v0.7.0 — Cairns (Episodic Session Memory)
-Cairns MCP tool, CairnManager, migration 004, REST endpoints (including first write endpoint), hook scripts for automatic session capture. Motes — every tool call logged as a lightweight event, crystallized into a cairn at session end. Three-tier graceful degradation. 13 new tests (68 total).
-
-### v0.6.0 — LLM Capabilities
-6 new LLM capabilities with feature flags and graceful degradation. Query expansion, relationship extraction, rule conflict detection, session synthesis, memory consolidation, confidence gating. 2 new MCP tools (12 total), 25 new tests (55 total).
-
-### v0.1.0 — Phase 1: Core Loop
-PostgreSQL + pgvector, HNSW indexing, hybrid RRF search, 6 MCP tools, Docker Compose deployment.
-
-### v0.2.0 — Phase 2: Enrichment + Eval
-LLM auto-enrichment (Bedrock + Ollama), HTTP transport, eval framework with recall@k benchmarks.
-
-### v0.3.0 — Phase 3-5: Full Feature Set + REST API
-Clustering, projects, tasks, thinking, REST API (FastAPI inside MCP Starlette), README, CHANGELOG, LICENSE.
-
-### v0.4.0 — Web UI
-Next.js 16 + shadcn/ui dashboard. 7 pages: Dashboard, Search, Projects, Clusters, Tasks, Thinking, Rules. Production Dockerfile. Authentik auth. SWAG proxy.
-
-### v0.5.0 — Features
-Timeline, Cmd+K command palette, inline memory viewer (Sheet), cluster visualization (t-SNE scatter plot), project export (JSON/Markdown). 3 new API endpoints, 5 new UI pages/components.

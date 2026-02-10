@@ -1,4 +1,4 @@
-"""Embedding engine. Local SentenceTransformer, always on CPU, always fast."""
+"""Local SentenceTransformer embedding engine. The default provider."""
 
 import logging
 
@@ -6,12 +6,16 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from cairn.config import EmbeddingConfig
+from cairn.embedding.interface import EmbeddingInterface
 
 logger = logging.getLogger(__name__)
 
 
-class EmbeddingEngine:
-    """Wraps SentenceTransformer for text → vector conversion."""
+class EmbeddingEngine(EmbeddingInterface):
+    """Wraps SentenceTransformer for text → vector conversion.
+
+    Runs on CPU, loads lazily on first embed call.
+    """
 
     def __init__(self, config: EmbeddingConfig):
         self.config = config
@@ -34,11 +38,11 @@ class EmbeddingEngine:
         return self.config.dimensions
 
     def embed(self, text: str) -> list[float]:
-        """Embed a single text string. Returns a list of floats."""
+        """Embed a single text string. Returns a normalized float vector."""
         vector = self.model.encode(text, normalize_embeddings=True)
         return vector.tolist()
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        """Embed multiple texts. Returns a list of float lists."""
+        """Embed multiple texts. Returns a list of normalized float vectors."""
         vectors = self.model.encode(texts, normalize_embeddings=True, batch_size=32)
         return vectors.tolist()

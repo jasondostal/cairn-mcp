@@ -2,13 +2,14 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { api, type Project, type IngestResponse } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { Check, Link, Loader2, X } from "lucide-react";
+import { AtSign, Check, Hash, Link, Loader2, X, Globe } from "lucide-react";
 
 const MEMORY_TYPES = [
   "note", "decision", "rule", "code-snippet", "learning",
@@ -19,6 +20,20 @@ interface SlashCommand {
   label: string;
   description: string;
   action: () => void;
+}
+
+/** Extract @mentions, #tags, and URLs from content text. */
+function extractInlineEntities(text: string) {
+  const mentions = [...new Set(
+    Array.from(text.matchAll(/(?:^|\s)@([\w-]+)/g), (m) => m[1]),
+  )];
+  const hashtags = [...new Set(
+    Array.from(text.matchAll(/(?:^|\s)#([\w-]+)/g), (m) => m[1]),
+  )];
+  const urls = [...new Set(
+    Array.from(text.matchAll(/https?:\/\/[^\s)]+/g), (m) => m[0]),
+  )];
+  return { mentions, hashtags, urls };
 }
 
 function CaptureForm() {
@@ -105,6 +120,33 @@ function CaptureForm() {
   function handleContentChange(value: string) {
     setContent(value);
 
+    // Auto-extract inline entities
+    const { mentions, hashtags, urls: detectedUrls } = extractInlineEntities(value);
+
+    // Auto-set project from @mention (first match wins)
+    if (mentions.length > 0) {
+      const match = projects.find(
+        (p) => p.name.toLowerCase() === mentions[0].toLowerCase(),
+      );
+      if (match && project !== match.name) {
+        setProject(match.name);
+        localStorage.setItem("cairn-capture-project", match.name);
+      }
+    }
+
+    // Auto-add #tags (additive — don't remove tags if user deleted the hashtag)
+    for (const ht of hashtags) {
+      if (!tags.includes(ht)) {
+        setTags((prev) => (prev.includes(ht) ? prev : [...prev, ht]));
+      }
+    }
+
+    // Auto-fill URL field if one is detected and field is empty
+    if (detectedUrls.length > 0 && !url) {
+      setUrl(detectedUrls[0]);
+    }
+
+    // Slash command detection
     const textarea = textareaRef.current;
     if (!textarea) return;
 
@@ -214,14 +256,20 @@ function CaptureForm() {
       setResult(res);
 
       if (res.status === "ingested") {
+        const ids = res.memory_ids?.map((id) => `#${id}`).join(", ") || "";
+        toast.success(`Captured ${ids}`, { description: `${project} / ${memoryType}` });
         setContent("");
         setUrl("");
         setTags([]);
         setTagInput("");
         textareaRef.current?.focus();
+      } else if (res.status === "duplicate") {
+        toast.info("Duplicate — already captured");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Capture failed");
+      const msg = err instanceof Error ? err.message : "Capture failed";
+      toast.error("Capture failed", { description: msg });
+      setError(msg);
     } finally {
       setSubmitting(false);
     }
@@ -233,7 +281,7 @@ function CaptureForm() {
       <div className="relative">
         <textarea
           ref={textareaRef}
-          placeholder="What are you capturing? (type / for commands)"
+          placeholder="What are you capturing? (/ commands, @project, #tags)"
           value={content}
           onChange={(e) => handleContentChange(e.target.value)}
           onKeyDown={handleTextareaKeyDown}
@@ -278,6 +326,36 @@ function CaptureForm() {
           </div>
         )}
       </div>
+
+      {/* Inline entity hints */}
+      {content && (() => {
+        const { mentions, hashtags, urls: detected } = extractInlineEntities(content);
+        if (mentions.length === 0 && hashtags.length === 0 && detected.length === 0) return null;
+        return (
+          <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground -mt-2">
+            {mentions.map((m) => (
+              <span key={m} className="flex items-center gap-1">
+                <AtSign className="h-3 w-3" />
+                <span className={projects.some((p) => p.name.toLowerCase() === m.toLowerCase()) ? "text-primary" : "text-yellow-500"}>
+                  {m}
+                </span>
+              </span>
+            ))}
+            {hashtags.map((t) => (
+              <span key={t} className="flex items-center gap-1">
+                <Hash className="h-3 w-3" />
+                {t}
+              </span>
+            ))}
+            {detected.map((u) => (
+              <span key={u} className="flex items-center gap-1 truncate max-w-[200px]">
+                <Globe className="h-3 w-3" />
+                {u}
+              </span>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* URL field */}
       <div className="relative">

@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-02-10
+
+### Added
+- **Pluggable LLM providers** — LLM backend is now a factory with a provider registry. Built-in: Ollama, Bedrock, Gemini, and OpenAI-compatible (covers OpenAI, Groq, Together, Mistral, LM Studio, vLLM, and anything that speaks the OpenAI chat format). Custom providers can be registered via `register_llm_provider(name, factory_fn)`. Zero SDK dependencies for Gemini and OpenAI — pure `urllib` with built-in retry logic.
+- **Pluggable embedding providers** — embedding engine abstracted behind `EmbeddingInterface` with the same factory/registry pattern. Built-in: `local` (SentenceTransformer, unchanged). Custom providers via `register_embedding_provider(name, factory_fn)`.
+- **Optional API key auth** — lightweight middleware on all `/api` routes. Off by default. When enabled, checks `X-API-Key` header (header name configurable for auth proxy compatibility). Health, swagger, and OpenAPI endpoints exempt. MCP endpoint unaffected. Compatible with Authentik, Caddy, nginx, or any reverse proxy that injects auth headers.
+- **Memory relations in API responses** — `GET /api/memories/:id` and search results now include a `relations` array showing incoming/outgoing relationships (extends, contradicts, implements, depends_on, related) with direction, summary, and linked memory type.
+- **Search score transparency** — search results include `score_components` object breaking down the vector, keyword, and tag contributions to the final RRF score.
+- **Thinking tree visualization** — `/thinking/:id` redesigned as a hierarchical tree with collapsible branches, color-coded thought types, and a tree/list view toggle.
+- **Keyboard navigation** — `j`/`k` (vim-style) and arrow keys navigate lists on Search and Timeline pages. Enter to open, Esc to clear. New `useKeyboardNav()` hook.
+- **Activity heatmap** — 52-day GitHub-style contribution heatmap on the Timeline page. Shows memory creation patterns at a glance.
+- **Dense/compact views** — toggle between card and dense row layouts on Docs, Tasks, and Timeline pages. Consistent toggle across all list surfaces.
+- **Toast notifications** — Sonner-based toasts for background operations (capture success/error, etc.).
+- **Sidebar version + clock** — footer shows app version and live time.
+- **Capture page: inline entity extraction** — `@mentions` auto-select projects, `#hashtags` auto-add tags, URLs auto-fill the URL field.
+- **Memory relations panel** — memory detail sheet shows clickable incoming/outgoing relations with color-coded relation types.
+- **Search score breakdown** — hover tooltip on search results shows vector/keyword/tag percentage contribution with color-coded bars.
+- **Next.js auth middleware** — `cairn-ui/middleware.ts` injects `CAIRN_API_KEY` into proxied `/api/*` requests server-side, so the browser never sees the key.
+- 2 new test files: `test_embedding_factory.py` (7 tests), `test_llm_factory.py` (8 tests + optional live smoke tests for Gemini and OpenAI).
+
+### Changed
+- `LLMConfig` expanded with Gemini and OpenAI settings.
+- `EmbeddingConfig` expanded with `backend` field (default: `local`).
+- `Config` gains `AuthConfig` section (enabled, api_key, header_name).
+- `Services` uses factory functions (`get_llm`, `get_embedding_engine`) instead of direct instantiation.
+- Knowledge graph node sizing adjusted for better visual weight (`5 + importance * 8`).
+- `docker-compose.yml` adds auth env vars to cairn service and `CAIRN_API_KEY` to cairn-ui service.
+- API version bumped to 0.18.0.
+- `cairn-ui` package version bumped to 0.18.0.
+
+### Dependencies
+- Added `sonner@^2.0.0` (frontend toast notifications).
+
 ## [0.17.0] - 2026-02-10
 
 ### Added
@@ -448,7 +481,9 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.17.0...v0.18.0
+[0.17.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.13.0...v0.14.0

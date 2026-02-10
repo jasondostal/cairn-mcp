@@ -8,7 +8,9 @@ import {
   Menu,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+const APP_VERSION = "0.18.0";
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
@@ -36,6 +38,27 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
         );
       })}
     </>
+  );
+}
+
+function SidebarFooter() {
+  const [time, setTime] = useState("");
+
+  useEffect(() => {
+    const tick = () =>
+      setTime(
+        new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      );
+    tick();
+    const id = setInterval(tick, 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <div className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground/60 tabular-nums">
+      <span>v{APP_VERSION}</span>
+      {time && <span className="float-right">{time}</span>}
+    </div>
   );
 }
 
@@ -84,6 +107,7 @@ export function SidebarNav() {
         <nav className="flex flex-1 flex-col gap-1 p-2">
           <NavLinks />
         </nav>
+        <SidebarFooter />
       </aside>
     </>
   );

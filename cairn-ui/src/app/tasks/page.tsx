@@ -11,7 +11,7 @@ import { ErrorState } from "@/components/error-state";
 import { ProjectSelector } from "@/components/project-selector";
 import { PaginatedList } from "@/components/paginated-list";
 import { SkeletonList } from "@/components/skeleton-list";
-import { CheckCircle, Circle, Link2 } from "lucide-react";
+import { CheckCircle, Circle, Link2, LayoutList, LayoutGrid } from "lucide-react";
 
 function TaskCard({ task, showProject }: { task: Task; showProject?: boolean }) {
   const done = task.status === "completed";
@@ -62,7 +62,40 @@ function TaskCard({ task, showProject }: { task: Task; showProject?: boolean }) 
   );
 }
 
-function TasksList({ tasks, showProject }: { tasks: Task[]; showProject?: boolean }) {
+function TaskDenseRow({ task, showProject }: { task: Task; showProject?: boolean }) {
+  const done = task.status === "completed";
+  return (
+    <div className={`flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors ${done ? "opacity-50" : ""}`}>
+      {done ? (
+        <CheckCircle className="h-3.5 w-3.5 shrink-0 text-green-500" />
+      ) : (
+        <Circle className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      )}
+      <span className="font-mono text-xs text-muted-foreground shrink-0">#{task.id}</span>
+      <span className="flex-1 truncate">{task.description}</span>
+      {showProject && task.project && (
+        <Badge variant="secondary" className="text-xs shrink-0">{task.project}</Badge>
+      )}
+      {task.linked_memories.length > 0 && (
+        <span className="text-xs text-muted-foreground shrink-0">
+          <Link2 className="inline h-3 w-3" /> {task.linked_memories.length}
+        </span>
+      )}
+      <span className="text-xs text-muted-foreground shrink-0">{formatDate(task.created_at)}</span>
+    </div>
+  );
+}
+
+function TasksList({ tasks, showProject, dense }: { tasks: Task[]; showProject?: boolean; dense?: boolean }) {
+  if (dense) {
+    return (
+      <div className="rounded-md border border-border divide-y divide-border">
+        {tasks.map((t) => (
+          <TaskDenseRow key={t.id} task={t} showProject={showProject} />
+        ))}
+      </div>
+    );
+  }
   return (
     <PaginatedList
       items={tasks}
@@ -81,6 +114,7 @@ export default function TasksPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [dense, setDense] = useState(true);
 
   useEffect(() => {
     if (!showAll && !selected) return;
@@ -130,6 +164,15 @@ export default function TasksPage() {
         >
           {showCompleted ? "Hide" : "Show"} completed
         </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0"
+          onClick={() => setDense(!dense)}
+          title={dense ? "Card view" : "Dense view"}
+        >
+          {dense ? <LayoutGrid className="h-4 w-4" /> : <LayoutList className="h-4 w-4" />}
+        </Button>
       </div>
 
       {(loading || projectsLoading) && <SkeletonList count={4} height="h-20" />}
@@ -145,7 +188,7 @@ export default function TasksPage() {
       )}
 
       {!loading && !projectsLoading && !error && !projectsError && tasks.length > 0 && (
-        <TasksList tasks={tasks} showProject={showAll} />
+        <TasksList tasks={tasks} showProject={showAll} dense={dense} />
       )}
     </div>
   );
