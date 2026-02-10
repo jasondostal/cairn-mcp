@@ -413,6 +413,7 @@ class MemoryStore:
         importance: float | None = None,
         tags: list[str] | None = None,
         reason: str | None = None,
+        project: str | None = None,
     ) -> dict:
         """Update, inactivate, or reactivate a memory."""
         if action == MemoryAction.INACTIVATE:
@@ -462,6 +463,11 @@ class MemoryStore:
             if tags is not None:
                 updates.append("tags = %s")
                 params.append(tags)
+
+            if project is not None:
+                project_id = get_or_create_project(self.db, project)
+                updates.append("project_id = %s")
+                params.append(project_id)
 
             if not updates:
                 return {"id": memory_id, "action": "no_changes"}

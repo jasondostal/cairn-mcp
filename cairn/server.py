@@ -213,6 +213,7 @@ def modify(
     importance: float | None = None,
     tags: list[str] | None = None,
     reason: str | None = None,
+    project: str | None = None,
 ) -> dict:
     """Update, soft-delete, or reactivate a memory.
 
@@ -229,6 +230,7 @@ def modify(
         importance: New importance score (update only).
         tags: New tags - replaces existing (update only).
         reason: Reason for inactivation (required for inactivate).
+        project: Move memory to a different project (update only).
     """
     try:
         if action not in MemoryAction.ALL:
@@ -247,6 +249,7 @@ def modify(
             importance=importance,
             tags=tags,
             reason=reason,
+            project=project,
         )
     except Exception as e:
         logger.exception("modify failed")

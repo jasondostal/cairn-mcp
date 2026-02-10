@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.1] - 2026-02-10
+
+### Added
+- **Project field on modify** — `modify(action="update", project="new-project")` moves a memory to a different project. Enables project consolidation without direct SQL.
+- **Bulk operations script** — `scripts/bulk_ops.py` with three commands:
+  - `demote-progress` — batch-lower importance of all progress-type memories (default target: 0.3)
+  - `move-project --from X --to Y` — move all memories + docs + tasks + thinking sequences + events + cairns between projects
+  - `cleanup-projects` — inventory all projects with active/inactive counts, flag empty ones
+  - All commands support `--dry-run` for preview.
+
 ## [0.20.0] - 2026-02-10
 
 ### Added

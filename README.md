@@ -247,7 +247,7 @@ No hooks? No problem. The `cairns` tool works without them — the agent can cal
 | `store` | Persist a memory with auto-enrichment, relationship extraction, and rule conflict detection |
 | `search` | Hybrid semantic search with query expansion and optional confidence gating |
 | `recall` | Expand memory IDs to full content with cluster context |
-| `modify` | Update, soft-delete, or reactivate memories |
+| `modify` | Update, soft-delete, reactivate, or move memories between projects |
 | `rules` | Behavioral guardrails — global or per-project |
 | `insights` | HDBSCAN clustering with LLM-generated pattern summaries |
 | `projects` | Documents (briefs, PRDs, plans, primers, writeups, guides) and cross-project linking |
@@ -337,7 +337,7 @@ Cairn fuses three signals with **Reciprocal Rank Fusion (RRF)**:
 
 | Signal | Weight | How |
 |--------|--------|-----|
-| Vector similarity | 60% | Cosine distance on MiniLM-L6-v2 embeddings via pgvector HNSW |
+| Vector similarity | 60% | Cosine distance via pgvector HNSW index. Local (MiniLM, 384-dim) or Bedrock Titan V2 (up to 1024-dim) — [configurable](#configuration). |
 | Keyword search | 25% | PostgreSQL `ts_rank` full-text search |
 | Tag matching | 15% | Intersection of query-derived tags with memory tags |
 
@@ -413,6 +413,19 @@ docker exec cairn pip install pytest
 docker cp tests/ cairn:/app/tests/
 docker exec cairn python -m pytest tests/ -v
 ```
+
+### Admin Scripts
+
+Maintenance utilities in `scripts/` (run inside the container):
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/reembed.py` | Re-embed memories with NULL embeddings after switching embedding backends |
+| `scripts/bulk_ops.py demote-progress` | Batch-lower importance of progress-type memories |
+| `scripts/bulk_ops.py move-project --from X --to Y` | Move all memories + related data between projects |
+| `scripts/bulk_ops.py cleanup-projects` | Inventory projects with active/inactive counts |
+
+All bulk operations support `--dry-run` for preview.
 
 ### Database Schema
 
