@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-02-10
+
+### Fixed
+- **Cairn stack cross-project** — MCP tool now allows omitting `project` on `cairns(action="stack")` to view cairns across all projects. Core method already supported this; the MCP handler was incorrectly rejecting it.
+
 ## [0.18.0] - 2026-02-10
 
 ### Added

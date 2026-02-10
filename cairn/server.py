@@ -635,10 +635,9 @@ def cairns(
             return cairn_manager.set(project, session_name, events=events)
 
         if action == CairnAction.STACK:
-            if not project or not project.strip():
-                return {"error": "project is required for stack"}
             stack_limit = min(limit, MAX_CAIRN_STACK)
-            return cairn_manager.stack(project, limit=stack_limit)
+            proj = project.strip() if project and project.strip() else None
+            return cairn_manager.stack(proj, limit=stack_limit)
 
         if action == CairnAction.GET:
             if not cairn_id:
