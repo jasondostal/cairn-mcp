@@ -17,6 +17,7 @@ import urllib.request
 import urllib.error
 
 from cairn.config import LLMConfig
+from cairn.core.stats import llm_stats
 from cairn.llm.interface import LLMInterface
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,9 @@ class OpenAICompatibleLLM(LLMInterface):
                 content = choices[0].get("message", {}).get("content")
                 if content is None:
                     raise ValueError(f"Unexpected response structure: {choices[0].keys()}")
+                if llm_stats:
+                    input_est = sum(len(m.get("content", "")) for m in messages) // 4
+                    llm_stats.record_call(tokens_est=input_est + len(content) // 4)
                 return content
 
             except urllib.error.HTTPError as e:
@@ -94,6 +98,8 @@ class OpenAICompatibleLLM(LLMInterface):
                 time.sleep(wait)
                 continue
 
+        if llm_stats:
+            llm_stats.record_error(str(last_error))
         raise last_error  # All retries exhausted
 
     def get_model_name(self) -> str:

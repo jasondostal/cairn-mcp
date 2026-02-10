@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-02-10
+
+### Added
+- **Model observability** — per-model health, invocation counts, estimated token usage, and error tracking for all embedding and LLM backends. In-memory stats (resets on restart) via thread-safe `ModelStats` class.
+- **Status endpoint redesign** — `status` tool and `GET /api/status` now return a `models` object with `embedding` and `llm` sub-objects, each containing: backend name, model ID, health state (healthy/degraded/unhealthy/unknown), call count, estimated tokens, error count, last call/error timestamps, and last error message.
+- Health derivation: 3+ consecutive failures = unhealthy, any error in rolling window of 5 = degraded, all success = healthy.
+- All 6 backends instrumented: Bedrock embedding, local SentenceTransformer, Bedrock LLM, Ollama, Gemini, OpenAI-compatible.
+
+### Changed
+- Status response replaces flat `embedding_model`, `embedding_dimensions`, `llm_backend`, `llm_model` fields with structured `models` object. Consumers should migrate to `models.embedding` and `models.llm`.
+
 ## [0.20.1] - 2026-02-10
 
 ### Added
@@ -517,7 +528,9 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.20.1...v0.21.0
+[0.20.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.20.0...v0.20.1
 [0.20.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.17.0...v0.18.0

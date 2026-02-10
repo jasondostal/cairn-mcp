@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from cairn.config import Config
+from cairn.core.stats import embedding_stats, llm_stats
 from cairn.storage.database import Database
 
 
@@ -35,6 +36,13 @@ def get_status(db: Database, config: Config) -> dict:
             "memories_clustered": last_clustering["memory_count"],
         }
 
+    # Model observability
+    models = {}
+    if embedding_stats:
+        models["embedding"] = embedding_stats.to_dict()
+    if llm_stats:
+        models["llm"] = llm_stats.to_dict()
+
     return {
         "status": "healthy",
         "memories": memory_count["count"],
@@ -43,13 +51,6 @@ def get_status(db: Database, config: Config) -> dict:
         "types": {r["memory_type"]: r["count"] for r in type_counts},
         "clusters": cluster_count["count"],
         "clustering": clustering_info,
-        "embedding_model": config.embedding.model,
-        "embedding_dimensions": config.embedding.dimensions,
-        "llm_backend": config.llm.backend,
-        "llm_model": (
-            config.llm.bedrock_model
-            if config.llm.backend == "bedrock"
-            else config.llm.ollama_model
-        ),
+        "models": models,
         "llm_capabilities": config.capabilities.active_list(),
     }

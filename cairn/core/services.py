@@ -19,6 +19,7 @@ from cairn.core.search import SearchEngine
 from cairn.core.synthesis import SessionSynthesizer
 from cairn.core.tasks import TaskManager
 from cairn.core.thinking import ThinkingEngine
+from cairn.core.stats import init_embedding_stats, init_llm_stats
 from cairn.embedding import get_embedding_engine
 from cairn.embedding.interface import EmbeddingInterface
 from cairn.llm import get_llm
@@ -64,12 +65,21 @@ def create_services(config: Config | None = None) -> Services:
     db = Database(config.db)
     embedding = get_embedding_engine(config.embedding)
 
+    # Initialize embedding stats
+    emb_model = (
+        config.embedding.bedrock_model
+        if config.embedding.backend == "bedrock"
+        else config.embedding.model
+    )
+    init_embedding_stats(config.embedding.backend, emb_model)
+
     # LLM enrichment (optional, graceful if disabled)
     llm = None
     enricher = None
     if config.enrichment_enabled:
         try:
             llm = get_llm(config.llm)
+            init_llm_stats(config.llm.backend, llm.get_model_name())
             enricher = Enricher(llm)
             logger.info("Enrichment enabled: %s", config.llm.backend)
         except Exception:

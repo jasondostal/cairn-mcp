@@ -7,6 +7,7 @@ import urllib.request
 import urllib.error
 
 from cairn.config import LLMConfig
+from cairn.core.stats import llm_stats
 from cairn.llm.interface import LLMInterface
 
 logger = logging.getLogger(__name__)
@@ -87,7 +88,11 @@ class GeminiLLM(LLMInterface):
                 parts = candidates[0].get("content", {}).get("parts", [])
                 if not parts or "text" not in parts[0]:
                     raise ValueError(f"Unexpected Gemini response structure: {candidates[0].keys()}")
-                return parts[0]["text"]
+                result_text = parts[0]["text"]
+                if llm_stats:
+                    input_est = sum(len(m.get("content", "")) for m in messages) // 4
+                    llm_stats.record_call(tokens_est=input_est + len(result_text) // 4)
+                return result_text
 
             except urllib.error.HTTPError as e:
                 if e.code in (429, 500, 503):
@@ -110,6 +115,8 @@ class GeminiLLM(LLMInterface):
                 time.sleep(wait)
                 continue
 
+        if llm_stats:
+            llm_stats.record_error(str(last_error))
         raise last_error  # All retries exhausted
 
     def get_model_name(self) -> str:
