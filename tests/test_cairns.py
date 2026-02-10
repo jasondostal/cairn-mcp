@@ -37,10 +37,11 @@ class TestCairnSet:
         db = _make_db()
         stones = [_make_stone(1), _make_stone(2), _make_stone(3)]
 
-        # Sequence: get_or_create_project, check existing, insert cairn
+        # Sequence: get_or_create_project, check existing, orphan bounds, insert cairn
         db.execute_one.side_effect = [
             {"id": 1},   # project lookup
             None,         # no existing cairn
+            {"first_event": None, "last_event": None},  # no session_events
             {             # INSERT RETURNING
                 "id": 10,
                 "title": "Session: test-session",
@@ -90,6 +91,7 @@ class TestCairnSet:
         db.execute_one.side_effect = [
             {"id": 1},   # project lookup
             None,         # no existing cairn
+            {"first_event": None, "last_event": None},  # no session_events
             {             # INSERT RETURNING
                 "id": 10,
                 "title": "PostgreSQL Integration and Connection Pooling",
@@ -119,6 +121,7 @@ class TestCairnSet:
         db.execute_one.side_effect = [
             {"id": 1},
             None,
+            {"first_event": None, "last_event": None},  # no session_events
             {
                 "id": 10,
                 "title": "Session: my-session",
@@ -144,6 +147,7 @@ class TestCairnSet:
         db.execute_one.side_effect = [
             {"id": 1},
             None,
+            {"first_event": None, "last_event": None},  # no session_events
         ]
         db.execute.side_effect = [[], []]  # no stones, no digests
 
@@ -159,6 +163,7 @@ class TestCairnSet:
         db.execute_one.side_effect = [
             {"id": 1},
             None,
+            {"first_event": None, "last_event": None},  # no session_events
             {
                 "id": 10,
                 "title": "Session: hook-session",
@@ -175,8 +180,8 @@ class TestCairnSet:
         result = manager.set("test-project", "hook-session", events=events)
 
         assert result["id"] == 10
-        # Verify events were passed in the INSERT call
-        insert_call = db.execute_one.call_args_list[2]
+        # Verify events were passed in the INSERT call (index 3: project, existing, bounds, INSERT)
+        insert_call = db.execute_one.call_args_list[3]
         assert insert_call[0][1][4] is not None  # events param is not None
 
     def test_set_with_events_triggers_llm_even_without_stones(self):
@@ -186,6 +191,7 @@ class TestCairnSet:
         db.execute_one.side_effect = [
             {"id": 1},   # project lookup
             None,         # no existing cairn
+            {"first_event": None, "last_event": None},  # no session_events
             {             # INSERT RETURNING
                 "id": 10,
                 "title": "Hook Session: Codebase Exploration",
@@ -227,6 +233,7 @@ class TestCairnSet:
         db.execute_one.side_effect = [
             {"id": 1},
             None,
+            {"first_event": None, "last_event": None},  # no session_events
             {
                 "id": 10,
                 "title": "Database Setup with PostgreSQL",
@@ -258,6 +265,96 @@ class TestCairnSet:
         assert "Mote timeline" in messages[1]["content"]
 
 
+class TestCairnOrphanReconciliation:
+    """Tests for _claim_orphans — reclaiming memories without session_name."""
+
+    def test_set_claims_orphaned_memories(self):
+        """Orphaned memories within the session window get session_name set."""
+        db = _make_db()
+        stones = [_make_stone(1), _make_stone(2)]
+
+        db.execute_one.side_effect = [
+            {"id": 1},   # project lookup
+            None,         # no existing cairn
+            {             # bounds from session_events
+                "first_event": datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc),
+                "last_event": datetime(2026, 2, 10, 14, 0, 0, tzinfo=timezone.utc),
+            },
+            {             # INSERT RETURNING
+                "id": 10,
+                "title": "Session: test-session",
+                "narrative": None,
+                "memory_count": 2,
+                "started_at": datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc),
+                "set_at": datetime(2026, 2, 10, 14, 0, 0, tzinfo=timezone.utc),
+            },
+        ]
+        # execute: orphan UPDATE, stones, digests, link stones
+        db.execute.side_effect = [
+            [{"id": 1}, {"id": 2}],  # 2 orphans claimed
+            stones,                    # stones query
+            [],                        # no digests
+            None,                      # link stones UPDATE
+        ]
+
+        manager = CairnManager(db)
+        result = manager.set("test-project", "test-session")
+
+        assert result["id"] == 10
+        # Verify the orphan UPDATE was called with correct params
+        orphan_call = db.execute.call_args_list[0]
+        assert "SET session_name" in orphan_call[0][0]
+        assert orphan_call[0][1][0] == "test-session"  # session_name
+        assert orphan_call[0][1][1] == 1                # project_id
+
+    def test_set_no_orphans_when_no_session_events(self):
+        """When no session_events exist, orphan claiming is a no-op."""
+        db = _make_db()
+        stones = [_make_stone(1)]
+
+        db.execute_one.side_effect = [
+            {"id": 1},
+            None,
+            {"first_event": None, "last_event": None},  # no session_events
+            {
+                "id": 10,
+                "title": "Session: test-session",
+                "narrative": None,
+                "memory_count": 1,
+                "started_at": datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc),
+                "set_at": datetime(2026, 2, 10, 14, 0, 0, tzinfo=timezone.utc),
+            },
+        ]
+        # execute: stones, digests, link stones (NO orphan UPDATE)
+        db.execute.side_effect = [stones, [], None]
+
+        manager = CairnManager(db)
+        result = manager.set("test-project", "test-session")
+
+        assert result["id"] == 10
+        # First execute call should be stones query, not orphan UPDATE
+        first_execute = db.execute.call_args_list[0]
+        assert "SELECT" in first_execute[0][0]
+        assert "SET session_name" not in first_execute[0][0]
+
+    def test_claim_orphans_zero_when_none_match(self):
+        """When bounds exist but no orphans match, returns 0."""
+        db = _make_db()
+
+        db.execute_one.side_effect = [
+            {  # bounds
+                "first_event": datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc),
+                "last_event": datetime(2026, 2, 10, 14, 0, 0, tzinfo=timezone.utc),
+            },
+        ]
+        db.execute.return_value = []  # no rows updated
+
+        manager = CairnManager(db)
+        claimed = manager._claim_orphans(1, "test-session")
+
+        assert claimed == 0
+
+
 class TestCairnSetWithDigests:
     """Tests for CairnManager.set() with Pipeline v2 digests."""
 
@@ -274,6 +371,7 @@ class TestCairnSetWithDigests:
         db.execute_one.side_effect = [
             {"id": 1},   # project lookup
             None,         # no existing cairn
+            {"first_event": None, "last_event": None},  # no session_events
             {             # INSERT RETURNING
                 "id": 10,
                 "title": "Implemented Streaming Event Pipeline",
@@ -307,6 +405,7 @@ class TestCairnSetWithDigests:
         db.execute_one.side_effect = [
             {"id": 1},   # project lookup
             None,         # no existing cairn
+            {"first_event": None, "last_event": None},  # no session_events
             {             # INSERT RETURNING
                 "id": 10,
                 "title": "Session: test-session",

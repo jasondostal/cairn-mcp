@@ -34,6 +34,54 @@ class CairnManager:
         self.llm = llm
         self.capabilities = capabilities
 
+    def _claim_orphans(self, project_id: int, session_name: str) -> int:
+        """Claim orphaned memories created during this session's time window.
+
+        Memories stored via MCP without session_name (NULL) are matched by
+        project and creation timestamp falling within the session's event
+        window (from session_events). This avoids requiring agents to
+        remember to pass session_name on every store() call.
+
+        Returns:
+            Number of orphaned memories claimed.
+        """
+        # Get the session's time bounds from shipped event batches
+        bounds = self.db.execute_one(
+            """
+            SELECT MIN(created_at) AS first_event, MAX(created_at) AS last_event
+            FROM session_events
+            WHERE project_id = %s AND session_name = %s
+            """,
+            (project_id, session_name),
+        )
+
+        if not bounds or not bounds["first_event"]:
+            return 0
+
+        result = self.db.execute(
+            """
+            UPDATE memories
+            SET session_name = %s
+            WHERE project_id = %s
+              AND session_name IS NULL
+              AND is_active = true
+              AND created_at >= %s
+              AND created_at <= %s
+            RETURNING id
+            """,
+            (session_name, project_id, bounds["first_event"], bounds["last_event"]),
+        )
+
+        claimed = len(result)
+        if claimed > 0:
+            logger.info(
+                "Claimed %d orphaned memories for session %s (window: %s to %s)",
+                claimed, session_name,
+                bounds["first_event"].isoformat(),
+                bounds["last_event"].isoformat(),
+            )
+        return claimed
+
     def _fetch_digests(self, project_id: int, session_name: str) -> list[dict]:
         """Query session_events for digested batches belonging to this session.
 
@@ -80,6 +128,10 @@ class CairnManager:
         )
         if existing:
             return self._merge_existing(existing, project, project_id, session_name, events)
+
+        # Reconcile orphaned memories — claim any that were stored without
+        # session_name during this session's time window.
+        self._claim_orphans(project_id, session_name)
 
         # Fetch session stones
         stones = self.db.execute(
@@ -211,6 +263,9 @@ class CairnManager:
             }
 
         # Case 1: caller brings events, existing cairn has none — merge them in
+        # Reconcile orphans before re-fetching stones
+        self._claim_orphans(project_id, session_name)
+
         # Re-fetch stones for narrative re-synthesis
         stones = self.db.execute(
             """
