@@ -192,17 +192,14 @@ class Database:
 
         logger.info("Reconciling vector dimensions: %d → %d", current_dim, dimensions)
 
-        # Drop and recreate index + alter column types
+        # Drop index, null existing embeddings, then resize columns
         self.execute("DROP INDEX IF EXISTS idx_memories_embedding")
-        self.execute(f"ALTER TABLE memories ALTER COLUMN embedding TYPE vector({dimensions})")
-        self.execute(f"ALTER TABLE clusters ALTER COLUMN centroid TYPE vector({dimensions})")
-
-        # Null out old embeddings — they are the wrong dimension
         self.execute("UPDATE memories SET embedding = NULL")
-
-        # Clear stale clusters
+        self.execute(f"ALTER TABLE memories ALTER COLUMN embedding TYPE vector({dimensions})")
         self.execute("DELETE FROM cluster_members")
         self.execute("DELETE FROM clusters")
+        self.execute(f"ALTER TABLE clusters ALTER COLUMN centroid TYPE vector({dimensions})")
+
         self.execute("DELETE FROM clustering_runs")
 
         # Recreate HNSW index
