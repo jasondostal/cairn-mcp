@@ -597,6 +597,35 @@ def build_cairn_digest_narrative_messages(
     ]
 
 
+# ============================================================
+# Content Classification Prompt (v0.16.0 — Smart Ingestion)
+# ============================================================
+
+CLASSIFICATION_SYSTEM_PROMPT = """\
+You classify content for a knowledge management system. Determine how to store the given content.
+
+Return a JSON object with exactly one field:
+{"type": "doc" | "memory" | "both"}
+
+Guidelines:
+- "doc": Long-lived reference material — guides, primers, PRDs, architecture docs, methodology.
+  Store whole, not chunked. These are artifacts you'd put on a bookshelf.
+- "memory": Working knowledge — decisions, learnings, progress notes, debug logs, session notes.
+  Store as memories (chunked if large). These are thoughts, not documents.
+- "both": Reference material that should ALSO be searchable at the chunk level.
+  Store whole as doc AND chunk into searchable memories.
+
+Return ONLY the JSON object."""
+
+
+def build_classification_messages(content: str) -> list[dict]:
+    """Build messages for content classification LLM call."""
+    return [
+        {"role": "system", "content": CLASSIFICATION_SYSTEM_PROMPT},
+        {"role": "user", "content": content},
+    ]
+
+
 def build_confidence_gating_messages(
     query: str, results: list[dict],
 ) -> list[dict]:

@@ -12,6 +12,7 @@ from cairn.core.clustering import ClusterEngine
 from cairn.core.digest import DigestWorker
 from cairn.core.consolidation import ConsolidationEngine
 from cairn.core.enrichment import Enricher
+from cairn.core.ingest import IngestPipeline
 from cairn.core.memory import MemoryStore
 from cairn.core.projects import ProjectManager
 from cairn.core.search import SearchEngine
@@ -47,6 +48,7 @@ class Services:
     consolidation_engine: ConsolidationEngine
     cairn_manager: CairnManager
     digest_worker: DigestWorker
+    ingest_pipeline: IngestPipeline
 
 
 def create_services(config: Config | None = None) -> Services:
@@ -76,20 +78,24 @@ def create_services(config: Config | None = None) -> Services:
 
     capabilities = config.capabilities
 
+    memory_store = MemoryStore(db, embedding, enricher=enricher, llm=llm, capabilities=capabilities)
+    project_manager = ProjectManager(db)
+
     return Services(
         config=config,
         db=db,
         embedding=embedding,
         llm=llm,
         enricher=enricher,
-        memory_store=MemoryStore(db, embedding, enricher=enricher, llm=llm, capabilities=capabilities),
+        memory_store=memory_store,
         search_engine=SearchEngine(db, embedding, llm=llm, capabilities=capabilities),
         cluster_engine=ClusterEngine(db, embedding, llm=llm),
-        project_manager=ProjectManager(db),
+        project_manager=project_manager,
         task_manager=TaskManager(db),
         thinking_engine=ThinkingEngine(db),
         session_synthesizer=SessionSynthesizer(db, llm=llm, capabilities=capabilities),
         consolidation_engine=ConsolidationEngine(db, embedding, llm=llm, capabilities=capabilities),
         cairn_manager=CairnManager(db, llm=llm, capabilities=capabilities),
         digest_worker=DigestWorker(db, llm=llm, capabilities=capabilities),
+        ingest_pipeline=IngestPipeline(db, project_manager, memory_store, llm, config),
     )

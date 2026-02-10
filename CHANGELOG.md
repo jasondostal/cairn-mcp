@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-02-09
+
+### Added
+- **Smart ingestion pipeline** — unified `POST /api/ingest` endpoint that classifies, chunks, deduplicates, and routes content in a single call. Replaces manual decisions about whether content is a doc, a memory, or both.
+- **Chonkie chunking** — large documents are split into searchable memories using markdown-aware chunking (`RecursiveChunker` with markdown recipe). Preserves heading structure and code blocks at chunk boundaries.
+- **LLM content classification** — auto-determines whether content should be stored as a doc (reference material), memory (working knowledge), or both. Explicit `hint` parameter for override. Graceful fallback to "memory" when LLM unavailable.
+- **Ingestion dedup** — content-hash based deduplication via `ingestion_log` table. Second ingest of identical content returns `{"status": "duplicate"}` with reference to the original.
+- **Chunk→doc linkage** — `source_doc_id` column on `memories` table links chunks back to their parent document for traceability.
+- **Migration 008** — `ingestion_log` table (source, content_hash, target_type, target_ids, chunk_count) with unique index on content_hash. `source_doc_id` FK column on memories.
+- **Configurable chunking** — `CAIRN_INGEST_CHUNK_SIZE` (default 512 tokens) and `CAIRN_INGEST_CHUNK_OVERLAP` (default 64 tokens) env vars. Content under 2000 chars stored as single memory without chunking.
+
+### Changed
+- `MemoryStore.store()` accepts optional `source_doc_id` parameter for chunk→doc linkage.
+- `MemoryStore.store()` accepts `enrich=False` to skip LLM enrichment and relationship extraction while still generating embeddings. Used by the ingest pipeline for chunk storage — follows RAG best practice of enriching at the document level, not per-chunk.
+- `Services` dataclass expanded with `ingest_pipeline` field.
+- API version bumped to 0.16.0.
+- `cairn-ui` package version bumped to 0.16.0.
+
+### Dependencies
+- Added `chonkie` for markdown-aware text chunking.
+
 ## [0.15.0] - 2026-02-10
 
 ### Added
@@ -408,7 +429,9 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.15.0...v0.16.0
+[0.15.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.11.0...v0.12.0

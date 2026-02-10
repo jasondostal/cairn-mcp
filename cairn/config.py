@@ -70,6 +70,8 @@ class Config:
     http_port: int = 8000
     cors_origins: list[str] = field(default_factory=lambda: ["*"])
     event_archive_dir: str | None = None  # File-based event archive (e.g. /data/events)
+    ingest_chunk_size: int = 512       # tokens per chunk (Chonkie)
+    ingest_chunk_overlap: int = 64     # overlap tokens between chunks
 
 
 def _parse_cors_origins(raw: str) -> list[str]:
@@ -113,4 +115,6 @@ def load_config() -> Config:
         http_port=int(os.getenv("CAIRN_HTTP_PORT", "8000")),
         cors_origins=_parse_cors_origins(os.getenv("CAIRN_CORS_ORIGINS", "*")),
         event_archive_dir=os.getenv("CAIRN_EVENT_ARCHIVE_DIR") or None,
+        ingest_chunk_size=int(os.getenv("CAIRN_INGEST_CHUNK_SIZE", "512")),
+        ingest_chunk_overlap=int(os.getenv("CAIRN_INGEST_CHUNK_OVERLAP", "64")),
     )

@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 
 from fastapi import FastAPI, APIRouter, Query, Path, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 
 from cairn.core.constants import (
     MAX_EVENT_BATCH_SIZE,
@@ -36,9 +36,10 @@ def create_api(svc: Services) -> FastAPI:
     task_manager = svc.task_manager
     thinking_engine = svc.thinking_engine
     cairn_manager = svc.cairn_manager
+    ingest_pipeline = svc.ingest_pipeline
     app = FastAPI(
         title="Cairn API",
-        version="0.15.0",
+        version="0.16.0",
         description="REST API for the Cairn web UI and content ingestion.",
         docs_url="/swagger",
         redoc_url=None,
@@ -687,6 +688,44 @@ def create_api(svc: Services) -> FastAPI:
             related_files=related_files,
             related_ids=related_ids,
         )
+        return result
+
+    # ------------------------------------------------------------------
+    # POST /ingest — smart ingestion: classify, chunk, dedup, route
+    # ------------------------------------------------------------------
+    @router.post("/ingest", status_code=201)
+    def api_ingest(body: dict):
+        content = body.get("content")
+        project = body.get("project")
+        hint = body.get("hint", "auto")
+
+        if not content:
+            raise HTTPException(status_code=400, detail="content is required")
+        if not project:
+            raise HTTPException(status_code=400, detail="project is required")
+        if hint not in ("auto", "doc", "memory", "both"):
+            raise HTTPException(status_code=400, detail="hint must be one of: auto, doc, memory, both")
+
+        doc_type = body.get("doc_type")
+        if doc_type and doc_type not in VALID_DOC_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid doc_type: {doc_type}. Must be one of: {VALID_DOC_TYPES}",
+            )
+
+        result = ingest_pipeline.ingest(
+            content=content,
+            project=project,
+            hint=hint,
+            doc_type=doc_type,
+            title=body.get("title"),
+            source=body.get("source"),
+            tags=body.get("tags"),
+            session_name=body.get("session_name"),
+        )
+
+        if result["status"] == "duplicate":
+            return JSONResponse(content=result, status_code=200)
         return result
 
     app.include_router(router)

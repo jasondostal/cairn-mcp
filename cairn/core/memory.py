@@ -44,19 +44,25 @@ class MemoryStore:
         session_name: str | None = None,
         related_files: list[str] | None = None,
         related_ids: list[int] | None = None,
+        source_doc_id: int | None = None,
+        enrich: bool = True,
     ) -> dict:
         """Store a memory with embedding.
+
+        Args:
+            enrich: When False, skips LLM enrichment and relationship extraction.
+                    Embedding is always generated. Use for bulk/chunk ingestion.
 
         Returns the stored memory dict with ID.
         """
         project_id = get_or_create_project(self.db, project)
 
-        # Generate embedding
+        # Generate embedding (always — required for search)
         vector = self.embedding.embed(content)
 
-        # --- Enrichment ---
+        # --- Enrichment (skip for chunks/bulk) ---
         enrichment = {}
-        if self.enricher:
+        if enrich and self.enricher:
             enrichment = self.enricher.enrich(content)
 
         # Override logic: caller-provided values win
@@ -74,17 +80,19 @@ class MemoryStore:
         if memory_type == "note" and "memory_type" in enrichment:
             final_type = enrichment["memory_type"]
 
-        # Summary: always from LLM
+        # Summary: from LLM if enriched, otherwise first 200 chars
         summary = enrichment.get("summary")
+        if not enrich and not summary:
+            summary = content[:200].strip()
 
         # Insert memory
         row = self.db.execute_one(
             """
             INSERT INTO memories
                 (content, memory_type, importance, project_id, session_name,
-                 embedding, tags, auto_tags, summary, related_files)
+                 embedding, tags, auto_tags, summary, related_files, source_doc_id)
             VALUES
-                (%s, %s, %s, %s, %s, %s::vector, %s, %s, %s, %s)
+                (%s, %s, %s, %s, %s, %s::vector, %s, %s, %s, %s, %s)
             RETURNING id, created_at
             """,
             (
@@ -98,6 +106,7 @@ class MemoryStore:
                 auto_tags,
                 summary,
                 related_files or [],
+                source_doc_id,
             ),
         )
 
@@ -115,20 +124,24 @@ class MemoryStore:
                     (memory_id, related_id),
                 )
 
-        # Auto-extract relationships via LLM
-        auto_relations = self._extract_relationships(memory_id, content, vector, project_id)
-
-        # Escalate high-importance contradictions
-        conflicts = self._escalate_contradictions(auto_relations)
-
-        # Rule conflict detection
+        auto_relations = []
+        conflicts = []
         rule_conflicts = None
-        if final_type == "rule":
-            rule_conflicts = self._check_rule_conflicts(content, project)
+
+        if enrich:
+            # Auto-extract relationships via LLM
+            auto_relations = self._extract_relationships(memory_id, content, vector, project_id)
+
+            # Escalate high-importance contradictions
+            conflicts = self._escalate_contradictions(auto_relations)
+
+            # Rule conflict detection
+            if final_type == "rule":
+                rule_conflicts = self._check_rule_conflicts(content, project)
 
         self.db.commit()
 
-        logger.info("Stored memory #%d (type=%s, project=%s)", memory_id, final_type, project)
+        logger.info("Stored memory #%d (type=%s, project=%s, enrich=%s)", memory_id, final_type, project, enrich)
 
         return {
             "id": memory_id,

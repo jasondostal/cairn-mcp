@@ -1,5 +1,5 @@
-# Pinned dependencies from production container (v0.5.1)
-# Generated: 2026-02-08
+# Pinned dependencies from production container (v0.16.0)
+# Generated: 2026-02-09
 # Python 3.11-slim, torch CPU-only
 # Regenerate: docker exec cairn pip freeze > requirements.lock
 annotated-doc==0.0.4
@@ -9,6 +9,7 @@ attrs==25.4.0
 boto3==1.42.44
 botocore==1.42.44
 certifi==2026.1.4
+chonkie
 cffi==2.0.0
 click==8.3.1
 cryptography==46.0.4
