@@ -22,9 +22,11 @@ import {
   Brain,
   Shield,
   FileText,
+  PenLine,
 } from "lucide-react";
 
 const pages = [
+  { href: "/capture", label: "New Capture", icon: PenLine },
   { href: "/", label: "Dashboard", icon: Activity },
   { href: "/timeline", label: "Timeline", icon: Clock },
   { href: "/search", label: "Search", icon: Search },

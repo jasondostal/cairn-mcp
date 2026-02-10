@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cairn-mcp"
-version = "0.16.0"
-description = "Semantic memory for AI agents. Store, search, and discover patterns across persistent context."
+version = "0.17.0"
+description = "Persistent memory for agents and humans. Store, search, and discover patterns across persistent context."
 readme = "README.md"
 license = {text = "GPL-3.0-only"}
 requires-python = ">=3.11"
@@ -33,6 +33,7 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn>=0.34",
     "chonkie",
+    "trafilatura>=2.0",
 ]
 
 [project.optional-dependencies]

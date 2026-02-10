@@ -47,18 +47,56 @@ class IngestPipeline:
             )
         return self._chunker
 
+    def fetch_url(self, url: str) -> tuple[str, str | None]:
+        """Fetch a URL and extract readable content. Returns (content, title)."""
+        import trafilatura
+
+        downloaded = trafilatura.fetch_url(url)
+        if not downloaded:
+            raise ValueError(f"Could not fetch URL: {url}")
+        text = trafilatura.extract(downloaded)
+        if not text:
+            raise ValueError(f"Could not extract content from URL: {url}")
+        # Get title from a separate metadata extraction
+        title = None
+        try:
+            meta = trafilatura.extract_metadata(downloaded)
+            if meta:
+                title = meta.title
+        except Exception:
+            pass
+        return text, title
+
     def ingest(
         self,
-        content: str,
-        project: str,
+        content: str | None = None,
+        project: str | None = None,
         hint: str = "auto",
         doc_type: str | None = None,
         title: str | None = None,
         source: str | None = None,
         tags: list[str] | None = None,
         session_name: str | None = None,
+        url: str | None = None,
+        memory_type: str | None = None,
     ) -> dict:
-        """Run the full pipeline. Returns result dict."""
+        """Run the full pipeline. Returns result dict.
+
+        If url is provided and content is empty, fetches and extracts from URL.
+        If both url and content, stores content and attaches url as source.
+        """
+        # 0. URL extraction
+        if url and not content:
+            content, extracted_title = self.fetch_url(url)
+            if not title:
+                title = extracted_title
+            source = source or url
+        elif url and content:
+            source = source or url
+
+        if not content:
+            raise ValueError("content is required (or provide a url to fetch)")
+
         # 1. Dedup
         content_hash = hashlib.sha256(content.encode()).hexdigest()
         existing = self._check_dedup(content_hash)
@@ -87,7 +125,7 @@ class IngestPipeline:
                 mem = self.memory_store.store(
                     content=chunk.text,
                     project=project,
-                    memory_type="note",
+                    memory_type=memory_type or "note",
                     tags=tags,
                     session_name=session_name,
                     source_doc_id=doc_id,

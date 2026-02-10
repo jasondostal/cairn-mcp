@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/cairn-readme-banner.png" alt="Cairn — semantic memory for AI agents" width="800">
+  <img src="images/cairn-readme-banner.png" alt="Cairn — persistent memory for agents and humans" width="800">
 </p>
 
 <p align="center">
@@ -11,9 +11,9 @@
 
 ---
 
-An MCP server that gives AI agents persistent memory with three-tier knowledge capture: everything from deliberate decisions to ambient tool activity is remembered, organized, and surfaced automatically. Hybrid semantic search, pattern discovery, and session continuity — so agents never start from zero.
+Persistent memory for agents and humans. Three-tier knowledge capture — from deliberate decisions to ambient tool activity — remembered, organized, and surfaced automatically. Hybrid semantic search, pattern discovery, session continuity, and now a human capture layer. Agents never start from zero. Humans never lose a thought.
 
-**Built for agents.** 13 MCP tools, a REST API, and a web dashboard — three containers, one `docker compose up`.
+**Built for agents. Now built for humans too.** 13 MCP tools, a REST API, a web dashboard with quick capture, and browser/mobile integration — three containers, one `docker compose up`.
 
 ## Three-Tier Knowledge Capture
 
@@ -39,7 +39,9 @@ The tiers are additive and degrade gracefully. With all three active, a session 
 - **Session continuity** — Cairns mark the trail. Motes capture what happened. Narratives synthesize why it mattered. Next session starts with context, not a cold start.
 - **Memory consolidation** — Find duplicates, recommend merges and promotions, with dry-run safety.
 - **Structured thinking** — Reasoning sequences with branching, for when an agent needs to think through a problem step by step.
-- **Web dashboard** — Next.js + shadcn/ui. Timeline, search, cluster visualization, knowledge graph, Cmd+K command palette, inline memory viewer. Dark mode.
+- **Quick capture** — Human-facing capture UI with slash commands (`/decision`, `/cairn`), URL extraction via trafilatura, browser bookmarklet, and iOS Shortcut support. Keyboard-first, Tana-inspired. All capture surfaces feed into the same smart ingestion pipeline.
+- **Smart ingestion** — `POST /api/ingest` accepts text, URLs, or both. Auto-classifies content, chunks large documents, deduplicates, and routes to docs or memories. One endpoint, many doorways.
+- **Web dashboard** — Next.js + shadcn/ui. Timeline, search, cluster visualization, knowledge graph, Cmd+K command palette, inline memory viewer, capture page. Dark mode.
 - **One port, everything** — MCP protocol at `/mcp`, REST API at `/api`, same process. stdio also supported.
 - **Hardened** — Input validation on all tools, non-root Docker container, t-SNE sampling cap, pinned dependencies.
 - **7 LLM capabilities** — Each independently toggleable via env vars, each with graceful degradation. Core search/store/cairns never depends on LLM.
@@ -65,27 +67,27 @@ The tiers are additive and degrade gracefully. With all three active, a session 
 ## Architecture
 
 ```
-Browser                   MCP Client (Claude, etc.)         curl / scripts
-   |                          |                                  |
-   | HTTPS                    | stdio or streamable-http         | REST (GET)
-   |                          |                                  |
-+--v---+                  +---v----------------------------------v-----------+
-| Next | --/api proxy-->  |  /mcp  (MCP protocol)          /api  (REST API)  |
-| .js  |                  |                                                   |
-| UI   |                  |  cairn.server  (MCP tool definitions)             |
-+------+                  |  cairn.api     (FastAPI endpoints)                |
-cairn-ui                  |                                                   |
-                          |  core: memory, search, enrichment, clustering     |
-                          |        projects, tasks, thinking, cairns          |
-                          |        synthesis, consolidation, digest           |
-                          |                                                   |
-                          |  embedding: MiniLM-L6-v2 (local, 384-dim)        |
-                          |  llm: Bedrock (Llama 90B) or Ollama (local)       |
-                          |  storage: PostgreSQL 16 + pgvector (HNSW)        |
-                          +---------------------------------------------------+
-                              |
-                              v
-                          PostgreSQL 16 + pgvector (15 tables, 7 migrations)
+Browser         Bookmarklet / iOS     MCP Client (Claude, etc.)     curl / scripts
+   |                  |                      |                            |
+   | HTTPS            | POST /api/ingest     | stdio or streamable-http   | REST
+   |                  |                      |                            |
++--v---+          +---v----------------------v----------------------------v------+
+| Next | -proxy-> |  /mcp  (MCP protocol)              /api  (REST API)          |
+| .js  |          |                                                               |
+| UI   |          |  cairn.server  (MCP tool definitions)                         |
++------+          |  cairn.api     (FastAPI endpoints + ingest pipeline)          |
+cairn-ui          |                                                               |
+                  |  core: memory, search, enrichment, clustering, ingest        |
+                  |        projects, tasks, thinking, cairns                     |
+                  |        synthesis, consolidation, digest                      |
+                  |                                                               |
+                  |  embedding: MiniLM-L6-v2 (local, 384-dim)                    |
+                  |  llm: Bedrock (Llama 90B) or Ollama (local)                   |
+                  |  storage: PostgreSQL 16 + pgvector (HNSW)                    |
+                  +---------------------------------------------------------------+
+                      |
+                      v
+                  PostgreSQL 16 + pgvector (15 tables, 8 migrations)
 ```
 
 ## Prerequisites
@@ -287,6 +289,8 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting.
 | `POST /api/cairns` | Set a cairn (used by session-end hook) |
 | `GET /api/events?session_name=&project=` | Event batches with digest status |
 | `POST /api/events/ingest` | Ship event batch (202 Accepted, idempotent) |
+| `POST /api/ingest` | Smart ingestion — text, URL, or both. Classify, chunk, dedup, route. |
+| `GET /api/bookmarklet.js` | Browser bookmarklet script for one-click capture |
 | `GET /api/clusters/visualization?project=` | t-SNE 2D coordinates for scatter plot |
 | `GET /api/export?project=&format=` | Export project memories (JSON or Markdown) |
 | `GET /api/graph?project=&relation_type=` | Knowledge graph nodes and edges |
@@ -300,9 +304,9 @@ curl "http://localhost:8000/api/search?q=architecture&limit=5"
 
 A full dashboard for browsing your agent's memory. Built with Next.js 16, shadcn/ui, and Tailwind CSS 4.
 
-**10 pages:** Dashboard / Timeline / Search / Projects / Docs / Clusters / Cluster Visualization / Tasks / Thinking / Rules
+**11 pages:** Dashboard / Capture / Timeline / Search / Projects / Docs / Clusters / Cluster Visualization / Tasks / Thinking / Rules
 
-**Plus:** Cmd+K command palette (global), inline memory viewer (Sheet slide-over), project export
+**Plus:** Cmd+K command palette (global), inline memory viewer (Sheet slide-over), project export, browser bookmarklet install
 
 The UI runs as a separate container and proxies API calls to the Cairn backend.
 
@@ -382,7 +386,7 @@ docker exec cairn python -m pytest tests/ -v
 
 ### Database Schema
 
-15 tables across 7 migrations:
+16 tables across 8 migrations:
 
 | Migration | Tables |
 |-----------|--------|
@@ -393,6 +397,7 @@ docker exec cairn python -m pytest tests/ -v
 | **005 Indexes** | Partial indexes on `memories` for timeline and session queries |
 | **006 Events** | `session_events` — streaming event batches with LLM digests |
 | **007 Doc Title** | `title` column on `project_documents` |
+| **008 Ingestion** | `ingestion_log` — content-hash dedup, source tracking, chunk counts |
 
 ## Search Quality
 

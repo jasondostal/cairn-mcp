@@ -13,6 +13,19 @@ async function get<T>(path: string, params?: Record<string, string>): Promise<T>
   return res.json();
 }
 
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `${res.status} ${res.statusText}`);
+  }
+  return res.json();
+}
+
 // --- Types ---
 
 export interface Status {
@@ -225,6 +238,28 @@ export interface CairnDetail extends Cairn {
   stones: CairnStone[];
 }
 
+export interface IngestRequest {
+  content?: string;
+  url?: string;
+  project: string;
+  hint?: "auto" | "doc" | "memory" | "both";
+  doc_type?: string;
+  title?: string;
+  source?: string;
+  tags?: string[];
+  session_name?: string;
+  memory_type?: string;
+}
+
+export interface IngestResponse {
+  status: "ingested" | "duplicate";
+  target_type?: string;
+  doc_id?: number | null;
+  memory_ids?: number[];
+  chunk_count?: number;
+  existing?: { id: number; source: string; target_type: string; created_at: string };
+}
+
 // --- API functions ---
 
 export const api = {
@@ -278,4 +313,6 @@ export const api = {
 
   exportProject: (project: string, format: string = "json") =>
     get<ExportResult | string>("/export", { project, format }),
+
+  ingest: (body: IngestRequest) => post<IngestResponse>("/ingest", body),
 };

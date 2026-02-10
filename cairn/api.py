@@ -39,7 +39,7 @@ def create_api(svc: Services) -> FastAPI:
     ingest_pipeline = svc.ingest_pipeline
     app = FastAPI(
         title="Cairn API",
-        version="0.16.0",
+        version="0.17.0",
         description="REST API for the Cairn web UI and content ingestion.",
         docs_url="/swagger",
         redoc_url=None,
@@ -697,10 +697,11 @@ def create_api(svc: Services) -> FastAPI:
     def api_ingest(body: dict):
         content = body.get("content")
         project = body.get("project")
+        url = body.get("url")
         hint = body.get("hint", "auto")
 
-        if not content:
-            raise HTTPException(status_code=400, detail="content is required")
+        if not content and not url:
+            raise HTTPException(status_code=400, detail="content or url is required")
         if not project:
             raise HTTPException(status_code=400, detail="project is required")
         if hint not in ("auto", "doc", "memory", "both"):
@@ -713,20 +714,47 @@ def create_api(svc: Services) -> FastAPI:
                 detail=f"Invalid doc_type: {doc_type}. Must be one of: {VALID_DOC_TYPES}",
             )
 
-        result = ingest_pipeline.ingest(
-            content=content,
-            project=project,
-            hint=hint,
-            doc_type=doc_type,
-            title=body.get("title"),
-            source=body.get("source"),
-            tags=body.get("tags"),
-            session_name=body.get("session_name"),
-        )
+        memory_type = body.get("memory_type")
+        if memory_type and memory_type not in VALID_MEMORY_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid memory_type: {memory_type}. Must be one of: {VALID_MEMORY_TYPES}",
+            )
+
+        try:
+            result = ingest_pipeline.ingest(
+                content=content,
+                project=project,
+                hint=hint,
+                doc_type=doc_type,
+                title=body.get("title"),
+                source=body.get("source"),
+                tags=body.get("tags"),
+                session_name=body.get("session_name"),
+                url=url,
+                memory_type=memory_type,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
 
         if result["status"] == "duplicate":
             return JSONResponse(content=result, status_code=200)
         return result
+
+    # ------------------------------------------------------------------
+    # GET /bookmarklet.js — browser bookmarklet for quick capture
+    # ------------------------------------------------------------------
+    @router.get("/bookmarklet.js")
+    def api_bookmarklet():
+        js = (
+            "javascript:void(window.open("
+            "'https://cairn.witekdivers.com/capture"
+            "?url='+encodeURIComponent(location.href)"
+            "+'&title='+encodeURIComponent(document.title)"
+            "+'&text='+encodeURIComponent(window.getSelection().toString()),"
+            "'_blank','width=600,height=600'))"
+        )
+        return Response(content=js, media_type="application/javascript")
 
     app.include_router(router)
     return app

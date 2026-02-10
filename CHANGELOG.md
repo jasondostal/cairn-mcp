@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-02-10
+
+### Added
+- **Capture UI** — new `/capture` page in the web UI. Auto-focused textarea, project selector, tag input, memory type selector, and URL field. Keyboard-first: Ctrl+Enter to submit, slash commands for inline project/type switching (type `/decision` or `/cairn` in the textarea). Remembers last-used project.
+- **Slash commands** — type `/` in the capture textarea to set memory type (`/decision`, `/rule`, `/learning`, etc.) or switch project (`/cairn`, `/llm-context`). Arrow keys navigate, Enter selects, Esc dismisses. The slash text is removed from content on selection.
+- **URL extraction** — `POST /api/ingest` now accepts an optional `url` field. If URL provided without content, fetches the page and extracts readable text via `trafilatura`. If both URL and content, attaches URL as source metadata. Title auto-extracted from page metadata.
+- **Browser bookmarklet** — `GET /api/bookmarklet.js` serves a one-click bookmarklet. Grabs page URL, document title, and selected text, opens the capture UI with fields pre-filled. Install instructions on the capture page.
+- **iOS Shortcut support** — the ingest API accepts `source: "ios-shortcut"` for tracking. Setup instructions on the capture page.
+- **`memory_type` on ingest** — `POST /api/ingest` now accepts `memory_type` parameter, threaded through to stored memories. Previously hardcoded to "note".
+- "New Capture" added to Cmd+K command palette.
+- Updated branding: "Persistent memory for agents and humans."
+
+### Changed
+- Capture page is second in nav (after Dashboard).
+- `/api/ingest` validation relaxed: `content` OR `url` required (previously `content` was mandatory).
+
+### Dependencies
+- Added `trafilatura>=2.0` for URL content extraction.
+
 ## [0.16.0] - 2026-02-09
 
 ### Added

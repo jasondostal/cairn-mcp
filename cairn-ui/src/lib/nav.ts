@@ -10,6 +10,7 @@ import {
   ListTodo,
   Brain,
   Shield,
+  PenLine,
 } from "lucide-react";
 
 export interface NavItem {
@@ -20,6 +21,7 @@ export interface NavItem {
 
 export const navItems: NavItem[] = [
   { href: "/", label: "Dashboard", icon: Activity },
+  { href: "/capture", label: "Capture", icon: PenLine },
   { href: "/timeline", label: "Timeline", icon: Clock },
   { href: "/cairns", label: "Cairns", icon: Landmark },
   { href: "/search", label: "Search", icon: Search },

@@ -66,6 +66,7 @@ sympy==1.14.0
 threadpoolctl==3.6.0
 tokenizers==0.22.2
 torch==2.10.0+cpu
+trafilatura>=2.0
 tqdm==4.67.3
 transformers==5.1.0
 typer==0.21.1
