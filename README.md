@@ -11,101 +11,26 @@
 
 ---
 
-Persistent memory for agents and humans. Three-tier knowledge capture — from deliberate decisions to ambient tool activity — remembered, organized, and surfaced automatically. Hybrid semantic search, pattern discovery, session continuity, and now a human capture layer. Agents never start from zero. Humans never lose a thought.
+Your AI starts every session from scratch. Your best ideas vanish before you can write them down. Cairn fixes both — persistent memory for agents and humans, stored once and found always.
 
-**Built for agents. Now built for humans too.** 13 MCP tools, a REST API, a web dashboard with quick capture, and browser/mobile integration — three containers, one `docker compose up`.
+**Agents remember across sessions.** Decisions, learnings, and dead ends are captured automatically. Session markers (*cairns*) let the next agent pick up where the last one left off. **Humans capture thoughts instantly.** Type a thought, slash-command it into a category, and move on. Grab a URL from your browser with one click. Share from your phone. Everything lands in the same searchable pool.
 
-## Three-Tier Knowledge Capture
-
-Most agent memory systems require the agent to explicitly decide what's worth remembering. Cairn captures knowledge at three levels simultaneously, with each tier working independently:
-
-| Tier | How it works | Agent effort | What's captured |
-|------|-------------|-------------|----------------|
-| **Tier 3: Hook-automated** | Claude Code lifecycle hooks silently log every tool call as a *mote* (lightweight event). At session end, the full event stream is crystallized into a cairn with an LLM-synthesized narrative. | Zero | Everything — files read, edits made, commands run, searches performed |
-| **Tier 2: Tool-assisted** | Agent calls `cairns(action="set")` at session end to mark a trail marker. Works without hooks. | One tool call | All memories stored during the session |
-| **Tier 1: Organic** | Agent stores memories via behavioral rules — decisions, learnings, dead ends. Works without cairns. | Per-insight | Deliberate observations the agent deems important |
-
-The tiers are additive and degrade gracefully. With all three active, a session produces: a rich narrative synthesized from both the mote timeline *and* stored memories, linked trail markers for next session's context, and individually searchable memories with auto-enrichment. Remove the hooks? Tier 2 and 1 still work. Agent forgets to set a cairn? The organic memories are still there.
-
-**Next session, the agent walks the trail back.** Session-start hooks load recent cairn narratives into context — the agent picks up where the last one left off, not from a blank slate.
-
-## Highlights
-
-- **Three-tier capture** — Ambient motes + session cairns + organic memories. See above.
-- **Hybrid search** — Vector similarity + full-text + tag matching, fused with Reciprocal Rank Fusion. [83.8% recall@10](#search-quality) on our internal benchmark (50-memory synthetic corpus, 25 hand-labeled queries). Optional LLM query expansion. Contradiction-aware ranking automatically demotes memories that have been superseded.
-- **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, and importance score on store. Bedrock or Ollama.
-- **Smart relationships** — On store, LLM identifies genuinely related memories and creates typed links (extends, contradicts, implements, depends_on). Rule conflict detection warns about contradictions.
-- **Pattern discovery** — DBSCAN clustering finds themes across memories. LLM writes the labels. No cron jobs — clusters refresh lazily.
-- **Session continuity** — Cairns mark the trail. Motes capture what happened. Narratives synthesize why it mattered. Next session starts with context, not a cold start.
-- **Memory consolidation** — Find duplicates, recommend merges and promotions, with dry-run safety.
-- **Structured thinking** — Reasoning sequences with branching, for when an agent needs to think through a problem step by step.
-- **Quick capture** — Human-facing capture UI with slash commands (`/decision`, `/cairn`), URL extraction via trafilatura, browser bookmarklet, and iOS Shortcut support. Keyboard-first, Tana-inspired. All capture surfaces feed into the same smart ingestion pipeline.
+Three containers. One `docker compose up`. 13 MCP tools, a REST API, a web dashboard, and browser/mobile capture.
 
 <p align="center">
   <img src="images/cairn-capture-screenshot.jpg" alt="Cairn capture page with slash commands" width="700">
 </p>
-- **Smart ingestion** — `POST /api/ingest` accepts text, URLs, or both. Auto-classifies content, chunks large documents, deduplicates, and routes to docs or memories. One endpoint, many doorways.
-- **Web dashboard** — Next.js + shadcn/ui. Timeline, search, cluster visualization, knowledge graph, Cmd+K command palette, inline memory viewer, capture page. Dark mode.
-- **One port, everything** — MCP protocol at `/mcp`, REST API at `/api`, same process. stdio also supported.
-- **Hardened** — Input validation on all tools, non-root Docker container, t-SNE sampling cap, pinned dependencies.
-- **7 LLM capabilities** — Each independently toggleable via env vars, each with graceful degradation. Core search/store/cairns never depends on LLM.
 
-## MCP Tools
+## What you get
 
-| Tool | What it does |
-|------|-------------|
-| `store` | Persist a memory with auto-enrichment, relationship extraction, and rule conflict detection |
-| `search` | Hybrid semantic search with query expansion and optional confidence gating |
-| `recall` | Expand memory IDs to full content with cluster context |
-| `modify` | Update, soft-delete, or reactivate memories |
-| `rules` | Behavioral guardrails — global or per-project |
-| `insights` | DBSCAN clustering with LLM-generated pattern summaries |
-| `projects` | Documents (briefs, PRDs, plans, primers, writeups, guides) and cross-project linking |
-| `tasks` | Task lifecycle — create, complete, list, link to memories |
-| `think` | Structured reasoning sequences with branching |
-| `status` | System health, counts, embedding model info, active LLM capabilities |
-| `synthesize` | Synthesize session memories into a coherent narrative |
-| `consolidate` | Find duplicate memories, recommend merges/promotions/inactivations |
-| `cairns` | Session markers — set at session end, walk the trail back, compress old ones |
-
-## Architecture
-
-```
-Browser         Bookmarklet / iOS     MCP Client (Claude, etc.)     curl / scripts
-   |                  |                      |                            |
-   | HTTPS            | POST /api/ingest     | stdio or streamable-http   | REST
-   |                  |                      |                            |
-+--v---+          +---v----------------------v----------------------------v------+
-| Next | -proxy-> |  /mcp  (MCP protocol)              /api  (REST API)          |
-| .js  |          |                                                               |
-| UI   |          |  cairn.server  (MCP tool definitions)                         |
-+------+          |  cairn.api     (FastAPI endpoints + ingest pipeline)          |
-cairn-ui          |                                                               |
-                  |  core: memory, search, enrichment, clustering, ingest        |
-                  |        projects, tasks, thinking, cairns                     |
-                  |        synthesis, consolidation, digest                      |
-                  |                                                               |
-                  |  embedding: MiniLM-L6-v2 (local, 384-dim)                    |
-                  |  llm: Bedrock (Llama 90B) or Ollama (local)                   |
-                  |  storage: PostgreSQL 16 + pgvector (HNSW)                    |
-                  +---------------------------------------------------------------+
-                      |
-                      v
-                  PostgreSQL 16 + pgvector (15 tables, 8 migrations)
-```
-
-## Prerequisites
-
-Cairn needs an **LLM backend** for enrichment, relationship extraction, and session narrative synthesis. Choose one:
-
-| Backend | Setup | Best for |
-|---------|-------|----------|
-| **Ollama** (default) | Install [Ollama](https://ollama.com), pull a model (`ollama pull qwen2.5-coder:7b`). Cairn connects to `host.docker.internal:11434`. | Local development, no cloud dependency |
-| **AWS Bedrock** | Set `CAIRN_LLM_BACKEND=bedrock`, mount or export AWS credentials. Requires model access in your AWS account. | Production, larger models |
-
-**No LLM? Cairn still works.** Core features — store, search, recall, cairns, rules — function without an LLM. You lose auto-enrichment (summaries, tags, importance scoring), relationship extraction, and session narrative synthesis. Memories are still embedded and searchable.
-
-> **Security note:** The default `docker-compose.yml` ships with a development database password (`cairn-dev-password`). This is intentional for quick local setup. For any network-exposed deployment, override it: `CAIRN_DB_PASS=your-secure-password docker compose up -d`
+- **Session continuity** — Cairns mark the trail. Motes capture what happened. Narratives synthesize why it mattered. Next session starts warm, not cold.
+- **Quick capture** — Slash commands (`/decision`, `/learning`), URL extraction, browser bookmarklet, iOS Shortcut. Keyboard-first, Tana-inspired.
+- **Smart ingestion** — Text, URLs, or both. Auto-classifies, chunks large documents, deduplicates, and routes. One endpoint, many doorways.
+- **Hybrid search** — Vector similarity + full-text + tag matching via Reciprocal Rank Fusion. [83.8% recall@10](#search-quality). Contradiction-aware ranking.
+- **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, importance score, and relationship links on store.
+- **Pattern discovery** — DBSCAN clustering finds themes across memories. LLM writes the labels. Clusters refresh lazily.
+- **Web dashboard** — 11 pages. Timeline, search, clusters, knowledge graph, Cmd+K, dark mode.
+- **Three containers, done** — MCP at `/mcp`, REST at `/api`, same process. PostgreSQL + pgvector. No exotic dependencies.
 
 ## Quick Start
 
@@ -246,7 +171,40 @@ Once connected, your agent can immediately use all 13 tools. Try:
 
 Cairn will store it, generate a summary, auto-tag it, and score its importance.
 
-### 4. Enable session capture (optional)
+## Prerequisites
+
+Cairn needs an **LLM backend** for enrichment, relationship extraction, and session narrative synthesis. Choose one:
+
+| Backend | Setup | Best for |
+|---------|-------|----------|
+| **Ollama** (default) | Install [Ollama](https://ollama.com), pull a model (`ollama pull qwen2.5-coder:7b`). Cairn connects to `host.docker.internal:11434`. | Local development, no cloud dependency |
+| **AWS Bedrock** | Set `CAIRN_LLM_BACKEND=bedrock`, mount or export AWS credentials. Requires model access in your AWS account. | Production, larger models |
+
+**No LLM? Cairn still works.** Core features — store, search, recall, cairns, rules — function without an LLM. You lose auto-enrichment (summaries, tags, importance scoring), relationship extraction, and session narrative synthesis. Memories are still embedded and searchable.
+
+> **Security note:** The default `docker-compose.yml` ships with a development database password (`cairn-dev-password`). This is intentional for quick local setup. For any network-exposed deployment, override it: `CAIRN_DB_PASS=your-secure-password docker compose up -d`
+
+---
+
+<details>
+<summary><strong>Three-Tier Knowledge Capture</strong></summary>
+
+Most agent memory systems require the agent to explicitly decide what's worth remembering. Cairn captures knowledge at three levels simultaneously, with each tier working independently:
+
+| Tier | How it works | Agent effort | What's captured |
+|------|-------------|-------------|----------------|
+| **Tier 3: Hook-automated** | Claude Code lifecycle hooks silently log every tool call as a *mote* (lightweight event). At session end, the full event stream is crystallized into a cairn with an LLM-synthesized narrative. | Zero | Everything — files read, edits made, commands run, searches performed |
+| **Tier 2: Tool-assisted** | Agent calls `cairns(action="set")` at session end to mark a trail marker. Works without hooks. | One tool call | All memories stored during the session |
+| **Tier 1: Organic** | Agent stores memories via behavioral rules — decisions, learnings, dead ends. Works without cairns. | Per-insight | Deliberate observations the agent deems important |
+
+The tiers are additive and degrade gracefully. With all three active, a session produces: a rich narrative synthesized from both the mote timeline *and* stored memories, linked trail markers for next session's context, and individually searchable memories with auto-enrichment. Remove the hooks? Tier 2 and 1 still work. Agent forgets to set a cairn? The organic memories are still there.
+
+**Next session, the agent walks the trail back.** Session-start hooks load recent cairn narratives into context — the agent picks up where the last one left off, not from a blank slate.
+
+</details>
+
+<details>
+<summary><strong>Session Capture & Hooks</strong></summary>
 
 Cairn can automatically capture your entire session — every tool call logged as a lightweight event (*mote*), crystallized into a cairn when the session ends. Next session, the agent starts with context instead of a blank slate.
 
@@ -269,7 +227,31 @@ The agent (via MCP tool) and the hook (via REST POST) can both set a cairn for t
 
 No hooks? No problem. The `cairns` tool works without them — the agent can call `cairns(action="set")` directly. And even without cairns, memories stored with a `session_name` are still grouped and searchable.
 
-## REST API
+</details>
+
+<details>
+<summary><strong>MCP Tools</strong> — 13 tools</summary>
+
+| Tool | What it does |
+|------|-------------|
+| `store` | Persist a memory with auto-enrichment, relationship extraction, and rule conflict detection |
+| `search` | Hybrid semantic search with query expansion and optional confidence gating |
+| `recall` | Expand memory IDs to full content with cluster context |
+| `modify` | Update, soft-delete, or reactivate memories |
+| `rules` | Behavioral guardrails — global or per-project |
+| `insights` | DBSCAN clustering with LLM-generated pattern summaries |
+| `projects` | Documents (briefs, PRDs, plans, primers, writeups, guides) and cross-project linking |
+| `tasks` | Task lifecycle — create, complete, list, link to memories |
+| `think` | Structured reasoning sequences with branching |
+| `status` | System health, counts, embedding model info, active LLM capabilities |
+| `synthesize` | Synthesize session memories into a coherent narrative |
+| `consolidate` | Find duplicate memories, recommend merges/promotions/inactivations |
+| `cairns` | Session markers — set at session end, walk the trail back, compress old ones |
+
+</details>
+
+<details>
+<summary><strong>REST API</strong> — 21 endpoints</summary>
 
 REST endpoints at `/api` — powers the web UI, hook scripts, and scripting.
 
@@ -304,29 +286,39 @@ curl http://localhost:8000/api/status
 curl "http://localhost:8000/api/search?q=architecture&limit=5"
 ```
 
-## Web UI
+</details>
 
-A full dashboard for browsing your agent's memory. Built with Next.js 16, shadcn/ui, and Tailwind CSS 4.
+<details>
+<summary><strong>Architecture</strong></summary>
 
-**11 pages:** Dashboard / Capture / Timeline / Search / Projects / Docs / Clusters / Cluster Visualization / Tasks / Thinking / Rules
-
-**Plus:** Cmd+K command palette (global), inline memory viewer (Sheet slide-over), project export, browser bookmarklet install
-
-The UI runs as a separate container and proxies API calls to the Cairn backend.
-
-```bash
-docker compose up -d  # starts cairn, cairn-db, and cairn-ui
+```
+Browser         Bookmarklet / iOS     MCP Client (Claude, etc.)     curl / scripts
+   |                  |                      |                            |
+   | HTTPS            | POST /api/ingest     | stdio or streamable-http   | REST
+   |                  |                      |                            |
++--v---+          +---v----------------------v----------------------------v------+
+| Next | -proxy-> |  /mcp  (MCP protocol)              /api  (REST API)          |
+| .js  |          |                                                               |
+| UI   |          |  cairn.server  (MCP tool definitions)                         |
++------+          |  cairn.api     (FastAPI endpoints + ingest pipeline)          |
+cairn-ui          |                                                               |
+                  |  core: memory, search, enrichment, clustering, ingest        |
+                  |        projects, tasks, thinking, cairns                     |
+                  |        synthesis, consolidation, digest                      |
+                  |                                                               |
+                  |  embedding: MiniLM-L6-v2 (local, 384-dim)                    |
+                  |  llm: Bedrock (Llama 90B) or Ollama (local)                   |
+                  |  storage: PostgreSQL 16 + pgvector (HNSW)                    |
+                  +---------------------------------------------------------------+
+                      |
+                      v
+                  PostgreSQL 16 + pgvector (16 tables, 8 migrations)
 ```
 
-Or run in development:
+</details>
 
-```bash
-cd cairn-ui
-npm install
-CAIRN_API_URL=http://localhost:8000 npm run dev
-```
-
-## Search
+<details>
+<summary><strong>Search</strong></summary>
 
 Cairn fuses three signals with **Reciprocal Rank Fusion (RRF)**:
 
@@ -338,7 +330,10 @@ Cairn fuses three signals with **Reciprocal Rank Fusion (RRF)**:
 
 Filter by project, memory type, file path, recency, or set custom limits. Three modes: `semantic` (hybrid, default), `keyword`, or `vector`.
 
-## Configuration
+</details>
+
+<details>
+<summary><strong>Configuration</strong></summary>
 
 All via environment variables:
 
@@ -369,7 +364,10 @@ All via environment variables:
 | `CAIRN_LLM_CONFIDENCE_GATING` | `false` | Post-search quality assessment — returns a confidence score but does not filter results (caller decides). High reasoning demand. |
 | `CAIRN_LLM_EVENT_DIGEST` | `true` | Digest event batches into rolling LLM summaries for richer cairn narratives |
 
-## Development
+</details>
+
+<details>
+<summary><strong>Development</strong></summary>
 
 ```bash
 git clone https://github.com/jasondostal/cairn-mcp.git
@@ -403,7 +401,10 @@ docker exec cairn python -m pytest tests/ -v
 | **007 Doc Title** | `title` column on `project_documents` |
 | **008 Ingestion** | `ingestion_log` — content-hash dedup, source tracking, chunk counts |
 
-## Search Quality
+</details>
+
+<details>
+<summary><strong>Search Quality</strong></summary>
 
 Cairn includes an evaluation framework (`eval/`) for measuring search quality. Current results on our internal benchmark:
 
@@ -428,6 +429,8 @@ The eval runs **without LLM features** (no query expansion, no confidence gating
 The eval framework supports model comparison (MiniLM-L6-v2 vs. all-mpnet-base-v2 evaluated, smaller model chosen with +1.5% recall advantage) and includes a keyword-only control to isolate embedding quality.
 
 We plan to grow the corpus, add graded relevance, test query expansion impact, and measure at larger scales. Contributions to the eval set are welcome.
+
+</details>
 
 ## License
 
