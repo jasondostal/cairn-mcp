@@ -319,7 +319,7 @@ cairn-ui          |                                                             
                   |        projects, tasks, thinking, cairns                     |
                   |        synthesis, consolidation, digest                      |
                   |                                                               |
-                  |  embedding: MiniLM-L6-v2 (local, 384-dim, pluggable)         |
+                  |  embedding: local (MiniLM), Bedrock (Titan V2) (pluggable)   |
                   |  llm: Ollama, Bedrock, Gemini, OpenAI-compat (pluggable)     |
                   |  storage: PostgreSQL 16 + pgvector (HNSW)                    |
                   +---------------------------------------------------------------+
@@ -377,9 +377,11 @@ All via environment variables:
 | `CAIRN_API_KEY` | *(empty)* | API key (required when auth enabled) |
 | `CAIRN_AUTH_HEADER` | `X-API-Key` | Header name to check for API key (configurable for auth proxy compatibility) |
 | `CAIRN_EVENT_ARCHIVE_DIR` | *(disabled)* | File path for event archive (e.g. `/data/events`) |
-| `CAIRN_EMBEDDING_BACKEND` | `local` | Embedding provider (`local` for SentenceTransformer, or custom registered name) |
-| `CAIRN_EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence transformer model |
-| `CAIRN_EMBEDDING_DIMENSIONS` | `384` | Embedding vector dimensions |
+| `CAIRN_EMBEDDING_BACKEND` | `local` | Embedding provider: `local` (SentenceTransformer), `bedrock` (Titan V2), or custom registered name |
+| `CAIRN_EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence transformer model (local backend) |
+| `CAIRN_EMBEDDING_DIMENSIONS` | `384` | Embedding vector dimensions. Auto-reconciled on startup if changed. |
+| `CAIRN_EMBEDDING_BEDROCK_MODEL` | `amazon.titan-embed-text-v2:0` | Bedrock embedding model ID |
+| `CAIRN_EMBEDDING_BEDROCK_REGION` | `us-east-1` | AWS region for Bedrock embedding (falls back to `AWS_DEFAULT_REGION`) |
 | `CAIRN_INGEST_CHUNK_SIZE` | `512` | Tokens per chunk for document ingestion |
 | `CAIRN_INGEST_CHUNK_OVERLAP` | `64` | Overlap tokens between chunks |
 | `CAIRN_LLM_QUERY_EXPANSION` | `true` | Expand search queries with related terms |

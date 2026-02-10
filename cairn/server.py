@@ -46,8 +46,9 @@ async def lifespan(server: FastMCP):
     """Connect to database and run migrations on startup, clean up on shutdown."""
     db.connect()
     db.run_migrations()
+    db.reconcile_vector_dimensions(config.embedding.dimensions)
     digest_worker.start()
-    logger.info("Cairn started. Embedding model: %s", config.embedding.model)
+    logger.info("Cairn started. Embedding: %s (%d-dim)", config.embedding.backend, config.embedding.dimensions)
     try:
         yield {}
     finally:
@@ -679,8 +680,9 @@ def main():
         async def combined_lifespan(app):
             db.connect()
             db.run_migrations()
+            db.reconcile_vector_dimensions(config.embedding.dimensions)
             digest_worker.start()
-            logger.info("Cairn started. Embedding: %s", config.embedding.model)
+            logger.info("Cairn started. Embedding: %s (%d-dim)", config.embedding.backend, config.embedding.dimensions)
             try:
                 async with _mcp_lifespan(app) as state:
                     yield state

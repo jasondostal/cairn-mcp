@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-02-10
+
+### Added
+- **Bedrock Titan Text Embeddings V2 backend** — new built-in embedding provider (`CAIRN_EMBEDDING_BACKEND=bedrock`) using Amazon Titan Text Embeddings V2 via Bedrock. 8,192 token context (vs 256 for local MiniLM), configurable output dimensions (256/512/1024). Same retry pattern as the Bedrock LLM backend. ~$0.02/1M tokens — effectively free at typical scales.
+- **Config-driven vector dimensions with auto-reconciliation** — on startup, Cairn compares the configured `CAIRN_EMBEDDING_DIMENSIONS` against the actual database schema. If they differ, it automatically resizes the `vector(N)` columns, nulls out stale embeddings, clears clusters, and recreates the HNSW index. Handles fresh installs, backend switches, and dimension changes without manual migration.
+- **Re-embedding script** — `scripts/reembed.py` backfills memories with NULL embeddings after a backend switch. Progress logging every 50 memories, cost estimate for Bedrock.
+- New env vars: `CAIRN_EMBEDDING_BEDROCK_MODEL` (default: `amazon.titan-embed-text-v2:0`), `CAIRN_EMBEDDING_BEDROCK_REGION` (falls back to `AWS_DEFAULT_REGION`).
+- 9 new tests for Bedrock embedding (request body, retry logic, factory routing, interface contract).
+
+### Changed
+- `EmbeddingConfig` expanded with `bedrock_model` and `bedrock_region` fields.
+- Embedding factory recognizes `"bedrock"` as a built-in backend alongside `"local"`.
+- Both server lifespan paths (stdio + HTTP) call `reconcile_vector_dimensions()` after migrations.
+
 ## [0.19.0] - 2026-02-10
 
 ### Changed
@@ -493,7 +507,9 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.19.0...v0.20.0
+[0.19.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.15.0...v0.16.0

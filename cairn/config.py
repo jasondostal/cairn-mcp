@@ -19,9 +19,13 @@ class DatabaseConfig:
 
 @dataclass(frozen=True)
 class EmbeddingConfig:
-    backend: str = "local"  # "local" (SentenceTransformer) or registered provider name
+    backend: str = "local"  # "local", "bedrock", or registered provider name
     model: str = "all-MiniLM-L6-v2"
     dimensions: int = 384
+
+    # Bedrock settings (Titan Text Embeddings V2)
+    bedrock_model: str = "amazon.titan-embed-text-v2:0"
+    bedrock_region: str = "us-east-1"
 
 
 @dataclass(frozen=True)
@@ -112,6 +116,8 @@ def load_config() -> Config:
             backend=os.getenv("CAIRN_EMBEDDING_BACKEND", "local"),
             model=os.getenv("CAIRN_EMBEDDING_MODEL", "all-MiniLM-L6-v2"),
             dimensions=int(os.getenv("CAIRN_EMBEDDING_DIMENSIONS", "384")),
+            bedrock_model=os.getenv("CAIRN_EMBEDDING_BEDROCK_MODEL", "amazon.titan-embed-text-v2:0"),
+            bedrock_region=os.getenv("CAIRN_EMBEDDING_BEDROCK_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1")),
         ),
         llm=LLMConfig(
             backend=os.getenv("CAIRN_LLM_BACKEND", "ollama"),

@@ -162,3 +162,59 @@ class Database:
                 raise
 
         logger.info("All migrations applied. %d total.", len(migration_files))
+
+    def reconcile_vector_dimensions(self, dimensions: int) -> None:
+        """Resize vector columns if configured dimensions differ from schema.
+
+        Handles backend switches (e.g. local 384-dim → Bedrock 1024-dim) by:
+        1. Altering vector column types on memories and clusters
+        2. Nulling existing embeddings (old dimensions are invalid)
+        3. Clearing stale clusters
+        4. Recreating the HNSW index
+
+        No-op when dimensions already match.
+        """
+        row = self.execute_one("""
+            SELECT atttypmod FROM pg_attribute
+            WHERE attrelid = 'memories'::regclass
+              AND attname = 'embedding'
+        """)
+        if row is None:
+            logger.warning("Could not read embedding column metadata — skipping reconciliation")
+            self.rollback()
+            return
+
+        current_dim = row["atttypmod"]
+        if current_dim == dimensions:
+            logger.info("Vector dimensions match configured value (%d) — no reconciliation needed", dimensions)
+            self.rollback()
+            return
+
+        logger.info("Reconciling vector dimensions: %d → %d", current_dim, dimensions)
+
+        # Drop and recreate index + alter column types
+        self.execute("DROP INDEX IF EXISTS idx_memories_embedding")
+        self.execute(f"ALTER TABLE memories ALTER COLUMN embedding TYPE vector({dimensions})")
+        self.execute(f"ALTER TABLE clusters ALTER COLUMN centroid TYPE vector({dimensions})")
+
+        # Null out old embeddings — they are the wrong dimension
+        self.execute("UPDATE memories SET embedding = NULL")
+
+        # Clear stale clusters
+        self.execute("DELETE FROM cluster_members")
+        self.execute("DELETE FROM clusters")
+        self.execute("DELETE FROM clustering_runs")
+
+        # Recreate HNSW index
+        self.execute(f"""
+            CREATE INDEX idx_memories_embedding
+            ON memories USING hnsw (embedding vector_cosine_ops)
+            WITH (m = 16, ef_construction = 64)
+        """)
+
+        self.commit()
+        logger.info(
+            "Vector dimensions reconciled: %d → %d. "
+            "Existing embeddings cleared — re-embed required.",
+            current_dim, dimensions,
+        )

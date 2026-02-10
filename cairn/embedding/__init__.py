@@ -1,6 +1,6 @@
 """Embedding backend factory with pluggable provider registry.
 
-Built-in provider: local (SentenceTransformer).
+Built-in providers: local (SentenceTransformer), bedrock (Titan Text Embeddings V2).
 Register custom providers via ``register_embedding_provider(name, factory_fn)``.
 """
 
@@ -53,12 +53,15 @@ def get_embedding_engine(config: EmbeddingConfig) -> EmbeddingInterface:
     if backend in _providers:
         return _providers[backend](config)
 
-    # Built-in: local SentenceTransformer (the default)
+    # Built-in backends
     if backend == "local":
         from cairn.embedding.engine import EmbeddingEngine
         return EmbeddingEngine(config)
+    elif backend == "bedrock":
+        from cairn.embedding.bedrock import BedrockEmbedding
+        return BedrockEmbedding(config)
     else:
-        available = sorted(set(["local"] + list(_providers.keys())))
+        available = sorted(set(["local", "bedrock"] + list(_providers.keys())))
         raise ValueError(
             f"Unknown embedding backend: {backend!r}. "
             f"Available: {', '.join(available)}"
