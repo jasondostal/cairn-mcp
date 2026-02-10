@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-02-10
+
+### Added
+- **Content ingestion endpoints** — three new REST write endpoints for ingesting content without going through MCP:
+  - `POST /api/ingest/doc` — create a single project document
+  - `POST /api/ingest/docs` — batch create multiple project documents
+  - `POST /api/ingest/memory` — store a memory via REST (full embedding + enrichment pipeline)
+- Batch endpoint supports partial success — returns per-item errors alongside successful creates.
+- All endpoints validate `doc_type` and `memory_type` against allowed values, auto-create projects.
+
+### Changed
+- API description updated from "read-only" to reflect write capability.
+- API version bumped to 0.15.0.
+
 ## [0.14.0] - 2026-02-10
 
 ### Added

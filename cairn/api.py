@@ -1,4 +1,4 @@
-"""Cairn REST API — read-only endpoints for the web UI."""
+"""Cairn REST API — endpoints for the web UI and content ingestion."""
 
 from __future__ import annotations
 
@@ -9,7 +9,11 @@ from fastapi import FastAPI, APIRouter, Query, Path, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from cairn.core.constants import MAX_EVENT_BATCH_SIZE
+from cairn.core.constants import (
+    MAX_EVENT_BATCH_SIZE,
+    VALID_DOC_TYPES,
+    VALID_MEMORY_TYPES,
+)
 from cairn.core.services import Services
 from cairn.core.status import get_status
 from cairn.core.utils import get_or_create_project
@@ -18,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_api(svc: Services) -> FastAPI:
-    """Build the read-only REST API as a FastAPI app.
+    """Build the REST API as a FastAPI app.
 
     Designed to be mounted as a sub-app on the MCP Starlette parent.
     No lifespan needed — the parent handles DB lifecycle.
@@ -34,8 +38,8 @@ def create_api(svc: Services) -> FastAPI:
     cairn_manager = svc.cairn_manager
     app = FastAPI(
         title="Cairn API",
-        version="0.14.0",
-        description="Read-only REST API for the Cairn web UI.",
+        version="0.15.0",
+        description="REST API for the Cairn web UI and content ingestion.",
         docs_url="/swagger",
         redoc_url=None,
     )
@@ -583,6 +587,107 @@ def create_api(svc: Services) -> FastAPI:
             "digested_count": sum(1 for i in items if i["digested"]),
             "items": items,
         }
+
+    # ==================================================================
+    # INGEST — write endpoints for content ingestion
+    # ==================================================================
+
+    # ------------------------------------------------------------------
+    # POST /ingest/doc — create a single project document
+    # ------------------------------------------------------------------
+    @router.post("/ingest/doc", status_code=201)
+    def api_ingest_doc(body: dict):
+        project = body.get("project")
+        doc_type = body.get("doc_type")
+        content = body.get("content")
+        title = body.get("title")
+
+        if not project:
+            raise HTTPException(status_code=400, detail="project is required")
+        if not doc_type:
+            raise HTTPException(status_code=400, detail="doc_type is required")
+        if doc_type not in VALID_DOC_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid doc_type: {doc_type}. Must be one of: {VALID_DOC_TYPES}",
+            )
+        if not content:
+            raise HTTPException(status_code=400, detail="content is required")
+
+        result = project_manager.create_doc(project, doc_type, content, title=title)
+        return result
+
+    # ------------------------------------------------------------------
+    # POST /ingest/docs — batch create multiple project documents
+    # ------------------------------------------------------------------
+    @router.post("/ingest/docs", status_code=201)
+    def api_ingest_docs(body: dict):
+        documents = body.get("documents")
+
+        if not isinstance(documents, list) or len(documents) == 0:
+            raise HTTPException(status_code=400, detail="documents must be a non-empty array")
+
+        results = []
+        errors = []
+        for i, doc in enumerate(documents):
+            project = doc.get("project")
+            doc_type = doc.get("doc_type")
+            content = doc.get("content")
+            title = doc.get("title")
+
+            if not project or not doc_type or not content:
+                errors.append({"index": i, "error": "project, doc_type, and content are required"})
+                continue
+            if doc_type not in VALID_DOC_TYPES:
+                errors.append({"index": i, "error": f"Invalid doc_type: {doc_type}"})
+                continue
+
+            try:
+                result = project_manager.create_doc(project, doc_type, content, title=title)
+                results.append(result)
+            except Exception as e:
+                logger.exception("Failed to create doc at index %d", i)
+                errors.append({"index": i, "error": str(e)})
+
+        return {"created": len(results), "errors": errors, "results": results}
+
+    # ------------------------------------------------------------------
+    # POST /ingest/memory — store a memory via REST (bypasses MCP)
+    # ------------------------------------------------------------------
+    @router.post("/ingest/memory", status_code=201)
+    def api_ingest_memory(body: dict):
+        content = body.get("content")
+        project = body.get("project")
+        memory_type = body.get("memory_type", "note")
+        importance = body.get("importance", 0.5)
+        tags = body.get("tags")
+        session_name = body.get("session_name")
+        related_files = body.get("related_files")
+        related_ids = body.get("related_ids")
+
+        if not content:
+            raise HTTPException(status_code=400, detail="content is required")
+        if not project:
+            raise HTTPException(status_code=400, detail="project is required")
+        if memory_type not in VALID_MEMORY_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid memory_type: {memory_type}. Must be one of: {VALID_MEMORY_TYPES}",
+            )
+        if not isinstance(importance, (int, float)) or not (0.0 <= importance <= 1.0):
+            raise HTTPException(status_code=400, detail="importance must be a number between 0.0 and 1.0")
+
+        result = memory_store.store(
+            content=content,
+            project=project,
+            memory_type=memory_type,
+            importance=importance,
+            tags=tags,
+            session_name=session_name,
+            related_files=related_files,
+            related_ids=related_ids,
+        )
+        return result
 
     app.include_router(router)
     return app
