@@ -7,7 +7,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 from cairn.config import LLMConfig
-from cairn.core.stats import llm_stats
+from cairn.core import stats
 from cairn.llm.interface import LLMInterface
 
 logger = logging.getLogger(__name__)
@@ -68,9 +68,9 @@ class BedrockLLM(LLMInterface):
                 if not content or "text" not in content[0]:
                     raise ValueError(f"Unexpected Bedrock response structure: {list(response.keys())}")
                 result_text = content[0]["text"]
-                if llm_stats:
+                if stats.llm_stats:
                     input_est = sum(len(m.get("content", "")) for m in messages) // 4
-                    llm_stats.record_call(tokens_est=input_est + len(result_text) // 4)
+                    stats.llm_stats.record_call(tokens_est=input_est + len(result_text) // 4)
                 return result_text
             except ClientError as e:
                 error_code = e.response.get("Error", {}).get("Code", "")
@@ -84,8 +84,8 @@ class BedrockLLM(LLMInterface):
             except (KeyError, IndexError, TypeError) as e:
                 raise ValueError(f"Failed to parse Bedrock response: {e}") from e
 
-        if llm_stats:
-            llm_stats.record_error(str(last_error))
+        if stats.llm_stats:
+            stats.llm_stats.record_error(str(last_error))
         raise last_error  # All retries exhausted
 
     def get_model_name(self) -> str:

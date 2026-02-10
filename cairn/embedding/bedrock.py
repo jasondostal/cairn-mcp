@@ -8,7 +8,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 from cairn.config import EmbeddingConfig
-from cairn.core.stats import embedding_stats
+from cairn.core import stats
 from cairn.embedding.interface import EmbeddingInterface
 
 logger = logging.getLogger(__name__)
@@ -57,8 +57,8 @@ class BedrockEmbedding(EmbeddingInterface):
                     body=body,
                 )
                 result = json.loads(response["body"].read())
-                if embedding_stats:
-                    embedding_stats.record_call(tokens_est=len(text) // 4)
+                if stats.embedding_stats:
+                    stats.embedding_stats.record_call(tokens_est=len(text) // 4)
                 return result["embedding"]
             except ClientError as e:
                 error_code = e.response.get("Error", {}).get("Code", "")
@@ -77,8 +77,8 @@ class BedrockEmbedding(EmbeddingInterface):
                     continue
                 raise
 
-        if embedding_stats:
-            embedding_stats.record_error(str(last_error))
+        if stats.embedding_stats:
+            stats.embedding_stats.record_error(str(last_error))
         raise last_error  # All retries exhausted
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:

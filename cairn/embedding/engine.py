@@ -6,7 +6,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from cairn.config import EmbeddingConfig
-from cairn.core.stats import embedding_stats
+from cairn.core import stats
 from cairn.embedding.interface import EmbeddingInterface
 
 logger = logging.getLogger(__name__)
@@ -41,13 +41,13 @@ class EmbeddingEngine(EmbeddingInterface):
     def embed(self, text: str) -> list[float]:
         """Embed a single text string. Returns a normalized float vector."""
         vector = self.model.encode(text, normalize_embeddings=True)
-        if embedding_stats:
-            embedding_stats.record_call(tokens_est=len(text) // 4)
+        if stats.embedding_stats:
+            stats.embedding_stats.record_call(tokens_est=len(text) // 4)
         return vector.tolist()
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Embed multiple texts. Returns a list of normalized float vectors."""
         vectors = self.model.encode(texts, normalize_embeddings=True, batch_size=32)
-        if embedding_stats:
-            embedding_stats.record_call(tokens_est=sum(len(t) // 4 for t in texts))
+        if stats.embedding_stats:
+            stats.embedding_stats.record_call(tokens_est=sum(len(t) // 4 for t in texts))
         return vectors.tolist()

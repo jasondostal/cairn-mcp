@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from cairn.config import Config
-from cairn.core.stats import embedding_stats, llm_stats
+from cairn.core import stats
 from cairn.storage.database import Database
 
 
@@ -38,10 +38,10 @@ def get_status(db: Database, config: Config) -> dict:
 
     # Model observability
     models = {}
-    if embedding_stats:
-        models["embedding"] = embedding_stats.to_dict()
-    if llm_stats:
-        models["llm"] = llm_stats.to_dict()
+    if stats.embedding_stats:
+        models["embedding"] = stats.embedding_stats.to_dict()
+    if stats.llm_stats:
+        models["llm"] = stats.llm_stats.to_dict()
 
     return {
         "status": "healthy",
