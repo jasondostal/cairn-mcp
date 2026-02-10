@@ -60,16 +60,15 @@ def demote_progress(db: Database, target_importance: float, dry_run: bool):
         logger.info("DRY RUN — no changes made.")
         return
 
-    count = db.execute_one(
+    db.execute(
         """
         UPDATE memories SET importance = %s, updated_at = NOW()
         WHERE memory_type = 'progress' AND is_active = true AND importance > %s
-        RETURNING COUNT(*) OVER() as total
         """,
         (target_importance, target_importance),
     )
     db.commit()
-    logger.info("Demoted %d progress memories to importance %.2f.", count["total"], target_importance)
+    logger.info("Demoted %d progress memories to importance %.2f.", len(rows), target_importance)
 
 
 def move_project(db: Database, source: str, target: str, dry_run: bool):
@@ -126,36 +125,19 @@ def move_project(db: Database, source: str, target: str, dry_run: bool):
         db.rollback()
         return
 
-    # Move memories
-    db.execute(
-        "UPDATE memories SET project_id = %s, updated_at = NOW() WHERE project_id = %s",
-        (tgt["id"], src["id"]),
-    )
-    # Move docs
-    db.execute(
-        "UPDATE project_docs SET project_id = %s WHERE project_id = %s",
-        (tgt["id"], src["id"]),
-    )
-    # Move tasks
-    db.execute(
-        "UPDATE tasks SET project_id = %s WHERE project_id = %s",
-        (tgt["id"], src["id"]),
-    )
-    # Move thinking sequences
-    db.execute(
-        "UPDATE thinking_sequences SET project_id = %s WHERE project_id = %s",
-        (tgt["id"], src["id"]),
-    )
-    # Move session events
-    db.execute(
-        "UPDATE session_events SET project_id = %s WHERE project_id = %s",
-        (tgt["id"], src["id"]),
-    )
-    # Move cairns
-    db.execute(
-        "UPDATE cairns SET project_id = %s WHERE project_id = %s",
-        (tgt["id"], src["id"]),
-    )
+    # Move all data referencing the source project
+    for table in [
+        "memories",
+        "project_documents",
+        "tasks",
+        "thinking_sequences",
+        "session_events",
+        "cairns",
+    ]:
+        db.execute(
+            f"UPDATE {table} SET project_id = %s WHERE project_id = %s",
+            (tgt["id"], src["id"]),
+        )
     db.commit()
     logger.info("Moved %d memories + related data from '%s' → '%s'.", total, source, target)
 

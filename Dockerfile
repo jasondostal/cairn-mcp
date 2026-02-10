@@ -21,6 +21,7 @@ RUN pip install --no-cache-dir -r requirements.lock
 # Copy application code
 COPY pyproject.toml .
 COPY cairn/ cairn/
+COPY scripts/ scripts/
 
 # Install the package itself (deps already satisfied by lockfile)
 RUN pip install --no-cache-dir --no-deps .
