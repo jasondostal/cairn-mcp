@@ -28,6 +28,20 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 
 // --- Types ---
 
+export interface ModelInfo {
+  backend: string;
+  model: string;
+  health: "healthy" | "degraded" | "unhealthy" | "unknown";
+  stats: {
+    calls: number;
+    tokens_est: number;
+    errors: number;
+    last_call: string | null;
+    last_error: string | null;
+    last_error_msg: string | null;
+  };
+}
+
 export interface Status {
   status: string;
   memories: number;
@@ -39,10 +53,11 @@ export interface Status {
     clusters: number;
     memories_clustered: number;
   } | null;
-  embedding_model: string;
-  embedding_dimensions: number;
-  llm_backend: string;
-  llm_model: string;
+  models: {
+    embedding?: ModelInfo;
+    llm?: ModelInfo;
+  };
+  llm_capabilities: string[];
 }
 
 export interface Project {
