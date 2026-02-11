@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.jasondostal/cairn-mcp",
   "title": "Cairn",
-  "description": "Persistent memory for agents and humans. Store, search, and discover patterns across persistent context.",
+  "description": "Persistent memory for AI agents and humans. Store, search, and discover patterns.",
   "repository": {
     "url": "https://github.com/jasondostal/cairn-mcp",
     "source": "github"
