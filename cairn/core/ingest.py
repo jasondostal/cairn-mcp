@@ -47,8 +47,48 @@ class IngestPipeline:
             )
         return self._chunker
 
+    @staticmethod
+    def _validate_url(url: str) -> None:
+        """Validate URL before fetching. Blocks SSRF vectors."""
+        import ipaddress
+        import socket
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+
+        # Only allow http/https
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError(f"Only http/https URLs allowed, got: {parsed.scheme}")
+
+        if not parsed.hostname:
+            raise ValueError("URL must include a hostname")
+
+        # Block known metadata and loopback hosts
+        blocked_hosts = {
+            "localhost",
+            "127.0.0.1",
+            "0.0.0.0",
+            "169.254.169.254",  # AWS/GCP metadata
+            "[::1]",
+            "metadata.google.internal",
+        }
+        if parsed.hostname.lower() in blocked_hosts:
+            raise ValueError(f"Fetching from {parsed.hostname} is not allowed")
+
+        # Resolve hostname and block private/reserved IPs
+        try:
+            resolved = socket.getaddrinfo(parsed.hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+            for family, _, _, _, sockaddr in resolved:
+                ip = ipaddress.ip_address(sockaddr[0])
+                if ip.is_private or ip.is_reserved or ip.is_loopback or ip.is_link_local:
+                    raise ValueError(f"Fetching from private/reserved IP ({ip}) is not allowed")
+        except socket.gaierror:
+            pass  # DNS resolution failed — trafilatura will handle the error
+
     def fetch_url(self, url: str) -> tuple[str, str | None]:
         """Fetch a URL and extract readable content. Returns (content, title)."""
+        self._validate_url(url)
+
         import trafilatura
 
         downloaded = trafilatura.fetch_url(url)

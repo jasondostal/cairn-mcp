@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-02-11
+
+### Security
+- **SSRF protection on URL ingestion** — `ingest(url=...)` now validates URLs before fetching: blocks non-HTTP schemes, known metadata endpoints (169.254.169.254, metadata.google.internal), loopback addresses, and resolves DNS to reject private/reserved IPs. Prevents server-side request forgery via the ingest pipeline.
+- **MCP endpoint auth enforcement** — when `CAIRN_AUTH_ENABLED=true`, the `/mcp` endpoint now requires the same API key as `/api`. Previously, MCP was unprotected even with auth enabled, allowing unauthenticated access to all tools.
+
 ## [0.22.0] - 2026-02-11
 
 ### Added
@@ -542,7 +548,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.22.1...HEAD
+[0.22.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.20.1...v0.21.0
 [0.20.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.20.0...v0.20.1

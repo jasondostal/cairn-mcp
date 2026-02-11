@@ -700,6 +700,31 @@ def main():
         api = create_api(_svc)
         mcp_app.mount("/api", api)
 
+        # Protect /mcp endpoint when auth is enabled.
+        # The /api sub-app has its own APIKeyAuthMiddleware, so we only
+        # guard MCP paths here. Health and status pass through.
+        if config.auth.enabled and config.auth.api_key:
+            from starlette.middleware.base import BaseHTTPMiddleware
+            from starlette.responses import JSONResponse as StarletteJSONResponse
+
+            class MCPAuthMiddleware(BaseHTTPMiddleware):
+                async def dispatch(self, request, call_next):
+                    path = request.url.path.rstrip("/")
+                    # Only protect /mcp paths — /api has its own auth
+                    if path.startswith("/mcp"):
+                        if request.method == "OPTIONS":
+                            return await call_next(request)
+                        token = request.headers.get(config.auth.header_name)
+                        if not token or token != config.auth.api_key:
+                            return StarletteJSONResponse(
+                                status_code=401,
+                                content={"detail": "Invalid or missing API key"},
+                            )
+                    return await call_next(request)
+
+            mcp_app.add_middleware(MCPAuthMiddleware)
+            logger.info("MCP endpoint auth enabled (header: %s)", config.auth.header_name)
+
         logger.info("Starting Cairn (HTTP on %s:%d — MCP at /mcp, API at /api)", config.http_host, config.http_port)
         uvicorn.run(mcp_app, host=config.http_host, port=config.http_port)
     else:

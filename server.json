@@ -7,11 +7,11 @@
     "url": "https://github.com/jasondostal/cairn-mcp",
     "source": "github"
   },
-  "version": "0.22.0",
+  "version": "0.22.1",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/jasondostal/cairn-mcp:0.22.0",
+      "identifier": "ghcr.io/jasondostal/cairn-mcp:0.22.1",
       "transport": {
         "type": "stdio"
       },
