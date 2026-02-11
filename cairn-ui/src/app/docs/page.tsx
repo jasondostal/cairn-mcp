@@ -12,6 +12,8 @@ import { ErrorState } from "@/components/error-state";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { SkeletonList } from "@/components/skeleton-list";
 import { DocTypeBadge } from "@/components/doc-type-badge";
+import { EmptyState } from "@/components/empty-state";
+import { PageLayout } from "@/components/page-layout";
 import { FileText, LayoutList, LayoutGrid } from "lucide-react";
 
 const DOC_TYPES = ["brief", "prd", "plan", "primer", "writeup", "guide"] as const;
@@ -114,9 +116,9 @@ export default function DocsPage() {
   const typeOptions = DOC_TYPES.map((t) => ({ value: t, label: t }));
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Docs</h1>
+    <PageLayout
+      title="Docs"
+      titleExtra={
         <Button
           variant="ghost"
           size="sm"
@@ -126,35 +128,34 @@ export default function DocsPage() {
         >
           {dense ? <LayoutGrid className="h-4 w-4" /> : <LayoutList className="h-4 w-4" />}
         </Button>
-      </div>
-
-      <div className="flex items-center gap-2 flex-wrap">
-        <MultiSelect
-          options={projectOptions}
-          value={projectFilter}
-          onValueChange={setProjectFilter}
-          placeholder="All projects"
-          searchPlaceholder="Search projects…"
-          maxCount={2}
-        />
-        <MultiSelect
-          options={typeOptions}
-          value={typeFilter}
-          onValueChange={setTypeFilter}
-          placeholder="All types"
-          searchPlaceholder="Search types…"
-          maxCount={2}
-        />
-      </div>
-
+      }
+      filters={
+        <div className="flex items-center gap-2 flex-wrap">
+          <MultiSelect
+            options={projectOptions}
+            value={projectFilter}
+            onValueChange={setProjectFilter}
+            placeholder="All projects"
+            searchPlaceholder="Search projects…"
+            maxCount={2}
+          />
+          <MultiSelect
+            options={typeOptions}
+            value={typeFilter}
+            onValueChange={setTypeFilter}
+            placeholder="All types"
+            searchPlaceholder="Search types…"
+            maxCount={2}
+          />
+        </div>
+      }
+    >
       {(loading || projectsLoading) && <SkeletonList count={4} height="h-24" />}
 
       {(error || projectsError) && <ErrorState message="Failed to load docs" detail={error || projectsError || undefined} />}
 
       {!loading && !projectsLoading && !error && !projectsError && docs.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          No documents found.
-        </p>
+        <EmptyState message="No documents found." />
       )}
 
       {!loading && !projectsLoading && !error && !projectsError && docs.length > 0 && (
@@ -172,6 +173,6 @@ export default function DocsPage() {
           </div>
         )
       )}
-    </div>
+    </PageLayout>
   );
 }

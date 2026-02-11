@@ -10,6 +10,8 @@ import { formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/error-state";
+import { EmptyState } from "@/components/empty-state";
+import { PageLayout } from "@/components/page-layout";
 import { DocTypeBadge } from "@/components/doc-type-badge";
 import { ArrowLeft } from "lucide-react";
 
@@ -37,47 +39,49 @@ export default function DocDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading) {
-    return (
-      <div className="space-y-4 animate-pulse">
-        <div className="h-6 w-48 bg-muted rounded" />
-        <div className="h-4 w-32 bg-muted rounded" />
-        <div className="space-y-2 mt-8">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="h-4 bg-muted rounded" style={{ width: `${70 + Math.random() * 30}%` }} />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (error) return <ErrorState message="Failed to load document" detail={error} />;
-  if (!doc) return <ErrorState message="Document not found" />;
-
-  const title = extractTitle(doc);
+  const title = doc ? extractTitle(doc) : "Document";
 
   return (
-    <div className="space-y-6">
-      <div>
+    <PageLayout
+      title={title}
+      titleExtra={
         <Link href="/docs">
-          <Button variant="ghost" size="sm" className="gap-1 -ml-2 mb-4">
+          <Button variant="ghost" size="sm" className="gap-1.5">
             <ArrowLeft className="h-4 w-4" />
-            Back to docs
+            Back
           </Button>
         </Link>
-
-        <h1 className="text-2xl font-semibold">{title}</h1>
-
-        <div className="flex items-center gap-2 mt-2">
-          <DocTypeBadge type={doc.doc_type} />
-          <Badge variant="secondary" className="text-xs">{doc.project}</Badge>
-          <span className="text-xs text-muted-foreground">{formatDate(doc.updated_at)}</span>
+      }
+    >
+      {loading && (
+        <div className="space-y-4 animate-pulse">
+          <div className="h-6 w-48 bg-muted rounded" />
+          <div className="h-4 w-32 bg-muted rounded" />
+          <div className="space-y-2 mt-8">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="h-4 bg-muted rounded" style={{ width: `${70 + Math.random() * 30}%` }} />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      <article className="prose prose-invert prose-sm max-w-none">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{doc.content}</ReactMarkdown>
-      </article>
-    </div>
+      {!loading && error && <ErrorState message="Failed to load document" detail={error} />}
+
+      {!loading && !error && !doc && <EmptyState message="Document not found." />}
+
+      {!loading && !error && doc && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-2">
+            <DocTypeBadge type={doc.doc_type} />
+            <Badge variant="secondary" className="text-xs">{doc.project}</Badge>
+            <span className="text-xs text-muted-foreground">{formatDate(doc.updated_at)}</span>
+          </div>
+
+          <article className="prose prose-invert prose-sm max-w-none">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{doc.content}</ReactMarkdown>
+          </article>
+        </div>
+      )}
+    </PageLayout>
   );
 }

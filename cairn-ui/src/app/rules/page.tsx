@@ -12,6 +12,8 @@ import { MultiSelect } from "@/components/ui/multi-select";
 import { RuleSheet } from "@/components/rule-sheet";
 import { PaginatedList } from "@/components/paginated-list";
 import { SkeletonList } from "@/components/skeleton-list";
+import { EmptyState } from "@/components/empty-state";
+import { PageLayout } from "@/components/page-layout";
 import { Shield, LayoutList, LayoutGrid } from "lucide-react";
 
 function RuleCard({ rule, onClick }: { rule: Rule; onClick: () => void }) {
@@ -127,9 +129,9 @@ export default function RulesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Rules</h1>
+    <PageLayout
+      title="Rules"
+      titleExtra={
         <Button
           variant="ghost"
           size="sm"
@@ -139,23 +141,24 @@ export default function RulesPage() {
         >
           {dense ? <LayoutGrid className="h-4 w-4" /> : <LayoutList className="h-4 w-4" />}
         </Button>
-      </div>
-
-      <MultiSelect
-        options={projectOptions}
-        value={selected}
-        onValueChange={setSelected}
-        placeholder="All projects"
-        searchPlaceholder="Search projects…"
-        maxCount={2}
-      />
-
+      }
+      filters={
+        <MultiSelect
+          options={projectOptions}
+          value={selected}
+          onValueChange={setSelected}
+          placeholder="All projects"
+          searchPlaceholder="Search projects…"
+          maxCount={2}
+        />
+      }
+    >
       {loading && <SkeletonList count={4} />}
 
       {error && <ErrorState message="Failed to load rules" detail={error} />}
 
       {!loading && !error && rules.length === 0 && (
-        <p className="text-sm text-muted-foreground">No rules found.</p>
+        <EmptyState message="No rules found." />
       )}
 
       {!loading && !error && rules.length > 0 && (
@@ -167,6 +170,6 @@ export default function RulesPage() {
         open={sheetOpen}
         onOpenChange={setSheetOpen}
       />
-    </div>
+    </PageLayout>
   );
 }

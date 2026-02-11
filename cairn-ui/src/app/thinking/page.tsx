@@ -11,6 +11,8 @@ import { ErrorState } from "@/components/error-state";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { PaginatedList } from "@/components/paginated-list";
 import { SkeletonList } from "@/components/skeleton-list";
+import { EmptyState } from "@/components/empty-state";
+import { PageLayout } from "@/components/page-layout";
 import { Brain } from "lucide-react";
 
 function SequenceCard({ sequence, showProject }: { sequence: ThinkingSequence; showProject?: boolean }) {
@@ -88,33 +90,34 @@ export default function ThinkingPage() {
   const projectOptions = projects.map((p) => ({ value: p.name, label: p.name }));
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Thinking</h1>
-
-      <MultiSelect
-        options={projectOptions}
-        value={projectFilter}
-        onValueChange={setProjectFilter}
-        placeholder="All projects"
-        searchPlaceholder="Search projects…"
-        maxCount={2}
-      />
-
+    <PageLayout
+      title="Thinking"
+      filters={
+        <MultiSelect
+          options={projectOptions}
+          value={projectFilter}
+          onValueChange={setProjectFilter}
+          placeholder="All projects"
+          searchPlaceholder="Search projects…"
+          maxCount={2}
+        />
+      }
+    >
       {(loading || projectsLoading) && <SkeletonList count={4} />}
 
       {(error || projectsError) && <ErrorState message="Failed to load thinking sequences" detail={error || projectsError || undefined} />}
 
       {!loading && !projectsLoading && !error && !projectsError && sequences.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          {showAll
+        <EmptyState
+          message={showAll
             ? "No thinking sequences yet."
             : `No thinking sequences for ${projectFilter.join(", ")}.`}
-        </p>
+        />
       )}
 
       {!loading && !projectsLoading && !error && !projectsError && sequences.length > 0 && (
         <SequencesList sequences={sequences} showProject={showAll} />
       )}
-    </div>
+    </PageLayout>
   );
 }

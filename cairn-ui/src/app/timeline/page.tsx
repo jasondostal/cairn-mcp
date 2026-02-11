@@ -15,6 +15,8 @@ import { ImportanceBadge } from "@/components/importance-badge";
 import { TagList } from "@/components/tag-list";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { SkeletonList } from "@/components/skeleton-list";
+import { EmptyState } from "@/components/empty-state";
+import { PageLayout } from "@/components/page-layout";
 
 const MEMORY_TYPES = [
   "note", "decision", "rule", "code-snippet", "learning",
@@ -204,11 +206,9 @@ export default function TimelinePage() {
   const typeOptions = MEMORY_TYPES.map((t) => ({ value: t, label: t }));
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Timeline</h1>
-
-      {/* Sticky filter toolbar */}
-      <div className="sticky top-0 z-10 -mx-4 bg-background/95 backdrop-blur-sm px-4 pb-3 pt-1 space-y-2 border-b border-border md:-mx-6 md:px-6">
+    <PageLayout
+      title="Timeline"
+      filters={
         <div className="flex items-center gap-2 flex-wrap">
           <MultiSelect
             options={projectOptions}
@@ -226,8 +226,6 @@ export default function TimelinePage() {
             searchPlaceholder="Search types…"
             maxCount={2}
           />
-
-          {/* Days range */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Range</span>
             <div className="flex gap-1">
@@ -244,16 +242,14 @@ export default function TimelinePage() {
             </div>
           </div>
         </div>
-      </div>
-
+      }
+    >
       {(loading || projectsLoading) && <SkeletonList count={5} />}
 
       {error && <ErrorState message="Failed to load timeline" detail={error} />}
 
       {!loading && !projectsLoading && !error && items.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          No memories in the last {days} days.
-        </p>
+        <EmptyState message={`No memories in the last ${days} days.`} />
       )}
 
       {!loading && !projectsLoading && !error && items.length > 0 && (
@@ -261,7 +257,7 @@ export default function TimelinePage() {
           <ActivityHeatmap items={items} />
           {Array.from(groups.entries()).map(([label, memories]) => (
             <div key={label}>
-              <h2 className="mb-3 text-sm font-medium text-muted-foreground sticky top-[5rem] z-[5] bg-background py-1">
+              <h2 className="mb-3 text-sm font-medium text-muted-foreground sticky top-0 z-[5] -mx-4 px-4 md:-mx-6 md:px-6 bg-background py-1.5 border-b border-border">
                 {label}
                 <span className="ml-2 text-xs">({memories.length})</span>
               </h2>
@@ -286,6 +282,6 @@ export default function TimelinePage() {
         open={sheetOpen}
         onOpenChange={setSheetOpen}
       />
-    </div>
+    </PageLayout>
   );
 }

@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { ErrorState } from "@/components/error-state";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { SkeletonList } from "@/components/skeleton-list";
+import { EmptyState } from "@/components/empty-state";
+import { PageLayout } from "@/components/page-layout";
 import { Landmark, Archive, Layers } from "lucide-react";
 
 function CairnCard({ cairn, showProject }: { cairn: Cairn; showProject?: boolean }) {
@@ -81,28 +83,28 @@ export default function CairnsPage() {
   const projectOptions = projects.map((p) => ({ value: p.name, label: p.name }));
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Cairns</h1>
-
-      <MultiSelect
-        options={projectOptions}
-        value={projectFilter}
-        onValueChange={setProjectFilter}
-        placeholder="All projects"
-        searchPlaceholder="Search projects…"
-        maxCount={2}
-      />
-
+    <PageLayout
+      title="Cairns"
+      filters={
+        <MultiSelect
+          options={projectOptions}
+          value={projectFilter}
+          onValueChange={setProjectFilter}
+          placeholder="All projects"
+          searchPlaceholder="Search projects…"
+          maxCount={2}
+        />
+      }
+    >
       {(loading || projectsLoading) && <SkeletonList count={4} height="h-24" />}
 
       {(error || projectsError) && <ErrorState message="Failed to load cairns" detail={error || projectsError || undefined} />}
 
       {!loading && !projectsLoading && !error && !projectsError && cairns.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          {showAll
-            ? "No cairns yet. Cairns are set at the end of sessions."
-            : `No cairns for ${projectFilter.join(", ")}. Cairns are set at the end of sessions.`}
-        </p>
+        <EmptyState
+          message={showAll ? "No cairns yet." : `No cairns for ${projectFilter.join(", ")}.`}
+          detail="Cairns are set at the end of sessions."
+        />
       )}
 
       {!loading && !projectsLoading && !error && !projectsError && cairns.length > 0 && (
@@ -112,6 +114,6 @@ export default function CairnsPage() {
           ))}
         </div>
       )}
-    </div>
+    </PageLayout>
   );
 }

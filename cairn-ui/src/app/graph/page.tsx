@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/error-state";
 import { MemorySheet } from "@/components/memory-sheet";
+import { PageLayout } from "@/components/page-layout";
 
 // --- Colors ---
 
@@ -455,63 +456,59 @@ export default function GraphPage() {
   const stats = data?.stats;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Knowledge Graph</h1>
-        {stats && (
+    <PageLayout
+      title="Knowledge Graph"
+      titleExtra={
+        stats && (
           <Badge variant="secondary" className="font-mono text-xs">
             {stats.node_count} nodes, {stats.edge_count} edges
           </Badge>
-        )}
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          placeholder="Filter by project"
-          value={project}
-          onChange={(e) => setProject(e.target.value)}
-          className="w-48"
-        />
-        <div className="flex gap-1">
-          {RELATION_TYPES.map((rt) => (
+        )
+      }
+      filters={
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            placeholder="Filter by project"
+            value={project}
+            onChange={(e) => setProject(e.target.value)}
+            className="w-48"
+          />
+          <div className="flex gap-1">
+            {RELATION_TYPES.map((rt) => (
+              <Button
+                key={rt}
+                variant={relationType === rt ? "default" : "outline"}
+                size="sm"
+                onClick={() => setRelationType(rt)}
+              >
+                {rt === "all" ? "All" : rt.replace("_", " ")}
+              </Button>
+            ))}
+          </div>
+          <Button onClick={load}>Apply</Button>
+          <div className="ml-auto flex gap-1">
             <Button
-              key={rt}
-              variant={relationType === rt ? "default" : "outline"}
+              variant={colorMode === "cluster" ? "default" : "outline"}
               size="sm"
-              onClick={() => setRelationType(rt)}
+              onClick={() => setColorMode(colorMode === "cluster" ? "type" : "cluster")}
             >
-              {rt === "all" ? "All" : rt.replace("_", " ")}
+              {colorMode === "cluster" ? "Color: Cluster" : "Color: Type"}
             </Button>
-          ))}
+            <Button
+              variant={showAge ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowAge(!showAge)}
+            >
+              Show age
+            </Button>
+          </div>
         </div>
-        <Button onClick={load}>Apply</Button>
-        <div className="ml-auto flex gap-1">
-          <Button
-            variant={colorMode === "cluster" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setColorMode(colorMode === "cluster" ? "type" : "cluster")}
-          >
-            {colorMode === "cluster" ? "Color: Cluster" : "Color: Type"}
-          </Button>
-          <Button
-            variant={showAge ? "default" : "outline"}
-            size="sm"
-            onClick={() => setShowAge(!showAge)}
-          >
-            Show age
-          </Button>
-        </div>
-      </div>
-
-      {/* Loading */}
+      }
+    >
       {loading && <Skeleton className="h-[600px]" />}
 
-      {/* Error */}
       {error && <ErrorState message="Failed to load graph" detail={error} />}
 
-      {/* Empty state */}
       {!loading && !error && data && data.nodes.length === 0 && (
         <div className="flex h-[400px] items-center justify-center rounded-lg border border-border bg-card">
           <div className="text-center">
@@ -526,7 +523,6 @@ export default function GraphPage() {
         </div>
       )}
 
-      {/* Graph canvas */}
       {!loading && !error && data && data.nodes.length > 0 && (
         <>
           <div
@@ -631,6 +627,6 @@ export default function GraphPage() {
         open={sheetOpen}
         onOpenChange={setSheetOpen}
       />
-    </div>
+    </PageLayout>
   );
 }

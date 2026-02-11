@@ -15,6 +15,7 @@ import { MemoryTypeBadge } from "@/components/memory-type-badge";
 import { MemorySheet } from "@/components/memory-sheet";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { SkeletonList } from "@/components/skeleton-list";
+import { PageLayout } from "@/components/page-layout";
 import { Network, Eye, LayoutList, LayoutGrid, ArrowRight } from "lucide-react";
 
 type Cluster = ClusterResult["clusters"][number];
@@ -176,48 +177,47 @@ export default function ClustersPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Clusters</h1>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0"
-            onClick={() => setDense(!dense)}
-            title={dense ? "Card view" : "Dense view"}
-          >
-            {dense ? <LayoutGrid className="h-4 w-4" /> : <LayoutList className="h-4 w-4" />}
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/clusters/visualization">
-              <Eye className="mr-1.5 h-4 w-4" />
-              Visualization
-            </Link>
-          </Button>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <MultiSelect
-          options={projectOptions}
-          value={project}
-          onValueChange={handleProjectChange}
-          placeholder="All projects"
-          searchPlaceholder="Search projects…"
-          maxCount={2}
-        />
-        <div className="flex gap-2">
-          <Input
-            placeholder="Filter by topic"
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-            className="w-48"
+    <PageLayout
+      title="Clusters"
+      titleExtra={<>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0"
+          onClick={() => setDense(!dense)}
+          title={dense ? "Card view" : "Dense view"}
+        >
+          {dense ? <LayoutGrid className="h-4 w-4" /> : <LayoutList className="h-4 w-4" />}
+        </Button>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/clusters/visualization">
+            <Eye className="mr-1.5 h-4 w-4" />
+            Visualization
+          </Link>
+        </Button>
+      </>}
+      filters={
+        <div className="space-y-2">
+          <MultiSelect
+            options={projectOptions}
+            value={project}
+            onValueChange={handleProjectChange}
+            placeholder="All projects"
+            searchPlaceholder="Search projects…"
+            maxCount={2}
           />
-          <Button onClick={() => load()} size="sm">Apply</Button>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Filter by topic"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              className="w-48"
+            />
+            <Button onClick={() => load()} size="sm">Apply</Button>
+          </div>
         </div>
-      </div>
-
+      }
+    >
       {loading && <SkeletonList count={4} height="h-32" />}
 
       {error && <ErrorState message="Failed to load clusters" detail={error} />}
@@ -262,6 +262,6 @@ export default function ClustersPage() {
         open={sheetOpen}
         onOpenChange={setSheetOpen}
       />
-    </div>
+    </PageLayout>
   );
 }

@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/error-state";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { MemorySheet } from "@/components/memory-sheet";
+import { PageLayout } from "@/components/page-layout";
 
 // Deterministic color palette for clusters
 const CLUSTER_COLORS = [
@@ -235,23 +236,24 @@ export default function ClusterVisualizationPage() {
   const hasNoise = points.some((p) => p.cluster_id === null);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Cluster Visualization</h1>
+    <PageLayout
+      title="Cluster Visualization"
+      titleExtra={
         <Button variant="outline" size="sm" onClick={() => window.history.back()}>
           Back to Clusters
         </Button>
-      </div>
-
-      <MultiSelect
-        options={projectOptions}
-        value={project}
-        onValueChange={handleProjectChange}
-        placeholder="All projects"
-        searchPlaceholder="Search projects…"
-        maxCount={2}
-      />
-
+      }
+      filters={
+        <MultiSelect
+          options={projectOptions}
+          value={project}
+          onValueChange={handleProjectChange}
+          placeholder="All projects"
+          searchPlaceholder="Search projects…"
+          maxCount={2}
+        />
+      }
+    >
       {loading && <Skeleton className="h-[500px]" />}
 
       {error && (
@@ -346,6 +348,6 @@ export default function ClusterVisualizationPage() {
         open={sheetOpen}
         onOpenChange={setSheetOpen}
       />
-    </div>
+    </PageLayout>
   );
 }

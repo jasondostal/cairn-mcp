@@ -17,6 +17,8 @@ import { TagList } from "@/components/tag-list";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { SkeletonList } from "@/components/skeleton-list";
 import { PaginatedList } from "@/components/paginated-list";
+import { EmptyState } from "@/components/empty-state";
+import { PageLayout } from "@/components/page-layout";
 import { Search, FileText } from "lucide-react";
 
 const MEMORY_TYPES = [
@@ -194,67 +196,67 @@ export default function SearchPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Search</h1>
-
-      <form onSubmit={handleSearch} className="space-y-3">
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search memories..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="pl-9"
-            />
+    <PageLayout
+      title="Search"
+      filters={
+        <form onSubmit={handleSearch} className="flex flex-col gap-3 w-full">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search memories..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Button type="submit" disabled={loading || !query.trim()}>
+              {loading ? "Searching\u2026" : "Search"}
+            </Button>
           </div>
-          <Button type="submit" disabled={loading || !query.trim()}>
-            {loading ? "Searching\u2026" : "Search"}
-          </Button>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          <MultiSelect
-            options={projectOptions}
-            value={projectFilter}
-            onValueChange={setProjectFilter}
-            placeholder="All projects"
-            searchPlaceholder="Search projects…"
-            maxCount={2}
-          />
-          <MultiSelect
-            options={typeOptions}
-            value={type}
-            onValueChange={setType}
-            placeholder="All types"
-            searchPlaceholder="Search types…"
-            maxCount={2}
-          />
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Mode</span>
-            <div className="flex gap-1">
-              {["semantic", "keyword", "vector"].map((m) => (
-                <Button
-                  key={m}
-                  type="button"
-                  variant={mode === m ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setMode(m)}
-                >
-                  {m}
-                </Button>
-              ))}
+          <div className="flex items-center gap-2 flex-wrap">
+            <MultiSelect
+              options={projectOptions}
+              value={projectFilter}
+              onValueChange={setProjectFilter}
+              placeholder="All projects"
+              searchPlaceholder="Search projects…"
+              maxCount={2}
+            />
+            <MultiSelect
+              options={typeOptions}
+              value={type}
+              onValueChange={setType}
+              placeholder="All types"
+              searchPlaceholder="Search types…"
+              maxCount={2}
+            />
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Mode</span>
+              <div className="flex gap-1">
+                {["semantic", "keyword", "vector"].map((m) => (
+                  <Button
+                    key={m}
+                    type="button"
+                    variant={mode === m ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setMode(m)}
+                  >
+                    {m}
+                  </Button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      </form>
-
+        </form>
+      }
+    >
       {loading && <SkeletonList count={5} height="h-32" />}
 
       {error && <ErrorState message="Search failed" detail={error} />}
 
       {!loading && !error && searched && results.length === 0 && (
-        <p className="text-sm text-muted-foreground">No results found.</p>
+        <EmptyState message="No results found." />
       )}
 
       {!loading && !error && results.length > 0 && (
@@ -266,6 +268,6 @@ export default function SearchPage() {
         open={sheetOpen}
         onOpenChange={setSheetOpen}
       />
-    </div>
+    </PageLayout>
   );
 }

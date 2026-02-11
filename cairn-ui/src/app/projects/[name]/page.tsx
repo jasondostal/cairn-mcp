@@ -12,8 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/error-state";
+import { EmptyState } from "@/components/empty-state";
+import { PageLayout } from "@/components/page-layout";
 import { DocTypeBadge } from "@/components/doc-type-badge";
-import { Download, LayoutList, LayoutGrid, FileText } from "lucide-react";
+import { Download, LayoutList, LayoutGrid, FileText, ArrowLeft } from "lucide-react";
 
 interface ProjectDetail {
   name: string;
@@ -192,53 +194,55 @@ export default function ProjectDetailPage() {
     [name]
   );
 
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-40" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return <ErrorState message="Failed to load project" detail={error} />;
-  }
-
-  if (!project) {
-    return <p className="text-sm text-muted-foreground">Project not found.</p>;
-  }
-
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">{project.name}</h1>
-        <ExportButton project={project.name} />
-      </div>
+    <PageLayout
+      title={project?.name ?? name}
+      titleExtra={<>
+        {project && <ExportButton project={project.name} />}
+        <Link href="/projects">
+          <Button variant="ghost" size="sm" className="gap-1.5">
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+        </Link>
+      </>}
+    >
+      {loading && (
+        <div className="space-y-4">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-40" />
+        </div>
+      )}
 
-      {/* Documents */}
-      <ProjectDocs docs={project.docs} />
+      {!loading && error && <ErrorState message="Failed to load project" detail={error} />}
 
-      {/* Links */}
-      <div>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-          Links ({project.links.length})
-        </h2>
-        {project.links.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No links.</p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {project.links.map((link, i) => (
-              <Badge key={i} variant="secondary" className="gap-1">
-                {(link.target as string) || "unknown"}
-                <span className="text-muted-foreground">
-                  ({(link.link_type as string) || "related"})
-                </span>
-              </Badge>
-            ))}
+      {!loading && !error && !project && <EmptyState message="Project not found." />}
+
+      {!loading && !error && project && (
+        <div className="space-y-6 max-w-3xl">
+          <ProjectDocs docs={project.docs} />
+
+          <div>
+            <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+              Links ({project.links.length})
+            </h2>
+            {project.links.length === 0 ? (
+              <EmptyState message="No links." />
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {project.links.map((link, i) => (
+                  <Badge key={i} variant="secondary" className="gap-1">
+                    {(link.target as string) || "unknown"}
+                    <span className="text-muted-foreground">
+                      ({(link.link_type as string) || "related"})
+                    </span>
+                  </Badge>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </PageLayout>
   );
 }

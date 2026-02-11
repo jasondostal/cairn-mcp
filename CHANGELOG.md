@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-02-11
+
+### Added
+- **`PageLayout` component** — reusable flex column layout with fixed header
+  (title, optional title extras, optional filters) and independently scrollable
+  content area. Eliminates `position: sticky` issues within the main scroll
+  container. (`cairn-ui/src/components/page-layout.tsx`)
+- **`EmptyState` component** — centered icon + message + optional detail text
+  for empty list/search states. Replaces bare `<p>` tags across all pages.
+  (`cairn-ui/src/components/empty-state.tsx`)
+- **Favicon** — `cairn-mark-trail.svg` wired as the browser tab icon via
+  Next.js metadata in `layout.tsx`.
+- **Back buttons on all detail pages** — thinking sequence detail and project
+  detail pages now have explicit back navigation.
+
+### Changed
+- **15 pages migrated to `PageLayout`** — all list pages (timeline, search,
+  thinking, cairns, tasks, rules, docs, clusters, cluster visualization,
+  knowledge graph) and all detail pages (cairn detail, thinking detail, doc
+  detail, memory detail, project detail) now use the consistent fixed-header
+  layout. Filters and title controls stay pinned while content scrolls.
+- **Deterministic back navigation** — all detail pages use `<Link>` to their
+  parent list page instead of `router.back()`. Predictable, bookmarkable,
+  no browser history dependency.
+- **Styled empty states** — 7 list pages and 2 detail pages upgraded from
+  plain text to the `EmptyState` component with icon and contextual messaging.
+- API version bumped to 0.25.0.
+
 ## [0.24.0] - 2026-02-11
 
 ### Added

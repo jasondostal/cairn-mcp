@@ -18,6 +18,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Cairn",
   description: "Semantic memory for AI agents",
+  icons: { icon: "/cairn-mark-trail.svg" },
 };
 
 export default function RootLayout({

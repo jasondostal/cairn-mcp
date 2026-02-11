@@ -12,6 +12,8 @@ import { MultiSelect } from "@/components/ui/multi-select";
 import { TaskSheet } from "@/components/task-sheet";
 import { PaginatedList } from "@/components/paginated-list";
 import { SkeletonList } from "@/components/skeleton-list";
+import { EmptyState } from "@/components/empty-state";
+import { PageLayout } from "@/components/page-layout";
 import { CheckCircle, Circle, Link2, LayoutList, LayoutGrid } from "lucide-react";
 
 function TaskCard({ task, showProject, onClick }: { task: Task; showProject?: boolean; onClick: () => void }) {
@@ -144,25 +146,9 @@ export default function TasksPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Tasks</h1>
-
-      <div className="flex items-center gap-2">
-        <MultiSelect
-          options={projectOptions}
-          value={projectFilter}
-          onValueChange={setProjectFilter}
-          placeholder="All projects"
-          searchPlaceholder="Search projects…"
-          maxCount={2}
-        />
-        <Button
-          variant={showCompleted ? "default" : "outline"}
-          size="sm"
-          onClick={() => setShowCompleted(!showCompleted)}
-        >
-          {showCompleted ? "Hide" : "Show"} completed
-        </Button>
+    <PageLayout
+      title="Tasks"
+      titleExtra={
         <Button
           variant="ghost"
           size="sm"
@@ -172,18 +158,37 @@ export default function TasksPage() {
         >
           {dense ? <LayoutGrid className="h-4 w-4" /> : <LayoutList className="h-4 w-4" />}
         </Button>
-      </div>
-
+      }
+      filters={
+        <div className="flex items-center gap-2 flex-wrap">
+          <MultiSelect
+            options={projectOptions}
+            value={projectFilter}
+            onValueChange={setProjectFilter}
+            placeholder="All projects"
+            searchPlaceholder="Search projects…"
+            maxCount={2}
+          />
+          <Button
+            variant={showCompleted ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowCompleted(!showCompleted)}
+          >
+            {showCompleted ? "Hide" : "Show"} completed
+          </Button>
+        </div>
+      }
+    >
       {(loading || projectsLoading) && <SkeletonList count={4} height="h-20" />}
 
       {(error || projectsError) && <ErrorState message="Failed to load tasks" detail={error || projectsError || undefined} />}
 
       {!loading && !projectsLoading && !error && !projectsError && tasks.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          {showAll
+        <EmptyState
+          message={showAll
             ? "No tasks yet."
             : `No tasks for ${projectFilter.join(", ")}.`}
-        </p>
+        />
       )}
 
       {!loading && !projectsLoading && !error && !projectsError && tasks.length > 0 && (
@@ -195,6 +200,6 @@ export default function TasksPage() {
         open={sheetOpen}
         onOpenChange={setSheetOpen}
       />
-    </div>
+    </PageLayout>
   );
 }
