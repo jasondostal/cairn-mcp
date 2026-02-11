@@ -1,5 +1,7 @@
 FROM python:3.11-slim
 
+LABEL io.modelcontextprotocol.server.name="io.github.jasondostal/cairn-mcp"
+
 WORKDIR /app
 
 # Install system dependencies for sentence-transformers

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.jasondostal/cairn-mcp",
+  "title": "Cairn",
+  "description": "Persistent memory for agents and humans. Store, search, and discover patterns across persistent context.",
+  "repository": {
+    "url": "https://github.com/jasondostal/cairn-mcp",
+    "source": "github"
+  },
+  "version": "0.21.1",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/jasondostal/cairn-mcp:0.21.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "CAIRN_DB_HOST",
+          "description": "PostgreSQL host (pgvector)",
+          "isRequired": true
+        },
+        {
+          "name": "CAIRN_DB_PASS",
+          "description": "PostgreSQL password",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "CAIRN_TRANSPORT",
+          "description": "Transport mode: stdio or http",
+          "default": "stdio"
+        },
+        {
+          "name": "CAIRN_LLM_BACKEND",
+          "description": "LLM backend for enrichment: bedrock or ollama",
+          "default": "ollama"
+        }
+      ]
+    }
+  ]
+}
