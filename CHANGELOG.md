@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-02-11
+
+### Fixed
+- **Connection pool exhaustion** — read-only API endpoints (status, search, graph,
+  timeline, drift) never released DB connections after completing, leaving them
+  checked out with stale transactions. Under concurrent load this exhausted the
+  pool (max 10) causing `PoolTimeout` after 30s. Added `release_if_held()` and a
+  FastAPI dependency that returns connections after every request.
+
 ## [0.23.0] - 2026-02-11
 
 ### Added
@@ -572,7 +581,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.23.1...HEAD
+[0.23.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.22.1...v0.23.0
 [0.22.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.21.0...v0.22.0
