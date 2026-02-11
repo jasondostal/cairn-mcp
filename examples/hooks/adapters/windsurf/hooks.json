@@ -1,0 +1,8 @@
+{
+  "hooks": {
+    "post-mcp-tool-use": {
+      "command": "CAIRN_URL=http://localhost:8000 /path/to/cairn/examples/hooks/adapters/windsurf/post-mcp-tool-use.sh",
+      "timeout": 10
+    }
+  }
+}

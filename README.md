@@ -7,6 +7,12 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/jasondostal/cairn-mcp?style=flat-square" alt="License"></a>
   <img src="https://img.shields.io/badge/MCP-compatible-brightgreen?style=flat-square" alt="MCP">
   <img src="https://img.shields.io/badge/PostgreSQL-16%20%2B%20pgvector-336791?style=flat-square" alt="PostgreSQL">
+  <br>
+  <img src="https://img.shields.io/badge/Claude_Code-supported-5A45FF?style=flat-square" alt="Claude Code">
+  <img src="https://img.shields.io/badge/Cursor-supported-00A67E?style=flat-square" alt="Cursor">
+  <img src="https://img.shields.io/badge/Windsurf-supported-3B82F6?style=flat-square" alt="Windsurf">
+  <img src="https://img.shields.io/badge/Cline-supported-E44D26?style=flat-square" alt="Cline">
+  <img src="https://img.shields.io/badge/Continue-supported-6B7280?style=flat-square" alt="Continue">
 </p>
 
 ---
@@ -135,15 +141,9 @@ volumes:
 
 </details>
 
-### 2. Connect your agent
+### 2. Connect your IDE
 
-**Claude Code** (HTTP — recommended):
-
-```bash
-claude mcp add --transport http cairn http://localhost:8000/mcp
-```
-
-Or add to your `.mcp.json`:
+Add Cairn to your IDE's MCP config — the JSON is the same everywhere:
 
 ```json
 {
@@ -156,7 +156,25 @@ Or add to your `.mcp.json`:
 }
 ```
 
-**Other MCP clients** (stdio — single-client, same host):
+| IDE | Where to put it |
+|-----|----------------|
+| **Claude Code** | `.mcp.json` (project) or `claude mcp add --transport http cairn http://localhost:8000/mcp` |
+| **Cursor** | `.cursor/mcp.json` |
+| **Windsurf** | `.windsurf/mcp.json` or `~/.codeium/windsurf/mcp.json` |
+| **Cline** (VS Code) | Cline MCP settings panel |
+| **Continue** | `.continue/config.yaml` (YAML format) |
+
+Or run the setup script to auto-detect your IDEs and configure everything:
+
+```bash
+git clone https://github.com/jasondostal/cairn-mcp.git
+./cairn-mcp/scripts/setup.sh
+```
+
+<details>
+<summary>stdio transport (single-client, same host)</summary>
+
+If your MCP client doesn't support HTTP transport, use stdio:
 
 ```json
 {
@@ -168,6 +186,10 @@ Or add to your `.mcp.json`:
   }
 }
 ```
+
+Note: stdio connects one client directly to the container. HTTP is preferred — it supports multiple concurrent clients and works across the network.
+
+</details>
 
 ### 3. Store your first memory
 
@@ -203,13 +225,13 @@ Most agent memory systems require the agent to explicitly decide what's worth re
 
 | Tier | How it works | Agent effort | What's captured |
 |------|-------------|-------------|----------------|
-| **Tier 3: Hook-automated** | Claude Code lifecycle hooks silently log every tool call as a *mote* (lightweight event). At session end, the full event stream is crystallized into a cairn with an LLM-synthesized narrative. | Zero | Everything — files read, edits made, commands run, searches performed |
+| **Tier 3: Hook-automated** | IDE lifecycle hooks (Claude Code, Cursor, Windsurf, Cline) silently log every tool call as a *mote* (lightweight event). At session end, the full event stream is crystallized into a cairn with an LLM-synthesized narrative. | Zero | Everything — files read, edits made, commands run, searches performed |
 | **Tier 2: Tool-assisted** | Agent calls `cairns(action="set")` at session end to mark a trail marker. Works without hooks. | One tool call | All memories stored during the session |
 | **Tier 1: Organic** | Agent stores memories via behavioral rules — decisions, learnings, dead ends. Works without cairns. | Per-insight | Deliberate observations the agent deems important |
 
 The tiers are additive and degrade gracefully. With all three active, a session produces: a rich narrative synthesized from both the mote timeline *and* stored memories, linked trail markers for next session's context, and individually searchable memories with auto-enrichment. Remove the hooks? Tier 2 and 1 still work. Agent forgets to set a cairn? The organic memories are still there.
 
-**Next session, the agent walks the trail back.** Session-start hooks load recent cairn narratives into context — the agent picks up where the last one left off, not from a blank slate.
+**Next session, the agent walks the trail back.** Session-start hooks (or adapter equivalents) load recent cairn narratives into context — the agent picks up where the last one left off, not from a blank slate.
 
 </details>
 
@@ -222,10 +244,22 @@ Cairn can automatically capture your entire session — every tool call logged a
 
 ```bash
 git clone https://github.com/jasondostal/cairn-mcp.git
-./cairn-mcp/scripts/setup-hooks.sh
+./cairn-mcp/scripts/setup.sh
 ```
 
-The setup script checks dependencies (`jq`, `curl`), tests Cairn connectivity, creates event directories, and generates a ready-to-paste Claude Code settings.json snippet. See [`examples/hooks/README.md`](examples/hooks/README.md) for manual setup, other MCP clients, verification steps, and troubleshooting.
+The setup script detects your installed IDEs, configures MCP connections, and optionally installs hook adapters. Run with `--dry-run` to preview changes. See [`examples/hooks/README.md`](examples/hooks/README.md) for manual setup, per-IDE details, and troubleshooting.
+
+**IDE hook capabilities:**
+
+| IDE | Session start | Tool capture | Session end | Auto-cairn |
+|-----|:---:|:---:|:---:|:---:|
+| Claude Code | yes | yes | yes | yes |
+| Cursor | yes | yes | yes | yes |
+| Cline | yes | yes | yes | yes |
+| Windsurf | auto* | yes | manual | manual |
+| Continue | — | — | — | — |
+
+\*Windsurf: session initializes on first tool use. No session-end hook — the agent calls `cairns(action="set")` directly.
 
 **What happens (Pipeline v2):**
 1. **Session starts** — hook fetches recent cairns for context, creates an event log in `~/.cairn/events/`

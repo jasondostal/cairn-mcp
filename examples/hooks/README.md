@@ -1,10 +1,12 @@
 # Cairn Session Hooks
 
-Automatic session capture using lifecycle hooks. Three scripts, zero manual effort.
+Automatic session capture using lifecycle hooks. Works with Claude Code, Cursor, Windsurf, and Cline.
 
 ## What it does
 
-| Hook | When | What happens |
+Three core scripts handle the universal contract. IDE-specific adapters translate field names.
+
+| Core script | When | What happens |
 |------|------|-------------|
 | `session-start.sh` | Session begins | Loads recent cairns as context, creates event log |
 | `log-event.sh` | After every tool use | Captures full event, ships batches of 25 incrementally |
@@ -12,19 +14,34 @@ Automatic session capture using lifecycle hooks. Three scripts, zero manual effo
 
 **Pipeline v2:** Events are captured with full fidelity (`tool_input` + `tool_response`), shipped in batches of 25 to `POST /api/events/ingest` during the session, digested by the server's DigestWorker into rolling LLM summaries, and crystallized into cairn narratives at session end. An `.offset` sidecar file tracks what's been shipped.
 
-## Quick Start (Claude Code)
+## IDE Hook Capabilities
 
-### 1. Run the setup script
+| IDE | Session start | Tool capture | Session end | Auto-cairn |
+|-----|:---:|:---:|:---:|:---:|
+| Claude Code | yes | yes | yes | yes |
+| Cursor | yes | yes | yes | yes |
+| Cline | yes | yes | yes | yes |
+| Windsurf | auto* | yes | manual | manual |
+| Continue | — | — | — | — |
+
+\*Windsurf: session initializes on first tool use (no session-start hook). No session-end hook — the agent calls `cairns(action="set")` directly.
+
+## Quick Start
+
+### Automatic setup (all IDEs)
 
 ```bash
-/path/to/cairn/scripts/setup-hooks.sh
+/path/to/cairn/scripts/setup.sh
 ```
 
-This checks dependencies, tests connectivity, and generates the settings.json snippet for you.
+The setup script detects your installed IDEs, configures MCP connections, and installs the appropriate hook adapters. Use `--dry-run` to preview changes.
 
-### 2. Or manual setup
+### Manual setup by IDE
 
-Add this to your `.claude/settings.local.json` (project-level) or `~/.claude/settings.json` (global):
+<details>
+<summary><strong>Claude Code</strong></summary>
+
+Add to `.claude/settings.local.json` (project) or `~/.claude/settings.json` (global):
 
 ```json
 {
@@ -69,38 +86,137 @@ Add this to your `.claude/settings.local.json` (project-level) or `~/.claude/set
 }
 ```
 
-Replace `/absolute/path/to/cairn` with wherever you cloned the repo. Replace `YOUR_CAIRN_HOST` with your Cairn server address (or `localhost` if running locally).
+Claude Code calls the core scripts directly — no adapter needed.
 
-### 3. Verify it works
+</details>
 
-Start a new Claude Code session and do some work. Then check:
+<details>
+<summary><strong>Cursor</strong></summary>
 
-```bash
-# During a session — events should be accumulating:
-ls ~/.cairn/events/cairn-events-*.jsonl
-cat ~/.cairn/events/cairn-events-*.jsonl.offset  # shows shipped count
+Cursor's hook system uses different field names (`sessionId`, `workspaceFolder`, `toolName`). The adapters in `adapters/cursor/` translate these to Cairn's contract.
 
-# After a session — cairn should exist, event batches should be digested:
-curl -s http://YOUR_CAIRN_HOST:8000/api/cairns?limit=1 | jq '.[0] | {title, memory_count}'
-curl -s "http://YOUR_CAIRN_HOST:8000/api/events?project=YOUR_PROJECT&session_name=SESSION" | jq '.[] | {batch_number, event_count, digested: (.digest != null)}'
+Add to `.cursor/hooks.json`:
+
+```json
+{
+  "hooks": {
+    "session-start": {
+      "command": "CAIRN_URL=http://YOUR_CAIRN_HOST:8000 /absolute/path/to/cairn/examples/hooks/adapters/cursor/session-start.sh",
+      "timeout": 15
+    },
+    "after-mcp-execution": {
+      "command": "CAIRN_URL=http://YOUR_CAIRN_HOST:8000 /absolute/path/to/cairn/examples/hooks/adapters/cursor/after-mcp-execution.sh",
+      "timeout": 5
+    },
+    "session-end": {
+      "command": "CAIRN_URL=http://YOUR_CAIRN_HOST:8000 /absolute/path/to/cairn/examples/hooks/adapters/cursor/session-end.sh",
+      "timeout": 30
+    }
+  }
+}
 ```
 
-## Quick Start (Other MCP Clients)
+**How it works:** Each adapter reads Cursor's JSON from stdin, remaps field names with defensive fallbacks (`jq` `//` operator), and pipes to the corresponding core script.
 
-The hooks are agent-agnostic bash scripts. Any AI coding agent with lifecycle hooks can use them.
+</details>
 
-**Contract:** Each script reads JSON from stdin and writes to stdout/stderr.
+<details>
+<summary><strong>Windsurf</strong></summary>
 
-| Event | Stdin JSON | Script | What it does |
-|-------|-----------|--------|-------------|
-| Session start | `{"session_id": "...", "cwd": "..."}` | `session-start.sh` | Outputs cairn context to stdout, creates event log |
-| Tool use | `{"session_id": "...", "tool_name": "...", "tool_input": {...}, "tool_response": "..."}` | `log-event.sh` | Captures event, ships batch of 25 via `POST /api/events/ingest` |
-| Session end | `{"session_id": "...", "reason": "..."}` | `session-end.sh` | Ships remaining events, sets cairn via `POST /api/cairns` |
+Windsurf only provides a `post_mcp_tool_use` hook — no session start or end. The adapter handles this by auto-initializing the session on the first tool use.
 
-Wire these into your agent's lifecycle hooks. The only requirements are:
+Add to your Windsurf hooks config (`.windsurf/hooks.json` or `~/.codeium/windsurf/hooks.json`):
+
+```json
+{
+  "hooks": {
+    "post-mcp-tool-use": {
+      "command": "CAIRN_URL=http://YOUR_CAIRN_HOST:8000 /absolute/path/to/cairn/examples/hooks/adapters/windsurf/post-mcp-tool-use.sh",
+      "timeout": 10
+    }
+  }
+}
+```
+
+**How it works:** On each tool call, the adapter checks if an event log exists for the session. If not, it runs `session-start.sh` first (transparent init), then forwards to `log-event.sh`.
+
+**Limitation:** No session-end hook. To crystallize a cairn, the agent must call `cairns(action="set")` directly (Tier 2), or you can manually run:
+
+```bash
+echo '{"session_id":"YOUR_SESSION_ID"}' | CAIRN_URL=http://localhost:8000 /path/to/cairn/examples/hooks/session-end.sh
+```
+
+</details>
+
+<details>
+<summary><strong>Cline (VS Code)</strong></summary>
+
+Cline hooks must return JSON on stdout. The adapters in `adapters/cline/` handle this — they run the core scripts, capture output, and wrap it in Cline's expected format.
+
+Cline uses `taskId` (not `session_id`) and `workingDirectory` (not `cwd`). The adapters translate these automatically.
+
+Install the hook scripts to Cline's hooks directory:
+
+```bash
+# Copy adapters
+cp /path/to/cairn/examples/hooks/adapters/cline/* ~/.cline/hooks/
+chmod +x ~/.cline/hooks/TaskStart ~/.cline/hooks/PostToolUse ~/.cline/hooks/TaskCancel
+```
+
+| Cline hook | Cairn adapter | Core script |
+|-----------|--------------|-------------|
+| `TaskStart` | `adapters/cline/TaskStart` | `session-start.sh` → wraps stdout in `{contextModification}` |
+| `PostToolUse` | `adapters/cline/PostToolUse` | `log-event.sh` → returns `{cancel: false}` |
+| `TaskCancel` | `adapters/cline/TaskCancel` | `session-end.sh` → returns `{cancel: false}` |
+
+</details>
+
+<details>
+<summary><strong>Continue</strong></summary>
+
+Continue does not currently support lifecycle hooks. Cairn still works at Tier 1 (organic) and Tier 2 (agent calls `cairns(action="set")` directly).
+
+</details>
+
+## Core Script Contract
+
+The core scripts are IDE-agnostic. Any agent with lifecycle hooks can use them directly or via adapters.
+
+| Event | Stdin JSON | Script | Stdout |
+|-------|-----------|--------|--------|
+| Session start | `{"session_id": "...", "cwd": "..."}` | `session-start.sh` | Cairn context (text) |
+| Tool use | `{"session_id": "...", "tool_name": "...", "tool_input": {...}, "tool_response": "..."}` | `log-event.sh` | (none) |
+| Session end | `{"session_id": "...", "reason": "..."}` | `session-end.sh` | (none, logs to stderr) |
+
+Requirements:
 - A unique `session_id` per session (passed in stdin JSON)
 - `jq` and `curl` installed on the system
 - `CAIRN_URL` environment variable pointing to your Cairn instance
+
+## Adapter Architecture
+
+```
+IDE stdin JSON                Core scripts
+     |                            |
+     v                            v
+ adapters/cursor/*.sh    ──→  session-start.sh
+ adapters/windsurf/*.sh  ──→  log-event.sh
+ adapters/cline/*        ──→  session-end.sh
+     |                            |
+     | Translate field names      | Universal contract:
+     | Add response wrappers      |   {session_id, tool_name,
+     | Handle IDE quirks          |    tool_input, tool_response}
+     v                            v
+ IDE-specific JSON out       Cairn event pipeline
+```
+
+Each adapter is a thin wrapper (~20 lines) that:
+1. Reads IDE-specific stdin JSON
+2. Translates field names to Cairn's contract using `jq` with defensive fallbacks
+3. Pipes to the core script
+4. Wraps response if needed (Cline requires JSON on stdout)
+
+**Caveat:** The exact stdin JSON field names for Cursor, Windsurf, and Cline are based on documentation research and may vary across versions. Adapters use defensive fallbacks (e.g., `.sessionId // .session_id // "unknown"`) to handle variations. If you encounter field name mismatches, please report them.
 
 ## Environment Variables
 
@@ -114,7 +230,7 @@ Wire these into your agent's lifecycle hooks. The only requirements are:
 ## How it works
 
 ```
-SessionStart hook
+Session start (hook or adapter)
     |
     +-- GET /api/cairns?limit=5
     |   Returns recent cairns (all projects) for context
@@ -127,7 +243,7 @@ SessionStart hook
     +-- Write session_start event with session_name
          |
          |  +--------------------------------------------+
-         +--| PostToolUse hook (every tool)               |
+         +--| Tool use hook (every tool)                  |
          |  | Capture: tool_name, tool_input, tool_response|
          |  | Append to JSONL event log                    |
          |  | Every 25 events → background ship batch to   |
@@ -139,7 +255,7 @@ SessionStart hook
          |  (Server-side: DigestWorker processes batches
          |   into 2-4 sentence LLM summaries as they arrive)
          |
-SessionEnd hook
+Session end (hook or adapter or agent)
     |
     +-- Ship any remaining unshipped events as final batch
     +-- POST /api/cairns {project, session_name}
@@ -162,7 +278,7 @@ These hooks are **Tier 3** — fully automatic. Cairn works at all three tiers:
 
 - **Tier 1 (Organic):** Agent follows behavioral rules, stores memories with `session_name`, sets cairns manually. No hooks needed.
 - **Tier 2 (Tool-assisted):** Agent calls `cairns(action="set")` at session end. One tool call.
-- **Tier 3 (Hook-automated):** These scripts. Zero agent effort. Events captured automatically.
+- **Tier 3 (Hook-automated):** These scripts + adapters. Zero agent effort. Events captured automatically.
 
 Each tier is additive. If hooks aren't installed, Tier 2 still works. If the agent forgets to set a cairn, Tier 1 memories still exist.
 
@@ -205,7 +321,7 @@ Open the Cairns page. Cairns with digested events will show a richer narrative s
 
 ### CAIRN_URL is wrong
 
-If hooks can't reach Cairn, you'll see `{"error": "failed to reach cairn"}` in Claude Code's debug output.
+If hooks can't reach Cairn, you'll see `{"error": "failed to reach cairn"}` in your IDE's debug output.
 
 ```bash
 # Test connectivity:
@@ -244,14 +360,14 @@ chmod 755 ~/.cairn/events
 ### Hook timeout errors
 
 If session-start or session-end hooks are timing out:
-- Increase the `timeout` value in settings.json (session-start: 15s, session-end: 30s)
+- Increase the `timeout` value in your hook config (session-start: 15s, session-end: 30s)
 - Check if Cairn is slow to respond (LLM synthesis can take time)
 - For session-end, the narrative synthesis happens server-side — the hook just POSTs and returns
 
 ## Customization
 
 - **Adjust batch size:** Set `CAIRN_EVENT_BATCH_SIZE` (default 25). Smaller = more frequent shipping, more digests. Larger = fewer HTTP calls.
-- **Filter noisy tools:** Add a matcher to the PostToolUse config (e.g., `"matcher": "Bash|Edit|Write"`)
-- **Skip event capture:** Remove the PostToolUse hook entirely — cairns still work, just without the event stream
-- **Different project per directory:** Set `CAIRN_PROJECT` in each project's `.claude/settings.local.json`
+- **Filter noisy tools:** Add a matcher to the tool-use hook config (e.g., `"matcher": "Bash|Edit|Write"` for Claude Code)
+- **Skip event capture:** Remove the tool-use hook entirely — cairns still work, just without the event stream
+- **Different project per directory:** Set `CAIRN_PROJECT` in your project-level hook config
 - **Disable digestion:** Set `CAIRN_LLM_EVENT_DIGEST=false` — events still ship and store, but no LLM summaries. Cairn narratives fall back to raw events.

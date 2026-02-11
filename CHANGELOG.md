@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-02-11
+
+### Added
+- **Multi-IDE hook adapters** — `examples/hooks/adapters/` with thin wrappers for Cursor (3 scripts), Windsurf (1 script with auto session-init), and Cline (3 scripts with JSON response wrapping). Each adapter translates IDE-specific field names to Cairn's core contract using `jq` defensive fallbacks. Claude Code continues to call core scripts directly.
+- **Multi-IDE setup script** — `scripts/setup.sh` detects installed IDEs (Claude Code, Cursor, Windsurf, Cline, Continue), configures MCP connections via JSON merge, and optionally installs hook adapters. Supports `--dry-run`. Existing `scripts/setup-hooks.sh` preserved for backward compatibility.
+- **MCP Registry** — `server.json` manifest and verification label for MCP Registry submission.
+
+### Changed
+- **README restructured for multi-IDE** — "Connect your agent" → "Connect your IDE" with generic-first MCP config, IDE config location table, setup script reference, and stdio in a collapsible. IDE badges added (Claude Code, Cursor, Windsurf, Cline, Continue). Tier 3 description and hooks section updated to list all supported IDEs. IDE hook capability matrix added.
+- **Hooks README rewritten for multi-IDE** — per-IDE setup in collapsible sections, adapter architecture diagram, core script contract table, capability matrix, and honest caveat about field name validation across IDE versions.
+
+### Fixed
+- **Orphaned memory reconciliation** — memories stored via MCP without `session_name` are now claimed at cairn-set time by matching project + timestamp window from `session_events`. Agents no longer need to pass `session_name` on every `store()` call — the system self-heals when setting the cairn.
+
 ## [0.21.0] - 2026-02-10
 
 ### Added
@@ -528,7 +542,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.20.1...v0.21.0
 [0.20.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.20.0...v0.20.1
 [0.20.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.19.0...v0.20.0

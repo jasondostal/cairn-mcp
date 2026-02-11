@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Cairn Adapter: Cline → session-end.sh
+# Translates Cline's TaskCancel hook JSON to Cairn's contract.
+#
+# Cline provides: { taskId, workingDirectory, ... }
+# Cairn expects:  { session_id, cwd, reason }
+#
+# Cline requires JSON response on stdout:
+#   { cancel: false, errorMessage: "" }
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CORE_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
+
+INPUT=$(cat)
+
+# Translate field names (defensive: try Cline names first, fall back to Cairn names)
+TRANSLATED=$(echo "$INPUT" | jq '{
+  session_id: (.taskId // .session_id // "unknown"),
+  cwd: (.workingDirectory // .cwd // ""),
+  reason: "task_cancel"
+}')
+
+echo "$TRANSLATED" | "$CORE_DIR/session-end.sh" >/dev/null 2>&1 || true
+
+# Cline expects a JSON response
+jq -nc '{cancel: false, errorMessage: ""}'

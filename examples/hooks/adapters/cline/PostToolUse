@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Cairn Adapter: Cline → log-event.sh
+# Translates Cline's PostToolUse hook JSON to Cairn's contract.
+#
+# Cline provides: { taskId, toolName, toolInput, toolResponse, workingDirectory, ... }
+# Cairn expects:  { session_id, tool_name, tool_input, tool_response, cwd }
+#
+# Cline requires JSON response on stdout:
+#   { cancel: false, errorMessage: "" }
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CORE_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
+
+INPUT=$(cat)
+
+# Translate field names (defensive: try Cline names first, fall back to Cairn names)
+TRANSLATED=$(echo "$INPUT" | jq '{
+  session_id: (.taskId // .session_id // "unknown"),
+  tool_name: (.toolName // .tool_name // "unknown"),
+  tool_input: (.toolInput // .tool_input // {}),
+  tool_response: (.toolResponse // .tool_response // ""),
+  cwd: (.workingDirectory // .cwd // "")
+}')
+
+echo "$TRANSLATED" | "$CORE_DIR/log-event.sh" >/dev/null 2>&1 || true
+
+# Cline expects a JSON response
+jq -nc '{cancel: false, errorMessage: ""}'

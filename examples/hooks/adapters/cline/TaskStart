@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Cairn Adapter: Cline → session-start.sh
+# Translates Cline's TaskStart hook JSON to Cairn's contract.
+#
+# Cline provides: { taskId, workingDirectory, ... }
+# Cairn expects:  { session_id, cwd }
+#
+# Cline requires JSON response on stdout:
+#   { contextModification: "...", cancel: false, errorMessage: "" }
+# The contextModification field injects text into the agent's context.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CORE_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
+
+INPUT=$(cat)
+
+# Translate field names (defensive: try Cline names first, fall back to Cairn names)
+TRANSLATED=$(echo "$INPUT" | jq '{
+  session_id: (.taskId // .session_id // "unknown"),
+  cwd: (.workingDirectory // .cwd // "")
+}')
+
+# Run core session-start and capture its stdout (cairn context)
+CONTEXT=$(echo "$TRANSLATED" | "$CORE_DIR/session-start.sh" 2>/dev/null || echo "")
+
+# Wrap in Cline's expected response format
+jq -nc --arg context "$CONTEXT" '{
+  contextModification: $context,
+  cancel: false,
+  errorMessage: ""
+}'
