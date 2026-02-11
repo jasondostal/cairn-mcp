@@ -121,6 +121,29 @@ class Database:
         self.conn.rollback()
         self._release()
 
+    def release_if_held(self) -> None:
+        """Release the current thread's connection if held with an open transaction.
+
+        Call at API request boundaries to prevent connection pool exhaustion.
+        Read-only endpoints don't call commit/rollback, leaving connections
+        checked out with stale transactions. This cleans them up.
+
+        No-op if no connection is held or if already released by commit/rollback.
+        """
+        existing = getattr(self._local, "conn", None)
+        if existing is None or existing.closed:
+            return
+        ts = existing.info.transaction_status
+        if ts in (
+            psycopg.pq.TransactionStatus.INTRANSACTION,
+            psycopg.pq.TransactionStatus.INERROR,
+        ):
+            try:
+                existing.rollback()
+            except Exception:
+                pass
+            self._release()
+
     def run_migrations(self) -> None:
         """Apply all pending migrations in order."""
         # Create migrations tracking table

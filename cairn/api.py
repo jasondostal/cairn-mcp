@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone, timedelta
 
-from fastapi import FastAPI, APIRouter, Query, Path, HTTPException, Request
+from fastapi import Depends, FastAPI, APIRouter, Query, Path, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -68,12 +68,25 @@ def create_api(svc: Services) -> FastAPI:
     thinking_engine = svc.thinking_engine
     cairn_manager = svc.cairn_manager
     ingest_pipeline = svc.ingest_pipeline
+    def _release_db_conn():
+        """Release DB connection after each API request.
+
+        Read-only endpoints don't call commit/rollback, leaving connections
+        checked out with stale transactions. This dependency runs after every
+        request and returns the connection to the pool, preventing exhaustion.
+        Write endpoints already call commit() which releases — this is a no-op
+        in that case.
+        """
+        yield
+        db.release_if_held()
+
     app = FastAPI(
         title="Cairn API",
         version="0.23.0",
         description="REST API for the Cairn web UI and content ingestion.",
         docs_url="/swagger",
         redoc_url=None,
+        dependencies=[Depends(_release_db_conn)],
     )
 
     app.add_middleware(
