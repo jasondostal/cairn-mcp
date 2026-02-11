@@ -45,6 +45,7 @@ class MemoryStore:
         related_files: list[str] | None = None,
         related_ids: list[int] | None = None,
         source_doc_id: int | None = None,
+        file_hashes: dict[str, str] | None = None,
         enrich: bool = True,
     ) -> dict:
         """Store a memory with embedding.
@@ -86,13 +87,17 @@ class MemoryStore:
             summary = content[:200].strip()
 
         # Insert memory
+        import json as _json
+        file_hashes_json = _json.dumps(file_hashes) if file_hashes else "{}"
         row = self.db.execute_one(
             """
             INSERT INTO memories
                 (content, memory_type, importance, project_id, session_name,
-                 embedding, tags, auto_tags, summary, related_files, source_doc_id)
+                 embedding, tags, auto_tags, summary, related_files, source_doc_id,
+                 file_hashes)
             VALUES
-                (%s, %s, %s, %s, %s, %s::vector, %s, %s, %s, %s, %s)
+                (%s, %s, %s, %s, %s, %s::vector, %s, %s, %s, %s, %s,
+                 %s::jsonb)
             RETURNING id, created_at
             """,
             (
@@ -107,6 +112,7 @@ class MemoryStore:
                 summary,
                 related_files or [],
                 source_doc_id,
+                file_hashes_json,
             ),
         )
 

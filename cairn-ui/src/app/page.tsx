@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { api, type Status, type ModelInfo, type Project } from "@/lib/api";
+import { api, type Status, type ModelInfo, type DigestInfo, type Project } from "@/lib/api";
 import { useFetch } from "@/lib/use-fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import {
   Network,
   Cpu,
   BrainCircuit,
+  Workflow,
 } from "lucide-react";
 
 function StatCard({
@@ -126,6 +127,66 @@ function ModelCard({
   );
 }
 
+const digestHealthColor: Record<string, string> = {
+  healthy: "text-green-500",
+  degraded: "text-yellow-500",
+  backoff: "text-red-500",
+  idle: "text-muted-foreground",
+};
+
+const digestHealthBadge: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+  healthy: "default",
+  degraded: "secondary",
+  backoff: "destructive",
+  idle: "outline",
+};
+
+function DigestCard({ digest }: { digest: DigestInfo | undefined }) {
+  if (!digest) return null;
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className="rounded-md bg-muted p-2">
+              <Workflow className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <span className="text-sm font-medium">Digest Pipeline</span>
+          </div>
+          <Badge variant={digestHealthBadge[digest.health] ?? "outline"}>
+            <Activity className={`h-3 w-3 mr-1 ${digestHealthColor[digest.health] ?? ""}`} />
+            {digest.health}
+          </Badge>
+        </div>
+        <div className="mb-2">
+          <p className="text-xs text-muted-foreground">State: {digest.state}</p>
+          {digest.queue_depth > 0 && (
+            <p className="font-mono text-xs">
+              {digest.queue_depth} batch{digest.queue_depth !== 1 ? "es" : ""} queued
+            </p>
+          )}
+        </div>
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div>
+            <p className="text-lg font-semibold tabular-nums">{formatNumber(digest.batches_processed)}</p>
+            <p className="text-[10px] text-muted-foreground">batches</p>
+          </div>
+          <div>
+            <p className="text-lg font-semibold tabular-nums">{formatNumber(digest.events_digested)}</p>
+            <p className="text-[10px] text-muted-foreground">events</p>
+          </div>
+          <div>
+            <p className="text-lg font-semibold tabular-nums">
+              {digest.avg_latency_s != null ? `${digest.avg_latency_s.toFixed(1)}s` : "—"}
+            </p>
+            <p className="text-[10px] text-muted-foreground">avg latency</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ProjectCard({ project }: { project: Project }) {
   return (
     <Link href={`/projects/${encodeURIComponent(project.name)}`}>
@@ -195,9 +256,10 @@ export default function Dashboard() {
         <StatCard label="Clusters" value={status.clusters} icon={Network} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         <ModelCard label="Embedding" model={status.models?.embedding} icon={Cpu} />
         <ModelCard label="LLM" model={status.models?.llm} icon={BrainCircuit} />
+        <DigestCard digest={status.digest} />
       </div>
 
       <div>

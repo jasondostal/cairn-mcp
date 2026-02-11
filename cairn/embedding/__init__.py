@@ -1,6 +1,7 @@
 """Embedding backend factory with pluggable provider registry.
 
-Built-in providers: local (SentenceTransformer), bedrock (Titan Text Embeddings V2).
+Built-in providers: local (SentenceTransformer), bedrock (Titan Text Embeddings V2),
+openai (any /v1/embeddings API).
 Register custom providers via ``register_embedding_provider(name, factory_fn)``.
 """
 
@@ -60,8 +61,11 @@ def get_embedding_engine(config: EmbeddingConfig) -> EmbeddingInterface:
     elif backend == "bedrock":
         from cairn.embedding.bedrock import BedrockEmbedding
         return BedrockEmbedding(config)
+    elif backend == "openai":
+        from cairn.embedding.openai_compat import OpenAICompatibleEmbedding
+        return OpenAICompatibleEmbedding(config)
     else:
-        available = sorted(set(["local", "bedrock"] + list(_providers.keys())))
+        available = sorted(set(["local", "bedrock", "openai"] + list(_providers.keys())))
         raise ValueError(
             f"Unknown embedding backend: {backend!r}. "
             f"Available: {', '.join(available)}"

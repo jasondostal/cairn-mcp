@@ -70,7 +70,7 @@ def create_api(svc: Services) -> FastAPI:
     ingest_pipeline = svc.ingest_pipeline
     app = FastAPI(
         title="Cairn API",
-        version="0.21.0",
+        version="0.23.0",
         description="REST API for the Cairn web UI and content ingestion.",
         docs_url="/swagger",
         redoc_url=None,
@@ -448,36 +448,59 @@ def create_api(svc: Services) -> FastAPI:
             node_ids = set(id_list)
             edges = [e for e in edges if e["source"] in node_ids and e["target"] in node_ids]
 
-        # Fetch node details
+        # Fetch node details with cluster membership
         placeholders = ",".join(["%s"] * len(id_list))
         nodes_raw = db.execute(
             f"""
-            SELECT m.id, m.summary, m.memory_type, m.importance, m.created_at,
-                   p.name as project
+            SELECT m.id, m.summary, m.memory_type, m.importance,
+                   m.created_at, m.updated_at,
+                   p.name as project,
+                   c.id as cluster_id, c.label as cluster_label
             FROM memories m
             LEFT JOIN projects p ON m.project_id = p.id
+            LEFT JOIN cluster_members cm ON cm.memory_id = m.id
+            LEFT JOIN clusters c ON c.id = cm.cluster_id
             WHERE m.id IN ({placeholders})
             """,
             tuple(id_list),
         )
 
-        nodes = [
-            {
+        now = datetime.now(timezone.utc)
+        nodes = []
+        for r in nodes_raw:
+            updated = r["updated_at"] if r["updated_at"] else r["created_at"]
+            age_days = (now - updated).days if updated else 0
+            # Server-computed size: base 5 + importance * 8
+            size = 5 + float(r["importance"]) * 8
+            node = {
                 "id": r["id"],
                 "summary": r["summary"] or f"Memory #{r['id']}",
                 "memory_type": r["memory_type"],
                 "importance": float(r["importance"]),
                 "project": r["project"],
                 "created_at": r["created_at"].isoformat(),
+                "updated_at": updated.isoformat() if updated else r["created_at"].isoformat(),
+                "cluster_id": r["cluster_id"],
+                "cluster_label": r["cluster_label"],
+                "age_days": age_days,
+                "size": round(size, 1),
             }
-            for r in nodes_raw
-        ]
+            nodes.append(node)
 
         # Stats
         relation_counts: dict[str, int] = {}
         for e in edges:
             rel = e["relation"]
             relation_counts[rel] = relation_counts.get(rel, 0) + 1
+
+        # Relation colors for UI
+        relation_colors = {
+            "extends": "#3b82f6",
+            "contradicts": "#ef4444",
+            "implements": "#22c55e",
+            "depends_on": "#f59e0b",
+            "related": "#6b7280",
+        }
 
         return {
             "nodes": nodes,
@@ -486,8 +509,28 @@ def create_api(svc: Services) -> FastAPI:
                 "node_count": len(nodes),
                 "edge_count": len(edges),
                 "relation_types": relation_counts,
+                "relation_colors": relation_colors,
             },
         }
+
+    # ------------------------------------------------------------------
+    # GET /drift?project=
+    # ------------------------------------------------------------------
+    @router.get("/drift")
+    def api_drift(
+        project: str | None = Query(None),
+    ):
+        """Check for stale file references. Query params only — for quick dashboard checks.
+        For full drift checks with file hashes, use POST /drift.
+        """
+        return svc.drift_detector.check(project=project, files=None)
+
+    @router.post("/drift")
+    def api_drift_post(body: dict):
+        """Full drift check: compare stored hashes against current file hashes."""
+        project = body.get("project")
+        files = body.get("files")
+        return svc.drift_detector.check(project=project, files=files)
 
     # ------------------------------------------------------------------
     # GET /export?project=&format=

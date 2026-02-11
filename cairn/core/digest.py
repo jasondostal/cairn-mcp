@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from cairn.core.constants import DIGEST_MAX_EVENTS_PER_BATCH, DIGEST_POLL_INTERVAL
+from cairn.core import stats as stats_mod
 
 if TYPE_CHECKING:
     from cairn.config import LLMCapabilities
@@ -71,20 +72,40 @@ class DigestWorker:
             logger.info("DigestWorker: stopped")
         self._thread = None
 
+    def _update_queue_depth(self) -> None:
+        """Query undigested batch count and update stats."""
+        if not stats_mod.digest_stats:
+            return
+        try:
+            row = self.db.execute_one(
+                "SELECT COUNT(*) as cnt FROM session_events WHERE digest IS NULL", (),
+            )
+            stats_mod.digest_stats.set_queue_depth(row["cnt"] if row else 0)
+        except Exception:
+            pass  # stats are best-effort
+
     def _run_loop(self) -> None:
         """Main loop: poll for undigested batches, process one at a time."""
         poll_interval = DIGEST_POLL_INTERVAL
 
         while not self._stop_event.is_set():
             try:
+                self._update_queue_depth()
+                if stats_mod.digest_stats:
+                    stats_mod.digest_stats.set_state("processing")
                 processed = self._process_one_batch()
                 if processed:
                     poll_interval = DIGEST_POLL_INTERVAL  # reset backoff
                 else:
+                    if stats_mod.digest_stats:
+                        stats_mod.digest_stats.set_state("idle")
                     # Nothing to process — wait before next poll
                     self._stop_event.wait(timeout=poll_interval)
-            except Exception:
+            except Exception as exc:
                 logger.warning("DigestWorker: error in poll cycle, backing off", exc_info=True)
+                if stats_mod.digest_stats:
+                    stats_mod.digest_stats.record_failure(str(exc))
+                    stats_mod.digest_stats.set_state("backoff")
                 poll_interval = min(poll_interval * 3, 60.0)  # backoff, cap at 60s
                 self._stop_event.wait(timeout=poll_interval)
 
@@ -129,11 +150,22 @@ class DigestWorker:
             batch_id, session_name, batch_number, len(events),
         )
 
-        messages = build_event_digest_messages(events, project, session_name, batch_number)
-        digest_text = self.llm.generate(messages, max_tokens=512)
+        t0 = time.monotonic()
+        try:
+            messages = build_event_digest_messages(events, project, session_name, batch_number)
+            digest_text = self.llm.generate(messages, max_tokens=512)
+        except Exception as exc:
+            duration = time.monotonic() - t0
+            if stats_mod.digest_stats:
+                stats_mod.digest_stats.record_failure(str(exc))
+            raise
+
+        duration = time.monotonic() - t0
 
         if not digest_text or not digest_text.strip():
             logger.warning("DigestWorker: LLM returned empty digest for batch %d", batch_id)
+            if stats_mod.digest_stats:
+                stats_mod.digest_stats.record_failure("empty digest response")
             return False
 
         now = datetime.now(timezone.utc)
@@ -143,7 +175,10 @@ class DigestWorker:
         )
         self.db.commit()
 
-        logger.info("DigestWorker: digested batch %d → %d chars", batch_id, len(digest_text.strip()))
+        if stats_mod.digest_stats:
+            stats_mod.digest_stats.record_batch(len(events), duration)
+
+        logger.info("DigestWorker: digested batch %d → %d chars (%.2fs)", batch_id, len(digest_text.strip()), duration)
         return True
 
     def digest_immediate(self, batch_id: int) -> str | None:

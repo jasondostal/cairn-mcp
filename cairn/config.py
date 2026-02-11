@@ -19,13 +19,18 @@ class DatabaseConfig:
 
 @dataclass(frozen=True)
 class EmbeddingConfig:
-    backend: str = "local"  # "local", "bedrock", or registered provider name
+    backend: str = "local"  # "local", "bedrock", "openai", or registered provider name
     model: str = "all-MiniLM-L6-v2"
     dimensions: int = 384
 
     # Bedrock settings (Titan Text Embeddings V2)
     bedrock_model: str = "amazon.titan-embed-text-v2:0"
     bedrock_region: str = "us-east-1"
+
+    # OpenAI-compatible settings (works with OpenAI, Ollama, vLLM, LM Studio, Together)
+    openai_base_url: str = "https://api.openai.com"
+    openai_model: str = "text-embedding-3-small"
+    openai_api_key: str = ""  # empty = no Authorization header (for local endpoints)
 
 
 @dataclass(frozen=True)
@@ -118,6 +123,9 @@ def load_config() -> Config:
             dimensions=int(os.getenv("CAIRN_EMBEDDING_DIMENSIONS", "384")),
             bedrock_model=os.getenv("CAIRN_EMBEDDING_BEDROCK_MODEL", "amazon.titan-embed-text-v2:0"),
             bedrock_region=os.getenv("CAIRN_EMBEDDING_BEDROCK_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1")),
+            openai_base_url=os.getenv("CAIRN_EMBEDDING_OPENAI_URL", os.getenv("CAIRN_OPENAI_BASE_URL", "https://api.openai.com")),
+            openai_model=os.getenv("CAIRN_EMBEDDING_OPENAI_MODEL", "text-embedding-3-small"),
+            openai_api_key=os.getenv("CAIRN_EMBEDDING_OPENAI_KEY", os.getenv("CAIRN_OPENAI_API_KEY", "")),
         ),
         llm=LLMConfig(
             backend=os.getenv("CAIRN_LLM_BACKEND", "ollama"),

@@ -47,6 +47,14 @@ const DEFAULT_EDGE_COLOR = "#6b7280";
 
 const RELATION_TYPES = ["all", "extends", "contradicts", "implements", "depends_on", "related"] as const;
 
+// --- Cluster colors (generated palette for cluster coloring mode) ---
+const CLUSTER_PALETTE = [
+  "#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6",
+  "#06b6d4", "#ec4899", "#14b8a6", "#f97316", "#6366f1",
+  "#84cc16", "#e11d48", "#0ea5e9", "#d946ef", "#facc15",
+];
+const CLUSTER_UNASSIGNED_COLOR = "#4b5563"; // gray-600
+
 // --- Simulation types ---
 
 interface SimNode extends SimulationNodeDatum {
@@ -56,6 +64,10 @@ interface SimNode extends SimulationNodeDatum {
   importance: number;
   project: string;
   radius: number;
+  cluster_id: number | null;
+  cluster_label: string | null;
+  age_days: number;
+  updated_at: string;
 }
 
 interface SimLink extends SimulationLinkDatum<SimNode> {
@@ -70,6 +82,8 @@ export default function GraphPage() {
   const [error, setError] = useState<string | null>(null);
   const [project, setProject] = useState("");
   const [relationType, setRelationType] = useState("all");
+  const [colorMode, setColorMode] = useState<"type" | "cluster">("type");
+  const [showAge, setShowAge] = useState(false);
 
   // Simulation state
   const nodesRef = useRef<SimNode[]>([]);
@@ -124,7 +138,11 @@ export default function GraphPage() {
         memory_type: n.memory_type,
         importance: n.importance,
         project: n.project,
-        radius: 5 + n.importance * 8,
+        radius: n.size ?? (5 + n.importance * 8),
+        cluster_id: n.cluster_id,
+        cluster_label: n.cluster_label,
+        age_days: n.age_days ?? 0,
+        updated_at: n.updated_at ?? n.created_at,
         x: width / 2 + (Math.random() - 0.5) * 200,
         y: CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * 200,
       };
@@ -234,10 +252,28 @@ export default function GraphPage() {
 
       const dimmed = hNode && !connectedIds.has(node.id);
 
+      // Color mode: type (default) or cluster
+      let fillColor: string;
+      if (colorMode === "cluster") {
+        if (node.cluster_id != null) {
+          fillColor = CLUSTER_PALETTE[node.cluster_id % CLUSTER_PALETTE.length];
+        } else {
+          fillColor = CLUSTER_UNASSIGNED_COLOR;
+        }
+      } else {
+        fillColor = TYPE_COLORS[node.memory_type] || DEFAULT_NODE_COLOR;
+      }
+
+      // Temporal opacity: fade older memories
+      let baseAlpha = dimmed ? 0.15 : 0.85;
+      if (showAge && !dimmed) {
+        baseAlpha = Math.max(0.3, 1 - node.age_days / 90);
+      }
+
       ctx.beginPath();
       ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
-      ctx.fillStyle = TYPE_COLORS[node.memory_type] || DEFAULT_NODE_COLOR;
-      ctx.globalAlpha = dimmed ? 0.15 : 0.85;
+      ctx.fillStyle = fillColor;
+      ctx.globalAlpha = baseAlpha;
       ctx.fill();
 
       // Highlight ring on hover
@@ -251,7 +287,7 @@ export default function GraphPage() {
 
     ctx.globalAlpha = 1.0;
     ctx.restore();
-  }, [hoveredNode]);
+  }, [hoveredNode, colorMode, showAge]);
 
   // Initial load
   useEffect(() => {
@@ -266,7 +302,7 @@ export default function GraphPage() {
   // Redraw when hover state changes
   useEffect(() => {
     rafRef.current = requestAnimationFrame(draw);
-  }, [hoveredNode, draw]);
+  }, [hoveredNode, draw, colorMode, showAge]);
 
   // --- Canvas to simulation coordinates ---
   function canvasToSim(clientX: number, clientY: number) {
@@ -451,6 +487,22 @@ export default function GraphPage() {
           ))}
         </div>
         <Button onClick={load}>Apply</Button>
+        <div className="ml-auto flex gap-1">
+          <Button
+            variant={colorMode === "cluster" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setColorMode(colorMode === "cluster" ? "type" : "cluster")}
+          >
+            {colorMode === "cluster" ? "Color: Cluster" : "Color: Type"}
+          </Button>
+          <Button
+            variant={showAge ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowAge(!showAge)}
+          >
+            Show age
+          </Button>
+        </div>
       </div>
 
       {/* Loading */}
@@ -512,11 +564,17 @@ export default function GraphPage() {
                   importance {hoveredNode.importance.toFixed(1)} &middot;{" "}
                   {connectionCount(hoveredNode.id)} connections
                 </p>
-                {hoveredNode.project && (
+                {hoveredNode.cluster_label && (
                   <p className="text-xs text-muted-foreground">
-                    {hoveredNode.project}
+                    Cluster: {hoveredNode.cluster_label}
                   </p>
                 )}
+                <p className="text-xs text-muted-foreground">
+                  {hoveredNode.project && <>{hoveredNode.project} &middot; </>}
+                  {hoveredNode.age_days === 0
+                    ? "Updated today"
+                    : `Updated ${hoveredNode.age_days}d ago`}
+                </p>
               </div>
             )}
 

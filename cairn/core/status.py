@@ -43,7 +43,7 @@ def get_status(db: Database, config: Config) -> dict:
     if stats.llm_stats:
         models["llm"] = stats.llm_stats.to_dict()
 
-    return {
+    result = {
         "status": "healthy",
         "memories": memory_count["count"],
         "cairns": cairn_count["count"],
@@ -54,3 +54,9 @@ def get_status(db: Database, config: Config) -> dict:
         "models": models,
         "llm_capabilities": config.capabilities.active_list(),
     }
+
+    # Digest pipeline observability
+    if stats.digest_stats:
+        result["digest"] = stats.digest_stats.to_dict()
+
+    return result

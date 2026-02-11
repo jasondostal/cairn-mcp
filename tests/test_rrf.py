@@ -7,7 +7,7 @@ still pass (they test the formula, not the config).
 
 # RRF constant and weights (mirrored from cairn.core.search)
 RRF_K = 60
-WEIGHTS = {"vector": 0.60, "keyword": 0.25, "tag": 0.15}
+WEIGHTS = {"vector": 0.50, "recency": 0.20, "keyword": 0.20, "tag": 0.10}
 
 
 def rrf_score(rank: int) -> float:
@@ -38,14 +38,20 @@ def test_default_weights_sum_to_one():
     assert abs(total - 1.0) < 1e-10
 
 
+def test_four_signals_present():
+    """All four signals should be in the weights dict."""
+    assert set(WEIGHTS.keys()) == {"vector", "recency", "keyword", "tag"}
+
+
 def test_hybrid_score_calculation():
-    """Simulate a hybrid score for a memory appearing in all three signals."""
-    # Memory at rank 1 in vector, rank 3 in keyword, rank 5 in tag
+    """Simulate a hybrid score for a memory appearing in all four signals."""
+    # Memory at rank 1 in vector, rank 2 in recency, rank 3 in keyword, rank 5 in tag
     vector_score = WEIGHTS["vector"] * rrf_score(1)
+    recency_score = WEIGHTS["recency"] * rrf_score(2)
     keyword_score = WEIGHTS["keyword"] * rrf_score(3)
     tag_score = WEIGHTS["tag"] * rrf_score(5)
 
-    total = vector_score + keyword_score + tag_score
+    total = vector_score + recency_score + keyword_score + tag_score
 
     assert total > 0
     # Should be less than theoretical max (all rank 1)
@@ -54,11 +60,28 @@ def test_hybrid_score_calculation():
 
 
 def test_vector_dominates():
-    """Vector signal at 60% should contribute more than keyword at 25% at same rank."""
+    """Vector signal at 50% should contribute more than keyword at 20% at same rank."""
     rank = 1
     vector_contribution = WEIGHTS["vector"] * rrf_score(rank)
     keyword_contribution = WEIGHTS["keyword"] * rrf_score(rank)
     assert vector_contribution > keyword_contribution
+
+
+def test_recency_signal_contribution():
+    """Recency signal should produce a positive score contribution."""
+    contribution = WEIGHTS["recency"] * rrf_score(1)
+    assert contribution > 0
+
+
+def test_recency_alone_produces_score():
+    """A memory that only appears in recency should still score positively."""
+    total = WEIGHTS["recency"] * rrf_score(1)
+    assert total > 0
+
+
+def test_recency_equals_keyword_weight():
+    """Recency and keyword should have equal weight at 20% each."""
+    assert WEIGHTS["recency"] == WEIGHTS["keyword"]
 
 
 def test_missing_signal():

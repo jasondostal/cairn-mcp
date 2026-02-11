@@ -1,7 +1,8 @@
 """Hybrid search with Reciprocal Rank Fusion (RRF).
 
-Three signals combined:
+Four signals combined:
   - Vector similarity (pgvector cosine distance)
+  - Recency (updated_at DESC — newer memories rank higher)
   - Keyword matching (PostgreSQL full-text search)
   - Tag matching (array overlap)
 
@@ -11,11 +12,14 @@ Design notes:
   - k=60 follows the original RRF paper (Cormack et al. 2009) and is standard
     in the literature. Not tuned for this specific use case. Smaller k would
     increase rank differentiation on small corpora; worth ablation testing.
-  - Weights (0.60 / 0.25 / 0.15) are based on initial tuning against the
-    eval benchmark. They are NOT the result of exhaustive grid search or
-    ablation. Vector gets the most weight because embedding similarity is the
-    strongest signal for semantic memory retrieval. Keyword and tag signals
-    compensate for embedding blind spots (exact terms, categorical matches).
+  - Weights (0.50 / 0.20 / 0.20 / 0.10) give vector the largest share because
+    embedding similarity is the strongest signal for semantic memory retrieval.
+    Recency is a proper RRF participant — it competes fairly through the same
+    fusion formula. No explicit decay function needed; RRF's 1/(k+rank)
+    provides natural diminishing returns. Keyword and tag signals compensate
+    for embedding blind spots (exact terms, categorical matches).
+  - Recency uses updated_at (not created_at) so that corrected or refreshed
+    memories surface as recent.
   - Candidate pool is limit * 5 per signal. On small corpora this examines a
     large fraction of total memories, which inflates recall metrics. At scale
     this is a reasonable efficiency tradeoff.
@@ -40,12 +44,13 @@ logger = logging.getLogger(__name__)
 # k=60 is the standard from Cormack et al. 2009. Not ablation-tested here.
 RRF_K = 60
 
-# Default signal weights. Initial tuning, not grid-searched.
+# Default signal weights. Rebalanced in v0.23.0 to include recency.
 # See module docstring for rationale and known limitations.
 DEFAULT_WEIGHTS = {
-    "vector": 0.60,
-    "keyword": 0.25,
-    "tag": 0.15,
+    "vector": 0.50,
+    "recency": 0.20,
+    "keyword": 0.20,
+    "tag": 0.10,
 }
 
 
@@ -245,7 +250,21 @@ class SearchEngine:
         )
         keyword_ranks = {r["id"]: r["rank"] for r in keyword_rows}
 
-        # Signal 3: Tag search (match query words against tags)
+        # Signal 3: Recency (newer memories ranked higher by updated_at)
+        recency_rows = self.db.execute(
+            f"""
+            SELECT m.id,
+                   ROW_NUMBER() OVER (ORDER BY m.updated_at DESC) as rank
+            FROM memories m
+            LEFT JOIN projects p ON m.project_id = p.id
+            WHERE {where}
+            LIMIT %s
+            """,
+            params + [candidate_limit],
+        )
+        recency_ranks = {r["id"]: r["rank"] for r in recency_rows}
+
+        # Signal 4: Tag search (match query words against tags)
         query_words = [w.lower() for w in query.split() if len(w) > 2]
         tag_ranks = {}
         if query_words:
@@ -274,18 +293,21 @@ class SearchEngine:
             tag_ranks = {r["id"]: r["rank"] for r in tag_rows}
 
         # Fuse via RRF
-        all_ids = set(vector_ranks) | set(keyword_ranks) | set(tag_ranks)
+        all_ids = set(vector_ranks) | set(keyword_ranks) | set(recency_ranks) | set(tag_ranks)
         if not all_ids:
             return []
 
         scored = {}
-        score_components = {}  # memory_id -> {vector, keyword, tag}
+        score_components = {}  # memory_id -> {vector, recency, keyword, tag}
         for memory_id in all_ids:
             score = 0.0
-            components = {"vector": 0.0, "keyword": 0.0, "tag": 0.0}
+            components = {"vector": 0.0, "recency": 0.0, "keyword": 0.0, "tag": 0.0}
             if memory_id in vector_ranks:
                 components["vector"] = DEFAULT_WEIGHTS["vector"] * (1.0 / (RRF_K + vector_ranks[memory_id]))
                 score += components["vector"]
+            if memory_id in recency_ranks:
+                components["recency"] = DEFAULT_WEIGHTS["recency"] * (1.0 / (RRF_K + recency_ranks[memory_id]))
+                score += components["recency"]
             if memory_id in keyword_ranks:
                 components["keyword"] = DEFAULT_WEIGHTS["keyword"] * (1.0 / (RRF_K + keyword_ranks[memory_id]))
                 score += components["keyword"]

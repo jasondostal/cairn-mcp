@@ -42,6 +42,19 @@ export interface ModelInfo {
   };
 }
 
+export interface DigestInfo {
+  health: "idle" | "healthy" | "degraded" | "backoff";
+  state: string;
+  batches_processed: number;
+  batches_failed: number;
+  events_digested: number;
+  queue_depth: number;
+  avg_latency_s: number | null;
+  last_batch_time: string | null;
+  last_error: string | null;
+  last_error_msg: string | null;
+}
+
 export interface Status {
   status: string;
   memories: number;
@@ -58,6 +71,7 @@ export interface Status {
     llm?: ModelInfo;
   };
   llm_capabilities: string[];
+  digest?: DigestInfo;
 }
 
 export interface Project {
@@ -93,7 +107,7 @@ export interface Memory {
   cluster: { id: number; label: string; size: number } | null;
   relations?: MemoryRelation[];
   score?: number;
-  score_components?: { vector: number; keyword: number; tag: number };
+  score_components?: { vector: number; recency: number; keyword: number; tag: number };
 }
 
 export interface ClusterResult {
@@ -200,6 +214,11 @@ export interface GraphNode {
   importance: number;
   project: string;
   created_at: string;
+  updated_at: string;
+  cluster_id: number | null;
+  cluster_label: string | null;
+  age_days: number;
+  size: number;
 }
 
 export interface GraphEdge {
@@ -216,6 +235,7 @@ export interface GraphResult {
     node_count: number;
     edge_count: number;
     relation_types: Record<string, number>;
+    relation_colors?: Record<string, string>;
   };
 }
 

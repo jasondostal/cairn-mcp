@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-02-11
+
+### Added
+- **Temporal decay in search** — recency is now the fourth signal in RRF hybrid
+  search. Newer memories rank higher without suppressing highly relevant older
+  ones. Uses `updated_at` for freshness.
+- **Code-aware drift detection** — new `drift_check` MCP tool compares file content
+  hashes stored at memory creation against current hashes. Returns memories with
+  stale file references. New `file_hashes` JSONB column (migration 009).
+- **OpenAI-compatible embedding backend** — works with any `/v1/embeddings` API
+  (OpenAI, Ollama, vLLM, LM Studio, Together). No SDK dependency.
+- **Digest pipeline observability** — batches processed/failed, events digested,
+  queue depth, avg latency, health state. Exposed via `/api/status`.
+- **Knowledge graph enhancements** — cluster membership, temporal age, and
+  server-computed sizing on graph nodes. UI adds cluster coloring mode
+  and temporal opacity toggle.
+
+### Changed
+- RRF weights rebalanced: vector/keyword/tag (0.60/0.25/0.15) →
+  vector/recency/keyword/tag (0.50/0.20/0.20/0.10).
+- `store` accepts optional `file_hashes` parameter.
+- Embedding factory recognizes `"openai"` as built-in backend.
+- API version bumped to 0.23.0.
+
 ## [0.22.1] - 2026-02-11
 
 ### Security
@@ -548,7 +572,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.22.1...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.22.1...v0.23.0
 [0.22.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.20.1...v0.21.0

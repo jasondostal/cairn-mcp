@@ -35,6 +35,7 @@ session_synthesizer = _svc.session_synthesizer
 consolidation_engine = _svc.consolidation_engine
 cairn_manager = _svc.cairn_manager
 digest_worker = _svc.digest_worker
+drift_detector = _svc.drift_detector
 
 
 # ============================================================
@@ -84,6 +85,7 @@ def store(
     session_name: str | None = None,
     related_files: list[str] | None = None,
     related_ids: list[int] | None = None,
+    file_hashes: dict[str, str] | None = None,
 ) -> dict:
     """Store a memory with automatic embedding generation.
 
@@ -100,6 +102,7 @@ def store(
         session_name: Optional session grouping (e.g., 'sprint-1', 'feature-auth').
         related_files: File paths related to this memory for code context searches.
         related_ids: IDs of related memories to link.
+        file_hashes: Optional dict of {file_path: content_hash} for drift detection.
     """
     try:
         validate_store(content, project, memory_type, importance, tags, session_name)
@@ -112,6 +115,7 @@ def store(
             session_name=session_name,
             related_files=related_files,
             related_ids=related_ids,
+            file_hashes=file_hashes,
         )
     except ValidationError as e:
         return {"error": str(e)}
@@ -135,13 +139,14 @@ def search(
 ) -> list[dict]:
     """Search memories using hybrid semantic search.
 
-    Combines three signals via Reciprocal Rank Fusion (RRF):
-    - Vector similarity (60%): finds conceptually similar content
-    - Keyword matching (25%): catches exact terms
-    - Tag matching (15%): categorical filtering
+    Combines four signals via Reciprocal Rank Fusion (RRF):
+    - Vector similarity (50%): finds conceptually similar content
+    - Recency (20%): newer memories rank higher (uses updated_at)
+    - Keyword matching (20%): catches exact terms
+    - Tag matching (10%): categorical filtering
 
     Use search_mode='keyword' for exact text matching or 'vector' for pure
-    semantic similarity. Default 'semantic' mode uses all three signals.
+    semantic similarity. Default 'semantic' mode uses all four signals.
 
     Args:
         query: Natural language search query.
@@ -658,6 +663,36 @@ def cairns(
         return {"error": str(e)}
     except Exception as e:
         logger.exception("cairns failed")
+        return {"error": f"Internal error: {e}"}
+
+
+# ============================================================
+# Tool 14: drift_check
+# ============================================================
+
+@mcp.tool()
+def drift_check(
+    project: str | None = None,
+    files: list[dict] | None = None,
+) -> dict:
+    """Check for memories with stale file references via content hash comparison.
+
+    Compares file content hashes stored at memory creation time against current
+    hashes provided by the caller. Returns memories where the referenced files
+    have changed since the memory was stored.
+
+    Pull-based: the caller computes and provides current file hashes because
+    Cairn may run on a different host than the codebase.
+
+    Args:
+        project: Filter to a specific project. Omit to check all.
+        files: List of {path: str, hash: str} — current file content hashes.
+               Use sha256 or any consistent hash of file contents.
+    """
+    try:
+        return drift_detector.check(project=project, files=files)
+    except Exception as e:
+        logger.exception("drift_check failed")
         return {"error": f"Internal error: {e}"}
 
 

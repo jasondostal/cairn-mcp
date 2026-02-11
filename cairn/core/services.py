@@ -11,6 +11,7 @@ from cairn.core.cairns import CairnManager
 from cairn.core.clustering import ClusterEngine
 from cairn.core.digest import DigestWorker
 from cairn.core.consolidation import ConsolidationEngine
+from cairn.core.drift import DriftDetector
 from cairn.core.enrichment import Enricher
 from cairn.core.ingest import IngestPipeline
 from cairn.core.memory import MemoryStore
@@ -19,7 +20,7 @@ from cairn.core.search import SearchEngine
 from cairn.core.synthesis import SessionSynthesizer
 from cairn.core.tasks import TaskManager
 from cairn.core.thinking import ThinkingEngine
-from cairn.core.stats import init_embedding_stats, init_llm_stats
+from cairn.core.stats import init_embedding_stats, init_llm_stats, init_digest_stats
 from cairn.embedding import get_embedding_engine
 from cairn.embedding.interface import EmbeddingInterface
 from cairn.llm import get_llm
@@ -50,6 +51,7 @@ class Services:
     consolidation_engine: ConsolidationEngine
     cairn_manager: CairnManager
     digest_worker: DigestWorker
+    drift_detector: DriftDetector
     ingest_pipeline: IngestPipeline
 
 
@@ -66,11 +68,12 @@ def create_services(config: Config | None = None) -> Services:
     embedding = get_embedding_engine(config.embedding)
 
     # Initialize embedding stats
-    emb_model = (
-        config.embedding.bedrock_model
-        if config.embedding.backend == "bedrock"
-        else config.embedding.model
-    )
+    if config.embedding.backend == "bedrock":
+        emb_model = config.embedding.bedrock_model
+    elif config.embedding.backend == "openai":
+        emb_model = config.embedding.openai_model
+    else:
+        emb_model = config.embedding.model
     init_embedding_stats(config.embedding.backend, emb_model)
 
     # LLM enrichment (optional, graceful if disabled)
@@ -88,6 +91,9 @@ def create_services(config: Config | None = None) -> Services:
         logger.info("Enrichment disabled by config")
 
     capabilities = config.capabilities
+
+    # Initialize digest stats
+    init_digest_stats()
 
     memory_store = MemoryStore(db, embedding, enricher=enricher, llm=llm, capabilities=capabilities)
     project_manager = ProjectManager(db)
@@ -108,5 +114,6 @@ def create_services(config: Config | None = None) -> Services:
         consolidation_engine=ConsolidationEngine(db, embedding, llm=llm, capabilities=capabilities),
         cairn_manager=CairnManager(db, llm=llm, capabilities=capabilities),
         digest_worker=DigestWorker(db, llm=llm, capabilities=capabilities),
+        drift_detector=DriftDetector(db),
         ingest_pipeline=IngestPipeline(db, project_manager, memory_store, llm, config),
     )

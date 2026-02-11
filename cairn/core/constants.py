@@ -29,6 +29,9 @@ VALID_SEARCH_MODES = ["semantic", "keyword", "vector"]
 CONTRADICTION_PENALTY = 0.5          # score multiplier for contradicted memories in search
 CONTRADICTION_ESCALATION_THRESHOLD = 0.7  # min importance to trigger conflict escalation on store
 
+# Drift detection
+MAX_FILE_HASHES = 50                 # max file hashes accepted per store() call
+
 
 class MemoryAction:
     UPDATE = "update"
