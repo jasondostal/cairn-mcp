@@ -13,7 +13,7 @@ import { MemorySheet } from "@/components/memory-sheet";
 import { MemoryTypeBadge } from "@/components/memory-type-badge";
 import { ImportanceBadge } from "@/components/importance-badge";
 import { TagList } from "@/components/tag-list";
-import { ProjectSelector } from "@/components/project-selector";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { SkeletonList } from "@/components/skeleton-list";
 
 const MEMORY_TYPES = [
@@ -154,31 +154,30 @@ function TimelineCard({
 }
 
 export default function TimelinePage() {
-  const { projects, selected, setSelected, loading: projectsLoading } = useProjectSelector();
+  const { projects, loading: projectsLoading } = useProjectSelector();
   const [items, setItems] = useState<TimelineMemory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(true);
-  const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [projectFilter, setProjectFilter] = useState<string[]>([]);
+  const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [days, setDays] = useState(7);
   const { sheetId, sheetOpen, setSheetOpen, openSheet } = useMemorySheet();
   const activeCardRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!showAll && !selected) return;
     setLoading(true);
     setError(null);
     api
       .timeline({
-        project: showAll ? undefined : selected,
-        type: typeFilter ?? undefined,
+        project: projectFilter.length ? projectFilter.join(",") : undefined,
+        type: typeFilter.length ? typeFilter.join(",") : undefined,
         days: String(days),
         limit: "200",
       })
       .then((data) => setItems(data.items))
       .catch((err) => setError(err?.message || "Failed to load timeline"))
       .finally(() => setLoading(false));
-  }, [selected, showAll, typeFilter, days]);
+  }, [projectFilter, typeFilter, days]);
 
   const groups = groupByDate(items);
 
@@ -195,12 +194,14 @@ export default function TimelinePage() {
 
   const activeId = activeIndex >= 0 ? flatItems[activeIndex]?.id : null;
 
-  // Scroll active card into view on keyboard nav
   useEffect(() => {
     if (activeCardRef.current) {
       activeCardRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   }, [activeIndex]);
+
+  const projectOptions = projects.map((p) => ({ value: p.name, label: p.name }));
+  const typeOptions = MEMORY_TYPES.map((t) => ({ value: t, label: t }));
 
   return (
     <div className="space-y-4">
@@ -208,57 +209,39 @@ export default function TimelinePage() {
 
       {/* Sticky filter toolbar */}
       <div className="sticky top-0 z-10 -mx-4 bg-background/95 backdrop-blur-sm px-4 pb-3 pt-1 space-y-2 border-b border-border md:-mx-6 md:px-6">
-        {/* Project filter */}
-        <div className="flex gap-1 flex-wrap">
-          <Button
-            variant={showAll ? "default" : "outline"}
-            size="sm"
-            onClick={() => setShowAll(true)}
-          >
-            All
-          </Button>
-          <ProjectSelector
-            projects={projects}
-            selected={showAll ? "" : selected}
-            onSelect={(name) => { setShowAll(false); setSelected(name); }}
+        <div className="flex items-center gap-2 flex-wrap">
+          <MultiSelect
+            options={projectOptions}
+            value={projectFilter}
+            onValueChange={setProjectFilter}
+            placeholder="All projects"
+            searchPlaceholder="Search projects…"
+            maxCount={2}
           />
-        </div>
+          <MultiSelect
+            options={typeOptions}
+            value={typeFilter}
+            onValueChange={setTypeFilter}
+            placeholder="All types"
+            searchPlaceholder="Search types…"
+            maxCount={2}
+          />
 
-        {/* Type filter */}
-        <div className="flex gap-1 flex-wrap">
-          <Button
-            variant={typeFilter === null ? "default" : "outline"}
-            size="sm"
-            onClick={() => setTypeFilter(null)}
-          >
-            All types
-          </Button>
-          {MEMORY_TYPES.map((t) => (
-            <Button
-              key={t}
-              variant={typeFilter === t ? "default" : "outline"}
-              size="sm"
-              onClick={() => setTypeFilter(t)}
-            >
-              {t}
-            </Button>
-          ))}
-        </div>
-
-        {/* Days range */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Range</span>
-          <div className="flex gap-1">
-            {DAY_PRESETS.map((p) => (
-              <Button
-                key={p.value}
-                variant={days === p.value ? "default" : "outline"}
-                size="sm"
-                onClick={() => setDays(p.value)}
-              >
-                {p.label}
-              </Button>
-            ))}
+          {/* Days range */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Range</span>
+            <div className="flex gap-1">
+              {DAY_PRESETS.map((p) => (
+                <Button
+                  key={p.value}
+                  variant={days === p.value ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setDays(p.value)}
+                >
+                  {p.label}
+                </Button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -278,7 +261,7 @@ export default function TimelinePage() {
           <ActivityHeatmap items={items} />
           {Array.from(groups.entries()).map(([label, memories]) => (
             <div key={label}>
-              <h2 className="mb-3 text-sm font-medium text-muted-foreground sticky top-[9.5rem] z-[5] bg-background py-1">
+              <h2 className="mb-3 text-sm font-medium text-muted-foreground sticky top-[5rem] z-[5] bg-background py-1">
                 {label}
                 <span className="ml-2 text-xs">({memories.length})</span>
               </h2>

@@ -35,7 +35,7 @@ Three containers. One `docker compose up`. 13 MCP tools, a REST API, a web dashb
 - **Hybrid search** — Vector similarity + full-text + tag matching via Reciprocal Rank Fusion. [83.8% recall@10](#search-quality). Contradiction-aware ranking.
 - **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, importance score, and relationship links on store.
 - **Pattern discovery** — HDBSCAN clustering finds themes across memories. LLM writes the labels. Clusters refresh lazily.
-- **Web dashboard** — 11 pages. Timeline with activity heatmap, search with score breakdowns, knowledge graph, thinking trees, Cmd+K, keyboard nav, dark mode.
+- **Web dashboard** — 11 pages. Timeline with activity heatmap, search with score breakdowns, knowledge graph, thinking trees, multi-select filters, Cmd+K, keyboard nav, dark mode.
 - **Three containers, done** — MCP at `/mcp`, REST at `/api`, same process. PostgreSQL + pgvector. Bring your own LLM — Ollama, Bedrock, Gemini, or anything OpenAI-compatible.
 
 ## Quick Start
@@ -302,7 +302,7 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Opt
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/status` | System health, memory counts, cluster info |
-| `GET /api/search?q=&project=&type=&mode=&limit=` | Hybrid search |
+| `GET /api/search?q=&project=&type=&mode=&limit=` | Hybrid search (multi-select: `project=a,b`) |
 | `GET /api/memories/:id` | Single memory with cluster context |
 | `GET /api/projects` | All projects with memory counts |
 | `GET /api/projects/:name` | Project docs and links |
@@ -313,7 +313,7 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Opt
 | `GET /api/thinking?project=&status=` | Thinking sequences |
 | `GET /api/thinking/:id` | Sequence detail with all thoughts |
 | `GET /api/rules?project=` | Behavioral rules |
-| `GET /api/timeline?project=&type=&days=` | Memory activity feed |
+| `GET /api/timeline?project=&type=&days=` | Memory activity feed (multi-select filters) |
 | `GET /api/cairns?project=` | Session trail — cairns newest first |
 | `GET /api/cairns/:id` | Single cairn with linked memories |
 | `POST /api/cairns` | Set a cairn (used by session-end hook) |
@@ -367,15 +367,16 @@ cairn-ui          |                                                             
 <details>
 <summary><strong>Search</strong></summary>
 
-Cairn fuses three signals with **Reciprocal Rank Fusion (RRF)**:
+Cairn fuses four signals with **Reciprocal Rank Fusion (RRF)**:
 
 | Signal | Weight | How |
 |--------|--------|-----|
-| Vector similarity | 60% | Cosine distance via pgvector HNSW index. Local (MiniLM, 384-dim) or Bedrock Titan V2 (up to 1024-dim) — [configurable](#configuration). |
-| Keyword search | 25% | PostgreSQL `ts_rank` full-text search |
-| Tag matching | 15% | Intersection of query-derived tags with memory tags |
+| Vector similarity | 50% | Cosine distance via pgvector HNSW index. Local (MiniLM, 384-dim) or Bedrock Titan V2 (up to 1024-dim) — [configurable](#configuration). |
+| Recency | 20% | Newer memories rank higher by `updated_at` |
+| Keyword search | 20% | PostgreSQL `ts_rank` full-text search |
+| Tag matching | 10% | Intersection of query-derived tags with memory tags |
 
-Filter by project, memory type, file path, recency, or set custom limits. Three modes: `semantic` (hybrid, default), `keyword`, or `vector`.
+Filter by project(s), memory type(s), file path, recency, or set custom limits. Multi-select supported — pass comma-separated values (e.g. `?project=cairn,llm-context&type=decision,learning`). Three modes: `semantic` (hybrid, default), `keyword`, or `vector`.
 
 </details>
 
@@ -463,7 +464,7 @@ All bulk operations support `--dry-run` for preview.
 
 ### Database Schema
 
-16 tables across 8 migrations:
+16 tables across 9 migrations:
 
 | Migration | Tables |
 |-----------|--------|
@@ -475,6 +476,7 @@ All bulk operations support `--dry-run` for preview.
 | **006 Events** | `session_events` — streaming event batches with LLM digests |
 | **007 Doc Title** | `title` column on `project_documents` |
 | **008 Ingestion** | `ingestion_log` — content-hash dedup, source tracking, chunk counts |
+| **009 Drift** | `file_hashes` JSONB column on `memories` for code-aware drift detection |
 
 </details>
 

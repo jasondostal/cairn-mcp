@@ -7,7 +7,7 @@ import { useProjectSelector } from "@/lib/use-project-selector";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/error-state";
-import { ProjectSelector } from "@/components/project-selector";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { MemorySheet } from "@/components/memory-sheet";
 
 // Deterministic color palette for clusters
@@ -35,7 +35,7 @@ export default function ClusterVisualizationPage() {
   const [hoveredPoint, setHoveredPoint] = useState<VisualizationPoint | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const { sheetId, sheetOpen, setSheetOpen, openSheet } = useMemorySheet();
-  const [project, setProject] = useState("");
+  const [project, setProject] = useState<string[]>([]);
   const { projects } = useProjectSelector();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -45,12 +45,12 @@ export default function ClusterVisualizationPage() {
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0 });
 
-  function load(proj?: string) {
+  function load(proj?: string[]) {
     const p = proj ?? project;
     setLoading(true);
     setError(null);
     api
-      .clusterVisualization({ project: p || undefined })
+      .clusterVisualization({ project: p.length ? p.join(",") : undefined })
       .then((data) => {
         setPoints(data.points);
         // Reset transform on new data
@@ -65,10 +65,11 @@ export default function ClusterVisualizationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function handleProjectSelect(name: string) {
-    const next = name === project ? "" : name;
-    setProject(next);
-    load(next);
+  const projectOptions = projects.map((p) => ({ value: p.name, label: p.name }));
+
+  function handleProjectChange(value: string[]) {
+    setProject(value);
+    load(value);
   }
 
   // Get unique cluster IDs for consistent color mapping
@@ -242,26 +243,14 @@ export default function ClusterVisualizationPage() {
         </Button>
       </div>
 
-      {/* Project selector buttons */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant={project === "" ? "default" : "outline"}
-          size="sm"
-          onClick={() => {
-            if (project !== "") {
-              setProject("");
-              load("");
-            }
-          }}
-        >
-          All
-        </Button>
-        <ProjectSelector
-          projects={projects}
-          selected={project}
-          onSelect={handleProjectSelect}
-        />
-      </div>
+      <MultiSelect
+        options={projectOptions}
+        value={project}
+        onValueChange={handleProjectChange}
+        placeholder="All projects"
+        searchPlaceholder="Search projects…"
+        maxCount={2}
+      />
 
       {loading && <Skeleton className="h-[500px]" />}
 

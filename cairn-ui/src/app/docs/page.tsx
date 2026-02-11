@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/error-state";
-import { ProjectSelector } from "@/components/project-selector";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { SkeletonList } from "@/components/skeleton-list";
 import { DocTypeBadge } from "@/components/doc-type-badge";
 import { FileText, LayoutList, LayoutGrid } from "lucide-react";
@@ -87,36 +87,31 @@ function DocCard({ doc, showProject }: { doc: Document; showProject?: boolean })
 }
 
 export default function DocsPage() {
-  const { projects, selected, setSelected, loading: projectsLoading, error: projectsError } = useProjectSelector();
+  const { projects, loading: projectsLoading, error: projectsError } = useProjectSelector();
   const [docs, setDocs] = useState<Document[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(true);
-  const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [projectFilter, setProjectFilter] = useState<string[]>([]);
+  const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [dense, setDense] = useState(true);
 
+  const showAll = projectFilter.length === 0;
+
   useEffect(() => {
-    if (!showAll && !selected) return;
     setLoading(true);
     setError(null);
     api
       .docs({
-        project: showAll ? undefined : selected,
-        doc_type: typeFilter ?? undefined,
+        project: projectFilter.length ? projectFilter.join(",") : undefined,
+        doc_type: typeFilter.length ? typeFilter.join(",") : undefined,
       })
       .then((r) => setDocs(r.items))
       .catch((err) => setError(err?.message || "Failed to load docs"))
       .finally(() => setLoading(false));
-  }, [selected, showAll, typeFilter]);
+  }, [projectFilter, typeFilter]);
 
-  function handleShowAll() {
-    setShowAll(true);
-  }
-
-  function handleSelectProject(name: string) {
-    setShowAll(false);
-    setSelected(name);
-  }
+  const projectOptions = projects.map((p) => ({ value: p.name, label: p.name }));
+  const typeOptions = DOC_TYPES.map((t) => ({ value: t, label: t }));
 
   return (
     <div className="space-y-6">
@@ -133,39 +128,23 @@ export default function DocsPage() {
         </Button>
       </div>
 
-      <div className="flex gap-1 flex-wrap">
-        <Button
-          variant={showAll ? "default" : "outline"}
-          size="sm"
-          onClick={handleShowAll}
-        >
-          All
-        </Button>
-        <ProjectSelector
-          projects={projects}
-          selected={showAll ? "" : selected}
-          onSelect={handleSelectProject}
+      <div className="flex items-center gap-2 flex-wrap">
+        <MultiSelect
+          options={projectOptions}
+          value={projectFilter}
+          onValueChange={setProjectFilter}
+          placeholder="All projects"
+          searchPlaceholder="Search projects…"
+          maxCount={2}
         />
-      </div>
-
-      <div className="flex gap-1 flex-wrap">
-        <Button
-          variant={typeFilter === null ? "default" : "outline"}
-          size="sm"
-          onClick={() => setTypeFilter(null)}
-        >
-          All types
-        </Button>
-        {DOC_TYPES.map((t) => (
-          <Button
-            key={t}
-            variant={typeFilter === t ? "default" : "outline"}
-            size="sm"
-            onClick={() => setTypeFilter(t)}
-          >
-            {t}
-          </Button>
-        ))}
+        <MultiSelect
+          options={typeOptions}
+          value={typeFilter}
+          onValueChange={setTypeFilter}
+          placeholder="All types"
+          searchPlaceholder="Search types…"
+          maxCount={2}
+        />
       </div>
 
       {(loading || projectsLoading) && <SkeletonList count={4} height="h-24" />}

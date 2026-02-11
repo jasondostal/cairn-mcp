@@ -70,8 +70,8 @@ class SearchEngine:
     def search(
         self,
         query: str,
-        project: str | None = None,
-        memory_type: str | None = None,
+        project: str | list[str] | None = None,
+        memory_type: str | list[str] | None = None,
         search_mode: str = "semantic",
         limit: int = 10,
         include_full: bool = False,
@@ -80,8 +80,8 @@ class SearchEngine:
 
         Args:
             query: Natural language search query.
-            project: Filter to a specific project.
-            memory_type: Filter to a specific memory type.
+            project: Filter to project(s). String or list of strings.
+            memory_type: Filter to memory type(s). String or list of strings.
             search_mode: "semantic" (hybrid), "keyword", or "vector".
             limit: Max results to return.
             include_full: If True, return full content. If False, return summary/truncated.
@@ -124,18 +124,26 @@ class SearchEngine:
 
         return query
 
-    def _build_filters(self, project: str | None, memory_type: str | None) -> tuple[str, list]:
+    def _build_filters(self, project: str | list[str] | None, memory_type: str | list[str] | None) -> tuple[str, list]:
         """Build WHERE clause fragments for common filters."""
         clauses = ["m.is_active = true"]
         params = []
 
         if project:
-            clauses.append("p.name = %s")
-            params.append(project)
+            if isinstance(project, list):
+                clauses.append("p.name = ANY(%s)")
+                params.append(project)
+            else:
+                clauses.append("p.name = %s")
+                params.append(project)
 
         if memory_type:
-            clauses.append("m.memory_type = %s")
-            params.append(memory_type)
+            if isinstance(memory_type, list):
+                clauses.append("m.memory_type = ANY(%s)")
+                params.append(memory_type)
+            else:
+                clauses.append("m.memory_type = %s")
+                params.append(memory_type)
 
         return " AND ".join(clauses), params
 

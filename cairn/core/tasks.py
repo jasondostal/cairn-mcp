@@ -50,28 +50,33 @@ class TaskManager:
         return {"id": task_id, "action": "completed"}
 
     def list_tasks(
-        self, project: str | None = None, include_completed: bool = False,
+        self, project: str | list[str] | None = None, include_completed: bool = False,
         limit: int | None = None, offset: int = 0,
     ) -> dict:
-        """List tasks for a project (or all projects) with optional pagination.
+        """List tasks for project(s) (or all projects) with optional pagination.
 
         Returns dict with 'total', 'limit', 'offset', and 'items' keys.
         """
         status_filter = "" if include_completed else f" AND t.status = '{TaskStatus.PENDING}'"
 
         if project is not None:
-            project_id = get_project(self.db, project)
-            if project_id is None:
-                return {"total": 0, "limit": limit, "offset": offset, "items": []}
-            where = "t.project_id = %s"
-            base_params: list = [project_id]
+            if isinstance(project, list):
+                where = "p.name = ANY(%s)"
+                base_params: list = [project]
+            else:
+                project_id = get_project(self.db, project)
+                if project_id is None:
+                    return {"total": 0, "limit": limit, "offset": offset, "items": []}
+                where = "t.project_id = %s"
+                base_params = [project_id]
         else:
             where = "TRUE"
             base_params = []
 
         # Get total count
+        count_join = " LEFT JOIN projects p ON t.project_id = p.id" if isinstance(project, list) else ""
         count_row = self.db.execute_one(
-            f"SELECT COUNT(*) as total FROM tasks t WHERE {where}{status_filter}",
+            f"SELECT COUNT(*) as total FROM tasks t{count_join} WHERE {where}{status_filter}",
             tuple(base_params),
         )
         total = count_row["total"]

@@ -8,16 +8,17 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/error-state";
-import { ProjectSelector } from "@/components/project-selector";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { TaskSheet } from "@/components/task-sheet";
 import { PaginatedList } from "@/components/paginated-list";
 import { SkeletonList } from "@/components/skeleton-list";
 import { CheckCircle, Circle, Link2, LayoutList, LayoutGrid } from "lucide-react";
 
-function TaskCard({ task, showProject }: { task: Task; showProject?: boolean }) {
+function TaskCard({ task, showProject, onClick }: { task: Task; showProject?: boolean; onClick: () => void }) {
   const done = task.status === "completed";
 
   return (
-    <Card className={done ? "opacity-60" : ""}>
+    <Card className={`transition-colors hover:border-primary/30 cursor-pointer ${done ? "opacity-60" : ""}`} onClick={onClick}>
       <CardContent className="flex items-start gap-3 p-4">
         {done ? (
           <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
@@ -62,10 +63,13 @@ function TaskCard({ task, showProject }: { task: Task; showProject?: boolean }) 
   );
 }
 
-function TaskDenseRow({ task, showProject }: { task: Task; showProject?: boolean }) {
+function TaskDenseRow({ task, showProject, onClick }: { task: Task; showProject?: boolean; onClick: () => void }) {
   const done = task.status === "completed";
   return (
-    <div className={`flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors ${done ? "opacity-50" : ""}`}>
+    <div
+      className={`flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer ${done ? "opacity-50" : ""}`}
+      onClick={onClick}
+    >
       {done ? (
         <CheckCircle className="h-3.5 w-3.5 shrink-0 text-green-500" />
       ) : (
@@ -86,12 +90,12 @@ function TaskDenseRow({ task, showProject }: { task: Task; showProject?: boolean
   );
 }
 
-function TasksList({ tasks, showProject, dense }: { tasks: Task[]; showProject?: boolean; dense?: boolean }) {
+function TasksList({ tasks, showProject, dense, onSelect }: { tasks: Task[]; showProject?: boolean; dense?: boolean; onSelect: (task: Task) => void }) {
   if (dense) {
     return (
       <div className="rounded-md border border-border divide-y divide-border">
         {tasks.map((t) => (
-          <TaskDenseRow key={t.id} task={t} showProject={showProject} />
+          <TaskDenseRow key={t.id} task={t} showProject={showProject} onClick={() => onSelect(t)} />
         ))}
       </div>
     );
@@ -101,7 +105,7 @@ function TasksList({ tasks, showProject, dense }: { tasks: Task[]; showProject?:
       items={tasks}
       noun="tasks"
       keyExtractor={(t) => t.id}
-      renderItem={(t) => <TaskCard task={t} showProject={showProject} />}
+      renderItem={(t) => <TaskCard task={t} showProject={showProject} onClick={() => onSelect(t)} />}
       gap="space-y-2"
     />
   );
@@ -113,29 +117,30 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
-  const [showAll, setShowAll] = useState(false);
+  const [projectFilter, setProjectFilter] = useState<string[]>([]);
   const [dense, setDense] = useState(true);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const showAll = projectFilter.length === 0;
 
   useEffect(() => {
-    if (!showAll && !selected) return;
     setLoading(true);
     setError(null);
     api
-      .tasks(showAll ? undefined : selected, {
+      .tasks(showAll ? undefined : projectFilter.join(","), {
         include_completed: showCompleted ? "true" : undefined,
       })
       .then((r) => setTasks(r.items))
       .catch((err) => setError(err?.message || "Failed to load tasks"))
       .finally(() => setLoading(false));
-  }, [selected, showCompleted, showAll]);
+  }, [projectFilter, showCompleted, showAll]);
 
-  function handleShowAll() {
-    setShowAll(true);
-  }
+  const projectOptions = projects.map((p) => ({ value: p.name, label: p.name }));
 
-  function handleSelectProject(name: string) {
-    setShowAll(false);
-    setSelected(name);
+  function openTaskSheet(task: Task) {
+    setSelectedTask(task);
+    setSheetOpen(true);
   }
 
   return (
@@ -143,20 +148,14 @@ export default function TasksPage() {
       <h1 className="text-2xl font-semibold">Tasks</h1>
 
       <div className="flex items-center gap-2">
-        <div className="flex gap-1 flex-wrap">
-          <Button
-            variant={showAll ? "default" : "outline"}
-            size="sm"
-            onClick={handleShowAll}
-          >
-            All
-          </Button>
-          <ProjectSelector
-            projects={projects}
-            selected={showAll ? "" : selected}
-            onSelect={handleSelectProject}
-          />
-        </div>
+        <MultiSelect
+          options={projectOptions}
+          value={projectFilter}
+          onValueChange={setProjectFilter}
+          placeholder="All projects"
+          searchPlaceholder="Search projects…"
+          maxCount={2}
+        />
         <Button
           variant={showCompleted ? "default" : "outline"}
           size="sm"
@@ -183,13 +182,19 @@ export default function TasksPage() {
         <p className="text-sm text-muted-foreground">
           {showAll
             ? "No tasks yet."
-            : `No tasks for ${selected}.`}
+            : `No tasks for ${projectFilter.join(", ")}.`}
         </p>
       )}
 
       {!loading && !projectsLoading && !error && !projectsError && tasks.length > 0 && (
-        <TasksList tasks={tasks} showProject={showAll} dense={dense} />
+        <TasksList tasks={tasks} showProject={showAll} dense={dense} onSelect={openTaskSheet} />
       )}
+
+      <TaskSheet
+        task={selectedTask}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+      />
     </div>
   );
 }

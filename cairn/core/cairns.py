@@ -368,32 +368,46 @@ class CairnManager:
         except Exception:
             logger.warning("Failed to archive events to %s", archive_dir, exc_info=True)
 
-    def stack(self, project: str | None = None, limit: int = 20) -> list[dict]:
-        """View the trail — cairns for a project (or all projects), newest first.
+    def stack(self, project: str | list[str] | None = None, limit: int = 20) -> list[dict]:
+        """View the trail — cairns for project(s) (or all projects), newest first.
 
         Args:
-            project: Project name. None returns cairns across all projects.
+            project: Project name(s). None returns cairns across all projects.
             limit: Maximum cairns to return (default 20).
 
         Returns:
             List of cairn summaries ordered by set_at DESC.
         """
         if project is not None:
-            project_id = get_project(self.db, project)
-            if project_id is None:
-                return []
-            rows = self.db.execute(
-                """
-                SELECT c.id, c.session_name, c.title, c.narrative, c.memory_count,
-                       c.started_at, c.set_at, c.is_compressed, p.name as project
-                FROM cairns c
-                LEFT JOIN projects p ON c.project_id = p.id
-                WHERE c.project_id = %s AND c.set_at IS NOT NULL
-                ORDER BY c.set_at DESC
-                LIMIT %s
-                """,
-                (project_id, limit),
-            )
+            if isinstance(project, list):
+                rows = self.db.execute(
+                    """
+                    SELECT c.id, c.session_name, c.title, c.narrative, c.memory_count,
+                           c.started_at, c.set_at, c.is_compressed, p.name as project
+                    FROM cairns c
+                    LEFT JOIN projects p ON c.project_id = p.id
+                    WHERE p.name = ANY(%s) AND c.set_at IS NOT NULL
+                    ORDER BY c.set_at DESC
+                    LIMIT %s
+                    """,
+                    (project, limit),
+                )
+            else:
+                project_id = get_project(self.db, project)
+                if project_id is None:
+                    return []
+                rows = self.db.execute(
+                    """
+                    SELECT c.id, c.session_name, c.title, c.narrative, c.memory_count,
+                           c.started_at, c.set_at, c.is_compressed, p.name as project
+                    FROM cairns c
+                    LEFT JOIN projects p ON c.project_id = p.id
+                    WHERE c.project_id = %s AND c.set_at IS NOT NULL
+                    ORDER BY c.set_at DESC
+                    LIMIT %s
+                    """,
+                    (project_id, limit),
+                )
         else:
             rows = self.db.execute(
                 """

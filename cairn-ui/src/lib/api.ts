@@ -1,11 +1,13 @@
 const BASE = "/api";
 
-async function get<T>(path: string, params?: Record<string, string>): Promise<T> {
+async function get<T>(path: string, params?: Record<string, string | string[] | undefined>): Promise<T> {
   const url = new URL(path, window.location.origin);
   url.pathname = `${BASE}${path}`;
   if (params) {
     Object.entries(params).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, v);
+      if (v === undefined || v === null) return;
+      const str = Array.isArray(v) ? v.join(",") : v;
+      if (str !== "") url.searchParams.set(k, str);
     });
   }
   const res = await fetch(url.toString());

@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
-const APP_VERSION = "0.18.0";
+const APP_VERSION = "0.24.0";
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
@@ -69,10 +69,10 @@ export function SidebarNav() {
     <>
       {/* Mobile header */}
       <header className="flex h-14 items-center justify-between border-b border-border bg-card px-4 md:hidden">
-        <div className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2 rounded-md px-1 -mx-1 hover:bg-accent/30 transition-colors">
           <img src="/cairn-mark-trail.svg" alt="Cairn" className="h-5 w-5" />
           <span className="text-lg font-semibold tracking-tight">Cairn</span>
-        </div>
+        </Link>
         <button
           onClick={() => setOpen(!open)}
           className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
@@ -100,9 +100,11 @@ export function SidebarNav() {
 
       {/* Desktop sidebar */}
       <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-card md:flex">
-        <div className="flex h-14 items-center gap-2 border-b border-border px-4">
-          <img src="/cairn-mark-trail.svg" alt="Cairn" className="h-5 w-5" />
-          <span className="text-lg font-semibold tracking-tight">Cairn</span>
+        <div className="flex h-14 items-center border-b border-border px-4">
+          <Link href="/" className="flex items-center gap-2 rounded-md px-1 -mx-1 hover:bg-accent/30 transition-colors">
+            <img src="/cairn-mark-trail.svg" alt="Cairn" className="h-5 w-5" />
+            <span className="text-lg font-semibold tracking-tight">Cairn</span>
+          </Link>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-2">
           <NavLinks />

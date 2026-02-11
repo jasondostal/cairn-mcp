@@ -491,23 +491,26 @@ class MemoryStore:
         raise ValueError(f"Unknown action: {action}")
 
     def get_rules(
-        self, project: str | None = None,
+        self, project: str | list[str] | None = None,
         limit: int | None = None, offset: int = 0,
     ) -> dict:
-        """Retrieve active rule-type memories for a project and __global__.
+        """Retrieve active rule-type memories for project(s) and __global__.
 
         Returns dict with 'total', 'limit', 'offset', and 'items' keys.
         """
-        project_param = project or "__global__"
+        if isinstance(project, list):
+            project_names = list(set(project + ["__global__"]))
+        else:
+            project_names = ["__global__"] if not project else ["__global__", project]
 
         count_row = self.db.execute_one(
             """
             SELECT COUNT(*) as total FROM memories m
             LEFT JOIN projects p ON m.project_id = p.id
             WHERE m.memory_type = 'rule' AND m.is_active = true
-                AND (p.name = '__global__' OR p.name = %s)
+                AND p.name = ANY(%s)
             """,
-            (project_param,),
+            (project_names,),
         )
         total = count_row["total"]
 
@@ -518,10 +521,10 @@ class MemoryStore:
             LEFT JOIN projects p ON m.project_id = p.id
             WHERE m.memory_type = 'rule'
                 AND m.is_active = true
-                AND (p.name = '__global__' OR p.name = %s)
+                AND p.name = ANY(%s)
             ORDER BY m.importance DESC, m.created_at DESC
         """
-        params: list = [project_param]
+        params: list = [project_names]
 
         if limit is not None:
             query += " LIMIT %s OFFSET %s"

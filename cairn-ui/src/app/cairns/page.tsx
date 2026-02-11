@@ -7,9 +7,8 @@ import { formatDate } from "@/lib/format";
 import { useProjectSelector } from "@/lib/use-project-selector";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/error-state";
-import { ProjectSelector } from "@/components/project-selector";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { SkeletonList } from "@/components/skeleton-list";
 import { Landmark, Archive, Layers } from "lucide-react";
 
@@ -61,50 +60,38 @@ function CairnCard({ cairn, showProject }: { cairn: Cairn; showProject?: boolean
 }
 
 export default function CairnsPage() {
-  const { projects, selected, setSelected, loading: projectsLoading, error: projectsError } = useProjectSelector();
+  const { projects, loading: projectsLoading, error: projectsError } = useProjectSelector();
   const [cairns, setCairns] = useState<Cairn[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
+  const [projectFilter, setProjectFilter] = useState<string[]>([]);
+
+  const showAll = projectFilter.length === 0;
 
   useEffect(() => {
-    if (!showAll && !selected) return;
     setLoading(true);
     setError(null);
     api
-      .cairns(showAll ? undefined : selected)
+      .cairns(projectFilter.length ? projectFilter.join(",") : undefined)
       .then(setCairns)
       .catch((err) => setError(err?.message || "Failed to load cairns"))
       .finally(() => setLoading(false));
-  }, [selected, showAll]);
+  }, [projectFilter]);
 
-  function handleShowAll() {
-    setShowAll(true);
-  }
-
-  function handleSelectProject(name: string) {
-    setShowAll(false);
-    setSelected(name);
-  }
+  const projectOptions = projects.map((p) => ({ value: p.name, label: p.name }));
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Cairns</h1>
 
-      <div className="flex gap-1 flex-wrap">
-        <Button
-          variant={showAll ? "default" : "outline"}
-          size="sm"
-          onClick={handleShowAll}
-        >
-          All
-        </Button>
-        <ProjectSelector
-          projects={projects}
-          selected={showAll ? "" : selected}
-          onSelect={handleSelectProject}
-        />
-      </div>
+      <MultiSelect
+        options={projectOptions}
+        value={projectFilter}
+        onValueChange={setProjectFilter}
+        placeholder="All projects"
+        searchPlaceholder="Search projects…"
+        maxCount={2}
+      />
 
       {(loading || projectsLoading) && <SkeletonList count={4} height="h-24" />}
 
@@ -114,7 +101,7 @@ export default function CairnsPage() {
         <p className="text-sm text-muted-foreground">
           {showAll
             ? "No cairns yet. Cairns are set at the end of sessions."
-            : `No cairns for ${selected}. Cairns are set at the end of sessions.`}
+            : `No cairns for ${projectFilter.join(", ")}. Cairns are set at the end of sessions.`}
         </p>
       )}
 

@@ -157,19 +157,23 @@ class ThinkingEngine:
         }
 
     def list_sequences(
-        self, project: str | None = None, status: str | None = None,
+        self, project: str | list[str] | None = None, status: str | None = None,
         limit: int | None = None, offset: int = 0,
     ) -> dict:
-        """List thinking sequences for a project (or all projects) with optional pagination.
+        """List thinking sequences for project(s) (or all projects) with optional pagination.
 
         Returns dict with 'total', 'limit', 'offset', and 'items' keys.
         """
         if project is not None:
-            project_id = get_project(self.db, project)
-            if project_id is None:
-                return {"total": 0, "limit": limit, "offset": offset, "items": []}
-            where = "ts.project_id = %s"
-            base_params: list = [project_id]
+            if isinstance(project, list):
+                where = "p.name = ANY(%s)"
+                base_params: list = [project]
+            else:
+                project_id = get_project(self.db, project)
+                if project_id is None:
+                    return {"total": 0, "limit": limit, "offset": offset, "items": []}
+                where = "ts.project_id = %s"
+                base_params = [project_id]
         else:
             where = "TRUE"
             base_params = []
@@ -179,8 +183,9 @@ class ThinkingEngine:
         if status:
             count_params.append(status)
 
+        count_join = " LEFT JOIN projects p ON ts.project_id = p.id" if isinstance(project, list) else ""
         count_row = self.db.execute_one(
-            f"SELECT COUNT(*) as total FROM thinking_sequences ts WHERE {where}{status_filter}",
+            f"SELECT COUNT(*) as total FROM thinking_sequences ts{count_join} WHERE {where}{status_filter}",
             tuple(count_params),
         )
         total = count_row["total"]

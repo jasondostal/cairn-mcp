@@ -22,6 +22,14 @@ from cairn.core.utils import get_or_create_project
 logger = logging.getLogger(__name__)
 
 
+def parse_multi(param: str | None) -> list[str] | None:
+    """Split a comma-separated query param into a list, or None if empty."""
+    if not param:
+        return None
+    parts = [p.strip() for p in param.split(",") if p.strip()]
+    return parts if parts else None
+
+
 class APIKeyAuthMiddleware(BaseHTTPMiddleware):
     """Optional API key authentication middleware.
 
@@ -82,7 +90,7 @@ def create_api(svc: Services) -> FastAPI:
 
     app = FastAPI(
         title="Cairn API",
-        version="0.23.1",
+        version="0.24.0",
         description="REST API for the Cairn web UI and content ingestion.",
         docs_url="/swagger",
         redoc_url=None,
@@ -126,16 +134,18 @@ def create_api(svc: Services) -> FastAPI:
         offset: int = Query(0, ge=0),
     ):
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        projects = parse_multi(project)
+        types = parse_multi(type)
 
         where = ["m.is_active = true", "m.created_at >= %s"]
         params: list = [cutoff]
 
-        if project:
-            where.append("p.name = %s")
-            params.append(project)
-        if type:
-            where.append("m.memory_type = %s")
-            params.append(type)
+        if projects:
+            where.append("p.name = ANY(%s)")
+            params.append(projects)
+        if types:
+            where.append("m.memory_type = ANY(%s)")
+            params.append(types)
 
         where_clause = " AND ".join(where)
 
@@ -202,8 +212,8 @@ def create_api(svc: Services) -> FastAPI:
     ):
         results = search_engine.search(
             query=q,
-            project=project,
-            memory_type=type,
+            project=parse_multi(project),
+            memory_type=parse_multi(type),
             search_mode=mode,
             limit=limit + offset,
             include_full=True,
@@ -252,7 +262,7 @@ def create_api(svc: Services) -> FastAPI:
         offset: int = Query(0, ge=0),
     ):
         return project_manager.list_all_docs(
-            project=project, doc_type=doc_type, limit=limit, offset=offset,
+            project=parse_multi(project), doc_type=parse_multi(doc_type), limit=limit, offset=offset,
         )
 
     # ------------------------------------------------------------------
@@ -306,7 +316,7 @@ def create_api(svc: Services) -> FastAPI:
         offset: int = Query(0, ge=0),
     ):
         return task_manager.list_tasks(
-            project=project, include_completed=include_completed,
+            project=parse_multi(project), include_completed=include_completed,
             limit=limit, offset=offset,
         )
 
@@ -321,7 +331,7 @@ def create_api(svc: Services) -> FastAPI:
         offset: int = Query(0, ge=0),
     ):
         return thinking_engine.list_sequences(
-            project=project, status=status, limit=limit, offset=offset,
+            project=parse_multi(project), status=status, limit=limit, offset=offset,
         )
 
     # ------------------------------------------------------------------
@@ -342,7 +352,7 @@ def create_api(svc: Services) -> FastAPI:
         project: str | None = Query(None, description="Project name (omit for all projects)"),
         limit: int = Query(20, ge=1, le=50),
     ):
-        return cairn_manager.stack(project=project, limit=limit)
+        return cairn_manager.stack(project=parse_multi(project), limit=limit)
 
     # ------------------------------------------------------------------
     # POST /cairns — set a cairn (used by hooks)
@@ -380,7 +390,7 @@ def create_api(svc: Services) -> FastAPI:
         limit: int | None = Query(None, ge=1, le=100),
         offset: int = Query(0, ge=0),
     ):
-        return memory_store.get_rules(project, limit=limit, offset=offset)
+        return memory_store.get_rules(parse_multi(project), limit=limit, offset=offset)
 
     # ------------------------------------------------------------------
     # GET /graph?project=&relation_type=&min_importance=

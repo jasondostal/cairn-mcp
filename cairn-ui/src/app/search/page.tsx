@@ -14,7 +14,7 @@ import { MemorySheet } from "@/components/memory-sheet";
 import { MemoryTypeBadge } from "@/components/memory-type-badge";
 import { ImportanceBadge } from "@/components/importance-badge";
 import { TagList } from "@/components/tag-list";
-import { ProjectSelector } from "@/components/project-selector";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { SkeletonList } from "@/components/skeleton-list";
 import { PaginatedList } from "@/components/paginated-list";
 import { Search, FileText } from "lucide-react";
@@ -70,7 +70,7 @@ function ScoreBreakdown({ score, components }: { score: number; components?: { v
 function MemoryCard({ memory, onSelect, isActive }: { memory: Memory; onSelect?: (id: number) => void; isActive?: boolean }) {
   const content =
     memory.content.length > 300
-      ? memory.content.slice(0, 300) + "…"
+      ? memory.content.slice(0, 300) + "\u2026"
       : memory.content;
 
   return (
@@ -157,16 +157,19 @@ function ResultsList({ results, onSelect }: { results: Memory[]; onSelect: (id: 
 }
 
 export default function SearchPage() {
-  const { projects, selected, setSelected } = useProjectSelector();
+  const { projects } = useProjectSelector();
   const [query, setQuery] = useState("");
-  const [showAllProjects, setShowAllProjects] = useState(true);
-  const [type, setType] = useState<string | null>(null);
+  const [projectFilter, setProjectFilter] = useState<string[]>([]);
+  const [type, setType] = useState<string[]>([]);
   const [mode, setMode] = useState("semantic");
   const [results, setResults] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { sheetId, sheetOpen, setSheetOpen, openSheet } = useMemorySheet();
+
+  const projectOptions = projects.map((p) => ({ value: p.name, label: p.name }));
+  const typeOptions = MEMORY_TYPES.map((t) => ({ value: t, label: t }));
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -176,8 +179,8 @@ export default function SearchPage() {
     setError(null);
     try {
       const data = await api.search(query, {
-        project: showAllProjects ? undefined : selected || undefined,
-        type: type ?? undefined,
+        project: projectFilter.length ? projectFilter.join(",") : undefined,
+        type: type.length ? type.join(",") : undefined,
         mode,
         limit: "100",
       });
@@ -206,65 +209,42 @@ export default function SearchPage() {
             />
           </div>
           <Button type="submit" disabled={loading || !query.trim()}>
-            {loading ? "Searching…" : "Search"}
+            {loading ? "Searching\u2026" : "Search"}
           </Button>
         </div>
 
-        {/* Project filter */}
-        <div className="flex gap-1 flex-wrap">
-          <Button
-            type="button"
-            variant={showAllProjects ? "default" : "outline"}
-            size="sm"
-            onClick={() => setShowAllProjects(true)}
-          >
-            All
-          </Button>
-          <ProjectSelector
-            projects={projects}
-            selected={showAllProjects ? "" : selected}
-            onSelect={(name) => { setShowAllProjects(false); setSelected(name); }}
+        <div className="flex items-center gap-2 flex-wrap">
+          <MultiSelect
+            options={projectOptions}
+            value={projectFilter}
+            onValueChange={setProjectFilter}
+            placeholder="All projects"
+            searchPlaceholder="Search projects…"
+            maxCount={2}
           />
-        </div>
-
-        {/* Type filter */}
-        <div className="flex gap-1 flex-wrap">
-          <Button
-            type="button"
-            variant={type === null ? "default" : "outline"}
-            size="sm"
-            onClick={() => setType(null)}
-          >
-            All types
-          </Button>
-          {MEMORY_TYPES.map((t) => (
-            <Button
-              key={t}
-              type="button"
-              variant={type === t ? "default" : "outline"}
-              size="sm"
-              onClick={() => setType(t)}
-            >
-              {t}
-            </Button>
-          ))}
-        </div>
-
-        {/* Search mode */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Mode</span>
-          <div className="flex gap-1">
-            {["semantic", "keyword", "vector"].map((m) => (
-              <Button
-                key={m}
-                type="button"
-                variant={mode === m ? "default" : "outline"}
-                size="sm"
-                onClick={() => setMode(m)}
-              >
-                {m}
-              </Button>
-            ))}
+          <MultiSelect
+            options={typeOptions}
+            value={type}
+            onValueChange={setType}
+            placeholder="All types"
+            searchPlaceholder="Search types…"
+            maxCount={2}
+          />
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Mode</span>
+            <div className="flex gap-1">
+              {["semantic", "keyword", "vector"].map((m) => (
+                <Button
+                  key={m}
+                  type="button"
+                  variant={mode === m ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setMode(m)}
+                >
+                  {m}
+                </Button>
+              ))}
+            </div>
           </div>
         </div>
       </form>

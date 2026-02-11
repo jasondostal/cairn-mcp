@@ -119,8 +119,8 @@ class ProjectManager:
 
     def list_all_docs(
         self,
-        project: str | None = None,
-        doc_type: str | None = None,
+        project: str | list[str] | None = None,
+        doc_type: str | list[str] | None = None,
         limit: int | None = None,
         offset: int = 0,
     ) -> dict:
@@ -129,11 +129,19 @@ class ProjectManager:
         params: list = []
 
         if project:
-            where.append("p.name = %s")
-            params.append(project)
+            if isinstance(project, list):
+                where.append("p.name = ANY(%s)")
+                params.append(project)
+            else:
+                where.append("p.name = %s")
+                params.append(project)
         if doc_type:
-            where.append("d.doc_type = %s")
-            params.append(doc_type)
+            if isinstance(doc_type, list):
+                where.append("d.doc_type = ANY(%s)")
+                params.append(doc_type)
+            else:
+                where.append("d.doc_type = %s")
+                params.append(doc_type)
 
         where_clause = (" WHERE " + " AND ".join(where)) if where else ""
 

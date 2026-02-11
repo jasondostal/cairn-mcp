@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-02-11
+
+### Added
+- **Multi-select filters across all UI pages** — every project/type filter dropdown
+  is now a multi-select with typeahead search, badge pills, "+N more" overflow,
+  individual remove, clear all, and select all. Filter by multiple projects or types
+  simultaneously. 9 pages migrated (search, timeline, tasks, thinking, cairns, docs,
+  rules, clusters, cluster visualization).
+- **New `MultiSelect` component** (`cairn-ui/src/components/ui/multi-select.tsx`) —
+  reusable multi-select built on shadcn Command + Popover + Badge primitives.
+- **Comma-separated multi-value API params** — all filter endpoints (`/timeline`,
+  `/search`, `/tasks`, `/thinking`, `/cairns`, `/rules`, `/docs`) accept
+  comma-separated `project` and `type` params (e.g. `?project=cairn,llm-context`).
+  Backend uses PostgreSQL `ANY()` for efficient multi-value matching.
+
+### Removed
+- **`FilterCombobox` component** — replaced entirely by `MultiSelect`. No migration
+  needed for API consumers — single values still work as before.
+
+### Changed
+- API version bumped to 0.24.0.
+- `api.ts` `get()` helper accepts `string | string[]` params, auto-joining arrays.
+
 ## [0.23.1] - 2026-02-11
 
 ### Fixed
