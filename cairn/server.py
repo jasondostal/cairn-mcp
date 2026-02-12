@@ -61,7 +61,32 @@ async def lifespan(server: FastMCP):
 # Create MCP server
 mcp_kwargs = dict(
     name="cairn",
-    instructions="Semantic memory for AI agents. Store, search, and discover patterns across persistent context.",
+    instructions=(
+        "Semantic memory for AI agents. Store, search, and discover patterns across persistent context.\n"
+        "\n"
+        "CRITICAL BEHAVIOR — SEARCH BEFORE GUESSING:\n"
+        "When you hit an 'I don't know' moment — a hostname, file path, deploy command, architecture detail, "
+        "workflow, or any infrastructure/process question — SEARCH THIS MEMORY FIRST. Do not guess. Do not "
+        "ask the user. Do not SSH somewhere and hope. The answer is almost certainly already stored. One search. "
+        "That's all it takes.\n"
+        "\n"
+        "SESSION STARTUP SEQUENCE:\n"
+        "1. rules() — load behavioral guardrails (global + active project)\n"
+        "2. cairns(action='stack') — walk recent session markers across all projects\n"
+        "3. search(query='learning', memory_type='learning', limit=5) — surface recent learnings\n"
+        "Then summarize the landscape and ask what we're working on.\n"
+        "\n"
+        "ONGOING USE — Memory is not just for boot:\n"
+        "The startup sequence loads broad context. But mid-task questions ('how do we deploy?', "
+        "'where is the config?', 'what port does X use?') require NEW searches. Do not assume the "
+        "boot context covers everything. Search is cheap. Being wrong is expensive.\n"
+        "\n"
+        "PROGRESSIVE DISCLOSURE: search (summaries) → recall (full content). "
+        "Search first, recall specific IDs when you need details.\n"
+        "\n"
+        "STORE THOUGHTFULLY: Consolidate, don't fragment. One comprehensive memory after a task "
+        "completes is better than five incremental notes during it."
+    ),
     lifespan=lifespan,
 )
 if config.transport == "http":
@@ -87,17 +112,33 @@ def store(
     related_ids: list[int] | None = None,
     file_hashes: dict[str, str] | None = None,
 ) -> dict:
-    """Store a memory with automatic embedding generation.
+    """Store a memory with automatic embedding generation and optional LLM enrichment.
 
-    Every memory is embedded as a vector for semantic search. Provide tags and
-    importance to aid discovery, or let the system infer them (Phase 2 enrichment).
+    WHEN TO STORE — Consolidate, Don't Fragment:
+    - Task/feature COMPLETE — capture the full journey (investigation → solution)
+    - Discussion CONCLUDES — consolidate decisions and learnings into one memory
+    - User explicitly says "remember this", "save this", "store this"
+    - Context switch — save state before moving to a different topic
+    - Key decision made — architecture choices, tool selections, process changes
+    - Learning discovered — something that should persist across sessions
+
+    DON'T STORE:
+    - Every small step during a task (cairns handle session tracking)
+    - Mid-conversation thoughts (wait for conclusions)
+    - Incremental progress updates (one summary at the end is better)
+    - Duplicate information already stored (search first!)
+
+    ONE comprehensive memory > multiple fragments.
+
+    MEMORY TYPES: note, decision, rule, code-snippet, learning, research,
+    discussion, progress, task, debug, design.
+    Use 'rule' for behavioral guardrails. Use '__global__' project for cross-project rules.
 
     Args:
         content: The memory content. Can be plain text, markdown, or code.
         project: Project name for organization. Use '__global__' for cross-project rules.
-        memory_type: Classification. One of: note, decision, rule, code-snippet,
-                     learning, research, discussion, progress, task, debug, design.
-        importance: Priority score 0.0-1.0. Higher = more important.
+        memory_type: Classification (see types above).
+        importance: Priority score 0.0-1.0. Higher = more important. 0.9+ for critical rules/decisions.
         tags: Optional tags for categorization. Merged with auto-tags, not replaced.
         session_name: Optional session grouping (e.g., 'sprint-1', 'feature-auth').
         related_files: File paths related to this memory for code context searches.
@@ -137,22 +178,35 @@ def search(
     limit: int = 10,
     include_full: bool = False,
 ) -> list[dict]:
-    """Search memories using hybrid semantic search.
+    """Search memories using hybrid semantic search. YOUR PRIMARY KNOWLEDGE RETRIEVAL TOOL.
+
+    TRIGGER — Use this when you encounter ANY of these patterns:
+    - "how do we...", "where is...", "what's the command for..."
+    - "did we...", "have we...", "was there...", "were there..."
+    - "what port", "what host", "what path", "what URL"
+    - "deploy", "configure", "set up", "install" (any infrastructure action)
+    - "remind me", "what was", "tell me about", "show me"
+    - "find", "look for", "search", "check", "review"
+    - Any moment of uncertainty about facts, processes, or prior decisions
+
+    CRITICAL: Search BEFORE guessing, before SSH-ing to figure it out, before
+    asking the user. Memory search is faster and more reliable than exploration.
+    This is not just for explicit "search" requests — use it whenever you need
+    context you don't currently have.
+
+    PATTERN: search (summaries) → recall (full content for specific IDs)
 
     Combines four signals via Reciprocal Rank Fusion (RRF):
     - Vector similarity (50%): finds conceptually similar content
-    - Recency (20%): newer memories rank higher (uses updated_at)
+    - Recency (20%): newer memories rank higher
     - Keyword matching (20%): catches exact terms
     - Tag matching (10%): categorical filtering
 
-    Use search_mode='keyword' for exact text matching or 'vector' for pure
-    semantic similarity. Default 'semantic' mode uses all four signals.
-
     Args:
-        query: Natural language search query.
-        project: Filter to a specific project. Omit to search all.
-        memory_type: Filter by type (e.g., 'decision', 'rule', 'code-snippet').
-        search_mode: 'semantic' (hybrid RRF), 'keyword' (full-text), or 'vector' (embedding only).
+        query: Natural language search query. Be specific — "deploy cairn UTIL" not just "deploy".
+        project: Filter to a specific project. Omit to search all (recommended for infrastructure/cross-cutting queries).
+        memory_type: Filter by type (e.g., 'decision' for architecture choices, 'rule' for guardrails).
+        search_mode: 'semantic' (hybrid RRF, default), 'keyword' (exact text), or 'vector' (embedding only).
         limit: Maximum results to return (default 10).
         include_full: Return full content (True) or summaries only (False, default).
     """
@@ -186,10 +240,15 @@ def search(
 
 @mcp.tool()
 def recall(ids: list[int]) -> list[dict]:
-    """Retrieve full content for specific memory IDs.
+    """Retrieve full content for specific memory IDs. Second step in progressive disclosure.
 
-    Use after search to get complete details. Search returns summaries for
-    context window efficiency; recall returns everything.
+    WHEN TO USE: After search returns relevant summaries and you need the complete content.
+    Search returns summaries to save context window; recall returns everything.
+
+    PATTERN: Always follows search — don't guess IDs, search first to find them.
+
+    TRIGGER: When a search result summary looks relevant but you need the full detail
+    to answer the question or make a decision.
 
     Args:
         ids: List of memory IDs to retrieve (max 10 per call).
@@ -221,6 +280,17 @@ def modify(
     project: str | None = None,
 ) -> dict:
     """Update, soft-delete, or reactivate a memory.
+
+    WHEN TO USE:
+    - Update outdated information (e.g., a deploy process changed)
+    - Correct mistakes in stored memories
+    - Inactivate obsolete content (soft-delete — recoverable)
+    - Reactivate a previously inactivated memory
+
+    PATTERN: search → recall → modify. Always find and verify the memory before modifying.
+
+    TRIGGER: "update memory", "that's outdated", "fix that note", "remove that",
+    "that's wrong", "archive that", "bring back"
 
     Actions:
     - 'update': Modify fields. Content changes trigger re-embedding.
@@ -269,6 +339,14 @@ def modify(
 def rules(project: str | None = None) -> list[dict]:
     """Get behavioral rules and guardrails.
 
+    CRITICAL: Call this at session start. Rules define how you should behave —
+    deployment patterns, communication style, project conventions, safety guardrails.
+
+    WHEN TO USE:
+    - Session startup (ALWAYS — this is step 1 of the boot sequence)
+    - Switching to a new project mid-session
+    - Before taking an action you're unsure about (rules may have guidance)
+
     Returns rule-type memories from __global__ (universal guardrails) and
     the specified project. Rules guide agent behavior and are loaded at
     session start.
@@ -297,12 +375,20 @@ def insights(
 ) -> dict:
     """Discover patterns across stored memories using semantic clustering.
 
+    TRIGGER: When the user wants meta-analysis or pattern discovery:
+    - "what patterns", "what trends", "what's recurring", "common themes"
+    - "best practices", "what can we learn from", "how has X evolved"
+    - "analyze across", "cross-project", "what do these have in common"
+
+    WHEN TO USE: For big-picture analysis, not simple lookups (use search for those).
+    Proactively use during complex discussions to surface patterns the user hasn't noticed.
+
     Uses HDBSCAN to group semantically similar memories into clusters, then
     generates labels and summaries for each cluster. Clustering runs lazily:
     only when stale (>24h, >20% growth, or first run).
 
     Args:
-        project: Filter to a specific project. Omit for all projects.
+        project: Filter to a specific project. Omit for cross-project analysis.
         topic: Optional topic to filter clusters by semantic similarity.
         min_confidence: Minimum cluster confidence score (0.0-1.0, default 0.5).
         limit: Maximum clusters to return (default 10).
@@ -350,7 +436,15 @@ def projects(
     target: str | None = None,
     link_type: str = "related",
 ) -> dict | list[dict]:
-    """Manage projects, documents, and relationships.
+    """Manage project documents and relationships. For formal project docs, NOT working notes.
+
+    WHEN TO USE:
+    - Creating or updating project briefs, PRDs, plans, primers, writeups, guides
+    - Linking related projects together
+    - Listing all projects for orientation
+    - User asks "what projects do we have", "show me the brief for X"
+
+    DON'T USE FOR: Working notes, progress updates, decisions, learnings — use store() for those.
 
     Actions:
     - 'list': List all projects with memory counts.
@@ -419,10 +513,19 @@ def tasks(
 ) -> dict | list[dict]:
     """Manage tasks: create, complete, list, and link memories.
 
+    WHEN TO USE:
+    - User explicitly requests: "remind me to...", "TODO:", "create a task for..."
+    - Checking what's pending: "what tasks do we have", "what's outstanding"
+    - Completing work: "mark that done", "finished that task"
+    - Linking context: associate memories with a task for knowledge graph
+
+    DON'T proactively create tasks unless the user asks. Tasks are user-requested
+    follow-up items, not automatic tracking.
+
     Actions:
     - 'create': Create a new task.
     - 'complete': Mark a task as done.
-    - 'list': List tasks for a project.
+    - 'list': List tasks for a project. Check at session start for pending work.
     - 'link_memories': Associate memories with a task.
 
     Args:
@@ -474,8 +577,17 @@ def think(
 ) -> dict | list[dict]:
     """Structured thinking sequences for complex reasoning.
 
-    Use this for step-by-step reasoning, architecture decisions, or problem-solving.
-    Start a sequence with a goal, add thoughts incrementally, then conclude.
+    TRIGGER: When a problem has multiple valid approaches or needs step-by-step analysis:
+    - "think through", "analyze", "reason about", "let's consider"
+    - Architecture decisions with trade-offs
+    - Debugging complex issues (hypothesis → test → observe → conclude)
+    - Planning multi-step implementations
+    - Any problem where the user wants to participate in the reasoning
+
+    PATTERN: start (with goal) → add thoughts (observations, hypotheses, analysis) → conclude
+    Use 'alternative' or 'branch' thought_type to explore divergent paths.
+
+    WHEN NOT TO USE: Simple questions (use search), straightforward tasks, quick lookups.
 
     Actions:
     - 'start': Begin a new thinking sequence with a goal.
@@ -532,8 +644,8 @@ def think(
 def status() -> dict:
     """System health and statistics.
 
-    Returns memory count, project count, cluster info, embedding model info,
-    and database status. No parameters required.
+    WHEN TO USE: Health checks, system overview, "how many memories", "is cairn working",
+    verifying deployment status. Quick diagnostic tool — no parameters required.
     """
     try:
         return get_status(db, config)
@@ -552,6 +664,11 @@ def synthesize(
     session_name: str,
 ) -> dict:
     """Synthesize session memories into a coherent narrative.
+
+    WHEN TO USE: Session wrap-up — creating a narrative summary of what happened.
+    Usually called before setting a cairn, or when reviewing past session work.
+
+    PATTERN: synthesize (create narrative) → cairns(action='set') (mark session end)
 
     Fetches all memories for a session and uses LLM to create a narrative summary.
     Falls back to a structured list of memory summaries when LLM is unavailable.
@@ -582,8 +699,13 @@ def consolidate(
 ) -> dict:
     """Review project memories for duplicates and recommend consolidation actions.
 
+    WHEN TO USE: Memory maintenance — cleaning up duplicate or overlapping memories.
+    - "clean up memories", "find duplicates", "consolidate", "too many similar notes"
+    - Periodic housekeeping after intensive work sessions
+
     Finds semantically similar memory pairs (>0.85 cosine similarity), then asks LLM
-    to recommend merges, promotions to rules, or inactivations. Dry run by default.
+    to recommend merges, promotions to rules, or inactivations. Dry run by default —
+    always preview before applying.
 
     Args:
         project: Project name to consolidate.
@@ -616,15 +738,27 @@ def cairns(
     A cairn marks the end of a session. It links all stones (memories) from that
     session into a navigable trail marker with an LLM-synthesized narrative.
 
+    WHEN TO USE:
+    - Session START: stack (view recent cairns across projects for orientation — step 2 of boot sequence)
+    - Session END: set (mark session complete, link memories, generate narrative)
+    - Context recovery: get (examine a specific past session in detail)
+
+    PATTERN:
+    - Boot: cairns(action='stack') → read recent trail markers
+    - Wrap-up: synthesize() → cairns(action='set') → mark session end
+
+    TRIGGER: "what did we do last time", "wrap up", "end of session", "set a cairn",
+    "show me recent sessions", "what's the trail look like"
+
     Actions:
     - 'set': Set a cairn at the end of a session. Links stones, synthesizes narrative.
-    - 'stack': View the trail — cairns for a project, newest first.
+    - 'stack': View the trail — cairns for a project (or all projects), newest first.
     - 'get': Examine a single cairn with full detail and linked stones.
     - 'compress': Clear event detail, keep narrative. For storage management.
 
     Args:
         action: One of 'set', 'stack', 'get', 'compress'.
-        project: Project name (required for set, stack).
+        project: Project name (required for set, optional for stack — omit for all projects).
         session_name: Session identifier (required for set). Must match memories' session_name.
         cairn_id: Cairn ID (required for get, compress).
         events: Optional ordered event log for set (from hooks). Stored as JSONB.
@@ -677,12 +811,14 @@ def drift_check(
 ) -> dict:
     """Check for memories with stale file references via content hash comparison.
 
-    Compares file content hashes stored at memory creation time against current
-    hashes provided by the caller. Returns memories where the referenced files
-    have changed since the memory was stored.
+    WHEN TO USE: Verify if stored memories about code/config files are still accurate.
+    - Before relying on a stored memory about a specific file's contents
+    - Periodic maintenance to find outdated code-snippet or decision memories
+    - After major refactors to identify memories that need updating
 
     Pull-based: the caller computes and provides current file hashes because
-    Cairn may run on a different host than the codebase.
+    Cairn may run on a different host than the codebase. Returns memories where
+    the referenced files have changed since the memory was stored.
 
     Args:
         project: Filter to a specific project. Omit to check all.

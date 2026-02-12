@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-02-11
+
+### Changed
+- **Behavioral tool descriptions** — all 14 MCP tool docstrings rewritten with
+  TRIGGER keywords, WHEN TO USE guidance, PATTERN/WORKFLOW sections, and cross-tool
+  references. Tool descriptions now coach agent behavior rather than just documenting
+  API surface. Inspired by analysis of MiniMe/Recallium and cortex-mcp-kit patterns.
+- **Server instructions enriched** — top-level MCP instructions now include the
+  "search before guessing" principle, session startup sequence, mid-task search
+  reminder, progressive disclosure pattern, and storage philosophy.
+- **`search` tool** — now lists 15+ natural language trigger phrases (e.g., "how do
+  we", "where is", "what's the command for") and explicitly states: search BEFORE
+  guessing, SSH-ing, or asking the user.
+- **`store` tool** — WHEN TO STORE / DON'T STORE guidance with consolidation
+  philosophy ("one comprehensive memory > multiple fragments").
+- **`cairns` tool** — session start/end workflow with boot sequence connection.
+- **`rules` tool** — CRITICAL flag for session start loading.
+- API version bumped to 0.26.0.
+
 ## [0.25.0] - 2026-02-11
 
 ### Added
