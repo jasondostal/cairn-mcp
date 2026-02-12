@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from cairn.core.analytics import track_operation
 from cairn.storage.database import Database
 
 if TYPE_CHECKING:
@@ -26,6 +27,7 @@ class SessionSynthesizer:
         self.llm = llm
         self.capabilities = capabilities
 
+    @track_operation("synthesize")
     def synthesize(self, project: str, session_name: str) -> dict:
         """Synthesize all memories for a session into a narrative.
 

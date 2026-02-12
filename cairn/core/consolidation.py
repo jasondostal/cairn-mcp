@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
+from cairn.core.analytics import track_operation
 from cairn.core.utils import extract_json
 from cairn.embedding.interface import EmbeddingInterface
 from cairn.storage.database import Database
@@ -35,6 +36,7 @@ class ConsolidationEngine:
         self.llm = llm
         self.capabilities = capabilities
 
+    @track_operation("consolidate")
     def consolidate(self, project: str, dry_run: bool = True) -> dict:
         """Analyze project memories and recommend/apply consolidation actions.
 

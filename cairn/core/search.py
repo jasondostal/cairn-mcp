@@ -30,6 +30,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from cairn.core.analytics import track_operation
 from cairn.core.constants import CONTRADICTION_PENALTY
 from cairn.embedding.interface import EmbeddingInterface
 from cairn.storage.database import Database
@@ -67,6 +68,7 @@ class SearchEngine:
         self.llm = llm
         self.capabilities = capabilities
 
+    @track_operation("search")
     def search(
         self,
         query: str,

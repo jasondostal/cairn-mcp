@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from cairn.core.analytics import track_operation
 from cairn.core.constants import VALID_DOC_TYPES, VALID_LINK_TYPES
 from cairn.core.utils import get_or_create_project, get_project
 from cairn.storage.database import Database
@@ -17,6 +18,7 @@ class ProjectManager:
     def __init__(self, db: Database):
         self.db = db
 
+    @track_operation("projects.list")
     def list_all(self, limit: int | None = None, offset: int = 0) -> dict:
         """List all projects with memory counts and optional pagination.
 
@@ -52,6 +54,7 @@ class ProjectManager:
         ]
         return {"total": total, "limit": limit, "offset": offset, "items": items}
 
+    @track_operation("projects.create_doc")
     def create_doc(self, project: str, doc_type: str, content: str, title: str | None = None) -> dict:
         """Create a project document."""
         if doc_type not in VALID_DOC_TYPES:
@@ -77,6 +80,7 @@ class ProjectManager:
             "created_at": row["created_at"].isoformat(),
         }
 
+    @track_operation("projects.get_docs")
     def get_docs(self, project: str, doc_type: str | None = None) -> list[dict]:
         """Get documents for a project, optionally filtered by type."""
         project_id = get_project(self.db, project)
@@ -209,6 +213,7 @@ class ProjectManager:
             "updated_at": row["updated_at"].isoformat(),
         }
 
+    @track_operation("projects.update_doc")
     def update_doc(self, doc_id: int, content: str, title: str | None = None) -> dict:
         """Update a project document's content and optionally its title."""
         if title is not None:
@@ -224,6 +229,7 @@ class ProjectManager:
         self.db.commit()
         return {"id": doc_id, "action": "updated"}
 
+    @track_operation("projects.link")
     def link(self, source: str, target: str, link_type: str = "related") -> dict:
         """Link two projects."""
         if link_type not in VALID_LINK_TYPES:
@@ -243,6 +249,7 @@ class ProjectManager:
         self.db.commit()
         return {"source": source, "target": target, "link_type": link_type}
 
+    @track_operation("projects.get_links")
     def get_links(self, project: str) -> list[dict]:
         """Get all links for a project (both directions)."""
         project_id = get_project(self.db, project)

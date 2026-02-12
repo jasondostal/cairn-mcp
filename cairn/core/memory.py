@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from cairn.core.analytics import track_operation
 from cairn.core.constants import CONTRADICTION_ESCALATION_THRESHOLD, MemoryAction
 from cairn.core.utils import extract_json, get_or_create_project
 from cairn.embedding.interface import EmbeddingInterface
@@ -34,6 +35,7 @@ class MemoryStore:
         self.llm = llm
         self.capabilities = capabilities
 
+    @track_operation("store")
     def store(
         self,
         content: str,
@@ -316,6 +318,7 @@ class MemoryStore:
             logger.warning("Rule conflict check failed", exc_info=True)
             return None
 
+    @track_operation("recall")
     def recall(self, ids: list[int]) -> list[dict]:
         """Retrieve full content for one or more memory IDs."""
         if not ids:
@@ -410,6 +413,7 @@ class MemoryStore:
 
         return results
 
+    @track_operation("modify")
     def modify(
         self,
         memory_id: int,
@@ -490,6 +494,7 @@ class MemoryStore:
 
         raise ValueError(f"Unknown action: {action}")
 
+    @track_operation("rules")
     def get_rules(
         self, project: str | list[str] | None = None,
         limit: int | None = None, offset: int = 0,

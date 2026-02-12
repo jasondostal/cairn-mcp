@@ -85,12 +85,23 @@ class AuthConfig:
 
 
 @dataclass(frozen=True)
+class AnalyticsConfig:
+    enabled: bool = True
+    retention_days: int = 90
+    # Cost rates per 1k tokens (USD)
+    cost_embedding_per_1k: float = 0.0001
+    cost_llm_input_per_1k: float = 0.003
+    cost_llm_output_per_1k: float = 0.015
+
+
+@dataclass(frozen=True)
 class Config:
     db: DatabaseConfig = field(default_factory=DatabaseConfig)
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     capabilities: LLMCapabilities = field(default_factory=LLMCapabilities)
     auth: AuthConfig = field(default_factory=AuthConfig)
+    analytics: AnalyticsConfig = field(default_factory=AnalyticsConfig)
     enrichment_enabled: bool = True
     transport: str = "stdio"  # "stdio" or "http"
     http_host: str = "0.0.0.0"
@@ -152,6 +163,13 @@ def load_config() -> Config:
             enabled=os.getenv("CAIRN_AUTH_ENABLED", "false").lower() in ("true", "1", "yes"),
             api_key=os.getenv("CAIRN_API_KEY") or None,
             header_name=os.getenv("CAIRN_AUTH_HEADER", "X-API-Key"),
+        ),
+        analytics=AnalyticsConfig(
+            enabled=os.getenv("CAIRN_ANALYTICS_ENABLED", "true").lower() in ("true", "1", "yes"),
+            retention_days=int(os.getenv("CAIRN_ANALYTICS_RETENTION_DAYS", "90")),
+            cost_embedding_per_1k=float(os.getenv("CAIRN_ANALYTICS_COST_EMBEDDING", "0.0001")),
+            cost_llm_input_per_1k=float(os.getenv("CAIRN_ANALYTICS_COST_LLM_INPUT", "0.003")),
+            cost_llm_output_per_1k=float(os.getenv("CAIRN_ANALYTICS_COST_LLM_OUTPUT", "0.015")),
         ),
         enrichment_enabled=os.getenv("CAIRN_ENRICHMENT_ENABLED", "true").lower() in ("true", "1", "yes"),
         transport=os.getenv("CAIRN_TRANSPORT", "stdio"),

@@ -7,6 +7,7 @@ import os
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from cairn.core.analytics import track_operation
 from cairn.core.utils import get_or_create_project, get_project, extract_json
 
 if TYPE_CHECKING:
@@ -99,6 +100,7 @@ class CairnManager:
             (project_id, session_name),
         )
 
+    @track_operation("cairns.set")
     def set(self, project: str, session_name: str, events: list | None = None) -> dict:
         """Set a cairn at the end of a session.
 
@@ -368,6 +370,7 @@ class CairnManager:
         except Exception:
             logger.warning("Failed to archive events to %s", archive_dir, exc_info=True)
 
+    @track_operation("cairns.stack")
     def stack(self, project: str | list[str] | None = None, limit: int = 20) -> list[dict]:
         """View the trail — cairns for project(s) (or all projects), newest first.
 
@@ -437,6 +440,7 @@ class CairnManager:
             for r in rows
         ]
 
+    @track_operation("cairns.get")
     def get(self, cairn_id: int) -> dict:
         """Examine a single cairn with full detail and linked stones.
 
@@ -501,6 +505,7 @@ class CairnManager:
             "stones": stone_list,
         }
 
+    @track_operation("cairns.compress")
     def compress(self, cairn_id: int) -> dict:
         """Clear event detail, keep narrative.
 

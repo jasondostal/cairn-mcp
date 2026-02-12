@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from cairn.core.analytics import track_operation
 from cairn.core.constants import TaskStatus
 from cairn.core.utils import get_or_create_project, get_project
 from cairn.storage.database import Database
@@ -17,6 +18,7 @@ class TaskManager:
     def __init__(self, db: Database):
         self.db = db
 
+    @track_operation("tasks.create")
     def create(self, project: str, description: str) -> dict:
         """Create a new task."""
         project_id = get_or_create_project(self.db,project)
@@ -40,6 +42,7 @@ class TaskManager:
             "created_at": row["created_at"].isoformat(),
         }
 
+    @track_operation("tasks.complete")
     def complete(self, task_id: int) -> dict:
         """Mark a task as completed."""
         self.db.execute(
@@ -49,6 +52,7 @@ class TaskManager:
         self.db.commit()
         return {"id": task_id, "action": "completed"}
 
+    @track_operation("tasks.list")
     def list_tasks(
         self, project: str | list[str] | None = None, include_completed: bool = False,
         limit: int | None = None, offset: int = 0,
@@ -114,6 +118,7 @@ class TaskManager:
         ]
         return {"total": total, "limit": limit, "offset": offset, "items": items}
 
+    @track_operation("tasks.link_memories")
     def link_memories(self, task_id: int, memory_ids: list[int]) -> dict:
         """Link memories to a task."""
         for mid in memory_ids:

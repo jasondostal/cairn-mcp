@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from cairn.core.analytics import track_operation
 from cairn.core.constants import VALID_THOUGHT_TYPES, ThinkingStatus
 from cairn.core.utils import get_or_create_project, get_project
 from cairn.storage.database import Database
@@ -17,6 +18,7 @@ class ThinkingEngine:
     def __init__(self, db: Database):
         self.db = db
 
+    @track_operation("think.start")
     def start(self, project: str, goal: str) -> dict:
         """Start a new thinking sequence."""
         project_id = get_or_create_project(self.db,project)
@@ -40,6 +42,7 @@ class ThinkingEngine:
             "created_at": row["created_at"].isoformat(),
         }
 
+    @track_operation("think.add")
     def add_thought(
         self,
         sequence_id: int,
@@ -83,6 +86,7 @@ class ThinkingEngine:
             "created_at": row["created_at"].isoformat(),
         }
 
+    @track_operation("think.conclude")
     def conclude(self, sequence_id: int, conclusion: str) -> dict:
         """Conclude a thinking sequence. Adds final thought and marks complete."""
         # Guard: check sequence exists and is still active
@@ -112,6 +116,7 @@ class ThinkingEngine:
         # Return the full sequence
         return self.get_sequence(sequence_id)
 
+    @track_operation("think.get")
     def get_sequence(self, sequence_id: int) -> dict:
         """Get a full thinking sequence with all thoughts."""
         seq = self.db.execute_one(
@@ -156,6 +161,7 @@ class ThinkingEngine:
             ],
         }
 
+    @track_operation("think.list")
     def list_sequences(
         self, project: str | list[str] | None = None, status: str | None = None,
         limit: int | None = None, offset: int = 0,

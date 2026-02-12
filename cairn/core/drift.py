@@ -14,6 +14,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
+from cairn.core.analytics import track_operation
 from cairn.core.utils import get_or_create_project
 
 if TYPE_CHECKING:
@@ -28,6 +29,7 @@ class DriftDetector:
     def __init__(self, db: Database):
         self.db = db
 
+    @track_operation("drift_check")
     def check(
         self,
         project: str | None = None,

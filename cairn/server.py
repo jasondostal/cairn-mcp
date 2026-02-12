@@ -36,6 +36,8 @@ consolidation_engine = _svc.consolidation_engine
 cairn_manager = _svc.cairn_manager
 digest_worker = _svc.digest_worker
 drift_detector = _svc.drift_detector
+analytics_tracker = _svc.analytics_tracker
+rollup_worker = _svc.rollup_worker
 
 
 # ============================================================
@@ -49,10 +51,18 @@ async def lifespan(server: FastMCP):
     db.run_migrations()
     db.reconcile_vector_dimensions(config.embedding.dimensions)
     digest_worker.start()
+    if analytics_tracker:
+        analytics_tracker.start()
+    if rollup_worker:
+        rollup_worker.start()
     logger.info("Cairn started. Embedding: %s (%d-dim)", config.embedding.backend, config.embedding.dimensions)
     try:
         yield {}
     finally:
+        if rollup_worker:
+            rollup_worker.stop()
+        if analytics_tracker:
+            analytics_tracker.stop()
         digest_worker.stop()
         db.close()
         logger.info("Cairn stopped.")
@@ -856,11 +866,19 @@ def main():
             db.run_migrations()
             db.reconcile_vector_dimensions(config.embedding.dimensions)
             digest_worker.start()
+            if analytics_tracker:
+                analytics_tracker.start()
+            if rollup_worker:
+                rollup_worker.start()
             logger.info("Cairn started. Embedding: %s (%d-dim)", config.embedding.backend, config.embedding.dimensions)
             try:
                 async with _mcp_lifespan(app) as state:
                     yield state
             finally:
+                if rollup_worker:
+                    rollup_worker.stop()
+                if analytics_tracker:
+                    analytics_tracker.stop()
                 digest_worker.stop()
                 db.close()
                 logger.info("Cairn stopped.")

@@ -12,6 +12,7 @@ from sklearn.cluster import HDBSCAN
 from sklearn.manifold import TSNE
 from sklearn.metrics.pairwise import cosine_distances
 
+from cairn.core.analytics import track_operation
 from cairn.core.utils import extract_json
 from cairn.embedding.interface import EmbeddingInterface
 from cairn.llm.prompts import build_cluster_summary_messages
@@ -87,6 +88,7 @@ class ClusterEngine:
     # Core Clustering
     # ============================================================
 
+    @track_operation("insights.recluster")
     def run_clustering(self, project: str | None = None) -> dict:
         """Run HDBSCAN clustering for a project (or globally).
 
@@ -189,6 +191,7 @@ class ClusterEngine:
     # Retrieval
     # ============================================================
 
+    @track_operation("insights")
     def get_clusters(
         self,
         project: str | None = None,
