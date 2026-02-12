@@ -27,6 +27,7 @@ class OllamaLLM(LLMInterface):
             "model": self.model,
             "messages": messages,
             "stream": False,
+            "think": False,
             "options": {"num_predict": max_tokens, "temperature": 0.3},
         }).encode()
 
