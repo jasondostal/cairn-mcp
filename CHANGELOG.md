@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.2] - 2026-02-12
+
+### Fixed
+- **Search page crash** — `related_files` can be `null` for memories without file
+  associations. Added optional chaining (`?.length`) in search results, memory sheet,
+  and memory detail page to prevent `TypeError` when rendering.
+
 ## [0.27.1] - 2026-02-12
 
 ### Fixed
