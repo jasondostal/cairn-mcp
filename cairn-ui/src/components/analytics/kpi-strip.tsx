@@ -41,10 +41,10 @@ function formatValue(key: string, value: number): string {
 }
 
 const KPI_COLORS: Record<string, string> = {
-  operations: "hsl(var(--chart-1))",
-  tokens: "hsl(var(--chart-2))",
-  avg_latency: "hsl(var(--chart-3))",
-  error_rate: "hsl(var(--chart-5))",
+  operations: "var(--chart-1)",
+  tokens: "var(--chart-2)",
+  avg_latency: "var(--chart-3)",
+  error_rate: "var(--chart-5)",
 };
 
 const SPARKLINE_MAP: Record<string, keyof AnalyticsOverview["sparklines"]> = {
@@ -68,7 +68,7 @@ export function KpiStrip({ data }: { data: AnalyticsOverview }) {
             </p>
             <MiniSparkline
               data={data.sparklines[SPARKLINE_MAP[key]] ?? []}
-              color={KPI_COLORS[key] ?? "hsl(var(--chart-1))"}
+              color={KPI_COLORS[key] ?? "var(--chart-1)"}
             />
           </CardContent>
         </Card>

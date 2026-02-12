@@ -42,33 +42,33 @@ export function TokenAreaChart({ series }: { series: TimeseriesPoint[] }) {
           <AreaChart data={series} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
             <defs>
               <linearGradient id="gradIn" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.4} />
-                <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
+                <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.4} />
+                <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="gradOut" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity={0.4} />
-                <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity={0} />
+                <stop offset="0%" stopColor="var(--chart-2)" stopOpacity={0.4} />
+                <stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis
               dataKey="timestamp"
               tickFormatter={formatTick}
-              tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+              tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
               axisLine={false}
               tickLine={false}
             />
             <YAxis
               tickFormatter={formatTokens}
-              tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+              tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
               axisLine={false}
               tickLine={false}
               width={48}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: "hsl(var(--popover))",
-                border: "1px solid hsl(var(--border))",
+                backgroundColor: "var(--popover)",
+                border: "1px solid var(--border)",
                 borderRadius: 6,
                 fontSize: 12,
               }}
@@ -79,7 +79,7 @@ export function TokenAreaChart({ series }: { series: TimeseriesPoint[] }) {
               type="monotone"
               dataKey="tokens_in"
               stackId="1"
-              stroke="hsl(var(--chart-1))"
+              stroke="var(--chart-1)"
               fill="url(#gradIn)"
               strokeWidth={1.5}
               isAnimationActive={false}
@@ -88,7 +88,7 @@ export function TokenAreaChart({ series }: { series: TimeseriesPoint[] }) {
               type="monotone"
               dataKey="tokens_out"
               stackId="1"
-              stroke="hsl(var(--chart-2))"
+              stroke="var(--chart-2)"
               fill="url(#gradOut)"
               strokeWidth={1.5}
               isAnimationActive={false}
@@ -97,11 +97,11 @@ export function TokenAreaChart({ series }: { series: TimeseriesPoint[] }) {
         </ResponsiveContainer>
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "hsl(var(--chart-1))" }} />
+            <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "var(--chart-1)" }} />
             Input
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "hsl(var(--chart-2))" }} />
+            <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "var(--chart-2)" }} />
             Output
           </span>
         </div>

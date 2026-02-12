@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-02-11
+
+### Added
+- **Analytics instrumentation** — all embedding and LLM backends now emit `UsageEvent`
+  rows with model name, token counts, and latency. New `emit_usage_event()` helper in
+  `cairn/core/stats.py` with deferred import to avoid circular deps. 7 backends instrumented
+  (3 embedding: engine, Bedrock, OpenAI-compat; 4 LLM: Bedrock, Ollama, OpenAI-compat, Gemini).
+- **8 analytics REST endpoints** — `GET /analytics/overview`, `/timeseries`, `/operations`,
+  `/projects`, `/models`, `/memory-growth`, `/sparklines`, `/heatmap`. Powered by
+  `AnalyticsQueryEngine` with pre-aggregated rollups from `metric_rollups` table.
+- **Chart-heavy dashboard** — full rewrite of the home page with: sparkline KPI strip
+  (memories, cairns, projects, clusters with 7-day deltas), operations volume bar chart,
+  stacked token usage area chart, memory type growth stacked area chart, activity heatmap,
+  compact health strip for embedding/LLM/digest, model performance table, project breakdown
+  table, cost projection, and memory type badges. Time range selector (7d/30d/90d).
+- **Migration 010** — `usage_events`, `metric_rollups`, `rollup_state` tables with indexes
+  for analytics queries.
+- **Migration 011** — performance indexes for dashboard queries (`memories` by created_at/type,
+  `cairns` by set_at, `usage_events` by model/timestamp).
+- **Dynamic version display** — sidebar footer fetches version from `/api/status` instead
+  of hardcoded constant. Status endpoint now includes `version` field from `cairn.__version__`.
+
+### Fixed
+- **OKLCH chart colors** — all recharts components were wrapping CSS custom properties in
+  `hsl()` (e.g. `hsl(var(--chart-1))`), but the theme defines colors as raw OKLCH values.
+  `hsl(oklch(...))` is invalid CSS, causing all chart series to render as the same fallback
+  color. Fixed across 5 component files.
+- **DB password alignment** — Python config defaults (`cairn/config.py`, `eval/corpus_export.py`)
+  now match docker-compose default (`cairn-dev-password`) instead of the legacy `cairn` value.
+
+### Changed
+- Analytics tracker initialized before embedding/LLM backends in `services.py` so the
+  singleton is available when backends start emitting events.
+- API version bumped to 0.27.0.
+- `cairn-ui` package version bumped to 0.27.0.
+
 ## [0.26.0] - 2026-02-11
 
 ### Changed
@@ -651,7 +687,11 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.23.1...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.27.0...HEAD
+[0.27.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.26.0...v0.27.0
+[0.26.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.25.0...v0.26.0
+[0.25.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.24.0...v0.25.0
+[0.24.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.23.1...v0.24.0
 [0.23.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.22.1...v0.23.0
 [0.22.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.22.0...v0.22.1

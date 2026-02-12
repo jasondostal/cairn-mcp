@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from cairn import __version__
 from cairn.config import Config
 from cairn.core import stats
 from cairn.core.analytics import track_operation
@@ -46,6 +47,7 @@ def get_status(db: Database, config: Config) -> dict:
         models["llm"] = stats.llm_stats.to_dict()
 
     result = {
+        "version": __version__,
         "status": "healthy",
         "memories": memory_count["count"],
         "cairns": cairn_count["count"],

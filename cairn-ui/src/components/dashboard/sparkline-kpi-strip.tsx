@@ -50,10 +50,10 @@ interface KpiDef {
 }
 
 const KPI_DEFS: KpiDef[] = [
-  { key: "memories", label: "Memories", icon: Database, color: "hsl(var(--chart-1))" },
-  { key: "cairns", label: "Cairns", icon: Landmark, color: "hsl(var(--chart-2))" },
-  { key: "projects", label: "Projects", icon: FolderOpen, color: "hsl(var(--chart-3))" },
-  { key: "clusters", label: "Clusters", icon: Network, color: "hsl(var(--chart-4))" },
+  { key: "memories", label: "Memories", icon: Database, color: "var(--chart-1)" },
+  { key: "cairns", label: "Cairns", icon: Landmark, color: "var(--chart-2)" },
+  { key: "projects", label: "Projects", icon: FolderOpen, color: "var(--chart-3)" },
+  { key: "clusters", label: "Clusters", icon: Network, color: "var(--chart-4)" },
 ];
 
 export function SparklineKpiStrip({ data }: { data: EntitySparklines }) {

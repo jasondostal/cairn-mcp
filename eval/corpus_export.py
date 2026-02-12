@@ -25,7 +25,7 @@ def export_memories(
     port: int = 5432,
     dbname: str = "cairn",
     user: str = "cairn",
-    password: str = "cairn",
+    password: str = "cairn-dev-password",
     limit: int = 50,
 ) -> dict:
     """Export a diverse sample of memories from a Cairn database.
@@ -88,7 +88,7 @@ def main():
     parser.add_argument("--port", type=int, default=5432)
     parser.add_argument("--dbname", default="cairn")
     parser.add_argument("--user", default="cairn")
-    parser.add_argument("--password", default="cairn")
+    parser.add_argument("--password", default="cairn-dev-password")
     parser.add_argument("--limit", type=int, default=50)
     args = parser.parse_args()
 

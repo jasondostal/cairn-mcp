@@ -10,8 +10,6 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
-const APP_VERSION = "0.27.0";
-
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
 
@@ -43,6 +41,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 
 function SidebarFooter() {
   const [time, setTime] = useState("");
+  const [version, setVersion] = useState("");
 
   useEffect(() => {
     const tick = () =>
@@ -54,9 +53,16 @@ function SidebarFooter() {
     return () => clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    fetch("/api/status")
+      .then((r) => r.json())
+      .then((d) => setVersion(d.version ?? ""))
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground/60 tabular-nums">
-      <span>v{APP_VERSION}</span>
+      {version && <span>v{version}</span>}
       {time && <span className="float-right">{time}</span>}
     </div>
   );

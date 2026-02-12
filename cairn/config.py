@@ -10,7 +10,7 @@ class DatabaseConfig:
     port: int = 5432
     name: str = "cairn"
     user: str = "cairn"
-    password: str = "cairn"
+    password: str = "cairn-dev-password"
 
     @property
     def dsn(self) -> str:
@@ -126,7 +126,7 @@ def load_config() -> Config:
             port=int(os.getenv("CAIRN_DB_PORT", "5432")),
             name=os.getenv("CAIRN_DB_NAME", "cairn"),
             user=os.getenv("CAIRN_DB_USER", "cairn"),
-            password=os.getenv("CAIRN_DB_PASS", "cairn"),
+            password=os.getenv("CAIRN_DB_PASS", "cairn-dev-password"),
         ),
         embedding=EmbeddingConfig(
             backend=os.getenv("CAIRN_EMBEDDING_BACKEND", "local"),

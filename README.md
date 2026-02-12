@@ -35,7 +35,7 @@ Three containers. One `docker compose up`. 13 MCP tools, a REST API, a web dashb
 - **Hybrid search** — Vector similarity + full-text + tag matching via Reciprocal Rank Fusion. [83.8% recall@10](#search-quality). Contradiction-aware ranking.
 - **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, importance score, and relationship links on store.
 - **Pattern discovery** — HDBSCAN clustering finds themes across memories. LLM writes the labels. Clusters refresh lazily.
-- **Web dashboard** — 11 pages. Timeline with activity heatmap, search with score breakdowns, knowledge graph, thinking trees, multi-select filters, Cmd+K, keyboard nav, dark mode.
+- **Web dashboard** — 11 pages. Chart-heavy home dashboard with KPI sparklines, operations/token/memory-growth charts, activity heatmap. Search with score breakdowns, knowledge graph, thinking trees, multi-select filters, Cmd+K, keyboard nav, dark mode.
 - **Three containers, done** — MCP at `/mcp`, REST at `/api`, same process. PostgreSQL + pgvector. Bring your own LLM — Ollama, Bedrock, Gemini, or anything OpenAI-compatible.
 
 ## Quick Start
@@ -295,13 +295,13 @@ No hooks? No problem. The `cairns` tool works without them — the agent can cal
 </details>
 
 <details>
-<summary><strong>REST API</strong> — 25 endpoints</summary>
+<summary><strong>REST API</strong> — 33 endpoints</summary>
 
 REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Optional API key auth when `CAIRN_AUTH_ENABLED=true`.
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/status` | System health, memory counts, cluster info |
+| `GET /api/status` | System health, version, memory counts, cluster info |
 | `GET /api/search?q=&project=&type=&mode=&limit=` | Hybrid search (multi-select: `project=a,b`) |
 | `GET /api/memories/:id` | Single memory with cluster context |
 | `GET /api/projects` | All projects with memory counts |
@@ -327,6 +327,14 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Opt
 | `GET /api/clusters/visualization?project=` | t-SNE 2D coordinates for scatter plot |
 | `GET /api/export?project=&format=` | Export project memories (JSON or Markdown) |
 | `GET /api/graph?project=&relation_type=` | Knowledge graph nodes and edges |
+| `GET /api/analytics/overview?days=` | KPI summary with sparklines |
+| `GET /api/analytics/timeseries?days=&granularity=` | Time-bucketed operations, tokens, errors |
+| `GET /api/analytics/operations?days=&project=&operation=` | Operations breakdown with filters |
+| `GET /api/analytics/projects?days=` | Per-project usage breakdown with trends |
+| `GET /api/analytics/models?days=` | Model performance with latency percentiles |
+| `GET /api/analytics/memory-growth?days=&granularity=` | Cumulative memory counts by type |
+| `GET /api/analytics/sparklines?days=` | Entity creation sparklines (memories, cairns, projects, clusters) |
+| `GET /api/analytics/heatmap?days=` | Daily activity counts for heatmap visualization |
 
 ```bash
 curl http://localhost:8000/api/status
@@ -359,7 +367,7 @@ cairn-ui          |                                                             
                   +---------------------------------------------------------------+
                       |
                       v
-                  PostgreSQL 16 + pgvector (16 tables, 8 migrations)
+                  PostgreSQL 16 + pgvector (19 tables, 11 migrations)
 ```
 
 </details>
@@ -464,7 +472,7 @@ All bulk operations support `--dry-run` for preview.
 
 ### Database Schema
 
-16 tables across 9 migrations:
+19 tables across 11 migrations:
 
 | Migration | Tables |
 |-----------|--------|
@@ -477,6 +485,8 @@ All bulk operations support `--dry-run` for preview.
 | **007 Doc Title** | `title` column on `project_documents` |
 | **008 Ingestion** | `ingestion_log` — content-hash dedup, source tracking, chunk counts |
 | **009 Drift** | `file_hashes` JSONB column on `memories` for code-aware drift detection |
+| **010 Analytics** | `usage_events`, `metric_rollups`, `rollup_state` — usage tracking and pre-aggregated rollups |
+| **011 Dashboard Indexes** | Performance indexes for memory-growth, sparkline, and heatmap queries |
 
 </details>
 
