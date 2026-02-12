@@ -135,7 +135,7 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
               )}
 
               {/* Related Files */}
-              {memory.related_files.length > 0 && (
+              {memory.related_files?.length > 0 && (
                 <>
                   <Separator />
                   <div>

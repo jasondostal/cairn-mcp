@@ -157,7 +157,7 @@ export default function MemoryDetail() {
             </div>
           )}
 
-          {memory.related_files.length > 0 && (
+          {memory.related_files?.length > 0 && (
             <div>
               <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
                 <FileText className="h-4 w-4" />

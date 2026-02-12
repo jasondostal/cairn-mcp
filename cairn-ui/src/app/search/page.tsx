@@ -106,7 +106,7 @@ function MemoryCard({ memory, onSelect, isActive }: { memory: Memory; onSelect?:
 
         <TagList tags={memory.tags} />
 
-        {memory.related_files.length > 0 && (
+        {memory.related_files?.length > 0 && (
           <div className="flex items-center gap-1.5 flex-wrap">
             <FileText className="h-3 w-3 text-muted-foreground" />
             {memory.related_files.map((f) => (
