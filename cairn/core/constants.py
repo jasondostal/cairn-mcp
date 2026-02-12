@@ -29,6 +29,42 @@ VALID_SEARCH_MODES = ["semantic", "keyword", "vector"]
 CONTRADICTION_PENALTY = 0.5          # score multiplier for contradicted memories in search
 CONTRADICTION_ESCALATION_THRESHOLD = 0.7  # min importance to trigger conflict escalation on store
 
+# RRF weight configurations — dynamically selected based on available signals.
+# All weight sets must sum to 1.0.
+RRF_WEIGHTS_DEFAULT = {
+    "vector": 0.50,
+    "recency": 0.20,
+    "keyword": 0.20,
+    "tag": 0.10,
+}
+RRF_WEIGHTS_WITH_ENTITIES = {
+    "vector": 0.40,
+    "entity": 0.20,
+    "keyword": 0.20,
+    "recency": 0.10,
+    "tag": 0.10,
+}
+RRF_WEIGHTS_WITH_ACTIVATION = {
+    "vector": 0.30,
+    "activation": 0.25,
+    "entity": 0.15,
+    "keyword": 0.15,
+    "recency": 0.05,
+    "tag": 0.10,
+}
+
+# Query type affinity map — maps query intent to memory types that are most likely relevant.
+QUERY_TYPE_AFFINITY = {
+    "factual":     ["note", "learning", "decision", "research"],
+    "temporal":    ["progress", "task", "discussion"],
+    "procedural":  ["code-snippet", "rule", "design"],
+    "exploratory": ["research", "discussion", "learning", "design"],
+    "debug":       ["debug", "code-snippet", "learning"],
+}
+
+# Type routing boost multiplier — memories matching query-type affinity get this boost.
+TYPE_ROUTING_BOOST = 1.3
+
 # Drift detection
 MAX_FILE_HASHES = 50                 # max file hashes accepted per store() call
 

@@ -72,6 +72,12 @@ def create_eval_db(
     """
     # Create database (requires autocommit)
     with psycopg.connect(admin_dsn, autocommit=True) as conn:
+        # Terminate existing connections before drop
+        conn.execute("""
+            SELECT pg_terminate_backend(pid)
+            FROM pg_stat_activity
+            WHERE datname = %s AND pid <> pg_backend_pid()
+        """, (db_name,))
         # Drop if exists for clean state
         conn.execute(f"DROP DATABASE IF EXISTS {db_name}")
         conn.execute(f"CREATE DATABASE {db_name}")
@@ -142,8 +148,8 @@ def insert_corpus(
                 """
                 INSERT INTO memories (
                     content, memory_type, importance, tags, auto_tags,
-                    embedding, project_id, session_name, is_active
-                ) VALUES (%s, %s, %s, %s, %s, %s::vector, %s, %s, true)
+                    embedding, project_id, session_name, is_active, entities
+                ) VALUES (%s, %s, %s, %s, %s, %s::vector, %s, %s, true, %s)
                 RETURNING id
                 """,
                 (
@@ -155,6 +161,7 @@ def insert_corpus(
                     str(vector),
                     project_id,
                     mem.get("session_name", ""),
+                    mem.get("entities", []),
                 ),
             ).fetchone()
 

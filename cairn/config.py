@@ -64,6 +64,9 @@ class LLMCapabilities:
     consolidation: bool = True
     confidence_gating: bool = False  # off by default — high reasoning demand
     event_digest: bool = True  # digest event batches via LLM
+    reranking: bool = False  # off by default — cross-encoder reranking
+    type_routing: bool = False  # off by default — query intent classification + type boost
+    spreading_activation: bool = False  # off by default — graph-based retrieval
 
     def active_list(self) -> list[str]:
         """Return names of enabled capabilities."""
@@ -71,7 +74,7 @@ class LLMCapabilities:
             name for name in (
                 "query_expansion", "relationship_extract", "rule_conflict_check",
                 "session_synthesis", "consolidation", "confidence_gating",
-                "event_digest",
+                "event_digest", "reranking", "type_routing", "spreading_activation",
             )
             if getattr(self, name)
         ]
@@ -103,6 +106,8 @@ class Config:
     auth: AuthConfig = field(default_factory=AuthConfig)
     analytics: AnalyticsConfig = field(default_factory=AnalyticsConfig)
     enrichment_enabled: bool = True
+    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    rerank_candidates: int = 50  # widen RRF pool when reranking is on
     transport: str = "stdio"  # "stdio" or "http"
     http_host: str = "0.0.0.0"
     http_port: int = 8000
@@ -158,6 +163,9 @@ def load_config() -> Config:
             consolidation=os.getenv("CAIRN_LLM_CONSOLIDATION", "true").lower() in ("true", "1", "yes"),
             confidence_gating=os.getenv("CAIRN_LLM_CONFIDENCE_GATING", "false").lower() in ("true", "1", "yes"),
             event_digest=os.getenv("CAIRN_LLM_EVENT_DIGEST", "true").lower() in ("true", "1", "yes"),
+            reranking=os.getenv("CAIRN_RERANKING", "false").lower() in ("true", "1", "yes"),
+            type_routing=os.getenv("CAIRN_TYPE_ROUTING", "false").lower() in ("true", "1", "yes"),
+            spreading_activation=os.getenv("CAIRN_SPREADING_ACTIVATION", "false").lower() in ("true", "1", "yes"),
         ),
         auth=AuthConfig(
             enabled=os.getenv("CAIRN_AUTH_ENABLED", "false").lower() in ("true", "1", "yes"),
@@ -172,6 +180,8 @@ def load_config() -> Config:
             cost_llm_output_per_1k=float(os.getenv("CAIRN_ANALYTICS_COST_LLM_OUTPUT", "0.015")),
         ),
         enrichment_enabled=os.getenv("CAIRN_ENRICHMENT_ENABLED", "true").lower() in ("true", "1", "yes"),
+        reranker_model=os.getenv("CAIRN_RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"),
+        rerank_candidates=int(os.getenv("CAIRN_RERANK_CANDIDATES", "50")),
         transport=os.getenv("CAIRN_TRANSPORT", "stdio"),
         http_host=os.getenv("CAIRN_HTTP_HOST", "0.0.0.0"),
         http_port=int(os.getenv("CAIRN_HTTP_PORT", "8000")),

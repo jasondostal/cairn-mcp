@@ -174,6 +174,9 @@ class ClusterEngine:
         self._write_clusters(project_id, cluster_data, summaries)
         self._record_run(project_id, memory_count, len(cluster_data), noise_count, start)
 
+        # Compute and store PageRank (piggybacks on clustering)
+        self._update_pagerank(project_id)
+
         duration_ms = self._elapsed_ms(start)
         logger.info(
             "Clustering complete: %d clusters, %d noise, %d memories, %dms",
@@ -374,6 +377,62 @@ class ClusterEngine:
     # ============================================================
     # Internals
     # ============================================================
+
+    def _update_pagerank(self, project_id: int | None) -> None:
+        """Compute and store PageRank scores for all memories in the project.
+
+        Called after clustering completes. Gracefully degrades if the
+        pagerank column doesn't exist (migration not applied).
+        """
+        try:
+            from cairn.core.activation import ActivationEngine
+
+            # Load graph
+            if project_id is not None:
+                node_rows = self.db.execute(
+                    "SELECT id FROM memories WHERE project_id = %s AND is_active = true",
+                    (project_id,),
+                )
+            else:
+                node_rows = self.db.execute(
+                    "SELECT id FROM memories WHERE is_active = true",
+                )
+
+            nodes = {r["id"] for r in node_rows}
+            if not nodes:
+                return
+
+            # Load edges
+            placeholders = ",".join(["%s"] * len(nodes))
+            edge_rows = self.db.execute(
+                f"""
+                SELECT source_id, target_id, COALESCE(edge_weight, 1.0) as weight
+                FROM memory_relations
+                WHERE source_id IN ({placeholders}) AND target_id IN ({placeholders})
+                """,
+                tuple(nodes) + tuple(nodes),
+            )
+
+            edges: dict[int, list[tuple[int, float]]] = {}
+            for r in edge_rows:
+                edges.setdefault(r["source_id"], []).append(
+                    (r["target_id"], float(r["weight"]))
+                )
+
+            pr = ActivationEngine.compute_pagerank(nodes, edges)
+
+            # Batch update pagerank scores
+            for nid, score in pr.items():
+                self.db.execute(
+                    "UPDATE memories SET pagerank = %s WHERE id = %s",
+                    (score, nid),
+                )
+            self.db.commit()
+
+            logger.info("PageRank updated for %d memories (project_id=%s)", len(pr), project_id)
+
+        except Exception:
+            logger.debug("PageRank update skipped (column may not exist)", exc_info=True)
 
     def _resolve_project_id(self, project_name: str) -> int | None:
         """Resolve project name to ID. Returns None if not found."""

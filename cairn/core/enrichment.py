@@ -69,4 +69,11 @@ class Enricher:
         if summary and isinstance(summary, str):
             result["summary"] = summary.strip()
 
+        # Entities: list of strings, preserve case, cap at 15
+        entities = data.get("entities", [])
+        if isinstance(entities, list):
+            result["entities"] = [
+                str(e).strip() for e in entities if e and str(e).strip()
+            ][:15]
+
         return result
