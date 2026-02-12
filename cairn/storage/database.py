@@ -135,7 +135,7 @@ class Database:
             return
         ts = existing.info.transaction_status
         if ts in (
-            psycopg.pq.TransactionStatus.INTRANSACTION,
+            psycopg.pq.TransactionStatus.INTRANS,
             psycopg.pq.TransactionStatus.INERROR,
         ):
             try:

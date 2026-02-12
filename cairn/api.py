@@ -90,7 +90,7 @@ def create_api(svc: Services) -> FastAPI:
 
     app = FastAPI(
         title="Cairn API",
-        version="0.27.0",
+        version="0.27.1",
         description="REST API for the Cairn web UI and content ingestion.",
         docs_url="/swagger",
         redoc_url=None,

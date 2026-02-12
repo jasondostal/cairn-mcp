@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-02-12
+
+### Fixed
+- **DB connection release crash** — `release_if_held()` referenced non-existent
+  `psycopg.pq.TransactionStatus.INTRANSACTION` enum member; corrected to `INTRANS`.
+  This caused `AttributeError` on every request, crashing the server under load.
+  Closes [#2](https://github.com/jasondostal/cairn-mcp/issues/2).
+- **Ollama thinking token leakage** — added `"think": False` to Ollama `generate()`
+  payload to prevent thinking-capable models (Qwen3, DeepSeek R1) from emitting
+  chain-of-thought tokens into structured responses. Non-thinking models safely
+  ignore this parameter. (PR [#1](https://github.com/jasondostal/cairn-mcp/pull/1)
+  by [@manabe-daiki](https://github.com/manabe-daiki))
+
 ## [0.27.0] - 2026-02-11
 
 ### Added
