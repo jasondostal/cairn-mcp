@@ -15,8 +15,10 @@ from cairn.core.consolidation import ConsolidationEngine
 from cairn.core.drift import DriftDetector
 from cairn.core.enrichment import Enricher
 from cairn.core.ingest import IngestPipeline
+from cairn.core.activation import ActivationEngine
 from cairn.core.memory import MemoryStore
 from cairn.core.projects import ProjectManager
+from cairn.core.reranker import Reranker
 from cairn.core.search import SearchEngine
 from cairn.core.synthesis import SessionSynthesizer
 from cairn.core.tasks import TaskManager
@@ -111,6 +113,21 @@ def create_services(config: Config | None = None) -> Services:
     # Initialize digest stats
     init_digest_stats()
 
+    # Reranker (optional, lazy-loaded on first query)
+    reranker = None
+    if capabilities.reranking:
+        try:
+            reranker = Reranker(model_name=config.reranker_model)
+            logger.info("Reranking enabled: %s", config.reranker_model)
+        except Exception:
+            logger.warning("Failed to create reranker, reranking disabled", exc_info=True)
+
+    # Activation engine (optional, for spreading activation)
+    activation_engine = None
+    if capabilities.spreading_activation:
+        activation_engine = ActivationEngine(db)
+        logger.info("Spreading activation enabled")
+
     memory_store = MemoryStore(db, embedding, enricher=enricher, llm=llm, capabilities=capabilities)
     project_manager = ProjectManager(db)
 
@@ -121,7 +138,11 @@ def create_services(config: Config | None = None) -> Services:
         llm=llm,
         enricher=enricher,
         memory_store=memory_store,
-        search_engine=SearchEngine(db, embedding, llm=llm, capabilities=capabilities),
+        search_engine=SearchEngine(
+            db, embedding, llm=llm, capabilities=capabilities,
+            reranker=reranker, rerank_candidates=config.rerank_candidates,
+            activation_engine=activation_engine,
+        ),
         cluster_engine=ClusterEngine(db, embedding, llm=llm),
         project_manager=project_manager,
         task_manager=TaskManager(db),

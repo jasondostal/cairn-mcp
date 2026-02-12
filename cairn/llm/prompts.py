@@ -9,7 +9,8 @@ You are a memory classification system. Analyze the provided content and return 
   "tags": ["tag1", "tag2", ...],
   "importance": 0.7,
   "memory_type": "decision",
-  "summary": "One-sentence summary."
+  "summary": "One-sentence summary.",
+  "entities": ["Person Name", "Project Name", "Organization"]
 }
 
 Rules:
@@ -21,6 +22,7 @@ Rules:
   - 0.3-0.4: Minor observations, tangential notes
 - memory_type: One of: note, decision, rule, code-snippet, learning, research, discussion, progress, task, debug, design
 - summary: A single concise sentence for progressive disclosure. Should let a reader decide whether to read the full content.
+- entities: 0-15 named entities mentioned in the content. Extract people, places, organizations, projects, products, and technologies. Preserve original casing. Only extract entities explicitly mentioned — do not infer.
 
 Return ONLY the JSON object. No markdown fences, no explanation, no extra text."""
 
@@ -80,14 +82,15 @@ def build_cluster_summary_messages(clusters: dict[int, list[str]]) -> list[dict]
 # ============================================================
 
 QUERY_EXPANSION_SYSTEM_PROMPT = """\
-You are a search query expansion system. Given a short search query, expand it with \
-related terms, synonyms, and contextual keywords that would help find relevant results \
-in a semantic memory system.
+You are a search query expansion system for a personal memory store. Given a short \
+search query, expand it with related terms that would help find relevant results.
 
 Rules:
 - Return ONLY the expanded query as plain text (no JSON, no markdown, no explanation).
-- Keep the original query terms and add 3-8 related terms.
-- Focus on synonyms, related concepts, and technical terms.
+- Keep the original query terms and add 2-5 related terms.
+- Focus on synonyms and closely related concepts.
+- Do NOT add proper nouns, real-world names, or specific entities not in the original query.
+- Do NOT guess who or what the query refers to — stay generic.
 - Keep it to a single line, space-separated."""
 
 
@@ -623,6 +626,35 @@ def build_classification_messages(content: str) -> list[dict]:
     return [
         {"role": "system", "content": CLASSIFICATION_SYSTEM_PROMPT},
         {"role": "user", "content": content},
+    ]
+
+
+# ============================================================
+# Query Classification Prompt (v0.28.0 — Type-Routed Retrieval)
+# ============================================================
+
+QUERY_CLASSIFICATION_SYSTEM_PROMPT = """\
+You classify search queries by intent. Given a search query for a personal memory store, \
+classify it into exactly one intent type.
+
+Return a JSON object with exactly one field:
+{"intent": "factual"}
+
+Valid intents:
+- "factual": Questions about facts, people, places, things. ("What did X say?", "Where does Y live?")
+- "temporal": Questions about when things happened, sequences, timelines. ("When did we deploy?", "What happened last week?")
+- "procedural": Questions about how to do something, processes, steps. ("How do I deploy?", "What's the command for X?")
+- "exploratory": Open-ended research, pattern discovery, connections. ("What do we know about X?", "What patterns exist?")
+- "debug": Troubleshooting, error investigation, fixing things. ("Why did X break?", "What caused the error?")
+
+Return ONLY the JSON object. No markdown fences, no explanation."""
+
+
+def build_query_classification_messages(query: str) -> list[dict]:
+    """Build messages for query intent classification."""
+    return [
+        {"role": "system", "content": QUERY_CLASSIFICATION_SYSTEM_PROMPT},
+        {"role": "user", "content": query},
     ]
 
 

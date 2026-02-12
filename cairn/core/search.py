@@ -1,10 +1,12 @@
 """Hybrid search with Reciprocal Rank Fusion (RRF).
 
-Four signals combined:
+Up to six signals combined (dynamic weight selection):
   - Vector similarity (pgvector cosine distance)
-  - Recency (updated_at DESC — newer memories rank higher)
   - Keyword matching (PostgreSQL full-text search)
+  - Recency (updated_at DESC — newer memories rank higher)
   - Tag matching (array overlap)
+  - Entity matching (entities TEXT[] overlap) — when entities are populated
+  - Spreading activation (graph-based) — when activation engine is enabled
 
 RRF formula: score = weight * (1 / (k + rank))
 
@@ -31,12 +33,21 @@ import logging
 from typing import TYPE_CHECKING
 
 from cairn.core.analytics import track_operation
-from cairn.core.constants import CONTRADICTION_PENALTY
+from cairn.core.constants import (
+    CONTRADICTION_PENALTY,
+    QUERY_TYPE_AFFINITY,
+    RRF_WEIGHTS_DEFAULT,
+    RRF_WEIGHTS_WITH_ACTIVATION,
+    RRF_WEIGHTS_WITH_ENTITIES,
+    TYPE_ROUTING_BOOST,
+)
 from cairn.embedding.interface import EmbeddingInterface
 from cairn.storage.database import Database
 
 if TYPE_CHECKING:
     from cairn.config import LLMCapabilities
+    from cairn.core.activation import ActivationEngine
+    from cairn.core.reranker import Reranker
     from cairn.llm.interface import LLMInterface
 
 logger = logging.getLogger(__name__)
@@ -62,11 +73,17 @@ class SearchEngine:
         self, db: Database, embedding: EmbeddingInterface, *,
         llm: LLMInterface | None = None,
         capabilities: LLMCapabilities | None = None,
+        reranker: Reranker | None = None,
+        rerank_candidates: int = 50,
+        activation_engine: ActivationEngine | None = None,
     ):
         self.db = db
         self.embedding = embedding
         self.llm = llm
         self.capabilities = capabilities
+        self.reranker = reranker
+        self.rerank_candidates = rerank_candidates
+        self.activation_engine = activation_engine
 
     @track_operation("search")
     def search(
@@ -91,15 +108,18 @@ class SearchEngine:
         Returns:
             List of memory dicts with relevance scores.
         """
-        # Query expansion: rewrite query with richer terms before search
+        # Query expansion: enrich query for vector search only.
+        # Keyword and tag signals use the original query to avoid
+        # world-knowledge poisoning (e.g. "Caroline" expanding to
+        # "Caroline Kennedy" when the corpus has a different Caroline).
         expanded = self._expand_query(query)
 
         if search_mode == "keyword":
-            return self._keyword_search(expanded, project, memory_type, limit, include_full)
+            return self._keyword_search(query, project, memory_type, limit, include_full)
         elif search_mode == "vector":
             return self._vector_search(expanded, project, memory_type, limit, include_full)
         else:
-            return self._hybrid_search(expanded, project, memory_type, limit, include_full)
+            return self._hybrid_search(query, expanded, project, memory_type, limit, include_full)
 
     def _expand_query(self, query: str) -> str:
         """Expand search query with related terms via LLM.
@@ -217,17 +237,31 @@ class SearchEngine:
         return self._format_results(rows, include_full)
 
     def _hybrid_search(
-        self, query: str, project: str | None, memory_type: str | None,
+        self, query: str, expanded: str, project: str | None, memory_type: str | None,
         limit: int, include_full: bool,
     ) -> list[dict]:
-        """Hybrid search: vector + keyword + tag, fused via RRF."""
-        query_vector = self.embedding.embed(query)
+        """Hybrid search: vector + keyword + tag, fused via RRF.
+
+        Uses expanded query for vector signal (robust to semantic noise)
+        and original query for keyword/tag signals (precision-sensitive).
+        """
+        # Vector signal uses the expanded query for richer semantic matching
+        query_vector = self.embedding.embed(expanded)
         where, params = self._build_filters(project, memory_type)
 
-        # Fetch a generous candidate set from each signal
-        candidate_limit = limit * 5
+        # When reranking is enabled, widen the RRF pool to give the cross-encoder
+        # more candidates to pick from. The reranker narrows back to `limit`.
+        use_reranker = (
+            self.reranker is not None
+            and self.capabilities is not None
+            and self.capabilities.reranking
+        )
+        effective_limit = self.rerank_candidates if use_reranker else limit
 
-        # Signal 1: Vector search
+        # Fetch a generous candidate set from each signal
+        candidate_limit = effective_limit * 5
+
+        # Signal 1: Vector search (uses expanded query embedding)
         vector_rows = self.db.execute(
             f"""
             SELECT m.id,
@@ -242,7 +276,7 @@ class SearchEngine:
         )
         vector_ranks = {r["id"]: r["rank"] for r in vector_rows}
 
-        # Signal 2: Keyword search
+        # Signal 2: Keyword search (uses ORIGINAL query — exact terms matter)
         keyword_rows = self.db.execute(
             f"""
             SELECT m.id,
@@ -274,7 +308,7 @@ class SearchEngine:
         )
         recency_ranks = {r["id"]: r["rank"] for r in recency_rows}
 
-        # Signal 4: Tag search (match query words against tags)
+        # Signal 4: Tag search (uses ORIGINAL query words — precision matters)
         query_words = [w.lower() for w in query.split() if len(w) > 2]
         tag_ranks = {}
         if query_words:
@@ -302,36 +336,136 @@ class SearchEngine:
             )
             tag_ranks = {r["id"]: r["rank"] for r in tag_rows}
 
+        # Signal 5: Entity search (uses ORIGINAL query words — entity names are precise)
+        entity_ranks = {}
+        if query_words:
+            entity_patterns = [f"%{w}%" for w in query_words]
+            try:
+                entity_rows = self.db.execute(
+                    f"""
+                    SELECT m.id,
+                           ROW_NUMBER() OVER (
+                               ORDER BY (
+                                   SELECT COUNT(*) FROM unnest(m.entities) e
+                                   WHERE e ILIKE ANY(%s)
+                               ) DESC
+                           ) as rank
+                    FROM memories m
+                    LEFT JOIN projects p ON m.project_id = p.id
+                    WHERE {where}
+                        AND m.entities != '{{}}' AND EXISTS (
+                            SELECT 1 FROM unnest(m.entities) e WHERE e ILIKE ANY(%s)
+                        )
+                    LIMIT %s
+                    """,
+                    [entity_patterns] + params + [entity_patterns, candidate_limit],
+                )
+                entity_ranks = {r["id"]: r["rank"] for r in entity_rows}
+            except Exception:
+                # Graceful: entities column may not exist yet (migration not applied)
+                logger.debug("Entity signal skipped (column may not exist)", exc_info=True)
+
+        # Signal 6: Spreading activation (graph-based retrieval)
+        activation_ranks = {}
+        use_activation = (
+            self.activation_engine is not None
+            and self.capabilities is not None
+            and self.capabilities.spreading_activation
+        )
+        if use_activation:
+            try:
+                # Use vector + keyword anchors as activation seeds
+                anchor_ids = list(set(list(vector_ranks.keys())[:10] + list(keyword_ranks.keys())[:5]))
+                anchor_scores = {}
+                for aid in anchor_ids:
+                    # Normalize: rank-1 gets 1.0, lower ranks get less
+                    if aid in vector_ranks:
+                        anchor_scores[aid] = max(anchor_scores.get(aid, 0), 1.0 / vector_ranks[aid])
+                    if aid in keyword_ranks:
+                        anchor_scores[aid] = max(anchor_scores.get(aid, 0), 1.0 / keyword_ranks[aid])
+
+                # Resolve project_id for graph scoping
+                act_project_id = None
+                if project and not isinstance(project, list):
+                    proj_row = self.db.execute_one(
+                        "SELECT id FROM projects WHERE name = %s", (project,)
+                    )
+                    if proj_row:
+                        act_project_id = proj_row["id"]
+
+                activations = self.activation_engine.activate(
+                    anchor_ids, anchor_scores, project_id=act_project_id,
+                )
+
+                if activations:
+                    # Convert activation values to ranks (sorted by activation desc)
+                    sorted_acts = sorted(activations.items(), key=lambda x: x[1], reverse=True)
+                    activation_ranks = {
+                        nid: rank + 1 for rank, (nid, _) in enumerate(sorted_acts)
+                    }
+            except Exception:
+                logger.debug("Spreading activation failed", exc_info=True)
+
+        # Dynamic weight selection based on available signals
+        if activation_ranks and entity_ranks:
+            weights = RRF_WEIGHTS_WITH_ACTIVATION
+        elif entity_ranks:
+            weights = RRF_WEIGHTS_WITH_ENTITIES
+        else:
+            weights = RRF_WEIGHTS_DEFAULT
+
         # Fuse via RRF
-        all_ids = set(vector_ranks) | set(keyword_ranks) | set(recency_ranks) | set(tag_ranks)
+        all_ids = (
+            set(vector_ranks) | set(keyword_ranks) | set(recency_ranks)
+            | set(tag_ranks) | set(entity_ranks) | set(activation_ranks)
+        )
         if not all_ids:
             return []
 
         scored = {}
-        score_components = {}  # memory_id -> {vector, recency, keyword, tag}
+        score_components = {}
         for memory_id in all_ids:
             score = 0.0
-            components = {"vector": 0.0, "recency": 0.0, "keyword": 0.0, "tag": 0.0}
+            components = {k: 0.0 for k in weights}
             if memory_id in vector_ranks:
-                components["vector"] = DEFAULT_WEIGHTS["vector"] * (1.0 / (RRF_K + vector_ranks[memory_id]))
+                components["vector"] = weights["vector"] * (1.0 / (RRF_K + vector_ranks[memory_id]))
                 score += components["vector"]
-            if memory_id in recency_ranks:
-                components["recency"] = DEFAULT_WEIGHTS["recency"] * (1.0 / (RRF_K + recency_ranks[memory_id]))
+            if "recency" in weights and memory_id in recency_ranks:
+                components["recency"] = weights["recency"] * (1.0 / (RRF_K + recency_ranks[memory_id]))
                 score += components["recency"]
             if memory_id in keyword_ranks:
-                components["keyword"] = DEFAULT_WEIGHTS["keyword"] * (1.0 / (RRF_K + keyword_ranks[memory_id]))
+                components["keyword"] = weights["keyword"] * (1.0 / (RRF_K + keyword_ranks[memory_id]))
                 score += components["keyword"]
             if memory_id in tag_ranks:
-                components["tag"] = DEFAULT_WEIGHTS["tag"] * (1.0 / (RRF_K + tag_ranks[memory_id]))
+                components["tag"] = weights["tag"] * (1.0 / (RRF_K + tag_ranks[memory_id]))
                 score += components["tag"]
+            if "entity" in weights and memory_id in entity_ranks:
+                components["entity"] = weights["entity"] * (1.0 / (RRF_K + entity_ranks[memory_id]))
+                score += components["entity"]
+            if "activation" in weights and memory_id in activation_ranks:
+                components["activation"] = weights["activation"] * (1.0 / (RRF_K + activation_ranks[memory_id]))
+                score += components["activation"]
             scored[memory_id] = score
             score_components[memory_id] = components
 
         # Penalize contradicted memories before ranking
         scored = self._apply_contradiction_penalty(scored)
 
-        # Sort by fused score, take top N
-        top_ids = sorted(scored, key=scored.get, reverse=True)[:limit]
+        # Type routing: classify query intent and boost matching memory types
+        query_intent = self._classify_query_intent(query)
+        if query_intent:
+            # Lightweight fetch of memory types for scoring
+            type_ids = list(scored.keys())
+            type_placeholders = ",".join(["%s"] * len(type_ids))
+            type_rows = self.db.execute(
+                f"SELECT id, memory_type FROM memories WHERE id IN ({type_placeholders})",
+                tuple(type_ids),
+            )
+            memory_types = {r["id"]: r["memory_type"] for r in type_rows}
+            scored = self._apply_type_boost(scored, memory_types, query_intent)
+
+        # Sort by fused score, take top N (or wider pool for reranking)
+        top_ids = sorted(scored, key=scored.get, reverse=True)[:effective_limit]
 
         if not top_ids:
             return []
@@ -352,8 +486,43 @@ class SearchEngine:
 
         # Re-order by RRF score and attach scores
         row_map = {r["id"]: r for r in rows}
+
+        # Reranking: cross-encoder picks the best `limit` from the wider pool
+        if use_reranker:
+            rerank_candidates = []
+            for memory_id in top_ids:
+                if memory_id in row_map:
+                    r = row_map[memory_id]
+                    rerank_candidates.append({
+                        "id": r["id"],
+                        "content": r["content"],
+                        "row": r,
+                        "rrf_score": scored[memory_id],
+                        "score_components": score_components.get(memory_id, {}),
+                    })
+
+            try:
+                reranked = self.reranker.rerank(query, rerank_candidates, limit=limit)
+            except Exception:
+                logger.warning("Reranking failed, falling back to RRF order", exc_info=True)
+                reranked = rerank_candidates[:limit]
+
+            results = []
+            for c in reranked:
+                r = c["row"]
+                r["score"] = round(c["rrf_score"], 6)
+                r["score_components"] = {
+                    k: round(v, 6) for k, v in c.get("score_components", {}).items()
+                }
+                if "rerank_score" in c:
+                    r["score_components"]["rerank"] = round(c["rerank_score"], 4)
+                results.append(r)
+
+            return self._format_results(results, include_full, prescored=True)
+
+        # Standard path: RRF ordering only
         results = []
-        for memory_id in top_ids:
+        for memory_id in top_ids[:limit]:
             if memory_id in row_map:
                 r = row_map[memory_id]
                 r["score"] = round(scored[memory_id], 6)
@@ -363,6 +532,57 @@ class SearchEngine:
                 results.append(r)
 
         return self._format_results(results, include_full, prescored=True)
+
+    def _classify_query_intent(self, query: str) -> str | None:
+        """Classify query intent for type-routed retrieval.
+
+        Returns intent string (factual/temporal/procedural/exploratory/debug),
+        or None if classification is off/fails.
+        """
+        can_classify = (
+            self.llm is not None
+            and self.capabilities is not None
+            and self.capabilities.type_routing
+        )
+        if not can_classify:
+            return None
+
+        try:
+            from cairn.core.utils import extract_json
+            from cairn.llm.prompts import build_query_classification_messages
+            messages = build_query_classification_messages(query)
+            raw = self.llm.generate(messages, max_tokens=64)
+            data = extract_json(raw, json_type="object")
+            if data and "intent" in data:
+                intent = str(data["intent"]).lower()
+                if intent in QUERY_TYPE_AFFINITY:
+                    logger.debug("Query classified as: %s", intent)
+                    return intent
+        except Exception:
+            logger.debug("Query classification failed", exc_info=True)
+
+        return None
+
+    def _apply_type_boost(
+        self, scored: dict[int, float], memory_types: dict[int, str], intent: str,
+    ) -> dict[int, float]:
+        """Boost scores for memories whose type matches the query intent affinity.
+
+        Args:
+            scored: memory_id -> score mapping.
+            memory_types: memory_id -> memory_type mapping.
+            intent: Classified query intent.
+
+        Returns updated scored dict.
+        """
+        affine_types = set(QUERY_TYPE_AFFINITY.get(intent, []))
+        if not affine_types:
+            return scored
+
+        return {
+            mid: score * TYPE_ROUTING_BOOST if memory_types.get(mid) in affine_types else score
+            for mid, score in scored.items()
+        }
 
     def _apply_contradiction_penalty(self, scored: dict[int, float]) -> dict[int, float]:
         """Penalize memories that have incoming contradiction relations.

@@ -15,10 +15,17 @@ MODEL_REGISTRY = {
     "minilm": {
         "hf_id": "all-MiniLM-L6-v2",
         "dimensions": 384,
+        "backend": "local",
     },
     "mpnet": {
         "hf_id": "all-mpnet-base-v2",
         "dimensions": 768,
+        "backend": "local",
+    },
+    "titan_v2": {
+        "hf_id": "amazon.titan-embed-text-v2:0",
+        "dimensions": 1024,
+        "backend": "bedrock",
     },
 }
 

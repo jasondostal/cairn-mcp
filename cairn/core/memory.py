@@ -88,6 +88,9 @@ class MemoryStore:
         if not enrich and not summary:
             summary = content[:200].strip()
 
+        # Entities: from LLM enrichment
+        entities = enrichment.get("entities", [])
+
         # Insert memory
         import json as _json
         file_hashes_json = _json.dumps(file_hashes) if file_hashes else "{}"
@@ -96,10 +99,10 @@ class MemoryStore:
             INSERT INTO memories
                 (content, memory_type, importance, project_id, session_name,
                  embedding, tags, auto_tags, summary, related_files, source_doc_id,
-                 file_hashes)
+                 file_hashes, entities)
             VALUES
                 (%s, %s, %s, %s, %s, %s::vector, %s, %s, %s, %s, %s,
-                 %s::jsonb)
+                 %s::jsonb, %s)
             RETURNING id, created_at
             """,
             (
@@ -115,6 +118,7 @@ class MemoryStore:
                 related_files or [],
                 source_doc_id,
                 file_hashes_json,
+                entities,
             ),
         )
 
@@ -139,6 +143,14 @@ class MemoryStore:
         if enrich:
             # Auto-extract relationships via LLM
             auto_relations = self._extract_relationships(memory_id, content, vector, project_id)
+
+            # Temporal edge: link to previous memory in same session
+            if session_name:
+                self._create_temporal_edge(memory_id, session_name, project_id)
+
+            # Entity co-occurrence edges: memories sharing 2+ entities
+            if entities and len(entities) >= 2:
+                self._create_entity_cooccurrence_edges(memory_id, entities, project_id)
 
             # Escalate high-importance contradictions
             conflicts = self._escalate_contradictions(auto_relations)
@@ -182,14 +194,17 @@ class MemoryStore:
             return []
 
         try:
-            # Vector search for top 5 nearest neighbors (excluding self)
+            # Vector search for top 15 nearest neighbors (excluding self)
+            # Wider horizon (was 5-NN) gives the LLM more candidates for
+            # relationship extraction and produces a denser graph for
+            # spreading activation.
             neighbors = self.db.execute(
                 """
                 SELECT m.id, m.content, m.summary
                 FROM memories m
                 WHERE m.id != %s AND m.is_active = true AND m.embedding IS NOT NULL
                 ORDER BY m.embedding <=> %s::vector
-                LIMIT 5
+                LIMIT 15
                 """,
                 (memory_id, str(embedding)),
             )
@@ -239,6 +254,70 @@ class MemoryStore:
         except Exception:
             logger.warning("Relationship extraction failed", exc_info=True)
             return []
+
+    def _create_temporal_edge(self, memory_id: int, session_name: str, project_id: int) -> None:
+        """Create a temporal edge to the previous memory in the same session.
+
+        Links sequential memories within a session for spreading activation.
+        """
+        try:
+            prev = self.db.execute_one(
+                """
+                SELECT id FROM memories
+                WHERE session_name = %s AND project_id = %s AND id < %s
+                    AND is_active = true
+                ORDER BY id DESC LIMIT 1
+                """,
+                (session_name, project_id, memory_id),
+            )
+            if prev:
+                self.db.execute(
+                    """
+                    INSERT INTO memory_relations (source_id, target_id, relation, edge_weight)
+                    VALUES (%s, %s, 'temporal', 0.8)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    (prev["id"], memory_id),
+                )
+        except Exception:
+            logger.debug("Temporal edge creation failed", exc_info=True)
+
+    def _create_entity_cooccurrence_edges(
+        self, memory_id: int, entities: list[str], project_id: int,
+    ) -> None:
+        """Create edges to memories sharing 2+ entities.
+
+        Finds other memories in the same project with overlapping entities
+        and creates 'related' edges between them.
+        """
+        try:
+            # Find memories with overlapping entities (at least 2 in common)
+            rows = self.db.execute(
+                """
+                SELECT m.id,
+                       (SELECT COUNT(*) FROM unnest(m.entities) e
+                        WHERE e = ANY(%s)) as overlap_count
+                FROM memories m
+                WHERE m.id != %s AND m.project_id = %s AND m.is_active = true
+                    AND m.entities != '{}'
+                HAVING (SELECT COUNT(*) FROM unnest(m.entities) e
+                        WHERE e = ANY(%s)) >= 2
+                ORDER BY overlap_count DESC
+                LIMIT 10
+                """,
+                (entities, memory_id, project_id, entities),
+            )
+            for r in rows:
+                self.db.execute(
+                    """
+                    INSERT INTO memory_relations (source_id, target_id, relation, edge_weight)
+                    VALUES (%s, %s, 'related', 0.6)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    (memory_id, r["id"]),
+                )
+        except Exception:
+            logger.debug("Entity co-occurrence edge creation failed", exc_info=True)
 
     def _escalate_contradictions(self, auto_relations: list[dict]) -> list[dict]:
         """Check auto_relations for contradicts entries against high-importance memories.
@@ -329,7 +408,7 @@ class MemoryStore:
             f"""
             SELECT m.id, m.content, m.summary, m.memory_type, m.importance,
                    m.tags, m.auto_tags, m.related_files, m.is_active,
-                   m.inactive_reason, m.session_name,
+                   m.inactive_reason, m.session_name, m.entities,
                    m.created_at, m.updated_at,
                    p.name as project,
                    c.id as cluster_id, c.label as cluster_label,
@@ -394,6 +473,7 @@ class MemoryStore:
                 "project": r["project"],
                 "tags": r["tags"],
                 "auto_tags": r["auto_tags"],
+                "entities": r.get("entities", []),
                 "related_files": r["related_files"],
                 "is_active": r["is_active"],
                 "inactive_reason": r["inactive_reason"],
