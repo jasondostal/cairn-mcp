@@ -1,6 +1,7 @@
 """Local SentenceTransformer embedding engine. The default provider."""
 
 import logging
+import time
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -40,14 +41,22 @@ class EmbeddingEngine(EmbeddingInterface):
 
     def embed(self, text: str) -> list[float]:
         """Embed a single text string. Returns a normalized float vector."""
+        t0 = time.monotonic()
         vector = self.model.encode(text, normalize_embeddings=True)
+        latency_ms = (time.monotonic() - t0) * 1000
+        tokens_est = len(text) // 4
         if stats.embedding_stats:
-            stats.embedding_stats.record_call(tokens_est=len(text) // 4)
+            stats.embedding_stats.record_call(tokens_est=tokens_est)
+        stats.emit_usage_event("embed", self.config.model, tokens_in=tokens_est, latency_ms=latency_ms)
         return vector.tolist()
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Embed multiple texts. Returns a list of normalized float vectors."""
+        t0 = time.monotonic()
         vectors = self.model.encode(texts, normalize_embeddings=True, batch_size=32)
+        latency_ms = (time.monotonic() - t0) * 1000
+        tokens_est = sum(len(t) // 4 for t in texts)
         if stats.embedding_stats:
-            stats.embedding_stats.record_call(tokens_est=sum(len(t) // 4 for t in texts))
+            stats.embedding_stats.record_call(tokens_est=tokens_est)
+        stats.emit_usage_event("embed.batch", self.config.model, tokens_in=tokens_est, latency_ms=latency_ms)
         return vectors.tolist()

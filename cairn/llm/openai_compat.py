@@ -55,6 +55,7 @@ class OpenAICompatibleLLM(LLMInterface):
             },
         )
 
+        t0 = time.monotonic()
         last_error = None
         for attempt in range(3):
             try:
@@ -72,9 +73,15 @@ class OpenAICompatibleLLM(LLMInterface):
                 content = choices[0].get("message", {}).get("content")
                 if content is None:
                     raise ValueError(f"Unexpected response structure: {choices[0].keys()}")
+                latency_ms = (time.monotonic() - t0) * 1000
+                input_est = sum(len(m.get("content", "")) for m in messages) // 4
+                output_est = len(content) // 4
                 if stats.llm_stats:
-                    input_est = sum(len(m.get("content", "")) for m in messages) // 4
-                    stats.llm_stats.record_call(tokens_est=input_est + len(content) // 4)
+                    stats.llm_stats.record_call(tokens_est=input_est + output_est)
+                stats.emit_usage_event(
+                    "llm.generate", self.model,
+                    tokens_in=input_est, tokens_out=output_est, latency_ms=latency_ms,
+                )
                 return content
 
             except urllib.error.HTTPError as e:
@@ -98,8 +105,13 @@ class OpenAICompatibleLLM(LLMInterface):
                 time.sleep(wait)
                 continue
 
+        latency_ms = (time.monotonic() - t0) * 1000
         if stats.llm_stats:
             stats.llm_stats.record_error(str(last_error))
+        stats.emit_usage_event(
+            "llm.generate", self.model, latency_ms=latency_ms,
+            success=False, error_message=str(last_error),
+        )
         raise last_error  # All retries exhausted
 
     def get_model_name(self) -> str:

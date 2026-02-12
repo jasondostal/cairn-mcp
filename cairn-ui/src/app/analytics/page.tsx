@@ -1,0 +1,101 @@
+"use client";
+
+import { useState } from "react";
+import {
+  api,
+  type AnalyticsOperation,
+} from "@/lib/api";
+import { useFetch } from "@/lib/use-fetch";
+import { Button } from "@/components/ui/button";
+import { PageLayout } from "@/components/page-layout";
+import { SkeletonList } from "@/components/skeleton-list";
+import { ErrorState } from "@/components/error-state";
+import { EmptyState } from "@/components/empty-state";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
+
+const DAY_PRESETS = [
+  { label: "7d", value: 7 },
+  { label: "30d", value: 30 },
+  { label: "90d", value: 90 },
+] as const;
+
+export default function AnalyticsPage() {
+  const [days, setDays] = useState(7);
+  const daysStr = String(days);
+
+  const { data: opsData, loading, error } =
+    useFetch<{ total: number; items: AnalyticsOperation[] }>(
+      () => api.analyticsOperations({ days: daysStr, limit: "100" }),
+      [daysStr],
+    );
+
+  return (
+    <PageLayout
+      title="Operations Log"
+      titleExtra={
+        <Link href="/">
+          <Button variant="outline" size="sm">Dashboard</Button>
+        </Link>
+      }
+      filters={
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Range</span>
+          <div className="flex gap-1">
+            {DAY_PRESETS.map((p) => (
+              <Button
+                key={p.value}
+                variant={days === p.value ? "default" : "outline"}
+                size="sm"
+                onClick={() => setDays(p.value)}
+              >
+                {p.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+      }
+    >
+      {loading && <SkeletonList count={10} />}
+
+      {error && <ErrorState message="Failed to load operations" detail={error} />}
+
+      {!loading && !error && (!opsData || opsData.items.length === 0) && (
+        <EmptyState message="No operations recorded yet." />
+      )}
+
+      {!loading && !error && opsData && opsData.items.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">{opsData.total} total operations</p>
+          <div className="space-y-1">
+            {opsData.items.map((op) => (
+              <Card key={op.id}>
+                <CardContent className="p-3 flex items-center gap-3 text-xs">
+                  <Badge variant={op.success ? "secondary" : "destructive"} className="text-[10px] shrink-0">
+                    {op.success ? "OK" : "ERR"}
+                  </Badge>
+                  <span className="font-mono font-medium truncate max-w-[160px]">{op.operation}</span>
+                  {op.model && (
+                    <span className="font-mono text-muted-foreground truncate max-w-[200px]">{op.model}</span>
+                  )}
+                  <span className="tabular-nums text-muted-foreground ml-auto shrink-0">
+                    {op.latency_ms.toFixed(0)}ms
+                  </span>
+                  {(op.tokens_in > 0 || op.tokens_out > 0) && (
+                    <span className="tabular-nums text-muted-foreground shrink-0">
+                      {op.tokens_in}/{op.tokens_out}t
+                    </span>
+                  )}
+                  <span className="text-muted-foreground shrink-0">
+                    {new Date(op.timestamp).toLocaleTimeString()}
+                  </span>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+    </PageLayout>
+  );
+}

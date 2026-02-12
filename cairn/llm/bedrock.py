@@ -57,6 +57,7 @@ class BedrockLLM(LLMInterface):
         if system_prompts:
             kwargs["system"] = system_prompts
 
+        t0 = time.monotonic()
         last_error = None
         for attempt in range(3):
             try:
@@ -68,9 +69,15 @@ class BedrockLLM(LLMInterface):
                 if not content or "text" not in content[0]:
                     raise ValueError(f"Unexpected Bedrock response structure: {list(response.keys())}")
                 result_text = content[0]["text"]
+                latency_ms = (time.monotonic() - t0) * 1000
+                input_est = sum(len(m.get("content", "")) for m in messages) // 4
+                output_est = len(result_text) // 4
                 if stats.llm_stats:
-                    input_est = sum(len(m.get("content", "")) for m in messages) // 4
-                    stats.llm_stats.record_call(tokens_est=input_est + len(result_text) // 4)
+                    stats.llm_stats.record_call(tokens_est=input_est + output_est)
+                stats.emit_usage_event(
+                    "llm.generate", self.model_id,
+                    tokens_in=input_est, tokens_out=output_est, latency_ms=latency_ms,
+                )
                 return result_text
             except ClientError as e:
                 error_code = e.response.get("Error", {}).get("Code", "")
@@ -84,8 +91,13 @@ class BedrockLLM(LLMInterface):
             except (KeyError, IndexError, TypeError) as e:
                 raise ValueError(f"Failed to parse Bedrock response: {e}") from e
 
+        latency_ms = (time.monotonic() - t0) * 1000
         if stats.llm_stats:
             stats.llm_stats.record_error(str(last_error))
+        stats.emit_usage_event(
+            "llm.generate", self.model_id, latency_ms=latency_ms,
+            success=False, error_message=str(last_error),
+        )
         raise last_error  # All retries exhausted
 
     def get_model_name(self) -> str:

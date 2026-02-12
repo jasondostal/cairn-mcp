@@ -1,6 +1,7 @@
 """Thread-safe model and pipeline stats. In-memory only — resets on restart."""
 
 import threading
+import time as _time
 from collections import deque
 from datetime import datetime, timezone
 
@@ -168,3 +169,31 @@ def init_digest_stats() -> DigestStats:
     global digest_stats
     digest_stats = DigestStats()
     return digest_stats
+
+
+def emit_usage_event(
+    operation: str,
+    model: str,
+    tokens_in: int = 0,
+    tokens_out: int = 0,
+    latency_ms: float = 0.0,
+    success: bool = True,
+    error_message: str | None = None,
+) -> None:
+    """Convenience function for embedding/LLM backends to emit usage events.
+
+    Uses deferred import to avoid circular deps with analytics module.
+    """
+    from cairn.core.analytics import _analytics_tracker, UsageEvent
+
+    if _analytics_tracker is None:
+        return
+    _analytics_tracker.track(UsageEvent(
+        operation=operation,
+        model=model,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        latency_ms=latency_ms,
+        success=success,
+        error_message=error_message[:512] if error_message else None,
+    ))

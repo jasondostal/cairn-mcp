@@ -1,5 +1,6 @@
 import {
   Activity,
+  BarChart3,
   Clock,
   Landmark,
   Search,
@@ -32,4 +33,5 @@ export const navItems: NavItem[] = [
   { href: "/tasks", label: "Tasks", icon: ListTodo },
   { href: "/thinking", label: "Thinking", icon: Brain },
   { href: "/rules", label: "Rules", icon: Shield },
+  { href: "/analytics", label: "Ops Log", icon: BarChart3 },
 ];

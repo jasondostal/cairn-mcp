@@ -71,6 +71,7 @@ class GeminiLLM(LLMInterface):
             headers={"Content-Type": "application/json"},
         )
 
+        t0 = time.monotonic()
         last_error = None
         for attempt in range(3):
             try:
@@ -89,9 +90,15 @@ class GeminiLLM(LLMInterface):
                 if not parts or "text" not in parts[0]:
                     raise ValueError(f"Unexpected Gemini response structure: {candidates[0].keys()}")
                 result_text = parts[0]["text"]
+                latency_ms = (time.monotonic() - t0) * 1000
+                input_est = sum(len(m.get("content", "")) for m in messages) // 4
+                output_est = len(result_text) // 4
                 if stats.llm_stats:
-                    input_est = sum(len(m.get("content", "")) for m in messages) // 4
-                    stats.llm_stats.record_call(tokens_est=input_est + len(result_text) // 4)
+                    stats.llm_stats.record_call(tokens_est=input_est + output_est)
+                stats.emit_usage_event(
+                    "llm.generate", self.model,
+                    tokens_in=input_est, tokens_out=output_est, latency_ms=latency_ms,
+                )
                 return result_text
 
             except urllib.error.HTTPError as e:
@@ -115,8 +122,13 @@ class GeminiLLM(LLMInterface):
                 time.sleep(wait)
                 continue
 
+        latency_ms = (time.monotonic() - t0) * 1000
         if stats.llm_stats:
             stats.llm_stats.record_error(str(last_error))
+        stats.emit_usage_event(
+            "llm.generate", self.model, latency_ms=latency_ms,
+            success=False, error_message=str(last_error),
+        )
         raise last_error  # All retries exhausted
 
     def get_model_name(self) -> str:

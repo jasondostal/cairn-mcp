@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
-const APP_VERSION = "0.24.0";
+const APP_VERSION = "0.27.0";
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();

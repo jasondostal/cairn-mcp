@@ -307,6 +307,122 @@ export interface IngestResponse {
   existing?: { id: number; source: string; target_type: string; created_at: string };
 }
 
+// --- Analytics types ---
+
+export interface KpiMetric {
+  value: number;
+  label: string;
+}
+
+export interface SparklinePoint {
+  t: string;
+  v: number;
+}
+
+export interface AnalyticsOverview {
+  kpis: {
+    operations: KpiMetric;
+    tokens: KpiMetric;
+    avg_latency: KpiMetric;
+    error_rate: KpiMetric;
+  };
+  sparklines: {
+    operations: SparklinePoint[];
+    tokens: SparklinePoint[];
+    errors: SparklinePoint[];
+  };
+  days: number;
+}
+
+export interface TimeseriesPoint {
+  timestamp: string;
+  operations: number;
+  tokens_in: number;
+  tokens_out: number;
+  errors: number;
+}
+
+export interface AnalyticsTimeseries {
+  series: TimeseriesPoint[];
+  granularity: string;
+  days: number;
+}
+
+export interface AnalyticsOperation {
+  id: number;
+  timestamp: string;
+  operation: string;
+  project: string | null;
+  tokens_in: number;
+  tokens_out: number;
+  latency_ms: number;
+  model: string | null;
+  success: boolean;
+  error_message: string | null;
+  session_name: string | null;
+}
+
+export interface ProjectBreakdown {
+  project: string;
+  operations: number;
+  tokens: number;
+  avg_latency: number;
+  errors: number;
+  error_rate: number;
+  trend: "up" | "down" | "flat";
+}
+
+export interface ModelPerformance {
+  model: string;
+  calls: number;
+  tokens_in: number;
+  tokens_out: number;
+  errors: number;
+  error_rate: number;
+  latency_p50: number;
+  latency_p95: number;
+  latency_p99: number;
+}
+
+// --- Dashboard types ---
+
+export interface EntitySparklines {
+  totals: {
+    memories: number;
+    projects: number;
+    cairns: number;
+    clusters: number;
+  };
+  sparklines: {
+    memories: SparklinePoint[];
+    projects: SparklinePoint[];
+    cairns: SparklinePoint[];
+    clusters: SparklinePoint[];
+  };
+  days: number;
+}
+
+export interface MemoryGrowthPoint {
+  timestamp: string;
+  [memoryType: string]: string | number;
+}
+
+export interface MemoryGrowthResult {
+  series: MemoryGrowthPoint[];
+  types: string[];
+  days: number;
+  granularity: string;
+}
+
+export interface HeatmapDay {
+  date: string;
+  count: number;
+}
+
+export interface HeatmapResult {
+  days: HeatmapDay[];
+}
+
 // --- API functions ---
 
 export const api = {
@@ -362,4 +478,28 @@ export const api = {
     get<ExportResult | string>("/export", { project, format }),
 
   ingest: (body: IngestRequest) => post<IngestResponse>("/ingest", body),
+
+  analyticsOverview: (opts?: { days?: string }) =>
+    get<AnalyticsOverview>("/analytics/overview", opts),
+
+  analyticsTimeseries: (opts?: { days?: string; granularity?: string; project?: string; operation?: string }) =>
+    get<AnalyticsTimeseries>("/analytics/timeseries", opts),
+
+  analyticsOperations: (opts?: { days?: string; project?: string; operation?: string; success?: string; limit?: string; offset?: string }) =>
+    get<{ total: number; limit: number; offset: number; items: AnalyticsOperation[] }>("/analytics/operations", opts),
+
+  analyticsProjects: (opts?: { days?: string }) =>
+    get<{ items: ProjectBreakdown[]; days: number }>("/analytics/projects", opts),
+
+  analyticsModels: (opts?: { days?: string }) =>
+    get<{ items: ModelPerformance[]; days: number }>("/analytics/models", opts),
+
+  analyticsMemoryGrowth: (opts?: { days?: string; granularity?: string }) =>
+    get<MemoryGrowthResult>("/analytics/memory-growth", opts),
+
+  analyticsSparklines: (opts?: { days?: string }) =>
+    get<EntitySparklines>("/analytics/sparklines", opts),
+
+  analyticsHeatmap: (opts?: { days?: string }) =>
+    get<HeatmapResult>("/analytics/heatmap", opts),
 };

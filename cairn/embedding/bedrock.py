@@ -47,6 +47,7 @@ class BedrockEmbedding(EmbeddingInterface):
             "normalize": True,
         })
 
+        t0 = time.monotonic()
         last_error = None
         for attempt in range(3):
             try:
@@ -57,8 +58,11 @@ class BedrockEmbedding(EmbeddingInterface):
                     body=body,
                 )
                 result = json.loads(response["body"].read())
+                latency_ms = (time.monotonic() - t0) * 1000
+                tokens_est = len(text) // 4
                 if stats.embedding_stats:
-                    stats.embedding_stats.record_call(tokens_est=len(text) // 4)
+                    stats.embedding_stats.record_call(tokens_est=tokens_est)
+                stats.emit_usage_event("embed", self._model_id, tokens_in=tokens_est, latency_ms=latency_ms)
                 return result["embedding"]
             except ClientError as e:
                 error_code = e.response.get("Error", {}).get("Code", "")
@@ -77,8 +81,13 @@ class BedrockEmbedding(EmbeddingInterface):
                     continue
                 raise
 
+        latency_ms = (time.monotonic() - t0) * 1000
         if stats.embedding_stats:
             stats.embedding_stats.record_error(str(last_error))
+        stats.emit_usage_event(
+            "embed", self._model_id, latency_ms=latency_ms,
+            success=False, error_message=str(last_error),
+        )
         raise last_error  # All retries exhausted
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:

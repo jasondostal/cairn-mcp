@@ -1,45 +1,41 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { api, type Status, type ModelInfo, type DigestInfo, type Project } from "@/lib/api";
+import {
+  api,
+  type Status,
+  type Project,
+  type AnalyticsTimeseries,
+  type ModelPerformance as MP,
+  type ProjectBreakdown as PB,
+  type EntitySparklines,
+  type MemoryGrowthResult,
+  type HeatmapResult,
+} from "@/lib/api";
 import { useFetch } from "@/lib/use-fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { PageLayout } from "@/components/page-layout";
 import { ErrorState } from "@/components/error-state";
 import { SkeletonList } from "@/components/skeleton-list";
-import {
-  Activity,
-  Database,
-  FolderOpen,
-  Network,
-  Cpu,
-  BrainCircuit,
-  Workflow,
-} from "lucide-react";
 
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: string | number;
-  icon: React.ComponentType<{ className?: string }>;
-}) {
-  return (
-    <Card>
-      <CardContent className="flex items-center gap-4 p-4">
-        <div className="rounded-md bg-muted p-2">
-          <Icon className="h-5 w-5 text-muted-foreground" />
-        </div>
-        <div>
-          <p className="text-sm text-muted-foreground">{label}</p>
-          <p className="text-2xl font-semibold tabular-nums">{value}</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+import { SparklineKpiStrip } from "@/components/dashboard/sparkline-kpi-strip";
+import { MemoryTypeGrowthChart } from "@/components/dashboard/memory-type-growth-chart";
+import { HealthStrip } from "@/components/dashboard/health-strip";
+import { TokenAreaChart } from "@/components/analytics/token-area-chart";
+import { OperationsBarChart } from "@/components/analytics/operations-bar-chart";
+import { ActivityHeatmap } from "@/components/analytics/activity-heatmap";
+import { ModelPerformance } from "@/components/analytics/model-performance";
+import { ProjectBreakdown } from "@/components/analytics/project-breakdown";
+import { CostProjection } from "@/components/analytics/cost-projection";
+
+const DAY_PRESETS = [
+  { label: "7d", value: 7 },
+  { label: "30d", value: 30 },
+  { label: "90d", value: 90 },
+] as const;
 
 function TypeBadge({ type, count }: { type: string; count: number }) {
   return (
@@ -47,143 +43,6 @@ function TypeBadge({ type, count }: { type: string; count: number }) {
       {type}
       <span className="text-muted-foreground">{count}</span>
     </Badge>
-  );
-}
-
-const healthColor: Record<string, string> = {
-  healthy: "text-green-500",
-  degraded: "text-yellow-500",
-  unhealthy: "text-red-500",
-  unknown: "text-muted-foreground",
-};
-
-const healthBadgeVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  healthy: "default",
-  degraded: "secondary",
-  unhealthy: "destructive",
-  unknown: "outline",
-};
-
-function formatBackend(backend: string): string {
-  if (backend === "bedrock") return "AWS Bedrock";
-  if (backend === "local") return "Local";
-  if (backend === "openai") return "OpenAI";
-  return backend.charAt(0).toUpperCase() + backend.slice(1);
-}
-
-function formatNumber(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return n.toString();
-}
-
-function ModelCard({
-  label,
-  model,
-  icon: Icon,
-}: {
-  label: string;
-  model: ModelInfo | undefined;
-  icon: React.ComponentType<{ className?: string }>;
-}) {
-  if (!model) return null;
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <div className="rounded-md bg-muted p-2">
-              <Icon className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <span className="text-sm font-medium">{label}</span>
-          </div>
-          <Badge variant={healthBadgeVariant[model.health] ?? "outline"}>
-            <Activity className={`h-3 w-3 mr-1 ${healthColor[model.health] ?? ""}`} />
-            {model.health}
-          </Badge>
-        </div>
-        <div className="mb-2">
-          <p className="text-xs text-muted-foreground">{formatBackend(model.backend)}</p>
-          <p className="font-mono text-xs truncate" title={model.model}>{model.model}</p>
-        </div>
-        <div className="grid grid-cols-3 gap-2 text-center">
-          <div>
-            <p className="text-lg font-semibold tabular-nums">{formatNumber(model.stats.calls)}</p>
-            <p className="text-[10px] text-muted-foreground">calls</p>
-          </div>
-          <div>
-            <p className="text-lg font-semibold tabular-nums">{formatNumber(model.stats.tokens_est)}</p>
-            <p className="text-[10px] text-muted-foreground">tokens</p>
-          </div>
-          <div>
-            <p className={`text-lg font-semibold tabular-nums ${model.stats.errors > 0 ? "text-red-500" : ""}`}>
-              {model.stats.errors}
-            </p>
-            <p className="text-[10px] text-muted-foreground">errors</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-const digestHealthColor: Record<string, string> = {
-  healthy: "text-green-500",
-  degraded: "text-yellow-500",
-  backoff: "text-red-500",
-  idle: "text-muted-foreground",
-};
-
-const digestHealthBadge: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  healthy: "default",
-  degraded: "secondary",
-  backoff: "destructive",
-  idle: "outline",
-};
-
-function DigestCard({ digest }: { digest: DigestInfo | undefined }) {
-  if (!digest) return null;
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <div className="rounded-md bg-muted p-2">
-              <Workflow className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <span className="text-sm font-medium">Digest Pipeline</span>
-          </div>
-          <Badge variant={digestHealthBadge[digest.health] ?? "outline"}>
-            <Activity className={`h-3 w-3 mr-1 ${digestHealthColor[digest.health] ?? ""}`} />
-            {digest.health}
-          </Badge>
-        </div>
-        <div className="mb-2">
-          <p className="text-xs text-muted-foreground">State: {digest.state}</p>
-          {digest.queue_depth > 0 && (
-            <p className="font-mono text-xs">
-              {digest.queue_depth} batch{digest.queue_depth !== 1 ? "es" : ""} queued
-            </p>
-          )}
-        </div>
-        <div className="grid grid-cols-3 gap-2 text-center">
-          <div>
-            <p className="text-lg font-semibold tabular-nums">{formatNumber(digest.batches_processed)}</p>
-            <p className="text-[10px] text-muted-foreground">batches</p>
-          </div>
-          <div>
-            <p className="text-lg font-semibold tabular-nums">{formatNumber(digest.events_digested)}</p>
-            <p className="text-[10px] text-muted-foreground">events</p>
-          </div>
-          <div>
-            <p className="text-lg font-semibold tabular-nums">
-              {digest.avg_latency_s != null ? `${digest.avg_latency_s.toFixed(1)}s` : "—"}
-            </p>
-            <p className="text-[10px] text-muted-foreground">avg latency</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -208,83 +67,145 @@ function ProjectCard({ project }: { project: Project }) {
 }
 
 export default function Dashboard() {
-  const {
-    data: status,
-    loading: statusLoading,
-    error: statusError,
-  } = useFetch<Status>(() => api.status());
-  const {
-    data: projects,
-    loading: projectsLoading,
-    error: projectsError,
-  } = useFetch<Project[]>(() => api.projects().then((r) => r.items));
+  const [days, setDays] = useState(7);
+  const daysStr = String(days);
+  const granularity = days <= 7 ? "hour" : "day";
 
-  const loading = statusLoading || projectsLoading;
-  const error = statusError || projectsError;
+  // --- Data fetching: all parallel, each section renders independently ---
 
-  if (loading) {
+  const { data: status, loading: statusLoading, error: statusError } =
+    useFetch<Status>(() => api.status(), [daysStr]);
+
+  const { data: projects } =
+    useFetch<Project[]>(() => api.projects().then((r) => r.items), [daysStr]);
+
+  const { data: sparklines } =
+    useFetch<EntitySparklines>(() => api.analyticsSparklines({ days: daysStr }), [daysStr]);
+
+  const { data: timeseries } =
+    useFetch<AnalyticsTimeseries>(
+      () => api.analyticsTimeseries({ days: daysStr, granularity }),
+      [daysStr, granularity],
+    );
+
+  const { data: memoryGrowth } =
+    useFetch<MemoryGrowthResult>(
+      () => api.analyticsMemoryGrowth({ days: daysStr, granularity: "day" }),
+      [daysStr],
+    );
+
+  const { data: heatmapData } =
+    useFetch<HeatmapResult>(() => api.analyticsHeatmap({ days: "365" }), [daysStr]);
+
+  const { data: modelsData } =
+    useFetch<{ items: MP[] }>(() => api.analyticsModels({ days: daysStr }), [daysStr]);
+
+  const { data: projectsData } =
+    useFetch<{ items: PB[] }>(() => api.analyticsProjects({ days: daysStr }), [daysStr]);
+
+  if (statusLoading) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
+      <PageLayout title="Dashboard">
         <SkeletonList count={4} height="h-20" gap="grid grid-cols-2 gap-4 lg:grid-cols-4" />
-        <SkeletonList count={6} height="h-24" gap="grid grid-cols-2 gap-4 lg:grid-cols-3" />
-      </div>
+      </PageLayout>
     );
   }
 
-  if (error) {
+  if (statusError) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <ErrorState
-          message="Failed to load dashboard"
-          detail={error}
-        />
-      </div>
+      <PageLayout title="Dashboard">
+        <ErrorState message="Failed to load dashboard" detail={statusError} />
+      </PageLayout>
     );
   }
 
   if (!status) return null;
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
-
-      <div className="grid grid-cols-3 gap-4">
-        <StatCard label="Memories" value={status.memories} icon={Database} />
-        <StatCard label="Projects" value={status.projects} icon={FolderOpen} />
-        <StatCard label="Clusters" value={status.clusters} icon={Network} />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <ModelCard label="Embedding" model={status.models?.embedding} icon={Cpu} />
-        <ModelCard label="LLM" model={status.models?.llm} icon={BrainCircuit} />
-        <DigestCard digest={status.digest} />
-      </div>
-
-      <div>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-          Memory Types
-        </h2>
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(status.types)
-            .sort(([, a], [, b]) => b - a)
-            .map(([type, count]) => (
-              <TypeBadge key={type} type={type} count={count} />
+    <PageLayout
+      title="Dashboard"
+      filters={
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Range</span>
+          <div className="flex gap-1">
+            {DAY_PRESETS.map((p) => (
+              <Button
+                key={p.value}
+                variant={days === p.value ? "default" : "outline"}
+                size="sm"
+                onClick={() => setDays(p.value)}
+              >
+                {p.label}
+              </Button>
             ))}
+          </div>
         </div>
-      </div>
+      }
+    >
+      <div className="space-y-4">
+        {/* KPI Strip with sparklines */}
+        {sparklines && <SparklineKpiStrip data={sparklines} />}
 
-      <div>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-          Projects
-        </h2>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
-          {(projects || []).map((p) => (
-            <ProjectCard key={p.id} project={p} />
-          ))}
+        {/* Operations + Token charts — 2 col */}
+        {timeseries && timeseries.series.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <OperationsBarChart series={timeseries.series} />
+            <TokenAreaChart series={timeseries.series} />
+          </div>
+        )}
+
+        {/* Memory Type Growth + Activity Heatmap */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {memoryGrowth && memoryGrowth.series.length > 0 && (
+            <MemoryTypeGrowthChart data={memoryGrowth} />
+          )}
+          {heatmapData && <ActivityHeatmap heatmapData={heatmapData.days} />}
+        </div>
+
+        {/* Health strip — compact horizontal */}
+        <HealthStrip
+          embedding={status.models?.embedding}
+          llm={status.models?.llm}
+          digest={status.digest}
+        />
+
+        {/* Model Performance + Project Breakdown — 2 col tables */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {modelsData && <ModelPerformance items={modelsData.items} />}
+          {projectsData && <ProjectBreakdown items={projectsData.items} />}
+        </div>
+
+        {/* Cost Projection — full width */}
+        {modelsData && modelsData.items.length > 0 && (
+          <CostProjection models={modelsData.items} days={days} />
+        )}
+
+        {/* Memory Types badges */}
+        <div>
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+            Memory Types
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(status.types)
+              .sort(([, a], [, b]) => b - a)
+              .map(([type, count]) => (
+                <TypeBadge key={type} type={type} count={count} />
+              ))}
+          </div>
+        </div>
+
+        {/* Projects Grid — pushed to bottom */}
+        <div>
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+            Projects
+          </h2>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
+            {(projects || []).map((p) => (
+              <ProjectCard key={p.id} project={p} />
+            ))}
+          </div>
         </div>
       </div>
-    </div>
+    </PageLayout>
   );
 }

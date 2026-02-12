@@ -68,6 +68,7 @@ class OpenAICompatibleEmbedding(EmbeddingInterface):
 
         req = self._build_request(payload)
 
+        t0 = time.monotonic()
         last_error = None
         for attempt in range(3):
             try:
@@ -84,8 +85,11 @@ class OpenAICompatibleEmbedding(EmbeddingInterface):
                 embedding = data[0].get("embedding")
                 if embedding is None:
                     raise ValueError(f"Unexpected response structure: {data[0].keys()}")
+                latency_ms = (time.monotonic() - t0) * 1000
+                tokens_est = len(text) // 4
                 if stats.embedding_stats:
-                    stats.embedding_stats.record_call(tokens_est=len(text) // 4)
+                    stats.embedding_stats.record_call(tokens_est=tokens_est)
+                stats.emit_usage_event("embed", self._model, tokens_in=tokens_est, latency_ms=latency_ms)
                 return embedding
 
             except urllib.error.HTTPError as e:
@@ -109,8 +113,13 @@ class OpenAICompatibleEmbedding(EmbeddingInterface):
                 time.sleep(wait)
                 continue
 
+        latency_ms = (time.monotonic() - t0) * 1000
         if stats.embedding_stats:
             stats.embedding_stats.record_error(str(last_error))
+        stats.emit_usage_event(
+            "embed", self._model, latency_ms=latency_ms,
+            success=False, error_message=str(last_error),
+        )
         raise last_error  # All retries exhausted
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
@@ -129,6 +138,7 @@ class OpenAICompatibleEmbedding(EmbeddingInterface):
 
         req = self._build_request(payload)
 
+        t0 = time.monotonic()
         last_error = None
         for attempt in range(3):
             try:
@@ -149,9 +159,11 @@ class OpenAICompatibleEmbedding(EmbeddingInterface):
                 data.sort(key=lambda d: d.get("index", 0))
                 embeddings = [d["embedding"] for d in data]
 
+                latency_ms = (time.monotonic() - t0) * 1000
+                total_tokens = sum(len(t) // 4 for t in texts)
                 if stats.embedding_stats:
-                    total_tokens = sum(len(t) // 4 for t in texts)
                     stats.embedding_stats.record_call(tokens_est=total_tokens)
+                stats.emit_usage_event("embed.batch", self._model, tokens_in=total_tokens, latency_ms=latency_ms)
                 return embeddings
 
             except urllib.error.HTTPError as e:
@@ -175,6 +187,11 @@ class OpenAICompatibleEmbedding(EmbeddingInterface):
                 time.sleep(wait)
                 continue
 
+        latency_ms = (time.monotonic() - t0) * 1000
         if stats.embedding_stats:
             stats.embedding_stats.record_error(str(last_error))
+        stats.emit_usage_event(
+            "embed.batch", self._model, latency_ms=latency_ms,
+            success=False, error_message=str(last_error),
+        )
         raise last_error  # All retries exhausted

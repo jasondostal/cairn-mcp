@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from cairn.config import Config, LLMCapabilities, load_config
+from cairn.core.analytics import AnalyticsQueryEngine, RollupWorker, UsageTracker, init_analytics_tracker
 from cairn.core.cairns import CairnManager
 from cairn.core.clustering import ClusterEngine
 from cairn.core.digest import DigestWorker
@@ -53,6 +54,9 @@ class Services:
     digest_worker: DigestWorker
     drift_detector: DriftDetector
     ingest_pipeline: IngestPipeline
+    analytics_tracker: UsageTracker | None
+    rollup_worker: RollupWorker | None
+    analytics_engine: AnalyticsQueryEngine | None
 
 
 def create_services(config: Config | None = None) -> Services:
@@ -65,6 +69,18 @@ def create_services(config: Config | None = None) -> Services:
         config = load_config()
 
     db = Database(config.db)
+
+    # Analytics first — so the tracker singleton is available when backends emit events
+    analytics_tracker = None
+    rollup_worker = None
+    analytics_engine = None
+    if config.analytics.enabled:
+        analytics_tracker = UsageTracker(db)
+        init_analytics_tracker(analytics_tracker)
+        rollup_worker = RollupWorker(db, retention_days=config.analytics.retention_days)
+        analytics_engine = AnalyticsQueryEngine(db, analytics_config=config.analytics)
+        logger.info("Analytics enabled (retention=%dd)", config.analytics.retention_days)
+
     embedding = get_embedding_engine(config.embedding)
 
     # Initialize embedding stats
@@ -116,4 +132,7 @@ def create_services(config: Config | None = None) -> Services:
         digest_worker=DigestWorker(db, llm=llm, capabilities=capabilities),
         drift_detector=DriftDetector(db),
         ingest_pipeline=IngestPipeline(db, project_manager, memory_store, llm, config),
+        analytics_tracker=analytics_tracker,
+        rollup_worker=rollup_worker,
+        analytics_engine=analytics_engine,
     )
