@@ -177,17 +177,13 @@ def _create_services(eval_dsn: str, model_spec: dict, skip_enricher: bool = Fals
 
     enricher = Enricher(llm) if (llm and not skip_enricher) else None
 
-    # Reranker for benchmark — local cross-encoder or Bedrock API
+    # Reranker for benchmark
     reranker = None
     if capabilities.reranking:
         from cairn.core.reranker import get_reranker
-        reranker_backend = _os.getenv("CAIRN_RERANKER_BACKEND", "local")
-        reranker = get_reranker(
-            backend=reranker_backend,
-            region=_os.getenv("CAIRN_RERANKER_REGION", _os.getenv("AWS_DEFAULT_REGION", "us-east-1")),
-        )
+        reranker = get_reranker(config.reranker)
 
-    rerank_candidates = int(_os.getenv("CAIRN_RERANK_CANDIDATES", "50"))
+    rerank_candidates = config.reranker.candidates
 
     # Activation engine for benchmark
     activation_engine = None

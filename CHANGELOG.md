@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.1] - 2026-02-13
+
+### Changed
+- **Reranker refactored to pluggable provider architecture** — reranker now follows the same
+  pattern as embedding and LLM backends: `RerankerConfig` dataclass, `RerankerInterface` ABC,
+  per-backend modules in `cairn/core/reranker/` package, factory with plugin registry. Supports
+  `local` (cross-encoder) and `bedrock` (Amazon Rerank API) backends. Custom providers via
+  `register_reranker_provider(name, factory_fn)`.
+- `RerankerConfig` added to `Config` — replaces scattered `reranker_model` and `rerank_candidates`
+  fields. Hydrated from `CAIRN_RERANKER_BACKEND`, `CAIRN_RERANKER_MODEL`, `CAIRN_RERANK_CANDIDATES`,
+  `CAIRN_RERANKER_BEDROCK_MODEL`, `CAIRN_RERANKER_REGION` env vars.
+- `Services` uses `get_reranker(config.reranker)` factory instead of direct `Reranker()` instantiation.
+- Bedrock reranker backend now properly wired through config system (was previously only usable
+  in eval scripts with manual construction).
+
+### Removed
+- `cairn/core/reranker.py` — monolithic file replaced by `cairn/core/reranker/` package
+  (`__init__.py`, `interface.py`, `local.py`, `bedrock.py`).
+
 ## [0.28.0] - 2026-02-13
 
 ### Added
@@ -741,7 +760,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.1...HEAD
+[0.28.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.0...v0.28.1
 [0.28.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.27.2...v0.28.0
 [0.27.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.27.1...v0.27.2
 [0.27.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.27.0...v0.27.1

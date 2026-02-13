@@ -191,10 +191,11 @@ def main():
 
     # Rerank
     from cairn.core.reranker import get_reranker
-    reranker = get_reranker(
+    from cairn.config import RerankerConfig
+    reranker = get_reranker(RerankerConfig(
         backend=os.getenv("CAIRN_RERANKER_BACKEND", "local"),
-        region=os.getenv("CAIRN_RERANKER_REGION", "us-east-1"),
-    )
+        bedrock_region=os.getenv("CAIRN_RERANKER_REGION", "us-east-1"),
+    ))
 
     # Convert to reranker format
     rerank_input = []

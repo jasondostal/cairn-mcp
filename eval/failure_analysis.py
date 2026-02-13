@@ -75,6 +75,7 @@ def main():
     from eval.benchmark.runner_bench import _create_services
     from eval.model_compare import MODEL_REGISTRY
     from cairn.core.reranker import get_reranker
+    from cairn.config import RerankerConfig
 
     # Load dataset
     adapter = LoCoMoAdapter()
@@ -99,10 +100,10 @@ def main():
     if not isinstance(search_engine, SearchEngine):
         legacy_engine = search_engine.fallback_engine
 
-    reranker = get_reranker(
+    reranker = get_reranker(RerankerConfig(
         backend=os.getenv("CAIRN_RERANKER_BACKEND", "local"),
-        region=os.getenv("CAIRN_RERANKER_REGION", "us-east-1"),
-    )
+        bedrock_region=os.getenv("CAIRN_RERANKER_REGION", "us-east-1"),
+    ))
 
     project = "benchmark"
     results = []
