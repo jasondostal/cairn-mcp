@@ -14,18 +14,22 @@ from cairn.core.digest import DigestWorker
 from cairn.core.consolidation import ConsolidationEngine
 from cairn.core.drift import DriftDetector
 from cairn.core.enrichment import Enricher
+from cairn.core.extraction import KnowledgeExtractor
 from cairn.core.ingest import IngestPipeline
 from cairn.core.activation import ActivationEngine
 from cairn.core.memory import MemoryStore
 from cairn.core.projects import ProjectManager
 from cairn.core.reranker import Reranker
 from cairn.core.search import SearchEngine
+from cairn.core.search_v2 import SearchV2
 from cairn.core.synthesis import SessionSynthesizer
 from cairn.core.tasks import TaskManager
 from cairn.core.thinking import ThinkingEngine
 from cairn.core.stats import init_embedding_stats, init_llm_stats, init_digest_stats
 from cairn.embedding import get_embedding_engine
 from cairn.embedding.interface import EmbeddingInterface
+from cairn.graph import get_graph_provider
+from cairn.graph.interface import GraphProvider
 from cairn.llm import get_llm
 from cairn.storage.database import Database
 
@@ -44,8 +48,11 @@ class Services:
     embedding: EmbeddingInterface
     llm: LLMInterface | None
     enricher: Enricher | None
+    graph_provider: GraphProvider | None
+    knowledge_extractor: KnowledgeExtractor | None
     memory_store: MemoryStore
     search_engine: SearchEngine
+    search_v2: SearchV2 | None
     cluster_engine: ClusterEngine
     project_manager: ProjectManager
     task_manager: TaskManager
@@ -110,6 +117,19 @@ def create_services(config: Config | None = None) -> Services:
 
     capabilities = config.capabilities
 
+    # Graph provider (optional, for knowledge extraction)
+    graph_provider = None
+    knowledge_extractor = None
+    if capabilities.knowledge_extraction:
+        graph_provider = get_graph_provider(config.neo4j)
+        if graph_provider and llm:
+            knowledge_extractor = KnowledgeExtractor(llm, embedding, graph_provider)
+            logger.info("Knowledge extraction enabled (Neo4j graph)")
+        elif not graph_provider:
+            logger.warning("Knowledge extraction requested but Neo4j not available (set CAIRN_GRAPH_BACKEND=neo4j)")
+        elif not llm:
+            logger.warning("Knowledge extraction requested but LLM not available")
+
     # Initialize digest stats
     init_digest_stats()
 
@@ -128,8 +148,33 @@ def create_services(config: Config | None = None) -> Services:
         activation_engine = ActivationEngine(db)
         logger.info("Spreading activation enabled")
 
-    memory_store = MemoryStore(db, embedding, enricher=enricher, llm=llm, capabilities=capabilities)
+    memory_store = MemoryStore(
+        db, embedding, enricher=enricher, llm=llm, capabilities=capabilities,
+        knowledge_extractor=knowledge_extractor,
+    )
     project_manager = ProjectManager(db)
+
+    # Legacy search engine (always built — used as fallback for search_v2)
+    legacy_search = SearchEngine(
+        db, embedding, llm=llm, capabilities=capabilities,
+        reranker=reranker, rerank_candidates=config.rerank_candidates,
+        activation_engine=activation_engine,
+    )
+
+    # Search v2 (optional, intent-routed with graph handlers)
+    search_v2 = None
+    if capabilities.search_v2:
+        search_v2 = SearchV2(
+            db=db,
+            embedding=embedding,
+            graph=graph_provider,
+            llm=llm,
+            capabilities=capabilities,
+            reranker=reranker,
+            rerank_candidates=config.rerank_candidates,
+            fallback_engine=legacy_search,
+        )
+        logger.info("Search v2 enabled (intent-routed)")
 
     return Services(
         config=config,
@@ -137,12 +182,11 @@ def create_services(config: Config | None = None) -> Services:
         embedding=embedding,
         llm=llm,
         enricher=enricher,
+        graph_provider=graph_provider,
+        knowledge_extractor=knowledge_extractor,
         memory_store=memory_store,
-        search_engine=SearchEngine(
-            db, embedding, llm=llm, capabilities=capabilities,
-            reranker=reranker, rerank_candidates=config.rerank_candidates,
-            activation_engine=activation_engine,
-        ),
+        search_engine=legacy_search,
+        search_v2=search_v2,
         cluster_engine=ClusterEngine(db, embedding, llm=llm),
         project_manager=project_manager,
         task_manager=TaskManager(db),

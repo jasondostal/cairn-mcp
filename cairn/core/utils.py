@@ -90,7 +90,7 @@ def strip_markdown_fences(text: str) -> str:
 
 
 def extract_json(raw: str, json_type: str = "object") -> dict | list | None:
-    """Extract JSON from an LLM response, handling markdown fences.
+    """Extract JSON from an LLM response, handling markdown fences and nested objects.
 
     Args:
         raw: Raw LLM response string.
@@ -101,12 +101,48 @@ def extract_json(raw: str, json_type: str = "object") -> dict | list | None:
     """
     text = strip_markdown_fences(raw.strip())
 
-    pattern = r"\{[^{}]*\}" if json_type == "object" else r"\[.*\]"
-    match = re.search(pattern, text, re.DOTALL)
-    if not match:
+    # Fast path: try parsing the whole text directly
+    try:
+        result = json.loads(text)
+        if json_type == "object" and isinstance(result, dict):
+            return result
+        if json_type == "array" and isinstance(result, list):
+            return result
+    except json.JSONDecodeError:
+        pass
+
+    # Slow path: find outermost matching braces/brackets
+    open_char = "{" if json_type == "object" else "["
+    close_char = "}" if json_type == "object" else "]"
+
+    start = text.find(open_char)
+    if start == -1:
         return None
 
-    try:
-        return json.loads(match.group())
-    except json.JSONDecodeError:
-        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        c = text[i]
+        if escape:
+            escape = False
+            continue
+        if c == "\\":
+            escape = True
+            continue
+        if c == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if c == open_char:
+            depth += 1
+        elif c == close_char:
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(text[start:i + 1])
+                except json.JSONDecodeError:
+                    return None
+
+    return None

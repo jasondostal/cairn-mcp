@@ -15,6 +15,7 @@ from cairn.storage.database import Database
 if TYPE_CHECKING:
     from cairn.config import LLMCapabilities
     from cairn.core.enrichment import Enricher
+    from cairn.core.extraction import KnowledgeExtractor
     from cairn.llm.interface import LLMInterface
 
 logger = logging.getLogger(__name__)
@@ -28,12 +29,14 @@ class MemoryStore:
         enricher: Enricher | None = None,
         llm: LLMInterface | None = None,
         capabilities: LLMCapabilities | None = None,
+        knowledge_extractor: KnowledgeExtractor | None = None,
     ):
         self.db = db
         self.embedding = embedding
         self.enricher = enricher
         self.llm = llm
         self.capabilities = capabilities
+        self.knowledge_extractor = knowledge_extractor
 
     @track_operation("store")
     def store(
@@ -63,9 +66,25 @@ class MemoryStore:
         # Generate embedding (always — required for search)
         vector = self.embedding.embed(content)
 
-        # --- Enrichment (skip for chunks/bulk) ---
+        # --- Knowledge Extraction path (combined extraction + enrichment) ---
+        use_extraction = (
+            enrich
+            and self.knowledge_extractor is not None
+            and self.capabilities is not None
+            and self.capabilities.knowledge_extraction
+        )
+        extraction_result = None
+        if use_extraction:
+            try:
+                extraction_result = self.knowledge_extractor.extract(content)
+            except Exception:
+                logger.warning("Knowledge extraction failed, falling back to enrichment", exc_info=True)
+
+        # --- Enrichment (skip for chunks/bulk, or when extraction succeeded) ---
         enrichment = {}
-        if enrich and self.enricher:
+        if extraction_result is not None:
+            enrichment = self.knowledge_extractor.extract_enrichment_fields(extraction_result)
+        elif enrich and self.enricher:
             enrichment = self.enricher.enrich(content)
 
         # Override logic: caller-provided values win
@@ -139,9 +158,30 @@ class MemoryStore:
         auto_relations = []
         conflicts = []
         rule_conflicts = None
+        graph_stats = None
 
-        if enrich:
-            # Auto-extract relationships via LLM
+        if extraction_result is not None:
+            # Knowledge extraction path: persist graph, skip old relationship pipeline
+            try:
+                graph_stats = self.knowledge_extractor.resolve_and_persist(
+                    extraction_result, memory_id, project_id,
+                )
+                logger.info(
+                    "Graph persist: %d entities created, %d merged, %d statements, %d contradictions",
+                    graph_stats.get("entities_created", 0),
+                    graph_stats.get("entities_merged", 0),
+                    graph_stats.get("statements_created", 0),
+                    graph_stats.get("contradictions_found", 0),
+                )
+            except Exception:
+                logger.warning("Graph persist failed (non-blocking)", exc_info=True)
+
+            # Rule conflict detection still applies
+            if final_type == "rule":
+                rule_conflicts = self._check_rule_conflicts(content, project)
+
+        elif enrich:
+            # Legacy enrichment path
             auto_relations = self._extract_relationships(memory_id, content, vector, project_id)
 
             # Temporal edge: link to previous memory in same session
@@ -163,7 +203,7 @@ class MemoryStore:
 
         logger.info("Stored memory #%d (type=%s, project=%s, enrich=%s)", memory_id, final_type, project, enrich)
 
-        return {
+        result = {
             "id": memory_id,
             "content": content,
             "memory_type": final_type,
@@ -177,6 +217,9 @@ class MemoryStore:
             "rule_conflicts": rule_conflicts,
             "created_at": row["created_at"].isoformat(),
         }
+        if graph_stats:
+            result["graph"] = graph_stats
+        return result
 
     def _extract_relationships(
         self, memory_id: int, content: str, embedding: list[float], project_id: int,

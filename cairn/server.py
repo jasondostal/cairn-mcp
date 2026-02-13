@@ -25,8 +25,10 @@ logger = logging.getLogger("cairn")
 _svc = create_services()
 config = _svc.config
 db = _svc.db
+graph_provider = _svc.graph_provider
 memory_store = _svc.memory_store
 search_engine = _svc.search_engine
+search_v2_engine = _svc.search_v2
 cluster_engine = _svc.cluster_engine
 project_manager = _svc.project_manager
 task_manager = _svc.task_manager
@@ -50,6 +52,13 @@ async def lifespan(server: FastMCP):
     db.connect()
     db.run_migrations()
     db.reconcile_vector_dimensions(config.embedding.dimensions)
+    if graph_provider:
+        try:
+            graph_provider.connect()
+            graph_provider.ensure_schema()
+            logger.info("Neo4j graph connected and schema ensured")
+        except Exception:
+            logger.warning("Neo4j connection failed — graph features disabled", exc_info=True)
     digest_worker.start()
     if analytics_tracker:
         analytics_tracker.start()
@@ -64,6 +73,11 @@ async def lifespan(server: FastMCP):
         if analytics_tracker:
             analytics_tracker.stop()
         digest_worker.stop()
+        if graph_provider:
+            try:
+                graph_provider.close()
+            except Exception:
+                pass
         db.close()
         logger.info("Cairn stopped.")
 
@@ -224,7 +238,10 @@ def search(
         validate_search(query, limit)
         if search_mode not in VALID_SEARCH_MODES:
             return {"error": f"invalid search_mode: {search_mode}. Must be one of: {', '.join(VALID_SEARCH_MODES)}"}
-        results = search_engine.search(
+
+        # Use search_v2 when enabled (transparent swap)
+        active_engine = search_v2_engine if search_v2_engine else search_engine
+        results = active_engine.search(
             query=query,
             project=project,
             memory_type=memory_type,
@@ -865,6 +882,13 @@ def main():
             db.connect()
             db.run_migrations()
             db.reconcile_vector_dimensions(config.embedding.dimensions)
+            if graph_provider:
+                try:
+                    graph_provider.connect()
+                    graph_provider.ensure_schema()
+                    logger.info("Neo4j graph connected and schema ensured")
+                except Exception:
+                    logger.warning("Neo4j connection failed — graph features disabled", exc_info=True)
             digest_worker.start()
             if analytics_tracker:
                 analytics_tracker.start()
@@ -880,6 +904,11 @@ def main():
                 if analytics_tracker:
                     analytics_tracker.stop()
                 digest_worker.stop()
+                if graph_provider:
+                    try:
+                        graph_provider.close()
+                    except Exception:
+                        pass
                 db.close()
                 logger.info("Cairn stopped.")
 

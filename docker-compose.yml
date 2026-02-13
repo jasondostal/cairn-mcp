@@ -19,6 +19,14 @@ services:
       CAIRN_AUTH_HEADER: "${CAIRN_AUTH_HEADER:-X-API-Key}"
       CAIRN_TRANSPORT: "${CAIRN_TRANSPORT:-http}"
       CAIRN_EVENT_ARCHIVE_DIR: "${CAIRN_EVENT_ARCHIVE_DIR:-/data/events}"
+      # Neo4j graph backend (set CAIRN_GRAPH_BACKEND=neo4j to enable)
+      CAIRN_GRAPH_BACKEND: "${CAIRN_GRAPH_BACKEND:-}"
+      CAIRN_NEO4J_URI: "${CAIRN_NEO4J_URI:-bolt://cairn-graph:7687}"
+      CAIRN_NEO4J_USER: "${CAIRN_NEO4J_USER:-neo4j}"
+      CAIRN_NEO4J_PASSWORD: "${CAIRN_NEO4J_PASSWORD:-cairn-dev-password}"
+      CAIRN_NEO4J_DATABASE: "${CAIRN_NEO4J_DATABASE:-neo4j}"
+      CAIRN_KNOWLEDGE_EXTRACTION: "${CAIRN_KNOWLEDGE_EXTRACTION:-false}"
+      CAIRN_SEARCH_V2: "${CAIRN_SEARCH_V2:-false}"
       # AWS credentials for Bedrock (ignored when using Ollama)
       AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
       AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
@@ -71,6 +79,26 @@ services:
       timeout: 5s
       retries: 5
 
+  cairn-graph:
+    image: neo4j:5-community
+    container_name: cairn-graph
+    restart: unless-stopped
+    ports:
+      - "${CAIRN_NEO4J_HTTP_PORT:-7474}:7474"
+      - "${CAIRN_NEO4J_BOLT_PORT:-7687}:7687"
+    environment:
+      NEO4J_AUTH: "${CAIRN_NEO4J_USER:-neo4j}/${CAIRN_NEO4J_PASSWORD:-cairn-dev-password}"
+      NEO4J_PLUGINS: '["apoc"]'
+    volumes:
+      - cairn-neo4j:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
 volumes:
   cairn-pgdata:
   cairn-events:
+  cairn-neo4j:
