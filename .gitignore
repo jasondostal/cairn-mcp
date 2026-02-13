@@ -35,3 +35,17 @@ Thumbs.db
 # Docker
 pgdata/
 eval/data/corpus.json
+eval/benchmark/data/longmemeval/
+eval/benchmark/data/locomo/
+!eval/benchmark/data/.gitkeep
+eval/reports/
+
+# Local dev artifacts
+docker-compose.override.yml
+*.zip
+screenshot.jpg
+.mcpregistry_*
+
+# Internal dev notes
+RETRIEVAL_POSTMORTEM.md
+V2_PROGRESS.md

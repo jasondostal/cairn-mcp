@@ -3,6 +3,8 @@
 import os
 from dataclasses import dataclass, field
 
+from cairn.graph.config import Neo4jConfig
+
 
 @dataclass(frozen=True)
 class DatabaseConfig:
@@ -67,6 +69,9 @@ class LLMCapabilities:
     reranking: bool = False  # off by default — cross-encoder reranking
     type_routing: bool = False  # off by default — query intent classification + type boost
     spreading_activation: bool = False  # off by default — graph-based retrieval
+    mca_gate: bool = False  # off by default — keyword coverage pre-filter (MCA)
+    knowledge_extraction: bool = False  # off by default — combined extraction + Neo4j graph
+    search_v2: bool = False  # off by default — intent-routed search with graph handlers
 
     def active_list(self) -> list[str]:
         """Return names of enabled capabilities."""
@@ -75,6 +80,7 @@ class LLMCapabilities:
                 "query_expansion", "relationship_extract", "rule_conflict_check",
                 "session_synthesis", "consolidation", "confidence_gating",
                 "event_digest", "reranking", "type_routing", "spreading_activation",
+                "mca_gate", "knowledge_extraction", "search_v2",
             )
             if getattr(self, name)
         ]
@@ -105,6 +111,7 @@ class Config:
     capabilities: LLMCapabilities = field(default_factory=LLMCapabilities)
     auth: AuthConfig = field(default_factory=AuthConfig)
     analytics: AnalyticsConfig = field(default_factory=AnalyticsConfig)
+    neo4j: Neo4jConfig = field(default_factory=Neo4jConfig)
     enrichment_enabled: bool = True
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     rerank_candidates: int = 50  # widen RRF pool when reranking is on
@@ -166,6 +173,9 @@ def load_config() -> Config:
             reranking=os.getenv("CAIRN_RERANKING", "false").lower() in ("true", "1", "yes"),
             type_routing=os.getenv("CAIRN_TYPE_ROUTING", "false").lower() in ("true", "1", "yes"),
             spreading_activation=os.getenv("CAIRN_SPREADING_ACTIVATION", "false").lower() in ("true", "1", "yes"),
+            mca_gate=os.getenv("CAIRN_MCA_GATE", "false").lower() in ("true", "1", "yes"),
+            knowledge_extraction=os.getenv("CAIRN_KNOWLEDGE_EXTRACTION", "false").lower() in ("true", "1", "yes"),
+            search_v2=os.getenv("CAIRN_SEARCH_V2", "false").lower() in ("true", "1", "yes"),
         ),
         auth=AuthConfig(
             enabled=os.getenv("CAIRN_AUTH_ENABLED", "false").lower() in ("true", "1", "yes"),
@@ -178,6 +188,12 @@ def load_config() -> Config:
             cost_embedding_per_1k=float(os.getenv("CAIRN_ANALYTICS_COST_EMBEDDING", "0.0001")),
             cost_llm_input_per_1k=float(os.getenv("CAIRN_ANALYTICS_COST_LLM_INPUT", "0.003")),
             cost_llm_output_per_1k=float(os.getenv("CAIRN_ANALYTICS_COST_LLM_OUTPUT", "0.015")),
+        ),
+        neo4j=Neo4jConfig(
+            uri=os.getenv("CAIRN_NEO4J_URI", "bolt://localhost:7687"),
+            user=os.getenv("CAIRN_NEO4J_USER", "neo4j"),
+            password=os.getenv("CAIRN_NEO4J_PASSWORD", "cairn-dev-password"),
+            database=os.getenv("CAIRN_NEO4J_DATABASE", "neo4j"),
         ),
         enrichment_enabled=os.getenv("CAIRN_ENRICHMENT_ENABLED", "true").lower() in ("true", "1", "yes"),
         reranker_model=os.getenv("CAIRN_RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"),

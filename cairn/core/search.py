@@ -41,6 +41,7 @@ from cairn.core.constants import (
     RRF_WEIGHTS_WITH_ENTITIES,
     TYPE_ROUTING_BOOST,
 )
+from cairn.core.mca import MCA_POOL_MULTIPLIER, MCAGate
 from cairn.embedding.interface import EmbeddingInterface
 from cairn.storage.database import Database
 
@@ -84,6 +85,10 @@ class SearchEngine:
         self.reranker = reranker
         self.rerank_candidates = rerank_candidates
         self.activation_engine = activation_engine
+        self._mca_gate: MCAGate | None = None
+        if capabilities is not None and capabilities.mca_gate:
+            self._mca_gate = MCAGate()
+            logger.info("MCA gate enabled (threshold=%.2f)", self._mca_gate.threshold)
 
     @track_operation("search")
     def search(
@@ -256,7 +261,12 @@ class SearchEngine:
             and self.capabilities is not None
             and self.capabilities.reranking
         )
+        use_mca = self._mca_gate is not None
+
         effective_limit = self.rerank_candidates if use_reranker else limit
+        # MCA filters aggressively — widen pool so enough candidates survive
+        if use_mca:
+            effective_limit *= MCA_POOL_MULTIPLIER
 
         # Fetch a generous candidate set from each signal
         candidate_limit = effective_limit * 5
@@ -464,7 +474,7 @@ class SearchEngine:
             memory_types = {r["id"]: r["memory_type"] for r in type_rows}
             scored = self._apply_type_boost(scored, memory_types, query_intent)
 
-        # Sort by fused score, take top N (or wider pool for reranking)
+        # Sort by fused score, take top N (or wider pool for MCA/reranking)
         top_ids = sorted(scored, key=scored.get, reverse=True)[:effective_limit]
 
         if not top_ids:
@@ -484,28 +494,35 @@ class SearchEngine:
             tuple(top_ids),
         )
 
-        # Re-order by RRF score and attach scores
+        # Build ordered candidate list (shared by MCA gate and reranker)
         row_map = {r["id"]: r for r in rows}
+        candidates = []
+        for memory_id in top_ids:
+            if memory_id in row_map:
+                candidates.append({
+                    "id": memory_id,
+                    "content": row_map[memory_id]["content"],
+                    "row": row_map[memory_id],
+                    "rrf_score": scored[memory_id],
+                    "score_components": score_components.get(memory_id, {}),
+                })
 
-        # Reranking: cross-encoder picks the best `limit` from the wider pool
+        # MCA gate: filter by keyword coverage
+        if use_mca:
+            filtered, _mca_stats = self._mca_gate.filter(query, candidates)
+            if filtered:
+                candidates = filtered
+            else:
+                # MCA filtered everything — fall back to RRF order
+                logger.debug("MCA filtered all candidates, falling back to RRF order")
+
+        # Reranking: cross-encoder picks the best `limit` from the (possibly filtered) pool
         if use_reranker:
-            rerank_candidates = []
-            for memory_id in top_ids:
-                if memory_id in row_map:
-                    r = row_map[memory_id]
-                    rerank_candidates.append({
-                        "id": r["id"],
-                        "content": r["content"],
-                        "row": r,
-                        "rrf_score": scored[memory_id],
-                        "score_components": score_components.get(memory_id, {}),
-                    })
-
             try:
-                reranked = self.reranker.rerank(query, rerank_candidates, limit=limit)
+                reranked = self.reranker.rerank(query, candidates, limit=limit)
             except Exception:
-                logger.warning("Reranking failed, falling back to RRF order", exc_info=True)
-                reranked = rerank_candidates[:limit]
+                logger.warning("Reranking failed, falling back to MCA/RRF order", exc_info=True)
+                reranked = candidates[:limit]
 
             results = []
             for c in reranked:
@@ -516,20 +533,23 @@ class SearchEngine:
                 }
                 if "rerank_score" in c:
                     r["score_components"]["rerank"] = round(c["rerank_score"], 4)
+                if "mca_coverage" in c:
+                    r["score_components"]["mca_coverage"] = c["mca_coverage"]
                 results.append(r)
 
             return self._format_results(results, include_full, prescored=True)
 
-        # Standard path: RRF ordering only
+        # Standard path: RRF ordering (possibly MCA-filtered)
         results = []
-        for memory_id in top_ids[:limit]:
-            if memory_id in row_map:
-                r = row_map[memory_id]
-                r["score"] = round(scored[memory_id], 6)
-                r["score_components"] = {
-                    k: round(v, 6) for k, v in score_components.get(memory_id, {}).items()
-                }
-                results.append(r)
+        for c in candidates[:limit]:
+            r = c["row"]
+            r["score"] = round(c["rrf_score"], 6)
+            r["score_components"] = {
+                k: round(v, 6) for k, v in c.get("score_components", {}).items()
+            }
+            if "mca_coverage" in c:
+                r["score_components"]["mca_coverage"] = c["mca_coverage"]
+            results.append(r)
 
         return self._format_results(results, include_full, prescored=True)
 

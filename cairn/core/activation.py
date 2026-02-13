@@ -1,8 +1,8 @@
 """Spreading activation over the memory graph.
 
-Inspired by Synapse (arXiv 2601.02744): start from anchor nodes matching the query,
-propagate activation through graph edges for T iterations, and surface structurally-
-connected memories that embedding similarity alone would never find.
+Start from anchor nodes matching the query, propagate activation through
+graph edges for T iterations, and surface structurally-connected memories
+that embedding similarity alone would never find.
 
 Algorithm:
   1. ANCHOR: Find top-N nodes via vector + keyword signals (reuses search infra)
@@ -13,7 +13,7 @@ Algorithm:
      FIRE:    a_i = sigmoid(u_i, γ, θ)
   4. RETURN: {node_id: activation} for all a_i > ε
 
-Parameters (from Synapse, adapted):
+Parameters:
   - δ = 0.5  (external vs propagated balance)
   - S = 0.8  (spread factor)
   - T = 3    (propagation iterations)

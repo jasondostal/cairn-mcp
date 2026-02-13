@@ -17,7 +17,12 @@ CONTEXT_SIZES = {
     "us.meta.llama3-2-90b-instruct-v1:0": 128000,
     "us.meta.llama3-2-11b-instruct-v1:0": 128000,
     "anthropic.claude-3-5-sonnet-20241022-v2:0": 200000,
+    "openai.gpt-oss-120b-1:0": 128000,
 }
+
+# Reasoning models return reasoning tokens before the answer text.
+# We need to bump max_tokens so reasoning doesn't consume the entire budget.
+REASONING_MODELS = {"openai.gpt-oss-120b-1:0"}
 
 
 class BedrockLLM(LLMInterface):
@@ -49,10 +54,13 @@ class BedrockLLM(LLMInterface):
                     "content": [{"text": msg["content"]}],
                 })
 
+        # Reasoning models consume tokens on chain-of-thought before answering
+        effective_max = max_tokens * 4 if self.model_id in REASONING_MODELS else max_tokens
+
         kwargs = {
             "modelId": self.model_id,
             "messages": converse_messages,
-            "inferenceConfig": {"maxTokens": max_tokens, "temperature": 0.3},
+            "inferenceConfig": {"maxTokens": effective_max, "temperature": 0.3},
         }
         if system_prompts:
             kwargs["system"] = system_prompts
@@ -62,13 +70,18 @@ class BedrockLLM(LLMInterface):
         for attempt in range(3):
             try:
                 response = self._client.converse(**kwargs)
-                # Defensive parsing — don't trust nested structure
+                # Defensive parsing — handle both standard and reasoning models
                 output = response.get("output", {})
                 message = output.get("message", {})
                 content = message.get("content", [])
-                if not content or "text" not in content[0]:
-                    raise ValueError(f"Unexpected Bedrock response structure: {list(response.keys())}")
-                result_text = content[0]["text"]
+                # Find the text block (reasoning models put reasoning first, answer second)
+                result_text = None
+                for block in content:
+                    if "text" in block:
+                        result_text = block["text"]
+                        break
+                if result_text is None:
+                    raise ValueError(f"No text block in Bedrock response: {[list(b.keys()) for b in content]}")
                 latency_ms = (time.monotonic() - t0) * 1000
                 input_est = sum(len(m.get("content", "")) for m in messages) // 4
                 output_est = len(result_text) // 4
