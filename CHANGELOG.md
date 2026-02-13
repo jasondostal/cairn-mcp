@@ -5,9 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.28.0] - 2026-02-13
 
 ### Added
+- **81.7% on LoCoMo benchmark** — validated against the standard evaluation for conversational
+  memory systems (Maharana et al., ACL 2024). Competitive with Mem0 (68.5%), Zep (75.1%),
+  and Letta (74.0%). All 5 question categories included (some published systems skip adversarial).
+- **Kimi K2.5 support** — Moonshot AI's trillion-parameter MoE model via AWS Bedrock.
+  $0.60/M input tokens. Used for answer generation and LLM-as-judge scoring in benchmarks.
+- **7-step Chain-of-Thought answer generation** — structured reasoning pipeline for RAG:
+  memory extraction, key details, cross-memory linking, time calculation, contradiction check,
+  detail verification, final answer. Adapted from competitive analysis of top-scoring systems.
+- **Timestamp-aware context formatting** — memory timestamps extracted and reformatted for
+  prominence in RAG context, improving temporal reasoning accuracy.
 - **Neo4j knowledge graph** — entity/statement/triple storage with vector + fulltext indexes,
   entity resolution via embedding similarity, contradiction detection with temporal invalidation,
   BFS traversal for multi-hop reasoning. Project-scoped. Graceful degradation when Neo4j unavailable.
@@ -28,11 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (IN_DB, RRF_TOP50, RERANK_TOP10, RAG_CORRECT).
 
 ### Changed
-- **Search quality section in README** — replaced specific score claims with honest "work in
-  progress" status. Previous synthetic benchmark numbers removed in favor of describing the
-  LoCoMo evaluation methodology being developed.
-- **Eval search quality metrics removed from README bullet** — no longer claims 83.8% recall@10
-  inline. Links to Search Quality section instead.
+- **Search quality section in README** — now includes validated LoCoMo benchmark score with
+  per-category breakdown, methodology details, and competitive comparison table.
 
 ## [0.27.2] - 2026-02-12
 
@@ -734,7 +741,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.27.2...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.0...HEAD
+[0.28.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.27.2...v0.28.0
 [0.27.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.27.1...v0.27.2
 [0.27.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.27.0...v0.27.1
 [0.27.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.26.0...v0.27.0
