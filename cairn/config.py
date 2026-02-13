@@ -58,6 +58,17 @@ class LLMConfig:
 
 
 @dataclass(frozen=True)
+class RerankerConfig:
+    backend: str = "local"  # "local", "bedrock", or registered provider name
+    model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    candidates: int = 50  # widen RRF pool when reranking is on
+
+    # Bedrock settings (Rerank API)
+    bedrock_model: str = "amazon.rerank-v1:0"
+    bedrock_region: str = "us-east-1"
+
+
+@dataclass(frozen=True)
 class LLMCapabilities:
     query_expansion: bool = True
     relationship_extract: bool = True
@@ -112,9 +123,8 @@ class Config:
     auth: AuthConfig = field(default_factory=AuthConfig)
     analytics: AnalyticsConfig = field(default_factory=AnalyticsConfig)
     neo4j: Neo4jConfig = field(default_factory=Neo4jConfig)
+    reranker: RerankerConfig = field(default_factory=RerankerConfig)
     enrichment_enabled: bool = True
-    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-    rerank_candidates: int = 50  # widen RRF pool when reranking is on
     transport: str = "stdio"  # "stdio" or "http"
     http_host: str = "0.0.0.0"
     http_port: int = 8000
@@ -195,9 +205,14 @@ def load_config() -> Config:
             password=os.getenv("CAIRN_NEO4J_PASSWORD", "cairn-dev-password"),
             database=os.getenv("CAIRN_NEO4J_DATABASE", "neo4j"),
         ),
+        reranker=RerankerConfig(
+            backend=os.getenv("CAIRN_RERANKER_BACKEND", "local"),
+            model=os.getenv("CAIRN_RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"),
+            candidates=int(os.getenv("CAIRN_RERANK_CANDIDATES", "50")),
+            bedrock_model=os.getenv("CAIRN_RERANKER_BEDROCK_MODEL", "amazon.rerank-v1:0"),
+            bedrock_region=os.getenv("CAIRN_RERANKER_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1")),
+        ),
         enrichment_enabled=os.getenv("CAIRN_ENRICHMENT_ENABLED", "true").lower() in ("true", "1", "yes"),
-        reranker_model=os.getenv("CAIRN_RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"),
-        rerank_candidates=int(os.getenv("CAIRN_RERANK_CANDIDATES", "50")),
         transport=os.getenv("CAIRN_TRANSPORT", "stdio"),
         http_host=os.getenv("CAIRN_HTTP_HOST", "0.0.0.0"),
         http_port=int(os.getenv("CAIRN_HTTP_PORT", "8000")),

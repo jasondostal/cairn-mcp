@@ -19,7 +19,8 @@ from cairn.core.ingest import IngestPipeline
 from cairn.core.activation import ActivationEngine
 from cairn.core.memory import MemoryStore
 from cairn.core.projects import ProjectManager
-from cairn.core.reranker import Reranker
+from cairn.core.reranker import get_reranker
+from cairn.core.reranker.interface import RerankerInterface
 from cairn.core.search import SearchEngine
 from cairn.core.search_v2 import SearchV2
 from cairn.core.synthesis import SessionSynthesizer
@@ -137,8 +138,8 @@ def create_services(config: Config | None = None) -> Services:
     reranker = None
     if capabilities.reranking:
         try:
-            reranker = Reranker(model_name=config.reranker_model)
-            logger.info("Reranking enabled: %s", config.reranker_model)
+            reranker = get_reranker(config.reranker)
+            logger.info("Reranking enabled: %s", config.reranker.backend)
         except Exception:
             logger.warning("Failed to create reranker, reranking disabled", exc_info=True)
 
@@ -157,7 +158,7 @@ def create_services(config: Config | None = None) -> Services:
     # Legacy search engine (always built — used as fallback for search_v2)
     legacy_search = SearchEngine(
         db, embedding, llm=llm, capabilities=capabilities,
-        reranker=reranker, rerank_candidates=config.rerank_candidates,
+        reranker=reranker, rerank_candidates=config.reranker.candidates,
         activation_engine=activation_engine,
     )
 
@@ -171,7 +172,7 @@ def create_services(config: Config | None = None) -> Services:
             llm=llm,
             capabilities=capabilities,
             reranker=reranker,
-            rerank_candidates=config.rerank_candidates,
+            rerank_candidates=config.reranker.candidates,
             fallback_engine=legacy_search,
         )
         logger.info("Search v2 enabled (intent-routed)")

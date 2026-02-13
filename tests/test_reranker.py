@@ -1,12 +1,15 @@
-"""Tests for cross-encoder reranker.
+"""Tests for reranker backends.
 
-Tests the Reranker class logic without loading the actual model
+Tests the LocalReranker class logic without loading the actual model
 (uses monkeypatching to mock the CrossEncoder).
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from cairn.core.reranker import Reranker
+from cairn.config import RerankerConfig
+from cairn.core.reranker import get_reranker
+from cairn.core.reranker.interface import RerankerInterface
+from cairn.core.reranker.local import LocalReranker
 
 
 def _make_candidates(n: int) -> list[dict]:
@@ -17,9 +20,29 @@ def _make_candidates(n: int) -> list[dict]:
     ]
 
 
+def _make_reranker() -> LocalReranker:
+    """Create a LocalReranker with default config."""
+    return LocalReranker(RerankerConfig())
+
+
+def test_factory_returns_interface():
+    """get_reranker() should return a RerankerInterface."""
+    config = RerankerConfig(backend="local")
+    reranker = get_reranker(config)
+    assert isinstance(reranker, RerankerInterface)
+
+
+def test_factory_bedrock():
+    """get_reranker() with bedrock backend should return BedrockReranker."""
+    from cairn.core.reranker.bedrock import BedrockReranker
+    config = RerankerConfig(backend="bedrock")
+    reranker = get_reranker(config)
+    assert isinstance(reranker, BedrockReranker)
+
+
 def test_skip_when_pool_lte_limit():
     """When candidates <= limit, reranker returns them as-is (no model call)."""
-    reranker = Reranker()
+    reranker = _make_reranker()
     candidates = _make_candidates(5)
     result = reranker.rerank("test query", candidates, limit=10)
     assert result == candidates
@@ -28,14 +51,14 @@ def test_skip_when_pool_lte_limit():
 
 def test_empty_candidates():
     """Empty candidate list returns empty."""
-    reranker = Reranker()
+    reranker = _make_reranker()
     result = reranker.rerank("test query", [], limit=10)
     assert result == []
 
 
 def test_rerank_selects_top_k():
     """Reranker should select top-k by cross-encoder score."""
-    reranker = Reranker()
+    reranker = _make_reranker()
 
     # Mock the cross-encoder: assign scores inversely (last candidate = highest score)
     mock_model = MagicMock()
@@ -55,7 +78,7 @@ def test_rerank_selects_top_k():
 
 def test_rerank_attaches_scores():
     """Reranker should attach rerank_score to each candidate."""
-    reranker = Reranker()
+    reranker = _make_reranker()
 
     mock_model = MagicMock()
     candidates = _make_candidates(5)
@@ -74,7 +97,7 @@ def test_rerank_attaches_scores():
 
 def test_rerank_fallback_on_predict_error():
     """If model.predict raises, return first N candidates as fallback."""
-    reranker = Reranker()
+    reranker = _make_reranker()
 
     mock_model = MagicMock()
     mock_model.predict.side_effect = RuntimeError("CUDA OOM")

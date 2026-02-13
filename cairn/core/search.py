@@ -48,7 +48,7 @@ from cairn.storage.database import Database
 if TYPE_CHECKING:
     from cairn.config import LLMCapabilities
     from cairn.core.activation import ActivationEngine
-    from cairn.core.reranker import Reranker
+    from cairn.core.reranker.interface import RerankerInterface
     from cairn.llm.interface import LLMInterface
 
 logger = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ class SearchEngine:
         self, db: Database, embedding: EmbeddingInterface, *,
         llm: LLMInterface | None = None,
         capabilities: LLMCapabilities | None = None,
-        reranker: Reranker | None = None,
+        reranker: RerankerInterface | None = None,
         rerank_candidates: int = 50,
         activation_engine: ActivationEngine | None = None,
     ):

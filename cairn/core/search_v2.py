@@ -14,7 +14,7 @@ from cairn.core.router import QueryRouter
 
 if TYPE_CHECKING:
     from cairn.config import LLMCapabilities
-    from cairn.core.reranker import Reranker
+    from cairn.core.reranker.interface import RerankerInterface
     from cairn.core.search import SearchEngine
     from cairn.embedding.interface import EmbeddingInterface
     from cairn.graph.interface import GraphProvider
@@ -38,7 +38,7 @@ class SearchV2:
         graph: GraphProvider | None,
         llm: LLMInterface | None,
         capabilities: LLMCapabilities | None,
-        reranker: Reranker | None = None,
+        reranker: RerankerInterface | None = None,
         rerank_candidates: int = 50,
         fallback_engine: SearchEngine | None = None,
     ):
