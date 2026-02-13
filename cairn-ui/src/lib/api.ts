@@ -258,6 +258,45 @@ export interface ExportResult {
   memories: Memory[];
 }
 
+export interface SessionInfo {
+  session_name: string;
+  project: string;
+  batch_count: number;
+  total_events: number;
+  digested_count: number;
+  first_event: string | null;
+  last_event: string | null;
+  is_active: boolean;
+  has_cairn: boolean;
+}
+
+export interface SessionEvent {
+  ts: string;
+  type: string;
+  tool_name?: string;
+  tool_input?: Record<string, unknown>;
+  tool_response?: string;
+  session_name?: string;
+  project?: string;
+  reason?: string;
+  [key: string]: unknown;
+}
+
+export interface SessionDigest {
+  batch: number;
+  digest: string;
+  digested_at: string | null;
+}
+
+export interface SessionEventsResult {
+  session_name: string;
+  project: string | null;
+  batch_count: number;
+  total_events: number;
+  events: SessionEvent[];
+  digests: SessionDigest[];
+}
+
 export interface Cairn {
   id: number;
   session_name: string;
@@ -465,6 +504,12 @@ export const api = {
     get<Cairn[]>("/cairns", { ...(project ? { project } : {}), ...opts }),
 
   cairnDetail: (id: number) => get<CairnDetail>(`/cairns/${id}`),
+
+  sessions: (opts?: { project?: string; limit?: string }) =>
+    get<{ count: number; items: SessionInfo[] }>("/sessions", opts),
+
+  sessionEvents: (sessionName: string, opts?: { project?: string }) =>
+    get<SessionEventsResult>(`/sessions/${encodeURIComponent(sessionName)}/events`, opts),
 
   graph: (opts?: { project?: string; relation_type?: string; min_importance?: string }) =>
     get<GraphResult>("/graph", opts),
