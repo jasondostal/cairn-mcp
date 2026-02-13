@@ -21,7 +21,7 @@ Your AI starts every session from scratch. Your best ideas vanish before you can
 
 **Agents remember across sessions.** Decisions, learnings, and dead ends are captured automatically. Session markers (*cairns*) let the next agent pick up where the last one left off. **Humans capture thoughts instantly.** Type a thought, slash-command it into a category, and move on. Grab a URL from your browser with one click. Share from your phone. Everything lands in the same searchable pool.
 
-Three containers. One `docker compose up`. 13 MCP tools, a REST API, a web dashboard, and browser/mobile capture.
+Four containers. One `docker compose up`. 13 MCP tools, a REST API, a web dashboard, and browser/mobile capture.
 
 <p align="center">
   <img src="images/cairn-capture-screenshot.jpg" alt="Cairn capture page with slash commands" width="700">
@@ -36,7 +36,7 @@ Three containers. One `docker compose up`. 13 MCP tools, a REST API, a web dashb
 - **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, importance score, and relationship links on store.
 - **Pattern discovery** — HDBSCAN clustering finds themes across memories. LLM writes the labels. Clusters refresh lazily.
 - **Web dashboard** — 11 pages. Chart-heavy home dashboard with KPI sparklines, operations/token/memory-growth charts, activity heatmap. Search with score breakdowns, knowledge graph, thinking trees, multi-select filters, Cmd+K, keyboard nav, dark mode.
-- **Three containers, done** — MCP at `/mcp`, REST at `/api`, same process. PostgreSQL + pgvector. Bring your own LLM — Ollama, Bedrock, Gemini, or anything OpenAI-compatible.
+- **Four containers, done** — MCP at `/mcp`, REST at `/api`, same process. PostgreSQL + pgvector, Neo4j knowledge graph. Bring your own LLM — Ollama, Bedrock, Gemini, or anything OpenAI-compatible.
 
 <h3 align="center">81.7% on LoCoMo</h3>
 <p align="center"><em>The standard benchmark for conversational memory systems (<a href="https://arxiv.org/abs/2402.09753">Maharana et al., ACL 2024</a>)</em></p>
@@ -68,10 +68,11 @@ curl -O https://raw.githubusercontent.com/jasondostal/cairn-mcp/main/docker-comp
 docker compose up -d
 ```
 
-This starts three containers:
+This starts four containers:
 - **cairn** — MCP server + REST API on port 8000
 - **cairn-ui** — Web dashboard on port 3000
 - **cairn-db** — PostgreSQL 16 with pgvector
+- **cairn-graph** — Neo4j 5 knowledge graph
 
 Migrations run automatically. Ready in under a minute.
 
@@ -379,16 +380,18 @@ Browser         Bookmarklet / iOS     MCP Client (Claude, etc.)     curl / scrip
 +------+          |  cairn.api     (FastAPI endpoints + ingest pipeline)          |
 cairn-ui          |                                                               |
                   |  core: memory, search, enrichment, clustering, ingest        |
+                  |        extraction, router, reranker, search_v2              |
                   |        projects, tasks, thinking, cairns                     |
                   |        synthesis, consolidation, digest                      |
                   |                                                               |
+                  |  graph: Neo4j (entities, statements, triples, BFS)          |
                   |  embedding: local (MiniLM), Bedrock (Titan V2) (pluggable)   |
                   |  llm: Ollama, Bedrock, Gemini, OpenAI-compat (pluggable)     |
                   |  storage: PostgreSQL 16 + pgvector (HNSW)                    |
                   +---------------------------------------------------------------+
-                      |
-                      v
-                  PostgreSQL 16 + pgvector (19 tables, 11 migrations)
+                      |                           |
+                      v                           v
+                  PostgreSQL 16 + pgvector    Neo4j 5 (knowledge graph)
 ```
 
 </details>
