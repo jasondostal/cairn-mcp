@@ -48,14 +48,14 @@ Four containers. One `docker compose up`. 13 MCP tools, a REST API, a web dashbo
 | | Cairn | OpenAI Memory | LangMem | Mem0 | Zep | Letta |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | **LoCoMo score** | **81.7%** | 52.9% | 58.1% | 68.5% | 75.1% | 74.0% |
-| **Self-hosted / OSS** | yes | no | yes | partial | partial | yes |
-| **Human capture** | yes | chat only | no | no | no | no |
-| **Web dashboard** | yes | no | no | no | yes | yes |
-| **MCP native** | yes | no | no | no | no | no |
-| **Knowledge graph** | yes | no | no | yes | yes | no |
-| **Session continuity** | yes | limited | no | no | no | no |
-| **Cross-encoder reranking** | yes | no | no | no | no | no |
-| **Clustering / patterns** | yes | no | no | no | no | no |
+| **Self-hosted / OSS** | ✅ | ❌ | ✅ | ⚠️ | ⚠️ | ✅ |
+| **Human capture** | ✅ | ⚠️ | ❌ | ❌ | ❌ | ❌ |
+| **Web dashboard** | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ |
+| **MCP native** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Knowledge graph** | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ |
+| **Session continuity** | ✅ | ⚠️ | ❌ | ❌ | ❌ | ❌ |
+| **Cross-encoder reranking** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Clustering / patterns** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 <sub>Feature claims verified via official docs, GitHub repos, and published papers (Feb 2026). Mem0/Zep "partial" OSS: core is open source, advanced features require cloud. OpenAI "chat only" capture: users can say "remember this" in conversation. OpenAI "limited" sessions: references past chats but no structured session markers. Zep dashboard is cloud-only. Letta dashboard is their ADE (Agent Development Environment).</sub>
 
