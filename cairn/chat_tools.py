@@ -1,0 +1,234 @@
+"""Chat tool definitions and executor for agentic LLM chat."""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import TYPE_CHECKING
+
+from cairn.core.status import get_status
+
+if TYPE_CHECKING:
+    from cairn.core.services import Services
+
+logger = logging.getLogger(__name__)
+
+SYSTEM_PROMPT = """\
+You are a Cairn memory assistant with access to the user's semantic memory system.
+You can search, browse, and create memories using the tools available to you.
+
+Guidelines:
+- When the user asks about something that might be in their memories, use search_memories first.
+- When search returns results with IDs, use recall_memory to get full content if summaries aren't enough.
+- Present information naturally — summarize and highlight what's relevant, don't dump raw JSON.
+- When storing memories, use appropriate memory_type values: note, decision, rule, code-snippet, learning, research, discussion, progress, task, debug, design.
+- If you're unsure about something, search first rather than guessing.
+- Be concise. The user is chatting, not reading a report.
+"""
+
+CHAT_TOOLS = [
+    {
+        "name": "search_memories",
+        "description": "Search for memories using semantic search. Returns summaries of matching memories. Use recall_memory to get full content.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Natural language search query"},
+                "project": {"type": "string", "description": "Filter by project name"},
+                "memory_type": {"type": "string", "description": "Filter by type: note, decision, rule, learning, etc."},
+                "limit": {"type": "integer", "description": "Max results (default 10)"},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "recall_memory",
+        "description": "Get the full content of specific memories by their IDs. Use after search to get details.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": "Memory IDs to retrieve (max 10)",
+                },
+            },
+            "required": ["ids"],
+        },
+    },
+    {
+        "name": "store_memory",
+        "description": "Store a new memory in the system.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {"type": "string", "description": "The memory content"},
+                "project": {"type": "string", "description": "Project to store under"},
+                "memory_type": {
+                    "type": "string",
+                    "description": "Type: note, decision, rule, code-snippet, learning, research, discussion, progress, task, debug, design",
+                },
+                "importance": {"type": "number", "description": "Priority 0.0-1.0 (default 0.5)"},
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional tags for categorization",
+                },
+            },
+            "required": ["content", "project"],
+        },
+    },
+    {
+        "name": "list_projects",
+        "description": "List all projects in the memory system with their memory counts.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "system_status",
+        "description": "Get Cairn system health, memory counts, and model information.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "get_rules",
+        "description": "Get behavioral rules and guardrails. Returns rules for the specified project plus global rules.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project name (also includes __global__ rules)"},
+            },
+        },
+    },
+    {
+        "name": "list_tasks",
+        "description": "List pending tasks for a project.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project name"},
+                "include_completed": {"type": "boolean", "description": "Include completed tasks (default false)"},
+            },
+            "required": ["project"],
+        },
+    },
+]
+
+
+class ChatToolExecutor:
+    """Executes chat tool calls against Cairn services."""
+
+    def __init__(self, svc: "Services"):
+        self.svc = svc
+
+    def execute(self, name: str, input_data: dict) -> str:
+        """Execute a tool call and return JSON result string."""
+        handler = getattr(self, f"_tool_{name}", None)
+        if handler is None:
+            return json.dumps({"error": f"Unknown tool: {name}"})
+        try:
+            result = handler(**input_data)
+            return json.dumps(result, default=str)
+        except Exception as e:
+            logger.warning("Chat tool %s failed: %s", name, e, exc_info=True)
+            return json.dumps({"error": str(e)})
+
+    def _tool_search_memories(
+        self, query: str, project: str | None = None,
+        memory_type: str | None = None, limit: int = 10,
+    ) -> dict:
+        search = self.svc.search_v2 or self.svc.search_engine
+        results = search.search(
+            query=query, project=project,
+            memory_type=memory_type, limit=min(limit, 20),
+            include_full=False,
+        )
+        return {
+            "count": len(results),
+            "results": [
+                {
+                    "id": r["id"],
+                    "summary": r.get("summary") or r.get("content", "")[:200],
+                    "memory_type": r.get("memory_type"),
+                    "project": r.get("project"),
+                    "importance": r.get("importance"),
+                    "tags": r.get("tags", []),
+                    "author": r.get("author"),
+                    "score": round(r.get("score", 0), 3) if r.get("score") else None,
+                    "created_at": r.get("created_at"),
+                }
+                for r in results
+            ],
+        }
+
+    def _tool_recall_memory(self, ids: list[int]) -> dict:
+        ids = ids[:10]
+        results = self.svc.memory_store.recall(ids)
+        return {
+            "count": len(results),
+            "memories": [
+                {
+                    "id": r["id"],
+                    "content": r["content"],
+                    "summary": r.get("summary"),
+                    "memory_type": r.get("memory_type"),
+                    "project": r.get("project"),
+                    "importance": r.get("importance"),
+                    "tags": r.get("tags", []),
+                    "author": r.get("author"),
+                    "is_active": r.get("is_active"),
+                    "session_name": r.get("session_name"),
+                    "created_at": r.get("created_at"),
+                }
+                for r in results
+            ],
+        }
+
+    def _tool_store_memory(
+        self, content: str, project: str, memory_type: str = "note",
+        importance: float = 0.5, tags: list[str] | None = None,
+    ) -> dict:
+        result = self.svc.memory_store.store(
+            content=content, project=project,
+            memory_type=memory_type, importance=importance,
+            tags=tags, author="assistant",
+        )
+        self.svc.db.commit()
+        return {"stored": True, "id": result["id"], "project": project}
+
+    def _tool_list_projects(self) -> dict:
+        result = self.svc.project_manager.list_all()
+        return {
+            "count": result["total"],
+            "projects": [
+                {"name": p["name"], "memories": p["memory_count"], "created_at": p.get("created_at")}
+                for p in result["items"]
+            ],
+        }
+
+    def _tool_system_status(self) -> dict:
+        return get_status(self.svc.db, self.svc.config)
+
+    def _tool_get_rules(self, project: str | None = None) -> dict:
+        result = self.svc.memory_store.get_rules(project=project)
+        return {
+            "count": result["total"],
+            "rules": [
+                {"id": r["id"], "content": r["content"], "importance": r["importance"], "project": r["project"]}
+                for r in result["items"]
+            ],
+        }
+
+    def _tool_list_tasks(self, project: str, include_completed: bool = False) -> dict:
+        result = self.svc.task_manager.list_tasks(project=project, include_completed=include_completed)
+        return {
+            "count": result["total"],
+            "tasks": [
+                {"id": t["id"], "description": t["description"], "status": t["status"], "created_at": t.get("created_at")}
+                for t in result["items"]
+            ],
+        }

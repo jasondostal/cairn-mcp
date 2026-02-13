@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.30.0] - 2026-02-13
+
+### Added
+- **Agentic chat** — the Chat page LLM can now call Cairn tools. Ask it to search memories,
+  browse projects, check system status, store new memories, list tasks, or view rules. The LLM
+  uses Bedrock Converse API's native tool calling in an agent loop (max 10 iterations).
+- 7 chat tools exposed: `search_memories`, `recall_memory`, `store_memory`, `list_projects`,
+  `system_status`, `get_rules`, `list_tasks`.
+- Tool calls shown in the UI as expandable `<details>` blocks — wrench icon with tool name,
+  click to see output. Clean, non-intrusive.
+- `LLMInterface.generate_with_tools()` — new method with default text-only fallback.
+  `BedrockLLM` overrides with full Converse API tool calling support.
+- Graceful degradation: if the model doesn't support tool use (ValidationException), automatically
+  falls back to plain text chat for the session.
+- `cairn/chat_tools.py` — tool definitions and `ChatToolExecutor` that maps tool calls to
+  Cairn service operations.
+
 ## [0.29.0] - 2026-02-13
 
 ### Added
@@ -781,6 +798,7 @@ Initial release. All four implementation phases complete.
 - 30 tests passing (clustering, enrichment, RRF)
 
 [Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.29.0...HEAD
+[0.30.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.2...v0.29.0
 [0.28.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.1...v0.28.2
 [0.28.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.0...v0.28.1
