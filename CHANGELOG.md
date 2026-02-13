@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.31.0] - 2026-02-13
+
+### Added
+- **Live session dashboard** — `/sessions` page shows active and recent Claude Code sessions
+  with event counts, digest status, and cairn linkage. Click into a session to see the full
+  event stream: every tool call with name, input preview, expandable response, and timestamp.
+- Active sessions show a pulsing green dot and auto-refresh every 5 seconds.
+- Session list auto-refreshes every 30 seconds.
+- `GET /api/sessions` — lists recent sessions grouped by session_name with stats (event count,
+  batch count, digest progress, active status, cairn status).
+- `GET /api/sessions/{session_name}/events` — returns flattened event stream + digests for a session.
+- Reinstalled Claude Code hooks (SessionStart, PostToolUse, SessionEnd) pointing to UTIL.
+
 ## [0.30.0] - 2026-02-13
 
 ### Added
@@ -798,6 +811,7 @@ Initial release. All four implementation phases complete.
 - 30 tests passing (clustering, enrichment, RRF)
 
 [Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.29.0...HEAD
+[0.31.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.30.1...v0.31.0
 [0.30.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.2...v0.29.0
 [0.28.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.1...v0.28.2

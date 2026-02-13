@@ -1,0 +1,333 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { api, SessionInfo, SessionEvent, SessionDigest } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import {
+  Radio,
+  ChevronRight,
+  ArrowLeft,
+  Wrench,
+  Play,
+  Square,
+  Loader2,
+  Landmark,
+  FileText,
+  RefreshCw,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+function timeAgo(dateStr: string): string {
+  const seconds = Math.floor(
+    (Date.now() - new Date(dateStr).getTime()) / 1000
+  );
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function eventIcon(type: string) {
+  if (type === "tool_use") return <Wrench className="h-3 w-3" />;
+  if (type === "session_start") return <Play className="h-3 w-3" />;
+  if (type === "session_end") return <Square className="h-3 w-3" />;
+  return <FileText className="h-3 w-3" />;
+}
+
+function toolInputPreview(input: Record<string, unknown> | undefined): string {
+  if (!input) return "";
+  if (input.command) return String(input.command).slice(0, 80);
+  if (input.file_path) return String(input.file_path);
+  if (input.pattern) return `/${input.pattern}/`;
+  if (input.query) return `"${String(input.query).slice(0, 60)}"`;
+  if (input.content) return String(input.content).slice(0, 60) + "...";
+  const keys = Object.keys(input);
+  if (keys.length === 0) return "";
+  return keys.slice(0, 3).join(", ");
+}
+
+// -- Session List --
+
+function SessionList({
+  sessions,
+  onSelect,
+  loading,
+  onRefresh,
+}: {
+  sessions: SessionInfo[];
+  onSelect: (s: SessionInfo) => void;
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-lg font-semibold">Sessions</h1>
+        <Button variant="ghost" size="icon" onClick={onRefresh} disabled={loading}>
+          <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+        </Button>
+      </div>
+
+      {sessions.length === 0 && !loading && (
+        <div className="text-center py-12 text-muted-foreground">
+          <Radio className="mx-auto mb-3 h-10 w-10 opacity-30" />
+          <p className="text-sm">No sessions yet.</p>
+          <p className="text-xs mt-1 opacity-60">
+            Sessions appear when Claude Code hooks ship events.
+          </p>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {sessions.map((s) => (
+          <button
+            key={s.session_name}
+            onClick={() => onSelect(s)}
+            className={cn(
+              "w-full text-left rounded-lg border px-4 py-3 transition-colors",
+              "hover:bg-muted/50",
+              s.is_active && "border-green-500/50 bg-green-500/5"
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                {s.is_active ? (
+                  <span className="relative flex h-2.5 w-2.5 shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
+                  </span>
+                ) : (
+                  <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30 shrink-0" />
+                )}
+                <span className="font-mono text-sm truncate">
+                  {s.session_name}
+                </span>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            </div>
+            <div className="flex items-center gap-4 mt-1.5 text-xs text-muted-foreground">
+              <span>{s.project}</span>
+              <span>{s.total_events} events</span>
+              {s.digested_count > 0 && (
+                <span>{s.digested_count}/{s.batch_count} digested</span>
+              )}
+              {s.has_cairn && (
+                <span className="flex items-center gap-0.5">
+                  <Landmark className="h-3 w-3" /> cairn set
+                </span>
+              )}
+              {s.last_event && <span>{timeAgo(s.last_event)}</span>}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// -- Session Detail (Event Stream) --
+
+function SessionDetail({
+  session,
+  onBack,
+}: {
+  session: SessionInfo;
+  onBack: () => void;
+}) {
+  const [events, setEvents] = useState<SessionEvent[]>([]);
+  const [digests, setDigests] = useState<SessionDigest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(session.is_active);
+
+  const fetchEvents = useCallback(async () => {
+    try {
+      const result = await api.sessionEvents(session.session_name);
+      setEvents(result.events);
+      setDigests(result.digests);
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  }, [session.session_name]);
+
+  useEffect(() => {
+    fetchEvents();
+  }, [fetchEvents]);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const interval = setInterval(fetchEvents, 5000);
+    return () => clearInterval(interval);
+  }, [autoRefresh, fetchEvents]);
+
+  const toolEvents = events.filter((e) => e.type === "tool_use");
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-4">
+        <Button variant="ghost" size="icon" onClick={onBack}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold truncate font-mono">
+              {session.session_name}
+            </h1>
+            {session.is_active && (
+              <span className="text-[10px] font-medium uppercase tracking-wider text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded">
+                live
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+            <span>{session.project}</span>
+            <span>{events.length} events</span>
+            <span>{toolEvents.length} tool calls</span>
+          </div>
+        </div>
+        {session.is_active && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setAutoRefresh(!autoRefresh)}
+            className="text-xs"
+          >
+            {autoRefresh ? (
+              <>
+                <Loader2 className="h-3 w-3 animate-spin mr-1" /> Auto
+              </>
+            ) : (
+              "Auto off"
+            )}
+          </Button>
+        )}
+      </div>
+
+      {/* Digests */}
+      {digests.length > 0 && (
+        <div className="mb-4 space-y-2">
+          {digests.map((d) => (
+            <div
+              key={d.batch}
+              className="rounded-lg border bg-muted/30 px-3 py-2 text-sm"
+            >
+              <div className="text-xs text-muted-foreground mb-1">
+                Batch {d.batch} digest
+              </div>
+              <div className="whitespace-pre-wrap">{d.digest}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Event Stream */}
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : events.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground text-sm">
+          No events yet.
+        </div>
+      ) : (
+        <div className="space-y-0.5">
+          {events.map((evt, i) => (
+            <div
+              key={i}
+              className={cn(
+                "flex items-start gap-2 rounded px-2 py-1.5 text-xs",
+                "hover:bg-muted/50 transition-colors",
+                evt.type === "session_start" && "bg-blue-500/5",
+                evt.type === "session_end" && "bg-orange-500/5"
+              )}
+            >
+              <div className="mt-0.5 text-muted-foreground shrink-0">
+                {eventIcon(evt.type)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">
+                    {evt.tool_name || evt.type}
+                  </span>
+                  {evt.type === "session_end" && evt.reason && (
+                    <span className="text-muted-foreground">({evt.reason})</span>
+                  )}
+                  <span className="text-muted-foreground ml-auto shrink-0">
+                    {evt.ts ? new Date(evt.ts).toLocaleTimeString() : ""}
+                  </span>
+                </div>
+                {evt.tool_input && (
+                  <div className="text-muted-foreground truncate mt-0.5 font-mono text-[11px]">
+                    {toolInputPreview(evt.tool_input)}
+                  </div>
+                )}
+                {evt.tool_response && (
+                  <details className="mt-0.5 group">
+                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
+                      response ({evt.tool_response.length} chars)
+                    </summary>
+                    <pre className="mt-1 text-[10px] bg-background/50 rounded p-1.5 overflow-x-auto whitespace-pre-wrap break-all text-muted-foreground max-h-32 overflow-y-auto">
+                      {evt.tool_response}
+                    </pre>
+                  </details>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// -- Page --
+
+export default function SessionsPage() {
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [selected, setSelected] = useState<SessionInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchSessions = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await api.sessions({ limit: "30" });
+      setSessions(result.items);
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSessions();
+  }, [fetchSessions]);
+
+  // Auto-refresh session list every 30s
+  useEffect(() => {
+    const interval = setInterval(fetchSessions, 30000);
+    return () => clearInterval(interval);
+  }, [fetchSessions]);
+
+  if (selected) {
+    return (
+      <SessionDetail
+        session={selected}
+        onBack={() => setSelected(null)}
+      />
+    );
+  }
+
+  return (
+    <SessionList
+      sessions={sessions}
+      onSelect={setSelected}
+      loading={loading}
+      onRefresh={fetchSessions}
+    />
+  );
+}

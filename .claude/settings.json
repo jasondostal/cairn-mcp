@@ -1,0 +1,40 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CAIRN_URL=http://util:8081 \"$CLAUDE_PROJECT_DIR\"/examples/hooks/session-start.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CAIRN_URL=http://util:8081 \"$CLAUDE_PROJECT_DIR\"/examples/hooks/log-event.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CAIRN_URL=http://util:8081 \"$CLAUDE_PROJECT_DIR\"/examples/hooks/session-end.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
