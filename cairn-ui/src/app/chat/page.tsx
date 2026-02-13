@@ -3,12 +3,32 @@
 import { useState, useRef, useEffect } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Send, Bot, User, Loader2 } from "lucide-react";
+import { Send, Bot, User, Loader2, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+interface ToolCallEntry {
+  name: string;
+  input: Record<string, unknown>;
+  output: unknown;
+}
 
 interface Message {
   role: "user" | "assistant" | "system";
   content: string;
+  toolCalls?: ToolCallEntry[];
+}
+
+function toolDisplayName(name: string): string {
+  return name.replace(/_/g, " ");
+}
+
+function toolInputSummary(name: string, input: Record<string, unknown>): string {
+  if (name === "search_memories" && input.query) return `"${input.query}"`;
+  if (name === "recall_memory" && input.ids) return `#${(input.ids as number[]).join(", #")}`;
+  if (name === "store_memory" && input.project) return `in ${input.project}`;
+  if (name === "list_tasks" && input.project) return `${input.project}`;
+  if (name === "get_rules" && input.project) return `${input.project}`;
+  return "";
 }
 
 export default function ChatPage() {
@@ -40,7 +60,14 @@ export default function ChatPage() {
     try {
       const result = await api.chat(updated, 2048);
       setModel(result.model);
-      setMessages([...updated, { role: "assistant", content: result.response }]);
+      setMessages([
+        ...updated,
+        {
+          role: "assistant",
+          content: result.response,
+          toolCalls: result.tool_calls ?? undefined,
+        },
+      ]);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Failed to get response";
       setMessages([
@@ -85,7 +112,7 @@ export default function ChatPage() {
               <Bot className="mx-auto mb-3 h-10 w-10 opacity-30" />
               <p className="text-sm">Talk to your Cairn LLM.</p>
               <p className="text-xs mt-1 opacity-60">
-                Messages are not stored. This is a direct chat.
+                The assistant can search and browse your memories.
               </p>
             </div>
           </div>
@@ -107,13 +134,33 @@ export default function ChatPage() {
               )}
               <div
                 className={cn(
-                  "rounded-lg px-3 py-2 text-sm max-w-[80%] whitespace-pre-wrap",
+                  "rounded-lg px-3 py-2 text-sm max-w-[80%]",
                   msg.role === "user"
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted"
                 )}
               >
-                {msg.content}
+                {/* Tool calls */}
+                {msg.toolCalls && msg.toolCalls.length > 0 && (
+                  <div className="space-y-1 mb-2 pb-2 border-b border-border/50">
+                    {msg.toolCalls.map((tc, j) => (
+                      <details key={j} className="group">
+                        <summary className="cursor-pointer text-xs text-muted-foreground flex items-center gap-1.5 hover:text-foreground transition-colors">
+                          <Wrench className="h-3 w-3 shrink-0" />
+                          <span className="font-medium">{toolDisplayName(tc.name)}</span>
+                          {toolInputSummary(tc.name, tc.input) && (
+                            <span className="opacity-60">{toolInputSummary(tc.name, tc.input)}</span>
+                          )}
+                        </summary>
+                        <pre className="mt-1 text-[10px] bg-background/50 rounded p-1.5 overflow-x-auto whitespace-pre-wrap break-all text-muted-foreground">
+                          {JSON.stringify(tc.output, null, 2)}
+                        </pre>
+                      </details>
+                    ))}
+                  </div>
+                )}
+                {/* Message text */}
+                <div className="whitespace-pre-wrap">{msg.content}</div>
               </div>
               {msg.role === "user" && (
                 <div className="mt-1 shrink-0">

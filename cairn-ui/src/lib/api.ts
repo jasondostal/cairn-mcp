@@ -479,8 +479,10 @@ export const api = {
 
   ingest: (body: IngestRequest) => post<IngestResponse>("/ingest", body),
 
-  chat: (messages: Array<{ role: string; content: string }>, maxTokens?: number) =>
-    post<{ response: string; model: string }>("/chat", { messages, max_tokens: maxTokens }),
+  chat: (messages: Array<{ role: string; content: string }>, maxTokens?: number, tools?: boolean) =>
+    post<{ response: string; model: string; tool_calls?: Array<{ name: string; input: Record<string, unknown>; output: unknown }> }>(
+      "/chat", { messages, max_tokens: maxTokens, ...(tools === false ? { tools: false } : {}) }
+    ),
 
   analyticsOverview: (opts?: { days?: string }) =>
     get<AnalyticsOverview>("/analytics/overview", opts),
