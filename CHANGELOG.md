@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.2] - 2026-02-13
+
+### Added
+- **Speaker attribution** — new `author` field on memories tracks who created each memory.
+  Use `"user"` for human-authored, `"assistant"` for AI-authored, or a specific name. Both
+  voices are valid — this is for attribution, not filtering. Shared memory, shared ownership.
+- `store()` and `modify()` MCP tools accept optional `author` parameter.
+- Author returned in `recall()`, `search()`, timeline, and REST API responses.
+- Migration 014 adds `author VARCHAR(100)` to memories table (nullable for backward compat).
+
 ## [0.28.1] - 2026-02-13
 
 ### Changed
@@ -760,7 +770,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.1...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.2...HEAD
+[0.28.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.1...v0.28.2
 [0.28.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.0...v0.28.1
 [0.28.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.27.2...v0.28.0
 [0.27.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.27.1...v0.27.2

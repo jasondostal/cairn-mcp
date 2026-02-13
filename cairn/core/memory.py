@@ -52,6 +52,7 @@ class MemoryStore:
         source_doc_id: int | None = None,
         file_hashes: dict[str, str] | None = None,
         enrich: bool = True,
+        author: str | None = None,
     ) -> dict:
         """Store a memory with embedding.
 
@@ -118,10 +119,10 @@ class MemoryStore:
             INSERT INTO memories
                 (content, memory_type, importance, project_id, session_name,
                  embedding, tags, auto_tags, summary, related_files, source_doc_id,
-                 file_hashes, entities)
+                 file_hashes, entities, author)
             VALUES
                 (%s, %s, %s, %s, %s, %s::vector, %s, %s, %s, %s, %s,
-                 %s::jsonb, %s)
+                 %s::jsonb, %s, %s)
             RETURNING id, created_at
             """,
             (
@@ -138,6 +139,7 @@ class MemoryStore:
                 source_doc_id,
                 file_hashes_json,
                 entities,
+                author,
             ),
         )
 
@@ -212,6 +214,7 @@ class MemoryStore:
             "tags": caller_tags,
             "auto_tags": auto_tags,
             "summary": summary,
+            "author": author,
             "auto_relations": auto_relations,
             "conflicts": conflicts,
             "rule_conflicts": rule_conflicts,
@@ -451,7 +454,7 @@ class MemoryStore:
             f"""
             SELECT m.id, m.content, m.summary, m.memory_type, m.importance,
                    m.tags, m.auto_tags, m.related_files, m.is_active,
-                   m.inactive_reason, m.session_name, m.entities,
+                   m.inactive_reason, m.session_name, m.entities, m.author,
                    m.created_at, m.updated_at,
                    p.name as project,
                    c.id as cluster_id, c.label as cluster_label,
@@ -521,6 +524,7 @@ class MemoryStore:
                 "is_active": r["is_active"],
                 "inactive_reason": r["inactive_reason"],
                 "session_name": r["session_name"],
+                "author": r.get("author"),
                 "created_at": r["created_at"].isoformat(),
                 "updated_at": r["updated_at"].isoformat(),
                 "cluster": None,
@@ -547,6 +551,7 @@ class MemoryStore:
         tags: list[str] | None = None,
         reason: str | None = None,
         project: str | None = None,
+        author: str | None = None,
     ) -> dict:
         """Update, inactivate, or reactivate a memory."""
         if action == MemoryAction.INACTIVATE:
@@ -601,6 +606,10 @@ class MemoryStore:
                 project_id = get_or_create_project(self.db, project)
                 updates.append("project_id = %s")
                 params.append(project_id)
+
+            if author is not None:
+                updates.append("author = %s")
+                params.append(author)
 
             if not updates:
                 return {"id": memory_id, "action": "no_changes"}

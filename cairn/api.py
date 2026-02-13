@@ -166,7 +166,7 @@ def create_api(svc: Services) -> FastAPI:
             f"""
             SELECT m.id, m.summary, m.content, m.memory_type, m.importance,
                    m.tags, m.auto_tags, m.related_files, m.is_active,
-                   m.session_name, m.created_at, m.updated_at,
+                   m.session_name, m.author, m.created_at, m.updated_at,
                    p.name as project
             FROM memories m
             LEFT JOIN projects p ON m.project_id = p.id
@@ -190,6 +190,7 @@ def create_api(svc: Services) -> FastAPI:
                 "related_files": r["related_files"],
                 "is_active": r["is_active"],
                 "session_name": r["session_name"],
+                "author": r.get("author"),
                 "created_at": r["created_at"].isoformat(),
                 "updated_at": r["updated_at"].isoformat(),
             }

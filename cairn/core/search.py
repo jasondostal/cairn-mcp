@@ -187,7 +187,7 @@ class SearchEngine:
         rows = self.db.execute(
             f"""
             SELECT m.id, m.content, m.summary, m.memory_type, m.importance,
-                   m.tags, m.auto_tags, m.created_at,
+                   m.tags, m.auto_tags, m.author, m.created_at,
                    p.name as project,
                    1 - (m.embedding <=> %s::vector) as score
             FROM memories m
@@ -219,7 +219,7 @@ class SearchEngine:
         rows = self.db.execute(
             f"""
             SELECT m.id, m.content, m.summary, m.memory_type, m.importance,
-                   m.tags, m.auto_tags, m.created_at,
+                   m.tags, m.auto_tags, m.author, m.created_at,
                    p.name as project,
                    ts_rank(to_tsvector('english', m.content), plainto_tsquery('english', %s)) as score
             FROM memories m
@@ -654,6 +654,7 @@ class SearchEngine:
                 "project": r["project"],
                 "tags": r["tags"],
                 "auto_tags": r.get("auto_tags", []),
+                "author": r.get("author"),
                 "created_at": r["created_at"].isoformat() if hasattr(r["created_at"], "isoformat") else r["created_at"],
                 "score": r.get("score", 0.0) if prescored else r.get("score", 0.0),
             }

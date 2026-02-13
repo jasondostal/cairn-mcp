@@ -135,6 +135,7 @@ def store(
     related_files: list[str] | None = None,
     related_ids: list[int] | None = None,
     file_hashes: dict[str, str] | None = None,
+    author: str | None = None,
 ) -> dict:
     """Store a memory with automatic embedding generation and optional LLM enrichment.
 
@@ -168,6 +169,9 @@ def store(
         related_files: File paths related to this memory for code context searches.
         related_ids: IDs of related memories to link.
         file_hashes: Optional dict of {file_path: content_hash} for drift detection.
+        author: Who created this memory. Use "user" for human-authored, "assistant" for
+            AI-authored, or a specific name. Both voices are valid — this is for attribution,
+            not filtering.
     """
     try:
         validate_store(content, project, memory_type, importance, tags, session_name)
@@ -181,6 +185,7 @@ def store(
             related_files=related_files,
             related_ids=related_ids,
             file_hashes=file_hashes,
+            author=author,
         )
     except ValidationError as e:
         return {"error": str(e)}
@@ -305,6 +310,7 @@ def modify(
     tags: list[str] | None = None,
     reason: str | None = None,
     project: str | None = None,
+    author: str | None = None,
 ) -> dict:
     """Update, soft-delete, or reactivate a memory.
 
@@ -333,6 +339,7 @@ def modify(
         tags: New tags - replaces existing (update only).
         reason: Reason for inactivation (required for inactivate).
         project: Move memory to a different project (update only).
+        author: Speaker attribution (update only). "user", "assistant", or a name.
     """
     try:
         if action not in MemoryAction.ALL:
@@ -352,6 +359,7 @@ def modify(
             tags=tags,
             reason=reason,
             project=project,
+            author=author,
         )
     except Exception as e:
         logger.exception("modify failed")
