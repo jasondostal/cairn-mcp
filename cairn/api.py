@@ -936,5 +936,30 @@ def create_api(svc: Services) -> FastAPI:
         ):
             return analytics_engine.activity_heatmap(days=days)
 
+    # ------------------------------------------------------------------
+    # POST /chat — conversational LLM chat
+    # ------------------------------------------------------------------
+    llm = svc.llm
+
+    @router.post("/chat")
+    def api_chat(body: dict):
+        if llm is None:
+            raise HTTPException(status_code=503, detail="LLM backend not configured")
+
+        messages = body.get("messages", [])
+        if not messages:
+            raise HTTPException(status_code=422, detail="messages array is required")
+
+        max_tokens = min(body.get("max_tokens", 2048), 4096)
+
+        try:
+            response = llm.generate(messages, max_tokens=max_tokens)
+            return {
+                "response": response,
+                "model": llm.get_model_name(),
+            }
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"LLM error: {e}")
+
     app.include_router(router)
     return app
