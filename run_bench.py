@@ -36,9 +36,10 @@ run_benchmark(
     model_names=["titan_v2"],
     no_enrich=True,
     keep_dbs=True,
-    reuse_db=False,  # Fresh ingestion with new prompts
+    reuse_db=True,  # Reuse existing DB — only testing RAG changes
     verbose=True,
     workers=8,
     max_questions=199,
     conversation_filter="conv-26",
+    search_limit=20,  # Wider context for multi-hop questions
 )
