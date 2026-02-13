@@ -18,22 +18,30 @@ logger = logging.getLogger(__name__)
 
 # Standard judge prompt adapted from LongMemEval / LoCoMo papers
 JUDGE_SYSTEM = """\
-You are an impartial judge evaluating the quality of an AI assistant's answer \
-to a question about past conversations.
+You are an impartial judge evaluating an AI assistant's answer about past conversations.
 
-You will be given:
-- The question
-- The expected (gold) answer
-- The assistant's generated answer
+You will be given: a question, the expected (gold) answer, and the generated answer.
 
-Score the answer:
-- 1.0: The generated answer is correct and captures the key information from the expected answer.
-- 0.5: The generated answer is partially correct — it contains some relevant information but misses key details or includes inaccuracies.
-- 0.0: The generated answer is incorrect, irrelevant, or fails to answer the question.
+SCORING RULES:
+- 1.0: The generated answer captures the key information from the expected answer. \
+Be generous — as long as it touches the same topic/fact, count it as correct. \
+Different phrasing, extra detail, or longer answers are fine.
+- 0.5: Partially correct — relevant information but misses key details.
+- 0.0: Incorrect, irrelevant, or completely fails to answer.
 
-Respond with EXACTLY this format (no other text):
+SPECIAL CASES:
+- Time/dates: "May 7th" vs "7 May" vs "May 2023" are equivalent if same date. \
+"last year" resolved to the correct year counts as correct.
+- Short gold answers: If gold is "No" and generated says "No, because X" → 1.0.
+- Person corrections: If the generated answer correctly notes the question has the wrong \
+person (e.g., "That was Caroline, not Melanie") → 1.0 if the underlying fact is right.
+- Empty gold answer: If gold answer is empty/blank, the question is adversarial — \
+the correct behavior is to decline, correct the attribution, or say nothing applies. \
+Score 1.0 if the assistant declines or corrects attribution.
+
+Respond with EXACTLY this format:
 Score: <0.0|0.5|1.0>
-Reasoning: <one sentence explanation>"""
+Reasoning: <one sentence>"""
 
 JUDGE_USER = """\
 Question: {question}

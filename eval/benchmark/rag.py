@@ -21,27 +21,29 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 ANSWER_SYSTEM = """\
-You are an intelligent memory assistant tasked with retrieving accurate \
-information from conversation memories.
+You are an intelligent memory assistant. Answer questions using ONLY the provided memories.
 
-INSTRUCTIONS:
-1. Carefully analyze all provided memories.
-2. Pay special attention to timestamps to determine the answer.
-3. If the question asks about a specific event or fact, look for direct evidence in the memories.
-4. If memories contain contradictory information, prioritize the most recent memory.
-5. If there is a question about time references (like "last year", "two months ago"), \
-calculate the actual date based on the memory timestamp. For example, if a memory from \
-4 May 2022 mentions "went to India last year," then the trip occurred in 2021.
-6. Always convert relative time references to specific dates, months, or years.
-7. The answer should be less than 5-6 words.
+RULES:
+1. Base your answer on the memories provided. You may combine facts from multiple memories.
+2. Pay attention to WHO each memory is about. Names matter — if the question asks \
+about Melanie but the memories only mention Caroline, say so.
+3. If the question attributes something to the wrong person, correct the attribution. \
+Example: Q "What is Melanie's favorite instrument?" but memories say Caroline plays guitar → \
+Answer: "Caroline plays acoustic guitar, not Melanie."
+4. If no memories mention the topic at all, say "I don't have information about that." \
+But if memories mention related facts, use them — don't abstain just because the exact \
+phrasing doesn't match.
+5. If memories contain contradictory information, prefer the most recent.
+6. For time references ("last year", "two months ago"), calculate the actual date from \
+the memory timestamp. Example: memory from May 2022 says "went to India last year" → 2021.
+7. Always convert relative time references to specific dates/months/years.
+8. Keep your answer concise — under 10 words when possible.
 
-APPROACH (Think step by step):
-1. Examine all memories that contain information related to the question.
-2. Look for explicit mentions of dates, times, locations, or events that answer the question.
-3. If the answer requires calculation (e.g., converting relative time references), show your work.
-4. Formulate a precise, concise answer based solely on the evidence in the memories.
-5. Double-check that your answer directly addresses the question asked.
-6. Ensure your final answer is specific and avoids vague time references."""
+APPROACH:
+1. Identify which memories relate to the question.
+2. Check if the PERSON in the question matches the person in the memories.
+3. Check timestamps for temporal questions — show your calculation.
+4. Give a specific, evidence-based answer."""
 
 ANSWER_USER = """\
 Memories:
@@ -52,18 +54,41 @@ Question: {question}
 Answer:"""
 
 
-def format_context(memories: list[dict], max_chars: int = 8000) -> str:
-    """Format retrieved memories as numbered context string."""
+def format_context(memories: list[dict], max_chars: int = 10000) -> str:
+    """Format retrieved memories as numbered context, grouped by session."""
+    # Group by session tag
+    from collections import OrderedDict
+
+    sessions: OrderedDict[str, list[dict]] = OrderedDict()
+    for mem in memories:
+        session = "unknown"
+        for tag in mem.get("tags", []):
+            if tag.startswith("session:"):
+                session = tag[8:]  # strip "session:" prefix
+                break
+        sessions.setdefault(session, []).append(mem)
+
     parts = []
     total = 0
-    for i, mem in enumerate(memories, 1):
-        content = mem.get("content", "")
-        entry = f"[{i}] {content}"
-        if total + len(entry) > max_chars:
+    i = 0
+    for session_id, mems in sessions.items():
+        header = f"--- Session: {session_id} ---"
+        if total + len(header) > max_chars:
             break
-        parts.append(entry)
-        total += len(entry)
-    return "\n\n".join(parts)
+        parts.append(header)
+        total += len(header)
+
+        for mem in mems:
+            i += 1
+            content = mem.get("content", "")
+            entry = f"[{i}] {content}"
+            if total + len(entry) > max_chars:
+                break
+            parts.append(entry)
+            total += len(entry)
+
+    return "\n".join(parts)
+
 
 
 def evaluate_question(
@@ -101,7 +126,7 @@ def evaluate_question(
         logger.exception("Search failed for question %s", question.id)
         memories = []
 
-    # 2. Format context
+    # 2. Format context (grouped by session for multi-hop reasoning)
     context = format_context(memories)
 
     # 3. Generate answer
@@ -118,7 +143,7 @@ def evaluate_question(
             },
         ]
         try:
-            generated = llm.generate(messages, max_tokens=150)
+            generated = llm.generate(messages, max_tokens=256)
         except Exception:
             logger.exception("Answer generation failed for question %s", question.id)
             generated = "Error generating answer."
