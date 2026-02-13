@@ -32,7 +32,7 @@ Three containers. One `docker compose up`. 13 MCP tools, a REST API, a web dashb
 - **Session continuity** — Cairns mark the trail. Motes capture what happened. Narratives synthesize why it mattered. Next session starts warm, not cold.
 - **Quick capture** — Slash commands (`/decision`, `/learning`), URL extraction, browser bookmarklet, iOS Shortcut. Keyboard-first, Tana-inspired.
 - **Smart ingestion** — Text, URLs, or both. Auto-classifies, chunks large documents, deduplicates, and routes. One endpoint, many doorways.
-- **Hybrid search** — Vector similarity + full-text + tag matching via Reciprocal Rank Fusion. [83.8% recall@10](#search-quality). Contradiction-aware ranking.
+- **Hybrid search** — Vector similarity + full-text + tag matching via Reciprocal Rank Fusion. Search quality actively under development — see [Search Quality](#search-quality).
 - **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, importance score, and relationship links on store.
 - **Pattern discovery** — HDBSCAN clustering finds themes across memories. LLM writes the labels. Clusters refresh lazily.
 - **Web dashboard** — 11 pages. Chart-heavy home dashboard with KPI sparklines, operations/token/memory-growth charts, activity heatmap. Search with score breakdowns, knowledge graph, thinking trees, multi-select filters, Cmd+K, keyboard nav, dark mode.
@@ -493,29 +493,24 @@ All bulk operations support `--dry-run` for preview.
 <details>
 <summary><strong>Search Quality</strong></summary>
 
-Cairn includes an evaluation framework (`eval/`) for measuring search quality. Current results on our internal benchmark:
+Search quality is under active development. We benchmark against **LoCoMo** (Maharana et al., ACL 2024) — the standard evaluation for conversational memory systems.
 
-| Metric | Score |
-|--------|-------|
-| Recall@10 | 83.8% |
-| Precision@5 | 72.0% |
-| MRR | 0.81 |
-| NDCG@10 | 0.78 |
+**Current status:** Early results are promising but not yet validated to a publishable standard. We are working on calibrating our evaluation methodology (judge prompts, scoring, category coverage) to produce numbers we can stand behind. No claimed score yet.
 
-**Methodology and limitations:**
+**What's built:**
+- Full LoCoMo benchmark runner with per-category breakdown (single-hop, multi-hop, temporal, open-domain, adversarial)
+- LLM-as-judge scoring pipeline
+- Two-pass ingestion strategy (normalize + extract)
+- Hybrid retrieval with cross-encoder reranking
 
-- **Corpus:** 50 synthetic memories, fabricated to cover diverse topic areas. Not derived from real usage data.
-- **Queries:** 25 hand-labeled queries with binary relevance judgments (relevant / not relevant), authored by the developer.
-- **No graded relevance** — a partially-relevant result scores the same as irrelevant (0). This inflates recall and obscures ranking quality.
-- **No error bars** — 25 queries is a small sample. The true recall likely has a wide confidence interval.
-- **Small corpus effect** — with 50 memories and a candidate pool of `limit * 5`, the system examines a significant fraction of the entire corpus before ranking. Performance at 500+ memories is untested.
-- **RRF weights** (vector 60%, keyword 25%, tag 15%) and `k=60` are based on initial tuning, not exhaustive ablation.
+**What we're working on:**
+- Judge calibration — ensuring our scoring methodology matches published baselines
+- Timestamp-aware context formatting
+- Context expansion (neighboring episodes per match)
+- Chain-of-thought answer generation
+- Full 10-conversation dataset validation (currently tested on single conversation subsets)
 
-The eval runs **without LLM features** (no query expansion, no confidence gating) — results reflect base search quality only. Query expansion's impact on recall has not been measured separately.
-
-The eval framework supports model comparison (MiniLM-L6-v2 vs. all-mpnet-base-v2 evaluated, smaller model chosen with +1.5% recall advantage) and includes a keyword-only control to isolate embedding quality.
-
-We plan to grow the corpus, add graded relevance, test query expansion impact, and measure at larger scales. Contributions to the eval set are welcome.
+The eval framework lives in `eval/` and supports model comparison, strategy comparison, and per-question failure analysis. Contributions welcome.
 
 </details>
 

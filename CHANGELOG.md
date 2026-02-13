@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Neo4j knowledge graph** — entity/statement/triple storage with vector + fulltext indexes,
+  entity resolution via embedding similarity, contradiction detection with temporal invalidation,
+  BFS traversal for multi-hop reasoning. Project-scoped. Graceful degradation when Neo4j unavailable.
+- **Combined knowledge extraction** — single LLM call at ingestion extracts entities (9 types),
+  statements (11 aspects), triples, tags, importance, and summary. Pydantic-validated structured
+  output with retry. Replaces separate enrichment when enabled.
+- **Intent-routed search (search_v2)** — LLM query router classifies intent into 5 types
+  (aspect_query, entity_lookup, temporal, exploratory, relationship) with typed handlers
+  dispatching to Neo4j graph or PostgreSQL as appropriate. Falls back to RRF on failure.
+- **Cross-encoder reranking** — Bedrock-powered reranker scores candidates after retrieval.
+  Proven +5.5 points on benchmark.
+- **LoCoMo benchmark framework** — full evaluation pipeline: dataset loader, two-pass ingestion
+  (normalize + extract), RAG answer generation, LLM-as-judge scoring, per-category breakdown,
+  parallel execution, JSON reports. Supports model comparison and strategy comparison.
+- **Two-pass ingestion strategy** — conversation normalization followed by structured fact
+  extraction for benchmark evaluation.
+- **Pipeline analysis tooling** — per-question failure analysis across 4 gates
+  (IN_DB, RRF_TOP50, RERANK_TOP10, RAG_CORRECT).
+
+### Changed
+- **Search quality section in README** — replaced specific score claims with honest "work in
+  progress" status. Previous synthetic benchmark numbers removed in favor of describing the
+  LoCoMo evaluation methodology being developed.
+- **Eval search quality metrics removed from README bullet** — no longer claims 83.8% recall@10
+  inline. Links to Search Quality section instead.
+
 ## [0.27.2] - 2026-02-12
 
 ### Fixed
@@ -707,7 +734,9 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.27.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.27.2...HEAD
+[0.27.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.27.1...v0.27.2
+[0.27.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.27.0...v0.27.1
 [0.27.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.24.0...v0.25.0
