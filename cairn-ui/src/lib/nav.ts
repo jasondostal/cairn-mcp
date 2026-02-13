@@ -12,6 +12,7 @@ import {
   Brain,
   Shield,
   PenLine,
+  MessageCircle,
 } from "lucide-react";
 
 export interface NavItem {
@@ -23,6 +24,7 @@ export interface NavItem {
 export const navItems: NavItem[] = [
   { href: "/", label: "Dashboard", icon: Activity },
   { href: "/capture", label: "Capture", icon: PenLine },
+  { href: "/chat", label: "Chat", icon: MessageCircle },
   { href: "/timeline", label: "Timeline", icon: Clock },
   { href: "/cairns", label: "Cairns", icon: Landmark },
   { href: "/search", label: "Search", icon: Search },

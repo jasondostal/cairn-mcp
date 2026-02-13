@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.0] - 2026-02-13
+
+### Added
+- **Chat page** — direct conversational interface to the embedded LLM at `/chat`. Bubble-style
+  UI with message history, keyboard submit (Enter), multi-line support (Shift+Enter), model
+  name display, and loading state. Messages are ephemeral (not stored). Uses the same LLM
+  backend configured for Cairn (Kimi K2.5 via Bedrock, Ollama, etc.).
+- `POST /api/chat` — accepts OpenAI-style `messages` array, returns LLM response + model name.
+- Chat nav item in sidebar (MessageCircle icon).
+
 ## [0.28.2] - 2026-02-13
 
 ### Added
@@ -770,7 +780,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.2...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.29.0...HEAD
+[0.29.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.2...v0.29.0
 [0.28.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.1...v0.28.2
 [0.28.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.0...v0.28.1
 [0.28.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.27.2...v0.28.0
