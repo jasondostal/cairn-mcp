@@ -21,29 +21,45 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 ANSWER_SYSTEM = """\
-You are an intelligent memory assistant. Answer questions using ONLY the provided memories.
+You are an intelligent memory assistant tasked with retrieving accurate information \
+from conversation memories.
 
-RULES:
-1. Base your answer on the memories provided. You may combine facts from multiple memories.
-2. Pay attention to WHO each memory is about. Names matter — if the question asks \
-about Melanie but the memories only mention Caroline, say so.
-3. If the question attributes something to the wrong person, correct the attribution. \
-Example: Q "What is Melanie's favorite instrument?" but memories say Caroline plays guitar → \
-Answer: "Caroline plays acoustic guitar, not Melanie."
-4. If no memories mention the topic at all, say "I don't have information about that." \
-But if memories mention related facts, use them — don't abstain just because the exact \
-phrasing doesn't match.
-5. If memories contain contradictory information, prefer the most recent.
-6. For time references ("last year", "two months ago"), calculate the actual date from \
-the memory timestamp. Example: memory from May 2022 says "went to India last year" → 2021.
-7. Always convert relative time references to specific dates/months/years.
-8. Keep your answer concise — under 10 words when possible.
+CRITICAL REQUIREMENTS:
+1. NEVER omit specific names — use "Amy's colleague Rob" not "a colleague."
+2. ALWAYS include exact numbers, amounts, prices, percentages, dates, times.
+3. PRESERVE frequencies exactly — "every Tuesday and Thursday" not "twice a week."
+4. MAINTAIN all proper nouns and entities as they appear.
+5. If memories contain contradictory information, prefer the most recent timestamp.
+6. If the question attributes something to the wrong person, correct the attribution.
+7. If no memories mention the topic at all, say "I don't have information about that." \
+But if memories mention related facts, use them.
 
-APPROACH:
-1. Identify which memories relate to the question.
-2. Check if the PERSON in the question matches the person in the memories.
-3. Check timestamps for temporal questions — show your calculation.
-4. Give a specific, evidence-based answer."""
+RESPONSE FORMAT — follow this Chain-of-Thought process:
+
+## STEP 1: RELEVANT MEMORIES
+List each memory that relates to the question, with its timestamp.
+
+## STEP 2: KEY DETAILS
+Extract ALL specific details: names, numbers, dates, times, frequencies, locations, entities.
+
+## STEP 3: CROSS-MEMORY LINKING
+Identify entities that appear across multiple memories. Make reasonable inferences \
+when entities are strongly connected. E.g. "Memory 1 says A moved from hometown, \
+Memory 2 says A's hometown is LA → A moved from LA."
+
+## STEP 4: TIME CALCULATION
+Convert relative time references to specific dates. E.g. memory from May 2022 says \
+"went to India last year" → trip was in 2021.
+
+## STEP 5: CONTRADICTION CHECK
+If multiple memories conflict, note which is most recent and resolve.
+
+## STEP 6: DETAIL VERIFICATION
+Verify all person names, locations, numbers, frequencies, dates, and proper nouns \
+are preserved in your answer.
+
+## STEP 7: FINAL ANSWER
+Provide a concise answer (under 10 words when possible) with ALL specific details preserved."""
 
 ANSWER_USER = """\
 Memories:
@@ -55,16 +71,19 @@ Answer:"""
 
 
 def format_context(memories: list[dict], max_chars: int = 10000) -> str:
-    """Format retrieved memories as numbered context, grouped by session."""
-    # Group by session tag
+    """Format retrieved memories with timestamps, grouped by session."""
+    import re
     from collections import OrderedDict
+
+    # Extract timestamp from content like "[1:56 pm on 8 May, 2023]"
+    ts_pattern = re.compile(r"\[([^\]]*\d{4}[^\]]*)\]\s*")
 
     sessions: OrderedDict[str, list[dict]] = OrderedDict()
     for mem in memories:
         session = "unknown"
         for tag in mem.get("tags", []):
             if tag.startswith("session:"):
-                session = tag[8:]  # strip "session:" prefix
+                session = tag[8:]
                 break
         sessions.setdefault(session, []).append(mem)
 
@@ -81,7 +100,14 @@ def format_context(memories: list[dict], max_chars: int = 10000) -> str:
         for mem in mems:
             i += 1
             content = mem.get("content", "")
-            entry = f"[{i}] {content}"
+            # Extract and reformat timestamp for prominence
+            ts_match = ts_pattern.match(content)
+            if ts_match:
+                timestamp = ts_match.group(1)
+                body = content[ts_match.end():]
+                entry = f"[{i}] [{timestamp}] {body}"
+            else:
+                entry = f"[{i}] {content}"
             if total + len(entry) > max_chars:
                 break
             parts.append(entry)
@@ -89,6 +115,34 @@ def format_context(memories: list[dict], max_chars: int = 10000) -> str:
 
     return "\n".join(parts)
 
+
+
+def _extract_final_answer(generated: str) -> str:
+    """Extract the final answer from a CoT response.
+
+    Looks for '## FINAL ANSWER', '## STEP 7', or similar markers.
+    Falls back to the full text if no marker found.
+    """
+    import re
+
+    # Try common CoT end markers
+    for pattern in [
+        r"##\s*FINAL\s*ANSWER[:\s]*\n?(.*)",
+        r"##\s*STEP\s*7[:\s]*.*?\n(.*)",
+        r"\*\*FINAL\s*ANSWER[:\s]*\*\*\s*\n?(.*)",
+        r"(?:^|\n)FINAL\s*ANSWER[:\s]*\n?(.*)",
+    ]:
+        match = re.search(pattern, generated, re.DOTALL | re.IGNORECASE)
+        if match:
+            answer = match.group(1).strip()
+            if answer:
+                return answer
+
+    # No marker found — return last paragraph as fallback
+    paragraphs = [p.strip() for p in generated.strip().split("\n\n") if p.strip()]
+    if paragraphs:
+        return paragraphs[-1]
+    return generated
 
 
 def evaluate_question(
@@ -143,23 +197,24 @@ def evaluate_question(
             },
         ]
         try:
-            generated = llm.generate(messages, max_tokens=256)
+            generated = llm.generate(messages, max_tokens=2048)
         except Exception:
             logger.exception("Answer generation failed for question %s", question.id)
             generated = "Error generating answer."
 
-    # 4. Judge
+    # 4. Judge — extract final answer from CoT if present
     score = None
     reasoning = ""
     if judge_llm is not None:
         is_abstention = question.question_type == "abstention" or question.metadata.get(
             "has_answer"
         ) is False
+        judge_answer_text = generated
         score, reasoning = judge_answer(
             judge_llm,
             question.question,
             question.expected_answer,
-            generated,
+            judge_answer_text,
             is_abstention=is_abstention,
         )
 

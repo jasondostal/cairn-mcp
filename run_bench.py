@@ -23,6 +23,9 @@ os.environ["CAIRN_RERANKING"] = "true"
 os.environ["CAIRN_RERANKER_BACKEND"] = "bedrock"
 os.environ["CAIRN_RERANKER_REGION"] = "us-west-2"
 
+# LLM: Kimi K2.5 for answer gen + judging
+os.environ["CAIRN_BEDROCK_MODEL"] = "moonshotai.kimi-k2.5"
+
 # Legacy features OFF
 os.environ["CAIRN_MCA_GATE"] = "false"
 os.environ["CAIRN_TYPE_ROUTING"] = "false"
