@@ -41,23 +41,9 @@ Four containers. One `docker compose up`. 13 MCP tools, a REST API, a web dashbo
 <h3 align="center">81.7% on LoCoMo</h3>
 <p align="center"><em>The standard benchmark for conversational memory systems (<a href="https://arxiv.org/abs/2402.09753">Maharana et al., ACL 2024</a>)</em></p>
 <p align="center">
-  <sub>adversarial 85.1% · open-domain 82.9% · multi-hop 79.7% · temporal 80.8% · single-hop 76.6%</sub>
+  <sub>adversarial 85.1% · open-domain 82.9% · multi-hop 79.7% · temporal 80.8% · single-hop 76.6%</sub><br>
+  <sub>Mem0 68.5% · Letta 74.0% · Zep 75.1% — scores from published papers</sub>
 </p>
-
-| Capability | Cairn | Mem0 | Zep | Letta |
-|------------|:-----:|:----:|:---:|:-----:|
-| LoCoMo accuracy | **81.7%** | 68.5% | 75.1% | 74.0% |
-| Human-in-the-loop capture | yes | — | — | — |
-| Web dashboard + UI | yes | — | yes | — |
-| MCP native | yes | — | — | — |
-| Session continuity (cairns) | yes | — | — | — |
-| Knowledge graph | yes | — | — | — |
-| Self-hosted / open source | yes | partial | partial | yes |
-| Hybrid search (vector + keyword + tag) | yes | vector only | yes | vector only |
-| Cross-encoder reranking | yes | — | — | — |
-| Chain-of-thought answer generation | yes | — | — | — |
-| Pattern discovery (clustering) | yes | — | — | — |
-| Browser + mobile capture | yes | — | — | — |
 
 ## Quick Start
 
