@@ -42,7 +42,7 @@ Four containers. One `docker compose up`. 13 MCP tools, a REST API, a web dashbo
 <p align="center"><em>The standard benchmark for conversational memory systems (<a href="https://arxiv.org/abs/2402.09753">Maharana et al., ACL 2024</a>)</em></p>
 <p align="center">
   <sub>adversarial 85.1% · open-domain 82.9% · multi-hop 79.7% · temporal 80.8% · single-hop 76.6%</sub><br>
-  <sub>Mem0 68.5% · Letta 74.0% · Zep 75.1% — scores from published papers</sub>
+  <sub>OpenAI Memory 52.9% · LangMem 58.1% · Mem0 68.5% · Letta 74.0% · Zep 75.1% — scores from published papers</sub>
 </p>
 
 ## Quick Start
