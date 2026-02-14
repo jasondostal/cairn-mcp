@@ -96,16 +96,16 @@ export default function DocsPage() {
   const typeOptions = DOC_TYPES.map((t) => ({ value: t, label: t }));
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    api
+    let cancelled = false;
+    setLoading(true);    setError(null);    api
       .docs({
         project: filters.showAllProjects ? undefined : filters.projectFilter.join(","),
         doc_type: filters.typeFilter.length ? filters.typeFilter.join(",") : undefined,
       })
-      .then((r) => setDocs(r.items))
-      .catch((err) => setError(err?.message || "Failed to load docs"))
-      .finally(() => setLoading(false));
+      .then((r) => { if (!cancelled) setDocs(r.items); })
+      .catch((err) => { if (!cancelled) setError(err?.message || "Failed to load docs"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [filters.projectFilter, filters.typeFilter, filters.showAllProjects]);
 
   return (

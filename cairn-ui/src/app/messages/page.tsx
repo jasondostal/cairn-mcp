@@ -304,9 +304,7 @@ export default function MessagesPage() {
   const [showArchived, setShowArchived] = useState(false);
 
   const loadMessages = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    api
+    setLoading(true);    setError(null);    api
       .messages({
         project: filters.showAllProjects ? undefined : filters.projectFilter.join(","),
         include_archived: showArchived ? "true" : undefined,
@@ -321,8 +319,7 @@ export default function MessagesPage() {
   }, [filters.projectFilter, showArchived, filters.showAllProjects]);
 
   useEffect(() => {
-    loadMessages();
-    const id = setInterval(loadMessages, 15_000);
+    loadMessages();    const id = setInterval(loadMessages, 15_000);
     return () => clearInterval(id);
   }, [loadMessages]);
 

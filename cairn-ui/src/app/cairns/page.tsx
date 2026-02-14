@@ -100,13 +100,13 @@ export default function CairnsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    api
+    let cancelled = false;
+    setLoading(true);    setError(null);    api
       .cairns(filters.showAllProjects ? undefined : filters.projectFilter.join(","))
-      .then(setCairns)
-      .catch((err) => setError(err?.message || "Failed to load cairns"))
-      .finally(() => setLoading(false));
+      .then((data) => { if (!cancelled) setCairns(data); })
+      .catch((err) => { if (!cancelled) setError(err?.message || "Failed to load cairns"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [filters.projectFilter, filters.showAllProjects]);
 
   return (

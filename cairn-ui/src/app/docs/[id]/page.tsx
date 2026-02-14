@@ -59,7 +59,7 @@ export default function DocDetailPage() {
           <div className="h-4 w-32 bg-muted rounded" />
           <div className="space-y-2 mt-8">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="h-4 bg-muted rounded" style={{ width: `${70 + Math.random() * 30}%` }} />
+              <div key={i} className="h-4 bg-muted rounded" style={{ width: `${70 + (i * 17 % 30)}%` }} />
             ))}
           </div>
         </div>
