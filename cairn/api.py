@@ -151,6 +151,7 @@ def create_api(svc: Services) -> FastAPI:
         "db.password", "auth.api_key", "terminal.encryption_key",
         "llm.gemini_api_key", "llm.openai_api_key",
         "embedding.openai_api_key", "neo4j.password",
+        "workspace.password",
     }
 
     def _build_settings_response():

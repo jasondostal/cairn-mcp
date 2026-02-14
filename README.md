@@ -19,6 +19,8 @@
 
 Your agent stores a decision at 2am. You capture a thought from your phone over coffee. A week later you vaguely describe what you remember and both come back. We benchmarked that claim. It holds up.
 
+*"Where did I put that singularity again? Let me just spawn a couple..."* — Drop a message in the inbox, hit spawn, and an autonomous agent picks it up with full project context. Rules, memories, trail markers — everything it needs to work like it's been on the team for months.
+
 There's a private LLM that lives inside your memory. Ask it what you decided about the auth system three weeks ago — from your phone, at midnight. It searches everything you've ever stored, pulls the details, and answers like a colleague who was in every meeting. It runs on your hardware — or on frontier models through Bedrock, just as private. Nobody else sees it.
 
 Cairn is a self-hosted memory system for AI agents and humans. Store something once — it gets embedded, enriched, linked to a knowledge graph, and connected to everything related. Hook into your IDE and every tool call gets captured automatically. At session end, everything crystallizes into a trail marker. Next session starts warm. Humans get the same pool — type a thought, slash-command it, grab a URL, share from your phone.
@@ -40,6 +42,7 @@ Four containers. One `docker compose up`. Done.
 - **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, importance score, and relationship links on store.
 - **Pattern discovery** — HDBSCAN clustering finds themes across memories. LLM writes the labels. Clusters refresh lazily.
 - **Web terminal** — SSH into your hosts from the browser. Two backends: native (xterm.js + WebSocket + asyncssh proxy with encrypted credential storage) or ttyd (iframe embed). Host management UI. Feature-flagged, disabled by default.
+- **Agent workspace** — Dispatch autonomous coding agents from the dashboard. Cairn assembles project context (rules, memories, trail) and injects it into an [OpenCode](https://github.com/opencode-ai/opencode) session. Chat, view diffs, abort. Requires a separately running OpenCode worker. Optional, disabled by default.
 - **Messages** — inter-agent communication. Agents leave notes for each other and for you. Inbox UI with project filtering, priority, and batch operations.
 - **Web dashboard** — 24 pages. Chart-heavy home dashboard with KPI sparklines, operations/token/memory-growth charts, activity heatmap. Search with score breakdowns, knowledge graph, thinking trees, live session viewer, chat with tool calling, multi-select filters, Cmd+K, keyboard nav, dark mode.
 - **Four containers, done** — MCP at `/mcp`, REST at `/api`, same process. PostgreSQL + pgvector, Neo4j knowledge graph. Bring your own LLM — Ollama, Bedrock, Gemini, or anything OpenAI-compatible.
@@ -62,6 +65,7 @@ Four containers. One `docker compose up`. Done.
 | **Session continuity** | ✅ | ⚠️ | ❌ | ❌ | ❌ | ❌ |
 | **Cross-encoder reranking** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **Clustering / patterns** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Agent dispatch** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 <sub>Feature claims verified via official docs, GitHub repos, and published papers (Feb 2026). Mem0/Zep "partial" OSS: core is open source, advanced features require cloud. OpenAI "chat only" capture: users can say "remember this" in conversation. OpenAI "limited" sessions: references past chats but no structured session markers. Zep dashboard is cloud-only. Letta dashboard is their ADE (Agent Development Environment).</sub>
 
