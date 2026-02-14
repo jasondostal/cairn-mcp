@@ -80,11 +80,20 @@ class ConsolidationEngine:
                 "applied": False,
             }
 
-        # Parse embeddings and compute pairwise similarity
+        # Parse embeddings and compute pairwise similarity (skip memories without embeddings)
+        filtered = [(r, parse_vector(r["embedding"])) for r in rows]
+        filtered = [(r, v) for r, v in filtered if v is not None]
+        if len(filtered) < 2:
+            return {
+                "project": project,
+                "memory_count": len(rows),
+                "candidates": [],
+                "recommendations": [],
+                "applied": False,
+            }
+        rows = [r for r, _ in filtered]
         ids = [r["id"] for r in rows]
-        embeddings = []
-        for r in rows:
-            embeddings.append(parse_vector(r["embedding"]))
+        embeddings = [v for _, v in filtered]
 
         embeddings_matrix = np.array(embeddings)
         sim_matrix = cosine_similarity(embeddings_matrix)
