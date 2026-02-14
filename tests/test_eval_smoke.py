@@ -30,14 +30,16 @@ VALID_MEMORY_TYPES = {
 @pytest.fixture
 def corpus():
     path = DATA_DIR / "corpus.json"
-    assert path.exists(), f"corpus.json not found at {path}"
+    if not path.exists():
+        pytest.skip("corpus.json not present (gitignored eval data)")
     return json.loads(path.read_text())
 
 
 @pytest.fixture
 def queries():
     path = DATA_DIR / "queries.json"
-    assert path.exists(), f"queries.json not found at {path}"
+    if not path.exists():
+        pytest.skip("queries.json not present (gitignored eval data)")
     return json.loads(path.read_text())
 
 
@@ -160,7 +162,8 @@ class TestEnrichmentGroundTruth:
     @pytest.fixture
     def ground_truth(self):
         path = DATA_DIR / "enrichment_ground_truth.json"
-        assert path.exists(), "enrichment_ground_truth.json not found"
+        if not path.exists():
+            pytest.skip("enrichment_ground_truth.json not present (gitignored eval data)")
         return json.loads(path.read_text())
 
     def test_has_samples(self, ground_truth):
