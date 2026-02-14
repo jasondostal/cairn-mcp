@@ -50,6 +50,9 @@ dev = [
 Homepage = "https://github.com/jasondostal/cairn-mcp"
 Repository = "https://github.com/jasondostal/cairn-mcp"
 
+[tool.setuptools.packages.find]
+include = ["cairn*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
