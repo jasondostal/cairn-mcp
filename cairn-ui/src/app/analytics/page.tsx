@@ -12,6 +12,7 @@ import { SkeletonList } from "@/components/skeleton-list";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
 
 const DAY_PRESETS = [
   { label: "7d", value: 7 },
@@ -68,8 +69,13 @@ export default function AnalyticsPage() {
                   {op.success ? "OK" : "ERR"}
                 </Badge>
                 <span className="font-mono font-medium truncate max-w-[160px]">{op.operation}</span>
+                {op.project && (
+                  <Link href={`/projects/${encodeURIComponent(op.project)}`} className="text-muted-foreground hover:text-foreground truncate max-w-[120px] transition-colors">
+                    {op.project}
+                  </Link>
+                )}
                 {op.model && (
-                  <span className="font-mono text-muted-foreground truncate max-w-[200px]">{op.model}</span>
+                  <span className="font-mono text-muted-foreground truncate max-w-[160px] hidden lg:inline">{op.model}</span>
                 )}
                 <span className="tabular-nums text-muted-foreground ml-auto shrink-0">
                   {op.latency_ms.toFixed(0)}ms
@@ -78,6 +84,11 @@ export default function AnalyticsPage() {
                   <span className="tabular-nums text-muted-foreground shrink-0">
                     {op.tokens_in}/{op.tokens_out}t
                   </span>
+                )}
+                {op.session_name && (
+                  <Link href={`/sessions`} className="font-mono text-muted-foreground/60 hover:text-foreground truncate max-w-[100px] hidden xl:inline transition-colors" title={op.session_name}>
+                    {op.session_name.slice(0, 12)}
+                  </Link>
                 )}
                 <span className="text-muted-foreground shrink-0">
                   {new Date(op.timestamp).toLocaleTimeString()}
