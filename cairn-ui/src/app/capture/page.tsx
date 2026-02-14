@@ -545,7 +545,7 @@ function CaptureExtras() {
                 capture the URL + selected text.
               </p>
               <a
-                href="javascript:void(window.open('https://cairn.witekdivers.com/capture?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title)+'&text='+encodeURIComponent(window.getSelection().toString()),'_blank','width=600,height=600'))"
+                href={`javascript:void(window.open('${typeof window !== 'undefined' ? window.location.origin : ''}/capture?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title)+'&text='+encodeURIComponent(window.getSelection().toString()),'_blank','width=600,height=600'))`}
                 className="inline-block px-3 py-1.5 rounded-md border bg-muted text-xs font-mono hover:bg-accent transition-colors"
                 onClick={(e) => e.preventDefault()}
               >
@@ -565,7 +565,7 @@ function CaptureExtras() {
                 Create an Apple Shortcut that POSTs to:
               </p>
               <code className="block text-xs bg-muted px-2 py-1 rounded">
-                POST https://cairn.witekdivers.com/api/ingest
+                POST https://your-cairn-host/api/ingest
               </code>
               <p className="text-xs text-muted-foreground">
                 Body: <code>{`{content, url, project, source: "ios-shortcut"}`}</code>

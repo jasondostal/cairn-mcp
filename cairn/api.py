@@ -1041,10 +1041,14 @@ def create_api(svc: Services) -> FastAPI:
     # GET /bookmarklet.js — browser bookmarklet for quick capture
     # ------------------------------------------------------------------
     @router.get("/bookmarklet.js")
-    def api_bookmarklet():
+    def api_bookmarklet(request: Request):
+        # Derive capture URL from request host so it works on any deployment
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+        host = request.headers.get("x-forwarded-host", request.headers.get("host", "localhost:3000"))
+        base = f"{scheme}://{host}"
         js = (
             "javascript:void(window.open("
-            "'https://cairn.witekdivers.com/capture"
+            f"'{base}/capture"
             "?url='+encodeURIComponent(location.href)"
             "+'&title='+encodeURIComponent(document.title)"
             "+'&text='+encodeURIComponent(window.getSelection().toString()),"
