@@ -1,13 +1,13 @@
 # Roadmap
 
-Current: **v0.34.0** — Editable settings with DB persistence.
+Current: **v0.35.1** — QoL batch, README overhaul, docs accuracy pass.
 
 ---
 
 ## Next Up
 
 ### UI Interactive Editing
-Turn the dashboard from read-only into a working interface. Edit memories inline, complete/update tasks, edit markdown content, update task status — all from the browser.
+Turn the dashboard from read-only into a working interface. Edit memories inline, edit markdown content, update task status — all from the browser. (Task completion and terminal host editing shipped in v0.35.1.)
 
 ### Graph Entity Management
 UI for Neo4j knowledge graph entities: visualize entity nodes, tag and merge duplicates, correct entity types, browse relationships. Depends on graph extraction being populated.
@@ -21,6 +21,31 @@ During cairn synthesis, compare session event digests against high-importance pr
 ---
 
 ## Shipped
+
+### v0.35.1 — QoL Batch + Docs ✓
+
+Dashboard layout, density, and polish.
+
+- [x] **Dashboard layout rearranged** — Memory Growth + Tokens (2-col), Heatmap (full), Health, Ops + Cost (2-col), Model + Project tables, Type badges. Removed redundant Projects grid.
+- [x] **Task completion from UI** — `POST /tasks/{id}/complete` endpoint + Mark Complete button
+- [x] **Terminal host editing** — edit dialog with pre-fill, pencil icon on hover
+- [x] **Chat persistence** — sessionStorage (capped 100), rAF scroll fix, New Chat button
+- [x] **Ops log density** — dense rows, project/session links, model column
+- [x] **Token chart readability** — unstacked series, differentiated fill opacity
+- [x] **Sidebar scroll fix** — `overflow-y-auto` on desktop nav
+- [x] **Chat LLM prompt tightened** — send_message restricted to async-only
+- [x] **Analytics labels** — `(none)` → `System`, `(no project)` → `Unassigned`
+- [x] **README overhaul** — new intro, accurate counts (15 tools, 55 endpoints, 24 pages, 17 migrations), synced embedded compose, added missing config vars
+- [x] **All docs accuracy pass** — ROADMAP, CHANGELOG, cairn-ui/README, hooks README, pyproject.toml
+
+### v0.35.0 — Voice-Aware Extraction + Hook Auth ✓
+
+- [x] **Voice-aware knowledge extraction** — speaker tag for extraction quality
+- [x] **Hook auth support** — API key header in example hooks
+
+### v0.34.2 — MCP Auth Fix ✓
+
+- [x] **Remove MCP endpoint auth** — Claude Code OAuth discovery incompatibility
 
 ### v0.34.0 — Editable Settings ✓
 

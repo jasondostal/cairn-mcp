@@ -931,11 +931,13 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.34.2...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.35.1...HEAD
+[0.35.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.35.0...v0.35.1
+[0.35.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.34.2...v0.35.0
 [0.34.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.34.0...v0.34.2
 [0.34.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.31.0...v0.33.0
-[0.31.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.30.1...v0.31.0
+[0.31.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.30.0...v0.31.0
 [0.30.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.2...v0.29.0
 [0.28.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.1...v0.28.2

@@ -17,11 +17,15 @@
 
 ---
 
-Your AI starts every session from scratch. Your best ideas vanish before you can write them down. Cairn fixes both — persistent memory for agents and humans, stored once and found always.
+Your agent stores a decision at 2am. You capture a thought from your phone over coffee. A week later you vaguely describe what you remember and both come back. We benchmarked that claim. It holds up.
 
-**Agents remember across sessions.** Decisions, learnings, and dead ends are captured automatically. Session markers (*cairns*) let the next agent pick up where the last one left off. **Humans capture thoughts instantly.** Type a thought, slash-command it into a category, and move on. Grab a URL from your browser with one click. Share from your phone. Everything lands in the same searchable pool.
+There's a private LLM that lives inside your memory. Ask it what you decided about the auth system three weeks ago — from your phone, at midnight. It searches everything you've ever stored, pulls the details, and answers like a colleague who was in every meeting. It runs on your hardware — or on frontier models through Bedrock, just as private. Nobody else sees it.
 
-Four containers. One `docker compose up`. 15 MCP tools, a REST API, a web dashboard, a web terminal, and browser/mobile capture.
+Cairn is a self-hosted memory system for AI agents and humans. Store something once — it gets embedded, enriched, linked to a knowledge graph, and connected to everything related. Hook into your IDE and every tool call gets captured automatically. At session end, everything crystallizes into a trail marker. Next session starts warm. Humans get the same pool — type a thought, slash-command it, grab a URL, share from your phone.
+
+There's a web dashboard — browse your documents, watch session replays, explore a knowledge graph, see analytics and patterns. What your agents actually did, not just what they told you.
+
+Four containers. One `docker compose up`. Done.
 
 <p align="center">
   <img src="images/cairn-capture-screenshot.jpg" alt="Cairn capture page with slash commands" width="700">
@@ -37,7 +41,7 @@ Four containers. One `docker compose up`. 15 MCP tools, a REST API, a web dashbo
 - **Pattern discovery** — HDBSCAN clustering finds themes across memories. LLM writes the labels. Clusters refresh lazily.
 - **Web terminal** — SSH into your hosts from the browser. Two backends: native (xterm.js + WebSocket + asyncssh proxy with encrypted credential storage) or ttyd (iframe embed). Host management UI. Feature-flagged, disabled by default.
 - **Messages** — inter-agent communication. Agents leave notes for each other and for you. Inbox UI with project filtering, priority, and batch operations.
-- **Web dashboard** — 16 pages. Chart-heavy home dashboard with KPI sparklines, operations/token/memory-growth charts, activity heatmap. Search with score breakdowns, knowledge graph, thinking trees, live session viewer, agentic chat, multi-select filters, Cmd+K, keyboard nav, dark mode.
+- **Web dashboard** — 24 pages. Chart-heavy home dashboard with KPI sparklines, operations/token/memory-growth charts, activity heatmap. Search with score breakdowns, knowledge graph, thinking trees, live session viewer, chat with tool calling, multi-select filters, Cmd+K, keyboard nav, dark mode.
 - **Four containers, done** — MCP at `/mcp`, REST at `/api`, same process. PostgreSQL + pgvector, Neo4j knowledge graph. Bring your own LLM — Ollama, Bedrock, Gemini, or anything OpenAI-compatible.
 
 <h3 align="center">81.7% on LoCoMo</h3>
@@ -103,6 +107,15 @@ services:
       CAIRN_AUTH_HEADER: "${CAIRN_AUTH_HEADER:-X-API-Key}"
       CAIRN_TRANSPORT: "${CAIRN_TRANSPORT:-http}"
       CAIRN_EVENT_ARCHIVE_DIR: "${CAIRN_EVENT_ARCHIVE_DIR:-/data/events}"
+      # Embedding backend (bedrock or local)
+      CAIRN_EMBEDDING_BACKEND: "${CAIRN_EMBEDDING_BACKEND:-local}"
+      CAIRN_EMBEDDING_DIMENSIONS: "${CAIRN_EMBEDDING_DIMENSIONS:-384}"
+      CAIRN_EMBEDDING_BEDROCK_MODEL: "${CAIRN_EMBEDDING_BEDROCK_MODEL:-amazon.titan-embed-text-v2:0}"
+      # Neo4j graph backend (set CAIRN_GRAPH_BACKEND=neo4j to enable)
+      CAIRN_GRAPH_BACKEND: "${CAIRN_GRAPH_BACKEND:-}"
+      CAIRN_NEO4J_URI: "${CAIRN_NEO4J_URI:-bolt://cairn-graph:7687}"
+      CAIRN_NEO4J_USER: "${CAIRN_NEO4J_USER:-neo4j}"
+      CAIRN_NEO4J_PASSWORD: "${CAIRN_NEO4J_PASSWORD:-cairn-dev-password}"
       # AWS credentials for Bedrock (ignored when using Ollama)
       AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
       AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
@@ -111,9 +124,6 @@ services:
       - "${CAIRN_HTTP_PORT:-8000}:8000"
     volumes:
       - cairn-events:/data/events
-    # Uncomment to mount AWS credentials for Bedrock:
-    # volumes (append to above):
-    #   - ~/.aws/credentials:/home/cairn/.aws/credentials:ro
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/status')\""]
       interval: 15s
@@ -158,9 +168,29 @@ services:
       timeout: 5s
       retries: 5
 
+  cairn-graph:
+    image: neo4j:5-community
+    container_name: cairn-graph
+    restart: unless-stopped
+    ports:
+      - "${CAIRN_NEO4J_HTTP_PORT:-7474}:7474"
+      - "${CAIRN_NEO4J_BOLT_PORT:-7687}:7687"
+    environment:
+      NEO4J_AUTH: "${CAIRN_NEO4J_USER:-neo4j}/${CAIRN_NEO4J_PASSWORD:-cairn-dev-password}"
+      NEO4J_PLUGINS: '["apoc"]'
+    volumes:
+      - cairn-neo4j:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
 volumes:
   cairn-pgdata:
   cairn-events:
+  cairn-neo4j:
 ```
 
 </details>
@@ -217,7 +247,7 @@ Note: stdio connects one client directly to the container. HTTP is preferred —
 
 ### 3. Store your first memory
 
-Once connected, your agent can immediately use all 13 tools. Try:
+Once connected, your agent can immediately use all 15 tools. Try:
 
 > "Remember that we chose PostgreSQL with pgvector for the storage layer because it gives us hybrid search without a separate vector database."
 
@@ -321,13 +351,16 @@ No hooks? No problem. The `cairns` tool works without them — the agent can cal
 </details>
 
 <details>
-<summary><strong>REST API</strong> — 50 endpoints</summary>
+<summary><strong>REST API</strong> — 55 endpoints</summary>
 
 REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Optional API key auth when `CAIRN_AUTH_ENABLED=true`.
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/status` | System health, version, memory counts, cluster info |
+| `GET /api/settings` | Current settings with source tracking and pending restart flag |
+| `PATCH /api/settings` | Bulk update editable settings |
+| `DELETE /api/settings/{key}` | Remove a single DB setting override |
 | `GET /api/search?q=&project=&type=&mode=&limit=` | Hybrid search (multi-select: `project=a,b`) |
 | `GET /api/memories/:id` | Single memory with cluster context |
 | `GET /api/projects` | All projects with memory counts |
@@ -336,6 +369,7 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Opt
 | `GET /api/docs/:id` | Single document with full content |
 | `GET /api/clusters?project=&topic=` | Clusters with member lists |
 | `GET /api/tasks?project=` | Tasks for a project |
+| `POST /api/tasks/{id}/complete` | Mark a task as completed |
 | `GET /api/messages/unread-count?project=` | Unread message count |
 | `GET /api/messages?project=` | Message inbox |
 | `POST /api/messages` | Send a message |
@@ -483,6 +517,19 @@ All via environment variables:
 | `CAIRN_SSH_ENCRYPTION_KEY` | *(empty)* | Fernet key for encrypting SSH credentials (native mode). Generate: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 | `CAIRN_TERMINAL_MAX_SESSIONS` | `5` | Max concurrent terminal sessions |
 | `CAIRN_TERMINAL_CONNECT_TIMEOUT` | `30` | SSH connect timeout in seconds (native mode) |
+| `CAIRN_RERANKING` | `false` | Enable cross-encoder reranking after retrieval |
+| `CAIRN_RERANKER_BACKEND` | *(empty)* | Reranker provider: `local` (cross-encoder) or `bedrock` (Amazon Rerank) |
+| `CAIRN_RERANKER_MODEL` | *(empty)* | Local cross-encoder model name |
+| `CAIRN_RERANK_CANDIDATES` | `50` | Number of candidates to rerank |
+| `CAIRN_RERANKER_BEDROCK_MODEL` | *(empty)* | Bedrock reranker model ID |
+| `CAIRN_RERANKER_REGION` | *(empty)* | AWS region for Bedrock reranker (falls back to `AWS_DEFAULT_REGION`) |
+| `CAIRN_GRAPH_BACKEND` | *(disabled)* | Graph backend: `neo4j` to enable knowledge graph |
+| `CAIRN_NEO4J_URI` | `bolt://cairn-graph:7687` | Neo4j Bolt connection URI |
+| `CAIRN_NEO4J_USER` | `neo4j` | Neo4j username |
+| `CAIRN_NEO4J_PASSWORD` | *(empty)* | Neo4j password |
+| `CAIRN_NEO4J_DATABASE` | `neo4j` | Neo4j database name |
+| `CAIRN_KNOWLEDGE_EXTRACTION` | `false` | Enable combined entity/statement/triple extraction on store |
+| `CAIRN_SEARCH_V2` | `false` | Enable intent-routed search with graph handlers |
 
 </details>
 
@@ -521,7 +568,7 @@ All bulk operations support `--dry-run` for preview.
 
 ### Database Schema
 
-16 migrations:
+17 migrations:
 
 | Migration | Tables / Changes |
 |-----------|--------|
@@ -541,6 +588,7 @@ All bulk operations support `--dry-run` for preview.
 | **014 Author** | `author` column on `memories` for speaker attribution |
 | **015 Messages** | `messages` — inter-agent communication with priority and read state |
 | **016 SSH Hosts** | `ssh_hosts` — terminal host management with encrypted credentials |
+| **017 Settings** | `app_settings` — runtime config persistence with key-value store |
 
 </details>
 
