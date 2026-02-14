@@ -60,6 +60,7 @@ const SECRET_KEYS = new Set([
   "llm.gemini_api_key", "llm.openai_api_key",
   "auth.api_key", "terminal.encryption_key",
   "db.password", "embedding.openai_api_key",
+  "workspace.password",
 ]);
 
 // --- Toggle component ---

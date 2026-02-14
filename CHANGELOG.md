@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — v0.36.0 "Agent Workspace"
+## [0.36.0] - 2026-02-14 — "Agent Workspace"
 
 ### Added
 - **Agent Workspace** — Cairn as orchestration layer above OpenCode execution engines.
@@ -40,6 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Default Bedrock model** — `us.meta.llama3-2-90b-instruct-v1:0` → `moonshotai.kimi-k2.5`.
 - **MCP tool init delay** — 3-second delay between session creation and first async
   message, allowing OpenCode to finish MCP tool initialization before the agent starts.
+
+### Fixed
+- **Workspace password exposed in settings API** — `workspace.password` was missing from
+  `_SECRET_SETTINGS` redaction list, causing the OpenCode password to be returned in
+  plaintext via `GET /api/settings`.
 
 ## [0.35.2] - 2026-02-14
 
