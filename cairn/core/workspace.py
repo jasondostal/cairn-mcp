@@ -12,6 +12,11 @@ import time
 from typing import Any
 
 from cairn.core.analytics import track_operation
+from cairn.core.budget import estimate_tokens, truncate_to_budget
+from cairn.core.constants import (
+    WORKSPACE_ALLOC_MEMORIES, WORKSPACE_ALLOC_RULES,
+    WORKSPACE_ALLOC_TASKS, WORKSPACE_ALLOC_TRAIL,
+)
 from cairn.core.messages import MessageManager
 from cairn.core.utils import get_or_create_project, get_project
 from cairn.integrations.opencode import OpenCodeClient, OpenCodeError
@@ -36,11 +41,13 @@ class WorkspaceManager:
         *,
         message_manager: MessageManager | None = None,
         default_agent: str = "cairn-build",
+        budget_tokens: int = 6000,
     ):
         self.db = db
         self.opencode = opencode
         self.message_manager = message_manager
         self.default_agent = default_agent
+        self.budget_tokens = budget_tokens
 
     # -- context assembly ----------------------------------------------------
 
@@ -101,41 +108,68 @@ class WorkspaceManager:
         return header + "\n\n".join(sections)
 
     def _build_full_context(self, project: str, *, task: str | None = None) -> str:
-        """Rich context for interactive sessions — full grimoire."""
-        sections: list[str] = []
+        """Rich context for interactive sessions — full grimoire.
 
-        # Global + project rules
+        Budget is allocated across sections by priority:
+        - Rules 35%, Memories 30%, Trail 20%, Tasks 15%
+        If a section uses less than its allocation, the remainder flows
+        to lower-priority sections.
+        """
+        total_budget = self.budget_tokens
+        sections: list[str] = []
+        budget_remaining = total_budget
+
+        # Allocate budgets (tokens) per section
+        budget_rules = int(total_budget * WORKSPACE_ALLOC_RULES)
+        budget_memories = int(total_budget * WORKSPACE_ALLOC_MEMORIES)
+        budget_trail = int(total_budget * WORKSPACE_ALLOC_TRAIL)
+        budget_tasks = int(total_budget * WORKSPACE_ALLOC_TASKS)
+
+        # Section 1: Rules (highest priority)
         rules = self._fetch_rules(project, include_global=True)
         if rules:
-            sections.append("## Rules & Conventions\n" + "\n".join(
-                f"- {r['content'][:200]}" for r in rules
-            ))
+            rules_text = self._format_rules(rules, budget_rules)
+            rules_tokens = estimate_tokens(rules_text)
+            sections.append(rules_text)
+            budget_remaining -= rules_tokens
+            # Surplus flows to memories
+            surplus = max(0, budget_rules - rules_tokens)
+            budget_memories += surplus
+        else:
+            budget_memories += budget_rules
 
-        # Recent cairn trail
-        trail = self._fetch_trail(project, limit=3)
-        if trail:
-            trail_lines = []
-            for c in trail:
-                title = c.get("title") or c.get("session_name", "untitled")
-                narrative = c.get("narrative", "")[:150]
-                trail_lines.append(f"- **{title}**: {narrative}")
-            sections.append("## Recent Sessions\n" + "\n".join(trail_lines))
-
-        # Relevant memories
+        # Section 2: Memories
         if task:
             memories = self._search_memories(project, task, limit=5)
             if memories:
-                mem_lines = []
-                for m in memories:
-                    summary = m.get("summary") or m.get("content", "")[:150]
-                    mem_lines.append(f"- [{m.get('memory_type', 'note')}] {summary}")
-                sections.append("## Relevant Context\n" + "\n".join(mem_lines))
+                mem_text = self._format_memories(memories, budget_memories)
+                mem_tokens = estimate_tokens(mem_text)
+                sections.append(mem_text)
+                budget_remaining -= mem_tokens
+                surplus = max(0, budget_memories - mem_tokens)
+                budget_trail += surplus
+            else:
+                budget_trail += budget_memories
+        else:
+            budget_trail += budget_memories
 
-        # Pending tasks
-        tasks = self._fetch_tasks(project)
-        if tasks:
-            task_lines = [f"- {t['description']}" for t in tasks[:5]]
-            sections.append("## Pending Tasks\n" + "\n".join(task_lines))
+        # Section 3: Trail
+        trail = self._fetch_trail(project, limit=3)
+        if trail:
+            trail_text = self._format_trail(trail, budget_trail)
+            trail_tokens = estimate_tokens(trail_text)
+            sections.append(trail_text)
+            budget_remaining -= trail_tokens
+            surplus = max(0, budget_trail - trail_tokens)
+            budget_tasks += surplus
+        else:
+            budget_tasks += budget_trail
+
+        # Section 4: Tasks (lowest priority)
+        tasks_data = self._fetch_tasks(project)
+        if tasks_data:
+            tasks_text = self._format_tasks(tasks_data, budget_tasks)
+            sections.append(tasks_text)
 
         if not sections:
             return f"Project: {project}\nNo prior context found."
@@ -491,6 +525,66 @@ class WorkspaceManager:
             return []
 
     # -- private helpers -----------------------------------------------------
+
+    def _format_rules(self, rules: list[dict], budget: int) -> str:
+        """Format rules section within a token budget."""
+        header = "## Rules & Conventions\n"
+        lines: list[str] = []
+        tokens_used = estimate_tokens(header)
+        for r in rules:
+            content = truncate_to_budget(r["content"], 200, suffix="...")
+            line = f"- {content}"
+            line_tokens = estimate_tokens(line)
+            if budget > 0 and tokens_used + line_tokens > budget and lines:
+                break
+            lines.append(line)
+            tokens_used += line_tokens
+        return header + "\n".join(lines)
+
+    def _format_memories(self, memories: list[dict], budget: int) -> str:
+        """Format memories section within a token budget."""
+        header = "## Relevant Context\n"
+        lines: list[str] = []
+        tokens_used = estimate_tokens(header)
+        for m in memories:
+            summary = m.get("summary") or m.get("content", "")[:150]
+            line = f"- [{m.get('memory_type', 'note')}] {summary}"
+            line_tokens = estimate_tokens(line)
+            if budget > 0 and tokens_used + line_tokens > budget and lines:
+                break
+            lines.append(line)
+            tokens_used += line_tokens
+        return header + "\n".join(lines)
+
+    def _format_trail(self, trail: list[dict], budget: int) -> str:
+        """Format trail section within a token budget."""
+        header = "## Recent Sessions\n"
+        lines: list[str] = []
+        tokens_used = estimate_tokens(header)
+        for c in trail:
+            title = c.get("title") or c.get("session_name", "untitled")
+            narrative = c.get("narrative", "")[:150]
+            line = f"- **{title}**: {narrative}"
+            line_tokens = estimate_tokens(line)
+            if budget > 0 and tokens_used + line_tokens > budget and lines:
+                break
+            lines.append(line)
+            tokens_used += line_tokens
+        return header + "\n".join(lines)
+
+    def _format_tasks(self, tasks: list[dict], budget: int) -> str:
+        """Format tasks section within a token budget."""
+        header = "## Pending Tasks\n"
+        lines: list[str] = []
+        tokens_used = estimate_tokens(header)
+        for t in tasks[:5]:
+            line = f"- {t['description']}"
+            line_tokens = estimate_tokens(line)
+            if budget > 0 and tokens_used + line_tokens > budget and lines:
+                break
+            lines.append(line)
+            tokens_used += line_tokens
+        return header + "\n".join(lines)
 
     def _fetch_rules(self, project: str, *, include_global: bool = True) -> list[dict]:
         """Fetch rules for a project, optionally including __global__."""

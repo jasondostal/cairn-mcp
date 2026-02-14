@@ -6,7 +6,10 @@ from contextlib import asynccontextmanager
 from mcp.server.fastmcp import FastMCP
 
 from cairn.config import apply_overrides, load_config
+from cairn.core.budget import apply_list_budget, truncate_to_budget
 from cairn.core.constants import (
+    BUDGET_CAIRN_NARRATIVE_CHARS, BUDGET_INSIGHTS_PER_ITEM,
+    BUDGET_RECALL_PER_ITEM, BUDGET_RULES_PER_ITEM, BUDGET_SEARCH_PER_ITEM,
     MAX_CAIRN_STACK, MAX_CONTENT_SIZE, MAX_LIMIT, MAX_NAME_LENGTH,
     MAX_RECALL_IDS, VALID_MEMORY_TYPES, VALID_SEARCH_MODES,
     CairnAction, MemoryAction,
@@ -323,6 +326,22 @@ def search(
             limit=limit,
             include_full=include_full,
         )
+
+        # Apply budget cap
+        budget = config.budget.search
+        if budget > 0 and results:
+            content_key = "content" if include_full else "summary"
+            results, meta = apply_list_budget(
+                results, budget, content_key,
+                per_item_max=BUDGET_SEARCH_PER_ITEM,
+                overflow_message=(
+                    "...{omitted} more results omitted. "
+                    "Use recall(ids=[...]) for full content, or narrow your query."
+                ),
+            )
+            if meta["omitted"] > 0:
+                results.append({"_overflow": meta["overflow_message"]})
+
         # Confidence gating: wrap results with assessment when active
         confidence = search_engine.assess_confidence(query, results)
         if confidence is not None:
@@ -359,7 +378,22 @@ def recall(ids: list[int]) -> list[dict]:
             return {"error": "ids list is required and cannot be empty"}
         if len(ids) > MAX_RECALL_IDS:
             return {"error": f"Maximum {MAX_RECALL_IDS} IDs per recall. Batch into multiple calls."}
-        return memory_store.recall(ids)
+        results = memory_store.recall(ids)
+
+        # Apply budget cap
+        budget = config.budget.recall
+        if budget > 0 and results:
+            results, meta = apply_list_budget(
+                results, budget, "content",
+                per_item_max=BUDGET_RECALL_PER_ITEM,
+                overflow_message=(
+                    "...{omitted} memories truncated from response. "
+                    "Recall fewer IDs per call for full content."
+                ),
+            )
+            if meta["omitted"] > 0:
+                results.append({"_overflow": meta["overflow_message"]})
+        return results
     except Exception as e:
         logger.exception("recall failed")
         return {"error": f"Internal error: {e}"}
@@ -460,7 +494,20 @@ def rules(project: str | None = None) -> list[dict]:
     """
     try:
         result = memory_store.get_rules(project)
-        return result["items"]
+        items = result["items"]
+        budget = config.budget.rules
+        if budget > 0 and items:
+            items, meta = apply_list_budget(
+                items, budget, "content",
+                per_item_max=BUDGET_RULES_PER_ITEM,
+                overflow_message=(
+                    "...{omitted} more rules omitted. "
+                    "Use search(query='topic', memory_type='rule') for targeted retrieval."
+                ),
+            )
+            if meta["omitted"] > 0:
+                items.append({"_overflow": meta["overflow_message"]})
+        return items
     except Exception as e:
         logger.exception("rules failed")
         return {"error": f"Internal error: {e}"}
@@ -514,12 +561,30 @@ def insights(
 
         last_run = cluster_engine.get_last_run(project)
 
-        return {
+        # Apply budget cap to cluster summaries
+        budget = config.budget.insights
+        overflow_msg = ""
+        if budget > 0 and clusters:
+            clusters, meta = apply_list_budget(
+                clusters, budget, "summary",
+                per_item_max=BUDGET_INSIGHTS_PER_ITEM,
+                overflow_message=(
+                    "...{omitted} clusters omitted. "
+                    "Use a topic filter or increase limit for targeted results."
+                ),
+            )
+            if meta["omitted"] > 0:
+                overflow_msg = meta["overflow_message"]
+
+        result = {
             "status": "reclustered" if reclustered else "cached",
             "cluster_count": len(clusters),
             "clusters": clusters,
             "last_clustered_at": last_run["created_at"] if last_run else None,
         }
+        if overflow_msg:
+            result["_overflow"] = overflow_msg
+        return result
     except Exception as e:
         logger.exception("insights failed")
         return {"error": f"Internal error: {e}"}
@@ -884,7 +949,28 @@ def cairns(
         if action == CairnAction.STACK:
             stack_limit = min(limit, MAX_CAIRN_STACK)
             proj = project.strip() if project and project.strip() else None
-            return cairn_manager.stack(proj, limit=stack_limit)
+            result = cairn_manager.stack(proj, limit=stack_limit)
+
+            # Apply budget cap to stack results
+            budget = config.budget.cairn_stack
+            if budget > 0 and isinstance(result, dict) and "cairns" in result:
+                cairn_items = result["cairns"]
+                # Truncate narratives before budget check
+                for item in cairn_items:
+                    narrative = item.get("narrative", "")
+                    if len(narrative) > BUDGET_CAIRN_NARRATIVE_CHARS:
+                        item["narrative"] = narrative[:BUDGET_CAIRN_NARRATIVE_CHARS] + "..."
+                cairn_items, meta = apply_list_budget(
+                    cairn_items, budget, "narrative",
+                    overflow_message=(
+                        "...{omitted} older cairns omitted. "
+                        "Use cairns(action='get', cairn_id=N) for detail."
+                    ),
+                )
+                result["cairns"] = cairn_items
+                if meta["omitted"] > 0:
+                    result["_overflow"] = meta["overflow_message"]
+            return result
 
         if action == CairnAction.GET:
             if not cairn_id:
