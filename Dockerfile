@@ -17,8 +17,9 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
 # Install from lockfile for reproducible builds
+# --extra-index-url needed so pip can resolve torch+cpu from the CPU-only wheel index
 COPY requirements.lock .
-RUN pip install --no-cache-dir -r requirements.lock
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.lock
 
 # Copy application code
 COPY pyproject.toml .
