@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from cairn.config import EDITABLE_KEYS, apply_overrides, config_to_flat, env_values
 from cairn.core.constants import (
     MAX_EVENT_BATCH_SIZE,
     VALID_DOC_TYPES,
@@ -19,6 +20,7 @@ from cairn.core.constants import (
 from cairn.core.services import Services
 from cairn.core.status import get_status
 from cairn.core.utils import get_or_create_project
+from cairn.storage import settings_store
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +108,7 @@ def create_api(svc: Services) -> FastAPI:
 
     app = FastAPI(
         title="Cairn API",
-        version="0.33.0",
+        version="0.34.0",
         description="REST API for the Cairn web UI and content ingestion.",
         docs_url="/swagger",
         redoc_url=None,
@@ -139,24 +141,145 @@ def create_api(svc: Services) -> FastAPI:
         return get_status(db, config)
 
     # ------------------------------------------------------------------
-    # GET /settings — current configuration (read-only)
+    # GET /settings — full configuration with source tracking
     # ------------------------------------------------------------------
+    env_snapshot = env_values()
+
+    _SECRET_SETTINGS = {
+        "db.password", "auth.api_key", "terminal.encryption_key",
+        "llm.gemini_api_key", "llm.openai_api_key",
+        "embedding.openai_api_key", "neo4j.password",
+    }
+
+    def _build_settings_response():
+        """Build the settings response with values, sources, and editable info."""
+        flat = config_to_flat(config)
+
+        # Redact secrets — frontend uses password inputs anyway
+        for key in _SECRET_SETTINGS:
+            if key in flat and flat[key]:
+                flat[key] = "••••••••"
+
+        # Load DB overrides to determine source per key
+        try:
+            db_overrides = settings_store.load_all(db)
+        except Exception:
+            db_overrides = {}
+
+        sources: dict[str, str] = {}
+        for key in flat:
+            if key in db_overrides:
+                sources[key] = "db"
+            elif env_snapshot.get(key) is not None:
+                sources[key] = "env"
+            else:
+                sources[key] = "default"
+
+        # pending_restart: any DB override that differs from running config
+        # Use unredacted values for comparison
+        pending_restart = False
+        if db_overrides:
+            running_flat = config_to_flat(config)
+            from cairn.server import _base_config
+            hypothetical = apply_overrides(_base_config, db_overrides)
+            hypothetical_flat = config_to_flat(hypothetical)
+            for key in db_overrides:
+                if key in running_flat and key in hypothetical_flat:
+                    if str(running_flat[key]) != str(hypothetical_flat[key]):
+                        pending_restart = True
+                        break
+
+        return {
+            "values": flat,
+            "sources": sources,
+            "editable": sorted(EDITABLE_KEYS),
+            "pending_restart": pending_restart,
+        }
+
     @router.get("/settings")
     def api_settings():
-        from dataclasses import fields
-        caps = {f.name: getattr(config.capabilities, f.name) for f in fields(config.capabilities) if f.name != "active_list"}
-        return {
-            "embedding": {"backend": config.embedding.backend, "model": config.embedding.model, "dimensions": config.embedding.dimensions},
-            "llm": {"backend": config.llm.backend, "model": _llm_model_name(config)},
-            "reranker": {"backend": config.reranker.backend, "model": config.reranker.model, "candidates": config.reranker.candidates},
-            "terminal": {"backend": config.terminal.backend},
-            "auth": {"enabled": config.auth.enabled},
-            "analytics": {"enabled": config.analytics.enabled, "retention_days": config.analytics.retention_days},
-            "enrichment_enabled": config.enrichment_enabled,
-            "capabilities": caps,
-            "transport": config.transport,
-            "http_port": config.http_port,
-        }
+        return _build_settings_response()
+
+    # ------------------------------------------------------------------
+    # PATCH /settings — bulk update editable settings
+    # ------------------------------------------------------------------
+    _VALID_LLM_BACKENDS = {"ollama", "bedrock", "gemini", "openai"}
+    _VALID_RERANKER_BACKENDS = {"local", "bedrock"}
+    _VALID_TERMINAL_BACKENDS = {"native", "ttyd", "disabled"}
+
+    @router.patch("/settings")
+    def api_settings_update(body: dict):
+        if not body:
+            raise HTTPException(status_code=400, detail="Request body is required")
+
+        errors = []
+        updates: dict[str, str] = {}
+
+        for key, value in body.items():
+            if key not in EDITABLE_KEYS:
+                errors.append(f"Key '{key}' is not editable")
+                continue
+
+            str_value = str(value).strip()
+
+            # Validate enum fields
+            if key == "llm.backend" and str_value not in _VALID_LLM_BACKENDS:
+                errors.append(f"llm.backend must be one of: {', '.join(sorted(_VALID_LLM_BACKENDS))}")
+                continue
+            if key == "reranker.backend" and str_value not in _VALID_RERANKER_BACKENDS:
+                errors.append(f"reranker.backend must be one of: {', '.join(sorted(_VALID_RERANKER_BACKENDS))}")
+                continue
+            if key == "terminal.backend" and str_value not in _VALID_TERMINAL_BACKENDS:
+                errors.append(f"terminal.backend must be one of: {', '.join(sorted(_VALID_TERMINAL_BACKENDS))}")
+                continue
+
+            # Validate numeric fields
+            if key in ("reranker.candidates", "analytics.retention_days",
+                       "terminal.max_sessions", "terminal.connect_timeout",
+                       "ingest_chunk_size", "ingest_chunk_overlap"):
+                try:
+                    n = int(str_value)
+                    if n < 1:
+                        errors.append(f"{key} must be a positive integer")
+                        continue
+                except ValueError:
+                    errors.append(f"{key} must be a valid integer")
+                    continue
+
+            if key in ("analytics.cost_embedding_per_1k", "analytics.cost_llm_input_per_1k",
+                       "analytics.cost_llm_output_per_1k"):
+                try:
+                    f = float(str_value)
+                    if f < 0:
+                        errors.append(f"{key} must be non-negative")
+                        continue
+                except ValueError:
+                    errors.append(f"{key} must be a valid number")
+                    continue
+
+            # Normalize booleans
+            if key.startswith("capabilities.") or key in ("analytics.enabled", "auth.enabled", "enrichment_enabled"):
+                str_value = "true" if str(value).lower() in ("true", "1", "yes") else "false"
+
+            updates[key] = str_value
+
+        if errors:
+            raise HTTPException(status_code=400, detail="; ".join(errors))
+
+        settings_store.save_bulk(db, updates)
+        return _build_settings_response()
+
+    # ------------------------------------------------------------------
+    # DELETE /settings/{key} — remove single override (revert to default)
+    # ------------------------------------------------------------------
+    @router.delete("/settings/{key:path}")
+    def api_settings_delete(key: str = Path(...)):
+        if key not in EDITABLE_KEYS:
+            raise HTTPException(status_code=400, detail=f"Key '{key}' is not editable")
+        deleted = settings_store.delete(db, key)
+        if not deleted:
+            raise HTTPException(status_code=404, detail=f"No override found for '{key}'")
+        return _build_settings_response()
 
     # ------------------------------------------------------------------
     # GET /timeline?project=&type=&days=&limit=&offset=

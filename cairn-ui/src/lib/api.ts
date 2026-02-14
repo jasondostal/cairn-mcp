@@ -114,6 +114,13 @@ export interface Settings {
   http_port: number;
 }
 
+export interface SettingsResponse {
+  values: Record<string, string | number | boolean>;
+  sources: Record<string, "default" | "env" | "db">;
+  editable: string[];
+  pending_restart: boolean;
+}
+
 export interface Project {
   id: number;
   name: string;
@@ -658,4 +665,12 @@ export const api = {
     del<{ deleted: boolean; id: number }>(`/terminal/hosts/${id}`),
 
   settings: () => get<Settings>("/settings"),
+
+  settingsV2: () => get<SettingsResponse>("/settings"),
+
+  updateSettings: (body: Record<string, string | number | boolean>) =>
+    patch<SettingsResponse>("/settings", body),
+
+  resetSetting: (key: string) =>
+    del<SettingsResponse>(`/settings/${key}`),
 };

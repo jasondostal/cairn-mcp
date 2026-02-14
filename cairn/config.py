@@ -1,7 +1,10 @@
 """Configuration management. All settings from environment variables with sensible defaults."""
 
+from __future__ import annotations
+
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, replace
+from typing import Any
 
 from cairn.graph.config import Neo4jConfig
 
@@ -147,6 +150,189 @@ def _parse_cors_origins(raw: str) -> list[str]:
     """Parse comma-separated CORS origins. '*' means allow all."""
     origins = [o.strip() for o in raw.split(",") if o.strip()]
     return origins or ["*"]
+
+
+# --- Editable keys whitelist ---
+# Keys that can be changed via the UI and persisted in app_settings.
+EDITABLE_KEYS: set[str] = {
+    # LLM
+    "llm.backend", "llm.bedrock_model", "llm.bedrock_region",
+    "llm.ollama_url", "llm.ollama_model",
+    "llm.gemini_model", "llm.gemini_api_key",
+    "llm.openai_base_url", "llm.openai_model", "llm.openai_api_key",
+    # Reranker
+    "reranker.backend", "reranker.model", "reranker.candidates",
+    "reranker.bedrock_model", "reranker.bedrock_region",
+    # Capabilities
+    "capabilities.query_expansion", "capabilities.relationship_extract",
+    "capabilities.rule_conflict_check", "capabilities.session_synthesis",
+    "capabilities.consolidation", "capabilities.confidence_gating",
+    "capabilities.event_digest", "capabilities.reranking",
+    "capabilities.type_routing", "capabilities.spreading_activation",
+    "capabilities.mca_gate", "capabilities.knowledge_extraction",
+    "capabilities.search_v2",
+    # Analytics
+    "analytics.enabled", "analytics.retention_days",
+    "analytics.cost_embedding_per_1k", "analytics.cost_llm_input_per_1k",
+    "analytics.cost_llm_output_per_1k",
+    # Auth
+    "auth.enabled", "auth.api_key", "auth.header_name",
+    # Terminal
+    "terminal.backend", "terminal.max_sessions", "terminal.connect_timeout",
+    # Top-level
+    "enrichment_enabled",
+    "ingest_chunk_size", "ingest_chunk_overlap",
+}
+
+# Map of section -> dataclass for sub-configs that are editable
+_SECTION_CLASSES = {
+    "llm": LLMConfig,
+    "reranker": RerankerConfig,
+    "capabilities": LLMCapabilities,
+    "analytics": AnalyticsConfig,
+    "auth": AuthConfig,
+    "terminal": TerminalConfig,
+}
+
+_BOOL_TRUTHY = {"true", "1", "yes"}
+
+
+def _coerce(value: str, target_type: type) -> Any:
+    """Coerce a string value to the target type."""
+    if target_type is bool:
+        return value.lower() in _BOOL_TRUTHY
+    if target_type is int:
+        return int(value)
+    if target_type is float:
+        return float(value)
+    # str, Optional[str]
+    return value
+
+
+def apply_overrides(config: Config, overrides: dict[str, str]) -> Config:
+    """Rebuild a frozen Config by applying DB overrides.
+
+    Only keys in EDITABLE_KEYS are applied; others are silently ignored.
+    """
+    if not overrides:
+        return config
+
+    # Group overrides by section
+    section_overrides: dict[str, dict[str, str]] = {}
+    top_overrides: dict[str, str] = {}
+
+    for key, value in overrides.items():
+        if key not in EDITABLE_KEYS:
+            continue
+        if "." in key:
+            section, field_name = key.split(".", 1)
+            section_overrides.setdefault(section, {})[field_name] = value
+        else:
+            top_overrides[key] = value
+
+    # Rebuild sub-configs
+    replacements: dict[str, Any] = {}
+    for section, field_overrides in section_overrides.items():
+        if section not in _SECTION_CLASSES:
+            continue
+        sub_config = getattr(config, section)
+        sub_replacements = {}
+        for fname, fvalue in field_overrides.items():
+            if not hasattr(sub_config, fname):
+                continue
+            current = getattr(sub_config, fname)
+            target_type = type(current) if current is not None else str
+            sub_replacements[fname] = _coerce(fvalue, target_type)
+        if sub_replacements:
+            replacements[section] = replace(sub_config, **sub_replacements)
+
+    # Top-level fields
+    for key, value in top_overrides.items():
+        if not hasattr(config, key):
+            continue
+        current = getattr(config, key)
+        target_type = type(current) if current is not None else str
+        replacements[key] = _coerce(value, target_type)
+
+    return replace(config, **replacements) if replacements else config
+
+
+def config_to_flat(config: Config) -> dict[str, Any]:
+    """Serialize config to a flat dict with dot-notation keys for the settings API."""
+    result: dict[str, Any] = {}
+
+    for f in fields(config):
+        val = getattr(config, f.name)
+        if hasattr(val, "__dataclass_fields__"):
+            for sf in fields(val):
+                result[f"{f.name}.{sf.name}"] = getattr(val, sf.name)
+        else:
+            # Skip list fields (cors_origins) — not useful in flat form
+            if isinstance(val, list):
+                continue
+            result[f.name] = val
+
+    return result
+
+
+# Snapshot of env var values at load time, keyed by dot-notation config key.
+# Used to determine source (default vs env vs db) for each setting.
+_ENV_MAP: dict[str, str] = {
+    "db.host": "CAIRN_DB_HOST", "db.port": "CAIRN_DB_PORT",
+    "db.name": "CAIRN_DB_NAME", "db.user": "CAIRN_DB_USER",
+    "db.password": "CAIRN_DB_PASS",
+    "embedding.backend": "CAIRN_EMBEDDING_BACKEND",
+    "embedding.model": "CAIRN_EMBEDDING_MODEL",
+    "embedding.dimensions": "CAIRN_EMBEDDING_DIMENSIONS",
+    "llm.backend": "CAIRN_LLM_BACKEND",
+    "llm.bedrock_model": "CAIRN_BEDROCK_MODEL",
+    "llm.bedrock_region": "AWS_DEFAULT_REGION",
+    "llm.ollama_url": "CAIRN_OLLAMA_URL",
+    "llm.ollama_model": "CAIRN_OLLAMA_MODEL",
+    "llm.gemini_model": "CAIRN_GEMINI_MODEL",
+    "llm.gemini_api_key": "CAIRN_GEMINI_API_KEY",
+    "llm.openai_base_url": "CAIRN_OPENAI_BASE_URL",
+    "llm.openai_model": "CAIRN_OPENAI_MODEL",
+    "llm.openai_api_key": "CAIRN_OPENAI_API_KEY",
+    "reranker.backend": "CAIRN_RERANKER_BACKEND",
+    "reranker.model": "CAIRN_RERANKER_MODEL",
+    "reranker.candidates": "CAIRN_RERANK_CANDIDATES",
+    "capabilities.query_expansion": "CAIRN_LLM_QUERY_EXPANSION",
+    "capabilities.relationship_extract": "CAIRN_LLM_RELATIONSHIP_EXTRACT",
+    "capabilities.rule_conflict_check": "CAIRN_LLM_RULE_CONFLICT_CHECK",
+    "capabilities.session_synthesis": "CAIRN_LLM_SESSION_SYNTHESIS",
+    "capabilities.consolidation": "CAIRN_LLM_CONSOLIDATION",
+    "capabilities.confidence_gating": "CAIRN_LLM_CONFIDENCE_GATING",
+    "capabilities.event_digest": "CAIRN_LLM_EVENT_DIGEST",
+    "capabilities.reranking": "CAIRN_RERANKING",
+    "capabilities.type_routing": "CAIRN_TYPE_ROUTING",
+    "capabilities.spreading_activation": "CAIRN_SPREADING_ACTIVATION",
+    "capabilities.mca_gate": "CAIRN_MCA_GATE",
+    "capabilities.knowledge_extraction": "CAIRN_KNOWLEDGE_EXTRACTION",
+    "capabilities.search_v2": "CAIRN_SEARCH_V2",
+    "terminal.backend": "CAIRN_TERMINAL_BACKEND",
+    "terminal.max_sessions": "CAIRN_TERMINAL_MAX_SESSIONS",
+    "terminal.connect_timeout": "CAIRN_TERMINAL_CONNECT_TIMEOUT",
+    "auth.enabled": "CAIRN_AUTH_ENABLED",
+    "auth.api_key": "CAIRN_API_KEY",
+    "auth.header_name": "CAIRN_AUTH_HEADER",
+    "analytics.enabled": "CAIRN_ANALYTICS_ENABLED",
+    "analytics.retention_days": "CAIRN_ANALYTICS_RETENTION_DAYS",
+    "analytics.cost_embedding_per_1k": "CAIRN_ANALYTICS_COST_EMBEDDING",
+    "analytics.cost_llm_input_per_1k": "CAIRN_ANALYTICS_COST_LLM_INPUT",
+    "analytics.cost_llm_output_per_1k": "CAIRN_ANALYTICS_COST_LLM_OUTPUT",
+    "enrichment_enabled": "CAIRN_ENRICHMENT_ENABLED",
+    "transport": "CAIRN_TRANSPORT",
+    "http_host": "CAIRN_HTTP_HOST",
+    "http_port": "CAIRN_HTTP_PORT",
+    "ingest_chunk_size": "CAIRN_INGEST_CHUNK_SIZE",
+    "ingest_chunk_overlap": "CAIRN_INGEST_CHUNK_OVERLAP",
+}
+
+
+def env_values() -> dict[str, str | None]:
+    """Snapshot current env var values for source detection."""
+    return {key: os.getenv(env_var) for key, env_var in _ENV_MAP.items()}
 
 
 def load_config() -> Config:

@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from mcp.server.fastmcp import FastMCP
 
+from cairn.config import apply_overrides, load_config
 from cairn.core.constants import (
     MAX_CAIRN_STACK, MAX_CONTENT_SIZE, MAX_LIMIT, MAX_NAME_LENGTH,
     MAX_RECALL_IDS, VALID_MEMORY_TYPES, VALID_SEARCH_MODES,
@@ -13,6 +14,8 @@ from cairn.core.constants import (
 from cairn.core.services import create_services
 from cairn.core.status import get_status
 from cairn.core.utils import ValidationError, validate_search, validate_store
+from cairn.storage.database import Database
+from cairn.storage import settings_store
 
 # Configure logging
 logging.basicConfig(
@@ -21,26 +24,107 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cairn")
 
-# Initialize all services via factory
-_svc = create_services()
-config = _svc.config
-db = _svc.db
-graph_provider = _svc.graph_provider
-memory_store = _svc.memory_store
-search_engine = _svc.search_engine
-search_v2_engine = _svc.search_v2
-cluster_engine = _svc.cluster_engine
-project_manager = _svc.project_manager
-task_manager = _svc.task_manager
-thinking_engine = _svc.thinking_engine
-session_synthesizer = _svc.session_synthesizer
-consolidation_engine = _svc.consolidation_engine
-cairn_manager = _svc.cairn_manager
-digest_worker = _svc.digest_worker
-drift_detector = _svc.drift_detector
-message_manager = _svc.message_manager
-analytics_tracker = _svc.analytics_tracker
-rollup_worker = _svc.rollup_worker
+# Base config from env vars only (loaded at module import time).
+# DB overrides are applied during lifespan once the database is connected.
+_base_config = load_config()
+
+# Module-level globals — populated by lifespan before MCP tools execute.
+# Declared here so tool functions can reference them; assigned in _init_services().
+_svc = None
+config = _base_config  # updated in lifespan
+db = None
+graph_provider = None
+memory_store = None
+search_engine = None
+search_v2_engine = None
+cluster_engine = None
+project_manager = None
+task_manager = None
+thinking_engine = None
+session_synthesizer = None
+consolidation_engine = None
+cairn_manager = None
+digest_worker = None
+drift_detector = None
+message_manager = None
+analytics_tracker = None
+rollup_worker = None
+
+
+def _init_services(svc):
+    """Assign module globals from a Services instance."""
+    global _svc, config, db, graph_provider, memory_store, search_engine
+    global search_v2_engine, cluster_engine, project_manager, task_manager
+    global thinking_engine, session_synthesizer, consolidation_engine
+    global cairn_manager, digest_worker, drift_detector, message_manager
+    global analytics_tracker, rollup_worker
+
+    _svc = svc
+    config = svc.config
+    db = svc.db
+    graph_provider = svc.graph_provider
+    memory_store = svc.memory_store
+    search_engine = svc.search_engine
+    search_v2_engine = svc.search_v2
+    cluster_engine = svc.cluster_engine
+    project_manager = svc.project_manager
+    task_manager = svc.task_manager
+    thinking_engine = svc.thinking_engine
+    session_synthesizer = svc.session_synthesizer
+    consolidation_engine = svc.consolidation_engine
+    cairn_manager = svc.cairn_manager
+    digest_worker = svc.digest_worker
+    drift_detector = svc.drift_detector
+    message_manager = svc.message_manager
+    analytics_tracker = svc.analytics_tracker
+    rollup_worker = svc.rollup_worker
+
+
+def _build_config_with_overrides(db_instance):
+    """Load DB overrides and rebuild config."""
+    try:
+        overrides = settings_store.load_all(db_instance)
+    except Exception:
+        logger.warning("Failed to load settings overrides, using base config", exc_info=True)
+        overrides = {}
+    if overrides:
+        logger.info("Loaded %d setting overrides from DB", len(overrides))
+        return apply_overrides(_base_config, overrides)
+    return _base_config
+
+
+def _start_workers(svc, cfg, db_instance):
+    """Start background workers and optional graph connection."""
+    db_instance.reconcile_vector_dimensions(cfg.embedding.dimensions)
+    if svc.graph_provider:
+        try:
+            svc.graph_provider.connect()
+            svc.graph_provider.ensure_schema()
+            logger.info("Neo4j graph connected and schema ensured")
+        except Exception:
+            logger.warning("Neo4j connection failed — graph features disabled", exc_info=True)
+    svc.digest_worker.start()
+    if svc.analytics_tracker:
+        svc.analytics_tracker.start()
+    if svc.rollup_worker:
+        svc.rollup_worker.start()
+    logger.info("Cairn started. Embedding: %s (%d-dim)", cfg.embedding.backend, cfg.embedding.dimensions)
+
+
+def _stop_workers(svc, db_instance):
+    """Stop background workers and close connections."""
+    if svc.rollup_worker:
+        svc.rollup_worker.stop()
+    if svc.analytics_tracker:
+        svc.analytics_tracker.stop()
+    svc.digest_worker.stop()
+    if svc.graph_provider:
+        try:
+            svc.graph_provider.close()
+        except Exception:
+            pass
+    db_instance.close()
+    logger.info("Cairn stopped.")
 
 
 # ============================================================
@@ -49,38 +133,20 @@ rollup_worker = _svc.rollup_worker
 
 @asynccontextmanager
 async def lifespan(server: FastMCP):
-    """Connect to database and run migrations on startup, clean up on shutdown."""
-    db.connect()
-    db.run_migrations()
-    db.reconcile_vector_dimensions(config.embedding.dimensions)
-    if graph_provider:
-        try:
-            graph_provider.connect()
-            graph_provider.ensure_schema()
-            logger.info("Neo4j graph connected and schema ensured")
-        except Exception:
-            logger.warning("Neo4j connection failed — graph features disabled", exc_info=True)
-    digest_worker.start()
-    if analytics_tracker:
-        analytics_tracker.start()
-    if rollup_worker:
-        rollup_worker.start()
-    logger.info("Cairn started. Embedding: %s (%d-dim)", config.embedding.backend, config.embedding.dimensions)
+    """Connect to database, load overrides, create services, and run lifecycle."""
+    db_instance = Database(_base_config.db)
+    db_instance.connect()
+    db_instance.run_migrations()
+
+    final_config = _build_config_with_overrides(db_instance)
+    svc = create_services(config=final_config, db=db_instance)
+    _init_services(svc)
+
+    _start_workers(svc, final_config, db_instance)
     try:
         yield {}
     finally:
-        if rollup_worker:
-            rollup_worker.stop()
-        if analytics_tracker:
-            analytics_tracker.stop()
-        digest_worker.stop()
-        if graph_provider:
-            try:
-                graph_provider.close()
-            except Exception:
-                pass
-        db.close()
-        logger.info("Cairn stopped.")
+        _stop_workers(svc, db_instance)
 
 
 # Create MCP server
@@ -114,9 +180,9 @@ mcp_kwargs = dict(
     ),
     lifespan=lifespan,
 )
-if config.transport == "http":
-    mcp_kwargs["host"] = config.http_host
-    mcp_kwargs["port"] = config.http_port
+if _base_config.transport == "http":
+    mcp_kwargs["host"] = _base_config.http_host
+    mcp_kwargs["port"] = _base_config.http_port
 
 mcp = FastMCP(**mcp_kwargs)
 
@@ -959,7 +1025,7 @@ def messages(
 
 def main():
     """Run the Cairn MCP server."""
-    if config.transport == "http":
+    if _base_config.transport == "http":
         import uvicorn
         from cairn.api import create_api
 
@@ -971,63 +1037,31 @@ def main():
         # lifespan (DB connect) doesn't fire unless we inject it here.
         _mcp_lifespan = mcp_app.router.lifespan_context
 
-        @asynccontextmanager
-        async def combined_lifespan(app):
-            db.connect()
-            db.run_migrations()
-            db.reconcile_vector_dimensions(config.embedding.dimensions)
-            if graph_provider:
-                try:
-                    graph_provider.connect()
-                    graph_provider.ensure_schema()
-                    logger.info("Neo4j graph connected and schema ensured")
-                except Exception:
-                    logger.warning("Neo4j connection failed — graph features disabled", exc_info=True)
-            digest_worker.start()
-            if analytics_tracker:
-                analytics_tracker.start()
-            if rollup_worker:
-                rollup_worker.start()
-            logger.info("Cairn started. Embedding: %s (%d-dim)", config.embedding.backend, config.embedding.dimensions)
-            try:
-                async with _mcp_lifespan(app) as state:
-                    yield state
-            finally:
-                if rollup_worker:
-                    rollup_worker.stop()
-                if analytics_tracker:
-                    analytics_tracker.stop()
-                digest_worker.stop()
-                if graph_provider:
-                    try:
-                        graph_provider.close()
-                    except Exception:
-                        pass
-                db.close()
-                logger.info("Cairn stopped.")
+        # Pre-connect DB and build services so we can mount API before app starts
+        db_instance = Database(_base_config.db)
+        db_instance.connect()
+        db_instance.run_migrations()
 
-        mcp_app.router.lifespan_context = combined_lifespan
+        final_config = _build_config_with_overrides(db_instance)
+        svc = create_services(config=final_config, db=db_instance)
+        _init_services(svc)
 
-        # Build REST API and mount as sub-app at /api
-        api = create_api(_svc)
+        # Mount REST API and auth middleware before app starts
+        api = create_api(svc)
         mcp_app.mount("/api", api)
 
-        # Protect /mcp endpoint when auth is enabled.
-        # The /api sub-app has its own APIKeyAuthMiddleware, so we only
-        # guard MCP paths here. Health and status pass through.
-        if config.auth.enabled and config.auth.api_key:
+        if final_config.auth.enabled and final_config.auth.api_key:
             from starlette.middleware.base import BaseHTTPMiddleware
             from starlette.responses import JSONResponse as StarletteJSONResponse
 
             class MCPAuthMiddleware(BaseHTTPMiddleware):
                 async def dispatch(self, request, call_next):
                     path = request.url.path.rstrip("/")
-                    # Only protect /mcp paths — /api has its own auth
                     if path.startswith("/mcp"):
                         if request.method == "OPTIONS":
                             return await call_next(request)
-                        token = request.headers.get(config.auth.header_name)
-                        if not token or token != config.auth.api_key:
+                        token = request.headers.get(final_config.auth.header_name)
+                        if not token or token != final_config.auth.api_key:
                             return StarletteJSONResponse(
                                 status_code=401,
                                 content={"detail": "Invalid or missing API key"},
@@ -1035,10 +1069,21 @@ def main():
                     return await call_next(request)
 
             mcp_app.add_middleware(MCPAuthMiddleware)
-            logger.info("MCP endpoint auth enabled (header: %s)", config.auth.header_name)
+            logger.info("MCP endpoint auth enabled (header: %s)", final_config.auth.header_name)
 
-        logger.info("Starting Cairn (HTTP on %s:%d — MCP at /mcp, API at /api)", config.http_host, config.http_port)
-        uvicorn.run(mcp_app, host=config.http_host, port=config.http_port)
+        @asynccontextmanager
+        async def combined_lifespan(app):
+            _start_workers(svc, final_config, db_instance)
+            try:
+                async with _mcp_lifespan(app) as state:
+                    yield state
+            finally:
+                _stop_workers(svc, db_instance)
+
+        mcp_app.router.lifespan_context = combined_lifespan
+
+        logger.info("Starting Cairn (HTTP on %s:%d — MCP at /mcp, API at /api)", _base_config.http_host, _base_config.http_port)
+        uvicorn.run(mcp_app, host=_base_config.http_host, port=_base_config.http_port)
     else:
         logger.info("Starting Cairn MCP server (stdio)")
         mcp.run(transport="stdio")

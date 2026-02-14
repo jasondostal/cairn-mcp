@@ -1,13 +1,10 @@
 # Roadmap
 
-Current: **v0.33.0** — Web terminal, inter-agent messages, live sessions, agentic chat.
+Current: **v0.34.0** — Editable settings with DB persistence.
 
 ---
 
 ## Next Up
-
-### Settings UI
-Runtime configuration without restarting. Env vars stay as boot defaults, a DB table stores runtime overrides, the UI edits the DB. Configurable: LLM model, chat system prompt, capability toggles (reranking, search_v2, query expansion), reranker backend. Env-only: DB creds, AWS keys, ports, CORS.
 
 ### UI Interactive Editing
 Turn the dashboard from read-only into a working interface. Edit memories inline, complete/update tasks, edit markdown content, update task status — all from the browser.
@@ -24,6 +21,17 @@ During cairn synthesis, compare session event digests against high-importance pr
 ---
 
 ## Shipped
+
+### v0.34.0 — Editable Settings ✓
+
+Runtime config from the UI, persisted in DB.
+
+- [x] **DB-persisted settings** — `app_settings` table, resolution order: default → env → DB override
+- [x] **42 editable keys** — LLM, reranker, capabilities, analytics, auth, terminal, ingestion
+- [x] **Settings page rewrite** — text/number/toggle/select inputs, source badges, per-field reset, restart banner
+- [x] **Secret redaction** — API redacts `db.password`, API keys, encryption keys server-side
+- [x] **Deferred service creation** — base config at import, DB overrides applied after connect
+- [x] Migration 017 (app_settings), 3 new API endpoints
 
 ### v0.33.0 — Web Terminal + Messages ✓
 
