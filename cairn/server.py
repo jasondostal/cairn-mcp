@@ -38,6 +38,7 @@ consolidation_engine = _svc.consolidation_engine
 cairn_manager = _svc.cairn_manager
 digest_worker = _svc.digest_worker
 drift_detector = _svc.drift_detector
+message_manager = _svc.message_manager
 analytics_tracker = _svc.analytics_tracker
 rollup_worker = _svc.rollup_worker
 
@@ -864,6 +865,91 @@ def drift_check(
         return drift_detector.check(project=project, files=files)
     except Exception as e:
         logger.exception("drift_check failed")
+        return {"error": f"Internal error: {e}"}
+
+
+# ============================================================
+# Tool 15: messages
+# ============================================================
+
+@mcp.tool()
+def messages(
+    action: str,
+    project: str | None = None,
+    content: str | None = None,
+    sender: str | None = None,
+    priority: str = "normal",
+    message_id: int | None = None,
+    include_archived: bool = False,
+    limit: int = 20,
+) -> dict | list[dict]:
+    """Send and receive messages between agents and the user.
+
+    WHEN TO USE:
+    - Leaving a note for the user: task completed, issue found, question to answer later
+    - Checking if anyone left you a message
+    - Async communication between sessions
+
+    Actions:
+    - 'send': Send a message. Requires content and project.
+    - 'inbox': Check messages. Optional project filter.
+    - 'mark_read': Mark a message as read. Requires message_id.
+    - 'mark_all_read': Mark all messages as read. Optional project filter.
+    - 'archive': Archive a message. Requires message_id.
+    - 'unread_count': Get count of unread messages. Optional project filter.
+
+    Args:
+        action: One of 'send', 'inbox', 'mark_read', 'mark_all_read', 'archive', 'unread_count'.
+        project: Project name (required for send, optional filter for others).
+        content: Message content (required for send).
+        sender: Who is sending (default "assistant"). Any string — agent name, "user", etc.
+        priority: "normal" or "urgent" (default "normal").
+        message_id: Message ID (required for mark_read, archive).
+        include_archived: Include archived messages in inbox (default false).
+        limit: Max messages to return for inbox (default 20).
+    """
+    try:
+        if action == "send":
+            if not content:
+                return {"error": "content is required for send"}
+            if not project:
+                return {"error": "project is required for send"}
+            return message_manager.send(
+                content=content,
+                project=project,
+                sender=sender or "assistant",
+                priority=priority,
+            )
+
+        if action == "inbox":
+            return message_manager.inbox(
+                project=project,
+                include_archived=include_archived,
+                limit=min(limit, MAX_LIMIT),
+            )["items"]
+
+        if action == "mark_read":
+            if not message_id:
+                return {"error": "message_id is required for mark_read"}
+            return message_manager.mark_read(message_id)
+
+        if action == "mark_all_read":
+            return message_manager.mark_all_read(project=project)
+
+        if action == "archive":
+            if not message_id:
+                return {"error": "message_id is required for archive"}
+            return message_manager.archive(message_id)
+
+        if action == "unread_count":
+            count = message_manager.unread_count(project=project)
+            return {"count": count, "project": project}
+
+        return {"error": f"Unknown action: {action}"}
+    except ValueError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        logger.exception("messages failed")
         return {"error": f"Internal error: {e}"}
 
 

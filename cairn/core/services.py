@@ -18,6 +18,8 @@ from cairn.core.extraction import KnowledgeExtractor
 from cairn.core.ingest import IngestPipeline
 from cairn.core.activation import ActivationEngine
 from cairn.core.memory import MemoryStore
+from cairn.core.messages import MessageManager
+from cairn.core.terminal import TerminalHostManager
 from cairn.core.projects import ProjectManager
 from cairn.core.reranker import get_reranker
 from cairn.core.reranker.interface import RerankerInterface
@@ -63,7 +65,9 @@ class Services:
     cairn_manager: CairnManager
     digest_worker: DigestWorker
     drift_detector: DriftDetector
+    message_manager: MessageManager
     ingest_pipeline: IngestPipeline
+    terminal_host_manager: TerminalHostManager | None
     analytics_tracker: UsageTracker | None
     rollup_worker: RollupWorker | None
     analytics_engine: AnalyticsQueryEngine | None
@@ -177,6 +181,15 @@ def create_services(config: Config | None = None) -> Services:
         )
         logger.info("Search v2 enabled (intent-routed)")
 
+    # Terminal host manager (optional, based on config)
+    terminal_host_manager = None
+    if config.terminal.backend != "disabled":
+        if config.terminal.backend == "native" and not config.terminal.encryption_key:
+            logger.warning("Terminal backend=native but no encryption key — terminal disabled")
+        else:
+            terminal_host_manager = TerminalHostManager(db, config.terminal)
+            logger.info("Terminal enabled: backend=%s", config.terminal.backend)
+
     return Services(
         config=config,
         db=db,
@@ -197,7 +210,9 @@ def create_services(config: Config | None = None) -> Services:
         cairn_manager=CairnManager(db, llm=llm, capabilities=capabilities),
         digest_worker=DigestWorker(db, llm=llm, capabilities=capabilities),
         drift_detector=DriftDetector(db),
+        message_manager=MessageManager(db),
         ingest_pipeline=IngestPipeline(db, project_manager, memory_store, llm, config),
+        terminal_host_manager=terminal_host_manager,
         analytics_tracker=analytics_tracker,
         rollup_worker=rollup_worker,
         analytics_engine=analytics_engine,

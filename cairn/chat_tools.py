@@ -31,6 +31,8 @@ Tool use:
 - When storing memories, pick the right memory_type: note, decision, rule, code-snippet, \
 learning, research, discussion, progress, task, debug, design.
 - Present results naturally. Summarize, don't dump.
+- Use send_message to leave notes for the user or flag things for their attention.
+- Check inbox with check_inbox for messages from other agents or the user.
 """
 
 CHAT_TOOLS = [
@@ -121,6 +123,30 @@ CHAT_TOOLS = [
                 "include_completed": {"type": "boolean", "description": "Include completed tasks (default false)"},
             },
             "required": ["project"],
+        },
+    },
+    {
+        "name": "send_message",
+        "description": "Send a message to the user or leave a note for other agents. Use for flagging things, leaving reminders, or async communication.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {"type": "string", "description": "The message content"},
+                "project": {"type": "string", "description": "Project to associate with"},
+                "priority": {"type": "string", "description": "Priority: 'normal' or 'urgent' (default normal)"},
+            },
+            "required": ["content", "project"],
+        },
+    },
+    {
+        "name": "check_inbox",
+        "description": "Check for unread messages from other agents or the user.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Filter by project (optional)"},
+                "limit": {"type": "integer", "description": "Max messages to return (default 10)"},
+            },
         },
     },
 ]
@@ -237,5 +263,30 @@ class ChatToolExecutor:
             "tasks": [
                 {"id": t["id"], "description": t["description"], "status": t["status"], "created_at": t.get("created_at")}
                 for t in result["items"]
+            ],
+        }
+
+    def _tool_send_message(self, content: str, project: str, priority: str = "normal") -> dict:
+        result = self.svc.message_manager.send(
+            content=content, project=project,
+            sender="assistant", priority=priority,
+        )
+        return {"sent": True, "id": result["id"], "project": project}
+
+    def _tool_check_inbox(self, project: str | None = None, limit: int = 10) -> dict:
+        result = self.svc.message_manager.inbox(project=project, limit=min(limit, 20))
+        return {
+            "count": result["total"],
+            "messages": [
+                {
+                    "id": m["id"],
+                    "sender": m["sender"],
+                    "content": m["content"],
+                    "priority": m["priority"],
+                    "is_read": m["is_read"],
+                    "project": m["project"],
+                    "created_at": m["created_at"],
+                }
+                for m in result["items"]
             ],
         }

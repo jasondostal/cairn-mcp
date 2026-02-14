@@ -13,7 +13,9 @@ import {
   Shield,
   PenLine,
   MessageCircle,
+  Mail,
   Radio,
+  Terminal,
 } from "lucide-react";
 
 export interface NavItem {
@@ -26,6 +28,7 @@ export const navItems: NavItem[] = [
   { href: "/", label: "Dashboard", icon: Activity },
   { href: "/capture", label: "Capture", icon: PenLine },
   { href: "/chat", label: "Chat", icon: MessageCircle },
+  { href: "/messages", label: "Messages", icon: Mail },
   { href: "/sessions", label: "Sessions", icon: Radio },
   { href: "/timeline", label: "Timeline", icon: Clock },
   { href: "/cairns", label: "Cairns", icon: Landmark },
@@ -37,5 +40,6 @@ export const navItems: NavItem[] = [
   { href: "/tasks", label: "Tasks", icon: ListTodo },
   { href: "/thinking", label: "Thinking", icon: Brain },
   { href: "/rules", label: "Rules", icon: Shield },
+  { href: "/terminal", label: "Terminal", icon: Terminal },
   { href: "/analytics", label: "Ops Log", icon: BarChart3 },
 ];

@@ -98,6 +98,14 @@ class LLMCapabilities:
 
 
 @dataclass(frozen=True)
+class TerminalConfig:
+    backend: str = "disabled"           # "native", "ttyd", "disabled"
+    encryption_key: str | None = None   # Fernet key (native mode only)
+    max_sessions: int = 5               # concurrent terminal sessions
+    connect_timeout: int = 30           # SSH connect timeout (native mode)
+
+
+@dataclass(frozen=True)
 class AuthConfig:
     enabled: bool = False
     api_key: str | None = None  # Static API key (checked via X-API-Key header)
@@ -120,6 +128,7 @@ class Config:
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     capabilities: LLMCapabilities = field(default_factory=LLMCapabilities)
+    terminal: TerminalConfig = field(default_factory=TerminalConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
     analytics: AnalyticsConfig = field(default_factory=AnalyticsConfig)
     neo4j: Neo4jConfig = field(default_factory=Neo4jConfig)
@@ -186,6 +195,12 @@ def load_config() -> Config:
             mca_gate=os.getenv("CAIRN_MCA_GATE", "false").lower() in ("true", "1", "yes"),
             knowledge_extraction=os.getenv("CAIRN_KNOWLEDGE_EXTRACTION", "false").lower() in ("true", "1", "yes"),
             search_v2=os.getenv("CAIRN_SEARCH_V2", "false").lower() in ("true", "1", "yes"),
+        ),
+        terminal=TerminalConfig(
+            backend=os.getenv("CAIRN_TERMINAL_BACKEND", "disabled"),
+            encryption_key=os.getenv("CAIRN_SSH_ENCRYPTION_KEY") or None,
+            max_sessions=int(os.getenv("CAIRN_TERMINAL_MAX_SESSIONS", "5")),
+            connect_timeout=int(os.getenv("CAIRN_TERMINAL_CONNECT_TIMEOUT", "30")),
         ),
         auth=AuthConfig(
             enabled=os.getenv("CAIRN_AUTH_ENABLED", "false").lower() in ("true", "1", "yes"),

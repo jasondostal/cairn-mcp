@@ -28,6 +28,30 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
+async function patch<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `${res.status} ${res.statusText}`);
+  }
+  return res.json();
+}
+
+async function del<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `${res.status} ${res.statusText}`);
+  }
+  return res.json();
+}
+
 // --- Types ---
 
 export interface ModelInfo {
@@ -324,6 +348,19 @@ export interface CairnDetail extends Cairn {
   stones: CairnStone[];
 }
 
+export interface Message {
+  id: number;
+  project: string;
+  sender: string;
+  content: string;
+  priority: string;
+  is_read: boolean;
+  archived: boolean;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface IngestRequest {
   content?: string;
   url?: string;
@@ -462,6 +499,28 @@ export interface HeatmapResult {
   days: HeatmapDay[];
 }
 
+// --- Terminal types ---
+
+export interface TerminalConfig {
+  backend: "native" | "ttyd" | "disabled";
+  max_sessions: number;
+}
+
+export interface TerminalHost {
+  id: number;
+  name: string;
+  hostname: string;
+  port: number;
+  username: string | null;
+  auth_method: string;
+  ttyd_url: string | null;
+  description: string | null;
+  is_active: boolean;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
 // --- API functions ---
 
 export const api = {
@@ -529,6 +588,21 @@ export const api = {
       "/chat", { messages, max_tokens: maxTokens, ...(tools === false ? { tools: false } : {}) }
     ),
 
+  messages: (opts?: { project?: string; include_archived?: string; limit?: string; offset?: string }) =>
+    get<Paginated<Message>>("/messages", opts),
+
+  sendMessage: (body: { content: string; project: string; sender?: string; priority?: string; metadata?: Record<string, unknown> }) =>
+    post<{ id: number; created_at: string }>("/messages", body),
+
+  updateMessage: (id: number, body: { is_read?: boolean; archived?: boolean }) =>
+    patch<{ updated: boolean; id: number }>(`/messages/${id}`, body),
+
+  markAllMessagesRead: (project?: string) =>
+    post<{ action: string; project: string | null }>("/messages/mark-all-read", project ? { project } : {}),
+
+  unreadCount: (project?: string) =>
+    get<{ count: number }>("/messages/unread-count", project ? { project } : {}),
+
   analyticsOverview: (opts?: { days?: string }) =>
     get<AnalyticsOverview>("/analytics/overview", opts),
 
@@ -552,4 +626,20 @@ export const api = {
 
   analyticsHeatmap: (opts?: { days?: string }) =>
     get<HeatmapResult>("/analytics/heatmap", opts),
+
+  terminalConfig: () => get<TerminalConfig>("/terminal/config"),
+
+  terminalHosts: () => get<{ items: TerminalHost[] }>("/terminal/hosts"),
+
+  terminalCreateHost: (body: {
+    name: string; hostname: string; port?: number;
+    username?: string; credential?: string; auth_method?: string;
+    ttyd_url?: string; description?: string;
+  }) => post<{ id: number; name: string; created_at: string }>("/terminal/hosts", body),
+
+  terminalUpdateHost: (id: number, body: Record<string, unknown>) =>
+    patch<{ updated: boolean; id: number }>(`/terminal/hosts/${id}`, body),
+
+  terminalDeleteHost: (id: number) =>
+    del<{ deleted: boolean; id: number }>(`/terminal/hosts/${id}`),
 };
