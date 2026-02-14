@@ -3,6 +3,7 @@
 # Python 3.11-slim, torch CPU-only
 # Regenerate: docker exec cairn pip freeze > requirements.lock
 annotated-doc==0.0.4
+asyncssh>=2.14
 annotated-types==0.7.0
 anyio==4.12.1
 attrs==25.4.0

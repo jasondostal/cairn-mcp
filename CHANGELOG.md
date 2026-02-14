@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.33.0] - 2026-02-13
+
+### Added
+- **Web terminal** — dual-backend SSH terminal at `/terminal`. Two modes controlled via
+  `CAIRN_TERMINAL_BACKEND` env var (default: `disabled`):
+  - **Native mode** — xterm.js in the browser, WebSocket to cairn backend, asyncssh proxy
+    to target hosts. Fernet-encrypted credential storage. Full PTY with resize support.
+  - **ttyd mode** — embed an external [ttyd](https://github.com/tsl0922/ttyd) container
+    via iframe. Zero WebSocket complexity, battle-tested.
+  - Host management UI: add/edit/delete hosts, adapts form fields based on active backend.
+  - `TerminalHostManager` service with CRUD operations and credential encryption.
+  - `TerminalConfig` dataclass — 4 env vars for backend selection, encryption key, session
+    limits, connect timeout.
+- **Messages** — inter-agent communication layer. Agents (and humans) can leave notes for
+  each other, check inboxes, and manage message state.
+  - `messages` MCP tool (#15) — send, inbox, mark_read, mark_all_read, archive, unread_count.
+  - `messages` chat tool — the agentic chat LLM can check and send messages.
+  - Messages UI page at `/messages` with project filtering, priority indicators, batch
+    mark-as-read, and archive support.
+- 6 new REST endpoints for messages: `GET /api/messages/unread-count`,
+  `GET/POST /api/messages`, `PATCH /api/messages/{id}`, `POST /api/messages/mark-all-read`.
+- 6 new REST endpoints for terminal host management: `GET /api/terminal/config`,
+  `GET/POST /api/terminal/hosts`, `GET/PATCH/DELETE /api/terminal/hosts/{id}`.
+- WebSocket endpoint: `/api/terminal/ws/{host_id}` — bidirectional terminal proxy
+  (native mode only). Text → terminal input, JSON resize messages → PTY resize.
+- Migration 015 — `messages` table with indexes for unread and project queries.
+- Migration 016 — `ssh_hosts` table for terminal host management (both modes).
+- Terminal and Messages nav items in sidebar.
+
+### Dependencies
+- `asyncssh>=2.14` added as optional terminal dependency (`pip install cairn-mcp[terminal]`).
+  Included in the Docker image for native terminal mode.
+- `@xterm/xterm` and `@xterm/addon-fit` added to frontend dependencies.
+
 ## [0.31.0] - 2026-02-13
 
 ### Added
@@ -16,7 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `GET /api/sessions` — lists recent sessions grouped by session_name with stats (event count,
   batch count, digest progress, active status, cairn status).
 - `GET /api/sessions/{session_name}/events` — returns flattened event stream + digests for a session.
-- Reinstalled Claude Code hooks (SessionStart, PostToolUse, SessionEnd) pointing to UTIL.
+- Reinstalled Claude Code hooks (SessionStart, PostToolUse, SessionEnd).
 
 ## [0.30.0] - 2026-02-13
 
@@ -810,7 +844,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.29.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.33.0...HEAD
+[0.33.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.31.0...v0.33.0
 [0.31.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.30.1...v0.31.0
 [0.30.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.28.2...v0.29.0
