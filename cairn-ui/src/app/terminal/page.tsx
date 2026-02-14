@@ -77,6 +77,7 @@ function HostSidebar({
   activeId,
   onSelect,
   onAdd,
+  onEdit,
   onDelete,
   backend,
 }: {
@@ -84,6 +85,7 @@ function HostSidebar({
   activeId: number | null;
   onSelect: (host: TerminalHost) => void;
   onAdd: () => void;
+  onEdit: (host: TerminalHost) => void;
   onDelete: (id: number) => void;
   backend: string;
 }) {
@@ -118,6 +120,15 @@ function HostSidebar({
               </div>
             </div>
             <button
+              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-accent"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(host);
+              }}
+            >
+              <Pencil className="h-3 w-3 text-muted-foreground" />
+            </button>
+            <button
               className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-destructive/20"
               onClick={(e) => {
                 e.stopPropagation();
@@ -141,17 +152,20 @@ function HostSidebar({
 // ---------------------------------------------------------------------------
 // Add Host Dialog
 // ---------------------------------------------------------------------------
-function AddHostDialog({
+function HostDialog({
   open,
   onClose,
-  onCreated,
+  onSaved,
   backend,
+  editHost,
 }: {
   open: boolean;
   onClose: () => void;
-  onCreated: () => void;
+  onSaved: () => void;
   backend: string;
+  editHost?: TerminalHost | null;
 }) {
+  const isEdit = !!editHost;
   const [name, setName] = useState("");
   const [hostname, setHostname] = useState("");
   const [port, setPort] = useState("22");
@@ -169,26 +183,53 @@ function AddHostDialog({
     setDescription(""); setError("");
   };
 
+  // Pre-fill when editing
+  useEffect(() => {
+    if (editHost) {
+      setName(editHost.name || "");
+      setHostname(editHost.hostname || "");
+      setPort(String(editHost.port || 22));
+      setUsername(editHost.username || "");
+      setCredential("");  // Never pre-fill credentials
+      setAuthMethod(editHost.auth_method || "password");
+      setTtydUrl(editHost.ttyd_url || "");
+      setDescription(editHost.description || "");
+      setError("");
+    } else {
+      reset();
+    }
+  }, [editHost]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setSaving(true);
     try {
-      await api.terminalCreateHost({
-        name,
-        hostname,
-        port: parseInt(port, 10),
-        username: username || undefined,
-        credential: credential || undefined,
-        auth_method: authMethod,
-        ttyd_url: ttydUrl || undefined,
-        description: description || undefined,
-      });
+      if (isEdit) {
+        const body: Record<string, unknown> = {
+          name, hostname, port: parseInt(port, 10),
+          username: username || undefined,
+          auth_method: authMethod,
+          description: description || undefined,
+        };
+        if (credential) body.credential = credential;
+        if (ttydUrl) body.ttyd_url = ttydUrl;
+        await api.terminalUpdateHost(editHost!.id, body);
+      } else {
+        await api.terminalCreateHost({
+          name, hostname, port: parseInt(port, 10),
+          username: username || undefined,
+          credential: credential || undefined,
+          auth_method: authMethod,
+          ttyd_url: ttydUrl || undefined,
+          description: description || undefined,
+        });
+      }
       reset();
-      onCreated();
+      onSaved();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create host");
+      setError(err instanceof Error ? err.message : `Failed to ${isEdit ? "update" : "create"} host`);
     } finally {
       setSaving(false);
     }
@@ -198,7 +239,7 @@ function AddHostDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add Host</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Host" : "Add Host"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -238,21 +279,23 @@ function AddHostDialog({
               <div>
                 <label className="text-xs font-medium text-muted-foreground">
                   {authMethod === "key" ? "Private Key" : "Password"}
+                  {isEdit && <span className="text-muted-foreground/60 ml-1">(leave blank to keep existing)</span>}
                 </label>
                 {authMethod === "key" ? (
                   <textarea
                     className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs font-mono shadow-xs min-h-[100px] resize-y"
                     value={credential}
                     onChange={(e) => setCredential(e.target.value)}
-                    placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
-                    required
+                    placeholder={isEdit ? "Leave blank to keep existing key" : "-----BEGIN OPENSSH PRIVATE KEY-----"}
+                    required={!isEdit}
                   />
                 ) : (
                   <Input
                     type="password"
                     value={credential}
                     onChange={(e) => setCredential(e.target.value)}
-                    required
+                    placeholder={isEdit ? "Leave blank to keep existing" : ""}
+                    required={!isEdit}
                   />
                 )}
               </div>
@@ -284,7 +327,7 @@ function AddHostDialog({
             <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
             <Button type="submit" disabled={saving}>
               {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-              Add Host
+              {isEdit ? "Save" : "Add Host"}
             </Button>
           </div>
         </form>
@@ -494,6 +537,7 @@ export default function TerminalPage() {
   const [hosts, setHosts] = useState<TerminalHost[]>([]);
   const [activeHost, setActiveHost] = useState<TerminalHost | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingHost, setEditingHost] = useState<TerminalHost | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -567,7 +611,8 @@ export default function TerminalPage() {
         hosts={hosts}
         activeId={activeHost?.id ?? null}
         onSelect={setActiveHost}
-        onAdd={() => setDialogOpen(true)}
+        onAdd={() => { setEditingHost(null); setDialogOpen(true); }}
+        onEdit={(host) => { setEditingHost(host); setDialogOpen(true); }}
         onDelete={handleDelete}
         backend={config.backend}
       />
@@ -584,11 +629,12 @@ export default function TerminalPage() {
         )}
       </div>
 
-      <AddHostDialog
+      <HostDialog
         open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        onCreated={loadHosts}
+        onClose={() => { setDialogOpen(false); setEditingHost(null); }}
+        onSaved={loadHosts}
         backend={config.backend}
+        editHost={editingHost}
       />
     </div>
   );

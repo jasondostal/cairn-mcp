@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import type { Task } from "@/lib/api";
+import { api, type Task } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import {
   Sheet,
@@ -11,6 +12,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { CheckCircle, Circle, Link2 } from "lucide-react";
 
@@ -18,10 +20,26 @@ interface TaskSheetProps {
   task: Task | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCompleted?: () => void;
 }
 
-export function TaskSheet({ task, open, onOpenChange }: TaskSheetProps) {
+export function TaskSheet({ task, open, onOpenChange, onCompleted }: TaskSheetProps) {
   const done = task?.status === "completed";
+  const [completing, setCompleting] = useState(false);
+
+  const handleComplete = async () => {
+    if (!task) return;
+    setCompleting(true);
+    try {
+      await api.taskComplete(task.id);
+      onCompleted?.();
+      onOpenChange(false);
+    } catch {
+      // silent — user sees the sheet stays open
+    } finally {
+      setCompleting(false);
+    }
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -87,6 +105,21 @@ export function TaskSheet({ task, open, onOpenChange }: TaskSheetProps) {
                       ))}
                     </div>
                   </div>
+                </>
+              )}
+
+              {!done && (
+                <>
+                  <Separator />
+                  <Button
+                    onClick={handleComplete}
+                    disabled={completing}
+                    className="w-full"
+                    size="sm"
+                  >
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    {completing ? "Completing..." : "Mark Complete"}
+                  </Button>
                 </>
               )}
 

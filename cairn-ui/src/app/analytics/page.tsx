@@ -11,9 +11,7 @@ import { PageLayout } from "@/components/page-layout";
 import { SkeletonList } from "@/components/skeleton-list";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import Link from "next/link";
 
 const DAY_PRESETS = [
   { label: "7d", value: 7 },
@@ -34,11 +32,6 @@ export default function AnalyticsPage() {
   return (
     <PageLayout
       title="Operations Log"
-      titleExtra={
-        <Link href="/">
-          <Button variant="outline" size="sm">Dashboard</Button>
-        </Link>
-      }
       filters={
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">Range</span>
@@ -68,30 +61,28 @@ export default function AnalyticsPage() {
       {!loading && !error && opsData && opsData.items.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">{opsData.total} total operations</p>
-          <div className="space-y-1">
+          <div className="rounded-md border border-border divide-y divide-border">
             {opsData.items.map((op) => (
-              <Card key={op.id}>
-                <CardContent className="p-3 flex items-center gap-3 text-xs">
-                  <Badge variant={op.success ? "secondary" : "destructive"} className="text-[10px] shrink-0">
-                    {op.success ? "OK" : "ERR"}
-                  </Badge>
-                  <span className="font-mono font-medium truncate max-w-[160px]">{op.operation}</span>
-                  {op.model && (
-                    <span className="font-mono text-muted-foreground truncate max-w-[200px]">{op.model}</span>
-                  )}
-                  <span className="tabular-nums text-muted-foreground ml-auto shrink-0">
-                    {op.latency_ms.toFixed(0)}ms
+              <div key={op.id} className="flex items-center gap-3 px-3 py-1.5 text-xs">
+                <Badge variant={op.success ? "secondary" : "destructive"} className="text-[10px] shrink-0">
+                  {op.success ? "OK" : "ERR"}
+                </Badge>
+                <span className="font-mono font-medium truncate max-w-[160px]">{op.operation}</span>
+                {op.model && (
+                  <span className="font-mono text-muted-foreground truncate max-w-[200px]">{op.model}</span>
+                )}
+                <span className="tabular-nums text-muted-foreground ml-auto shrink-0">
+                  {op.latency_ms.toFixed(0)}ms
+                </span>
+                {(op.tokens_in > 0 || op.tokens_out > 0) && (
+                  <span className="tabular-nums text-muted-foreground shrink-0">
+                    {op.tokens_in}/{op.tokens_out}t
                   </span>
-                  {(op.tokens_in > 0 || op.tokens_out > 0) && (
-                    <span className="tabular-nums text-muted-foreground shrink-0">
-                      {op.tokens_in}/{op.tokens_out}t
-                    </span>
-                  )}
-                  <span className="text-muted-foreground shrink-0">
-                    {new Date(op.timestamp).toLocaleTimeString()}
-                  </span>
-                </CardContent>
-              </Card>
+                )}
+                <span className="text-muted-foreground shrink-0">
+                  {new Date(op.timestamp).toLocaleTimeString()}
+                </span>
+              </div>
             ))}
           </div>
         </div>
