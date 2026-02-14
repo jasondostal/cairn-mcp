@@ -112,7 +112,18 @@ class Database:
             return None
 
     def commit(self) -> None:
-        """Commit the current transaction and return connection to pool."""
+        """Commit the current transaction and return connection to pool.
+
+        Raises RuntimeError if the connection is in INERROR state (a sub-operation
+        failed). This prevents silently rolling back and losing the entire
+        transaction — callers must handle the error explicitly.
+        """
+        existing = getattr(self._local, "conn", None)
+        if existing is not None and existing.info.transaction_status == psycopg.pq.TransactionStatus.INERROR:
+            logger.error("Commit called on INERROR connection — rolling back and raising")
+            existing.rollback()
+            self._release()
+            raise RuntimeError("Cannot commit: transaction is in error state (a sub-operation failed)")
         self.conn.commit()
         self._release()
 

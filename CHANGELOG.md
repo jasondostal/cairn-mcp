@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.35.2] - 2026-02-14
+
+### Fixed
+- **Silent data loss in `store()`** — when enrichment sub-operations (relationship extraction,
+  temporal edges, entity co-occurrence) hit a database error, the exception was caught but left
+  the connection in PostgreSQL's INERROR state. The subsequent `commit()` silently rolled back the
+  entire transaction — including the primary memory INSERT — while returning success to the caller.
+  Fix: core INSERT now commits in a separate transaction before enrichment runs. Enrichment
+  failures can no longer roll back the memory write.
+- **`Database.commit()` silent rollback** — `commit()` accessed the connection through the
+  auto-recovery property, which would silently roll back INERROR transactions. Now raises
+  `RuntimeError` instead, making transaction failures explicit rather than silent.
+
 ## [0.35.1] - 2026-02-14
 
 ### Added
