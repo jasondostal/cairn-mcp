@@ -64,8 +64,14 @@ Memories often contain relative time references. Resolve them to actual dates wh
   If you can't resolve confidently, leave event_date as null — don't guess.
 
 ### 4. SPEAKER ATTRIBUTION — WHO SAID THIS?
-Before extracting a fact, determine who is the source:
+The [Speaker] tag (when present) tells you who authored this memory:
+- **user**: The human's own words — decisions, preferences, directives. Extract with full confidence.
+- **assistant**: The AI assistant's analysis and work product. Extract factual findings, \
+confirmed decisions, and observations. Skip speculative suggestions that weren't acted on.
+- **collaborative**: Joint decisions from discussion. Extract agreements and shared conclusions.
+- No tag: Infer from content using the rules below.
 
+When inferring from content (no [Speaker] tag):
   - "I decided to use Neo4j" → user fact, EXTRACT as Decision
   - "The assistant suggested using Redis" → assistant suggestion, SKIP unless user confirmed
   - "We agreed to deploy on Friday" → collaborative decision, EXTRACT
@@ -327,17 +333,28 @@ Input: "LoCoMo benchmark results: 49.2% overall. Failure analysis shows 66% of f
 Now extract knowledge from the following text. Return ONLY the JSON object, no other text."""
 
 
-def build_extraction_messages(content: str, created_at: str | None = None) -> list[dict]:
+def build_extraction_messages(
+    content: str,
+    created_at: str | None = None,
+    author: str | None = None,
+) -> list[dict]:
     """Build messages for the combined extraction LLM call.
 
     Args:
         content: The memory text to extract from.
         created_at: ISO timestamp of when the memory was created. Used for
             resolving relative dates ("last week", "yesterday").
+        author: Voice attribution ("user", "assistant", "collaborative").
+            Passed as [Speaker] tag to guide extraction filtering.
     """
     user_content = content
+    metadata_parts = []
     if created_at:
-        user_content = f"[Memory recorded: {created_at}]\n\n{content}"
+        metadata_parts.append(f"[Memory recorded: {created_at}]")
+    if author:
+        metadata_parts.append(f"[Speaker: {author}]")
+    if metadata_parts:
+        user_content = "\n".join(metadata_parts) + f"\n\n{content}"
     return [
         {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
         {"role": "user", "content": user_content},

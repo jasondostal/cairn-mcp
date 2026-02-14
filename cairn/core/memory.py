@@ -77,7 +77,9 @@ class MemoryStore:
         extraction_result = None
         if use_extraction:
             try:
-                extraction_result = self.knowledge_extractor.extract(content)
+                extraction_result = self.knowledge_extractor.extract(
+                    content, author=author,
+                )
             except Exception:
                 logger.warning("Knowledge extraction failed, falling back to enrichment", exc_info=True)
 

@@ -21,7 +21,14 @@ OFFSET_FILE="${EVENT_LOG}.offset"
 [ ! -f "$EVENT_LOG" ] && exit 0
 
 CAIRN_URL="${CAIRN_URL:-http://localhost:8000}"
+CAIRN_API_KEY="${CAIRN_API_KEY:-}"
 BATCH_SIZE="${CAIRN_EVENT_BATCH_SIZE:-25}"
+
+# Build auth header if API key is set
+AUTH_HEADER=()
+if [ -n "$CAIRN_API_KEY" ]; then
+    AUTH_HEADER=(-H "X-API-Key: ${CAIRN_API_KEY}")
+fi
 
 # Capture full event: tool_name, tool_input (full JSON), tool_response (capped)
 TOOL_INPUT=$(echo "$INPUT" | jq -c '.tool_input // {}')
@@ -79,6 +86,7 @@ if [ "$UNSHIPPED" -ge "$BATCH_SIZE" ]; then
     (
         if curl -sf -X POST "${CAIRN_URL}/api/events/ingest" \
             -H "Content-Type: application/json" \
+            "${AUTH_HEADER[@]}" \
             -d "$PAYLOAD" >/dev/null 2>&1; then
             echo "$((SHIPPED + BATCH_SIZE))" > "$OFFSET_FILE"
         fi

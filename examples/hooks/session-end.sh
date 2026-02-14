@@ -22,7 +22,14 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 
 CAIRN_URL="${CAIRN_URL:-http://localhost:8000}"
+CAIRN_API_KEY="${CAIRN_API_KEY:-}"
 CAIRN_PROJECT="${CAIRN_PROJECT:-$(basename "${CWD:-$(pwd)}")}"
+
+# Build auth header if API key is set
+AUTH_HEADER=()
+if [ -n "$CAIRN_API_KEY" ]; then
+    AUTH_HEADER=(-H "X-API-Key: ${CAIRN_API_KEY}")
+fi
 
 CAIRN_EVENT_DIR="${CAIRN_EVENT_DIR:-${HOME}/.cairn/events}"
 EVENT_LOG="${CAIRN_EVENT_DIR}/cairn-events-${SESSION_ID}.jsonl"
@@ -78,6 +85,7 @@ if [ -f "$EVENT_LOG" ]; then
         # Ship final batch — synchronous this time (we're at session end)
         HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" -X POST "${CAIRN_URL}/api/events/ingest" \
             -H "Content-Type: application/json" \
+            "${AUTH_HEADER[@]}" \
             -d "$PAYLOAD" 2>/dev/null || echo "000")
 
         if [ "$HTTP_CODE" = "202" ] || [ "$HTTP_CODE" = "200" ]; then
@@ -111,6 +119,7 @@ fi
 
 RESULT=$(curl -sf -X POST "${CAIRN_URL}/api/cairns" \
     -H "Content-Type: application/json" \
+    "${AUTH_HEADER[@]}" \
     -d "$PAYLOAD" \
     2>/dev/null || echo '{"error": "failed to reach cairn"}')
 

@@ -131,18 +131,21 @@ class KnowledgeExtractor:
             self._embed_cache[text] = vec
         return vec
 
-    def extract(self, content: str, created_at: str | None = None) -> ExtractionResult | None:
+    def extract(
+        self, content: str, created_at: str | None = None, author: str | None = None,
+    ) -> ExtractionResult | None:
         """Run extraction LLM call and parse result.
 
         Args:
             content: Memory text to extract from.
             created_at: ISO timestamp for resolving relative dates.
+            author: Voice attribution ("user", "assistant", "collaborative").
 
         Returns ExtractionResult on success, None on total failure.
         Retries once on parse failure.
         """
         try:
-            messages = build_extraction_messages(content, created_at=created_at)
+            messages = build_extraction_messages(content, created_at=created_at, author=author)
             raw = self.llm.generate(messages, max_tokens=2048)
             return self._parse(raw)
         except Exception as first_error:

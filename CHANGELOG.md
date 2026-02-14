@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.35.0] - 2026-02-14
+
+### Added
+- **Voice-aware knowledge extraction** — extraction LLM now receives a `[Speaker: user|assistant|collaborative]`
+  tag when the memory has an `author` field set. Improves extraction filtering: user-authored
+  memories are extracted with full confidence, assistant-authored memories filter speculative
+  suggestions, collaborative memories extract shared decisions. Gracefully ignored when author
+  is null (no behavioral change for existing deployments).
+- **Hook auth support** — example hooks (`session-start.sh`, `session-end.sh`, `log-event.sh`)
+  now pass `CAIRN_API_KEY` as an `X-API-Key` header when the env var is set. Required for
+  deployments with `CAIRN_AUTH_ENABLED=true`.
+- `migrate_v2.py` passes `author` to extraction during bulk re-extraction runs.
+
 ## [0.34.2] - 2026-02-14
 
 ### Fixed
