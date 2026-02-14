@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.35.1] - 2026-02-14
+
+### Added
+- **Task completion from UI** — `POST /api/tasks/{id}/complete` endpoint + "Mark Complete"
+  button in task detail sheet. Refetches list on completion.
+- **Chat session persistence** — messages saved to `sessionStorage` (capped at 100), restored
+  on page load. "New Chat" button to clear.
+- **Ops log metadata** — project (links to `/projects/{name}`) and session name (links to
+  `/sessions`) now displayed in each row. Model shown on lg+ viewports, session on xl+.
+
+### Changed
+- **Dashboard layout rearranged** — Memory Type Growth + Token Usage (2-col), Activity Heatmap
+  (full width), Health Strip, Operations + Cost Projection (2-col), Model + Project tables,
+  Type badges. Removed redundant Projects grid.
+- **Ops log density** — replaced `<Card>` wrappers with `divide-y` list rows (`px-3 py-1.5`).
+  Removed Dashboard button (redundant with sidebar).
+- **Token chart readability** — unstacked series (removed `stackId`), differentiated fill
+  opacity (input 0.3, output 0.15), increased stroke width to 2.
+- **Analytics labels** — `(none)` → `System` for null models, `(no project)` → `Unassigned`.
+- **Chat scroll fix** — `requestAnimationFrame` + `{ block: "end" }` for reliable post-paint
+  scroll anchoring.
+
+### Fixed
+- **Sidebar nav overflow** — added `overflow-y-auto` to desktop nav. 18 items no longer render
+  outside the `bg-card` background on shorter viewports.
+- **Chat LLM inbox spam** — tightened system prompt so `send_message` is only used for async
+  notes (unrelated discoveries, explicit reminders), not during normal conversation.
+
 ## [0.35.0] - 2026-02-14
 
 ### Added
