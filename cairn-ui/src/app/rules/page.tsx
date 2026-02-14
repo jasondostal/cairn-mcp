@@ -1,20 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, type Rule, type Project } from "@/lib/api";
+import { api, type Rule } from "@/lib/api";
 import { formatDate } from "@/lib/format";
+import { usePageFilters } from "@/lib/use-page-filters";
+import { PageFilters, DenseToggle } from "@/components/page-filters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/error-state";
 import { ImportanceBadge } from "@/components/importance-badge";
-import { MultiSelect } from "@/components/ui/multi-select";
 import { RuleSheet } from "@/components/rule-sheet";
 import { PaginatedList } from "@/components/paginated-list";
 import { SkeletonList } from "@/components/skeleton-list";
 import { EmptyState } from "@/components/empty-state";
 import { PageLayout } from "@/components/page-layout";
-import { Shield, LayoutList, LayoutGrid } from "lucide-react";
+import { Shield } from "lucide-react";
 
 function RuleCard({ rule, onClick }: { rule: Rule; onClick: () => void }) {
   return (
@@ -91,37 +91,22 @@ function RulesList({ rules, dense, onSelect }: { rules: Rule[]; dense: boolean; 
 }
 
 export default function RulesPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [selected, setSelected] = useState<string[]>([]);
+  const filters = usePageFilters({ defaultDense: false });
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dense, setDense] = useState(false);
   const [selectedRule, setSelectedRule] = useState<Rule | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-
-  useEffect(() => {
-    setError(null);
-    Promise.all([api.projects(), api.rules()])
-      .then(([p, r]) => {
-        setProjects(p.items);
-        setRules(r.items);
-      })
-      .catch((err) => setError(err?.message || "Failed to load rules"))
-      .finally(() => setLoading(false));
-  }, []);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
     api
-      .rules(selected.length ? { project: selected.join(",") } : undefined)
+      .rules(filters.showAllProjects ? undefined : { project: filters.projectFilter.join(",") })
       .then((r) => setRules(r.items))
       .catch((err) => setError(err?.message || "Failed to load rules"))
       .finally(() => setLoading(false));
-  }, [selected]);
-
-  const projectOptions = projects.map((p) => ({ value: p.name, label: p.name }));
+  }, [filters.projectFilter, filters.showAllProjects]);
 
   function openRuleSheet(rule: Rule) {
     setSelectedRule(rule);
@@ -131,38 +116,19 @@ export default function RulesPage() {
   return (
     <PageLayout
       title="Rules"
-      titleExtra={
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0"
-          onClick={() => setDense(!dense)}
-          title={dense ? "Card view" : "Dense view"}
-        >
-          {dense ? <LayoutGrid className="h-4 w-4" /> : <LayoutList className="h-4 w-4" />}
-        </Button>
-      }
-      filters={
-        <MultiSelect
-          options={projectOptions}
-          value={selected}
-          onValueChange={setSelected}
-          placeholder="All projects"
-          searchPlaceholder="Search projects…"
-          maxCount={2}
-        />
-      }
+      titleExtra={<DenseToggle dense={filters.dense} onToggle={() => filters.setDense((d) => !d)} />}
+      filters={<PageFilters filters={filters} />}
     >
-      {loading && <SkeletonList count={4} />}
+      {(loading || filters.projectsLoading) && <SkeletonList count={4} />}
 
       {error && <ErrorState message="Failed to load rules" detail={error} />}
 
-      {!loading && !error && rules.length === 0 && (
+      {!loading && !filters.projectsLoading && !error && rules.length === 0 && (
         <EmptyState message="No rules found." />
       )}
 
-      {!loading && !error && rules.length > 0 && (
-        <RulesList rules={rules} dense={dense} onSelect={openRuleSheet} />
+      {!loading && !filters.projectsLoading && !error && rules.length > 0 && (
+        <RulesList rules={rules} dense={filters.dense} onSelect={openRuleSheet} />
       )}
 
       <RuleSheet

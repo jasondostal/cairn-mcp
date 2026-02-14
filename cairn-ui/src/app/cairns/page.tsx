@@ -4,11 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, type Cairn } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { useProjectSelector } from "@/lib/use-project-selector";
+import { usePageFilters } from "@/lib/use-page-filters";
+import { PageFilters, DenseToggle } from "@/components/page-filters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ErrorState } from "@/components/error-state";
-import { MultiSelect } from "@/components/ui/multi-select";
 import { SkeletonList } from "@/components/skeleton-list";
 import { EmptyState } from "@/components/empty-state";
 import { PageLayout } from "@/components/page-layout";
@@ -61,58 +61,85 @@ function CairnCard({ cairn, showProject }: { cairn: Cairn; showProject?: boolean
   );
 }
 
+function CairnDenseRow({ cairn, showProject }: { cairn: Cairn; showProject?: boolean }) {
+  const truncated = cairn.narrative
+    ? cairn.narrative.length > 100 ? cairn.narrative.slice(0, 100) + "…" : cairn.narrative
+    : "";
+  return (
+    <Link
+      href={`/cairns/${cairn.id}`}
+      className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors"
+    >
+      <Landmark className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <span className="font-medium truncate shrink-0 max-w-[200px]">{cairn.title}</span>
+      {truncated && <span className="flex-1 truncate text-muted-foreground">{truncated}</span>}
+      {!truncated && <span className="flex-1" />}
+      {cairn.is_compressed && (
+        <Badge variant="secondary" className="text-xs shrink-0">
+          <Archive className="mr-1 h-3 w-3" />
+          compressed
+        </Badge>
+      )}
+      {showProject && cairn.project && (
+        <Badge variant="secondary" className="text-xs shrink-0">{cairn.project}</Badge>
+      )}
+      <Badge variant="outline" className="text-xs shrink-0">{cairn.session_name}</Badge>
+      <span className="text-xs text-muted-foreground shrink-0 flex items-center gap-1">
+        <Layers className="h-3 w-3" />
+        {cairn.memory_count}
+      </span>
+      <span className="text-xs text-muted-foreground shrink-0">{formatDate(cairn.set_at)}</span>
+    </Link>
+  );
+}
+
 export default function CairnsPage() {
-  const { projects, loading: projectsLoading, error: projectsError } = useProjectSelector();
+  const filters = usePageFilters({ defaultDense: false });
   const [cairns, setCairns] = useState<Cairn[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [projectFilter, setProjectFilter] = useState<string[]>([]);
-
-  const showAll = projectFilter.length === 0;
 
   useEffect(() => {
     setLoading(true);
     setError(null);
     api
-      .cairns(projectFilter.length ? projectFilter.join(",") : undefined)
+      .cairns(filters.showAllProjects ? undefined : filters.projectFilter.join(","))
       .then(setCairns)
       .catch((err) => setError(err?.message || "Failed to load cairns"))
       .finally(() => setLoading(false));
-  }, [projectFilter]);
-
-  const projectOptions = projects.map((p) => ({ value: p.name, label: p.name }));
+  }, [filters.projectFilter, filters.showAllProjects]);
 
   return (
     <PageLayout
       title="Cairns"
-      filters={
-        <MultiSelect
-          options={projectOptions}
-          value={projectFilter}
-          onValueChange={setProjectFilter}
-          placeholder="All projects"
-          searchPlaceholder="Search projects…"
-          maxCount={2}
-        />
-      }
+      titleExtra={<DenseToggle dense={filters.dense} onToggle={() => filters.setDense((d) => !d)} />}
+      filters={<PageFilters filters={filters} />}
     >
-      {(loading || projectsLoading) && <SkeletonList count={4} height="h-24" />}
+      {(loading || filters.projectsLoading) && <SkeletonList count={4} height="h-24" />}
 
-      {(error || projectsError) && <ErrorState message="Failed to load cairns" detail={error || projectsError || undefined} />}
+      {error && <ErrorState message="Failed to load cairns" detail={error} />}
 
-      {!loading && !projectsLoading && !error && !projectsError && cairns.length === 0 && (
+      {!loading && !filters.projectsLoading && !error && cairns.length === 0 && (
         <EmptyState
-          message={showAll ? "No cairns yet." : `No cairns for ${projectFilter.join(", ")}.`}
+          message={filters.showAllProjects ? "No cairns yet." : `No cairns for ${filters.projectFilter.join(", ")}.`}
           detail="Cairns are set at the end of sessions."
         />
       )}
 
-      {!loading && !projectsLoading && !error && !projectsError && cairns.length > 0 && (
-        <div className="space-y-2">
-          {cairns.map((c) => (
-            <CairnCard key={c.id} cairn={c} showProject={showAll} />
-          ))}
-        </div>
+      {!loading && !filters.projectsLoading && !error && cairns.length > 0 && (
+        filters.dense ? (
+          <div className="rounded-md border border-border divide-y divide-border">
+            {cairns.map((c) => (
+              <CairnDenseRow key={c.id} cairn={c} showProject={filters.showAllProjects} />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {cairns.map((c) => (
+              <CairnCard key={c.id} cairn={c} showProject={filters.showAllProjects} />
+            ))}
+          </div>
+        )
       )}
     </PageLayout>
   );

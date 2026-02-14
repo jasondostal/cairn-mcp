@@ -82,6 +82,7 @@ export interface DigestInfo {
 }
 
 export interface Status {
+  version: string;
   status: string;
   memories: number;
   projects: number;
@@ -98,6 +99,19 @@ export interface Status {
   };
   llm_capabilities: string[];
   digest?: DigestInfo;
+}
+
+export interface Settings {
+  embedding: { backend: string; model: string; dimensions: number };
+  llm: { backend: string; model: string };
+  reranker: { backend: string; model: string; candidates: number };
+  terminal: { backend: string };
+  auth: { enabled: boolean };
+  analytics: { enabled: boolean; retention_days: number };
+  enrichment_enabled: boolean;
+  capabilities: Record<string, boolean>;
+  transport: string;
+  http_port: number;
 }
 
 export interface Project {
@@ -642,4 +656,6 @@ export const api = {
 
   terminalDeleteHost: (id: number) =>
     del<{ deleted: boolean; id: number }>(`/terminal/hosts/${id}`),
+
+  settings: () => get<Settings>("/settings"),
 };

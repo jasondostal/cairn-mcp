@@ -23,6 +23,7 @@ import {
   Shield,
   FileText,
   PenLine,
+  Settings,
 } from "lucide-react";
 
 const pages = [
@@ -35,6 +36,7 @@ const pages = [
   { href: "/tasks", label: "Tasks", icon: ListTodo },
   { href: "/thinking", label: "Thinking", icon: Brain },
   { href: "/rules", label: "Rules", icon: Shield },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function CommandPalette() {

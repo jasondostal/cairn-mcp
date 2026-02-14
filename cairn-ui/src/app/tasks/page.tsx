@@ -3,18 +3,18 @@
 import { useEffect, useState } from "react";
 import { api, type Task } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { useProjectSelector } from "@/lib/use-project-selector";
+import { usePageFilters } from "@/lib/use-page-filters";
+import { PageFilters, DenseToggle } from "@/components/page-filters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/error-state";
-import { MultiSelect } from "@/components/ui/multi-select";
 import { TaskSheet } from "@/components/task-sheet";
 import { PaginatedList } from "@/components/paginated-list";
 import { SkeletonList } from "@/components/skeleton-list";
 import { EmptyState } from "@/components/empty-state";
 import { PageLayout } from "@/components/page-layout";
-import { CheckCircle, Circle, Link2, LayoutList, LayoutGrid } from "lucide-react";
+import { CheckCircle, Circle, Link2 } from "lucide-react";
 
 function TaskCard({ task, showProject, onClick }: { task: Task; showProject?: boolean; onClick: () => void }) {
   const done = task.status === "completed";
@@ -114,31 +114,25 @@ function TasksList({ tasks, showProject, dense, onSelect }: { tasks: Task[]; sho
 }
 
 export default function TasksPage() {
-  const { projects, selected, setSelected, loading: projectsLoading, error: projectsError } = useProjectSelector();
+  const filters = usePageFilters();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
-  const [projectFilter, setProjectFilter] = useState<string[]>([]);
-  const [dense, setDense] = useState(true);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-
-  const showAll = projectFilter.length === 0;
 
   useEffect(() => {
     setLoading(true);
     setError(null);
     api
-      .tasks(showAll ? undefined : projectFilter.join(","), {
+      .tasks(filters.showAllProjects ? undefined : filters.projectFilter.join(","), {
         include_completed: showCompleted ? "true" : undefined,
       })
       .then((r) => setTasks(r.items))
       .catch((err) => setError(err?.message || "Failed to load tasks"))
       .finally(() => setLoading(false));
-  }, [projectFilter, showCompleted, showAll]);
-
-  const projectOptions = projects.map((p) => ({ value: p.name, label: p.name }));
+  }, [filters.projectFilter, showCompleted, filters.showAllProjects]);
 
   function openTaskSheet(task: Task) {
     setSelectedTask(task);
@@ -148,51 +142,36 @@ export default function TasksPage() {
   return (
     <PageLayout
       title="Tasks"
-      titleExtra={
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0"
-          onClick={() => setDense(!dense)}
-          title={dense ? "Card view" : "Dense view"}
-        >
-          {dense ? <LayoutGrid className="h-4 w-4" /> : <LayoutList className="h-4 w-4" />}
-        </Button>
-      }
+      titleExtra={<DenseToggle dense={filters.dense} onToggle={() => filters.setDense((d) => !d)} />}
       filters={
-        <div className="flex items-center gap-2 flex-wrap">
-          <MultiSelect
-            options={projectOptions}
-            value={projectFilter}
-            onValueChange={setProjectFilter}
-            placeholder="All projects"
-            searchPlaceholder="Search projects…"
-            maxCount={2}
-          />
-          <Button
-            variant={showCompleted ? "default" : "outline"}
-            size="sm"
-            onClick={() => setShowCompleted(!showCompleted)}
-          >
-            {showCompleted ? "Hide" : "Show"} completed
-          </Button>
-        </div>
+        <PageFilters
+          filters={filters}
+          extra={
+            <Button
+              variant={showCompleted ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowCompleted(!showCompleted)}
+            >
+              {showCompleted ? "Hide" : "Show"} completed
+            </Button>
+          }
+        />
       }
     >
-      {(loading || projectsLoading) && <SkeletonList count={4} height="h-20" />}
+      {(loading || filters.projectsLoading) && <SkeletonList count={4} height="h-20" />}
 
-      {(error || projectsError) && <ErrorState message="Failed to load tasks" detail={error || projectsError || undefined} />}
+      {error && <ErrorState message="Failed to load tasks" detail={error} />}
 
-      {!loading && !projectsLoading && !error && !projectsError && tasks.length === 0 && (
+      {!loading && !filters.projectsLoading && !error && tasks.length === 0 && (
         <EmptyState
-          message={showAll
+          message={filters.showAllProjects
             ? "No tasks yet."
-            : `No tasks for ${projectFilter.join(", ")}.`}
+            : `No tasks for ${filters.projectFilter.join(", ")}.`}
         />
       )}
 
-      {!loading && !projectsLoading && !error && !projectsError && tasks.length > 0 && (
-        <TasksList tasks={tasks} showProject={showAll} dense={dense} onSelect={openTaskSheet} />
+      {!loading && !filters.projectsLoading && !error && tasks.length > 0 && (
+        <TasksList tasks={tasks} showProject={filters.showAllProjects} dense={filters.dense} onSelect={openTaskSheet} />
       )}
 
       <TaskSheet

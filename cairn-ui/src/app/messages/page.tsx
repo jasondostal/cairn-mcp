@@ -3,12 +3,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { api, type Message } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { useProjectSelector } from "@/lib/use-project-selector";
+import { usePageFilters } from "@/lib/use-page-filters";
+import { PageFilters, DenseToggle } from "@/components/page-filters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/error-state";
-import { MultiSelect } from "@/components/ui/multi-select";
 import { SkeletonList } from "@/components/skeleton-list";
 import { EmptyState } from "@/components/empty-state";
 import { PageLayout } from "@/components/page-layout";
@@ -21,6 +21,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 function timeAgo(dateStr: string): string {
   const seconds = Math.floor(
@@ -142,6 +143,80 @@ function MessageRow({
   );
 }
 
+function MessageDenseRow({
+  message,
+  showProject,
+  onMarkRead,
+  onArchive,
+}: {
+  message: Message;
+  showProject?: boolean;
+  onMarkRead: (id: number) => void;
+  onArchive: (id: number) => void;
+}) {
+  const unread = !message.is_read;
+  const urgent = message.priority === "urgent";
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer",
+        unread && "font-medium",
+      )}
+      onClick={() => {
+        if (unread) onMarkRead(message.id);
+      }}
+    >
+      <div className="shrink-0">
+        {unread ? (
+          <Mail className={cn("h-3.5 w-3.5", urgent ? "text-red-500" : "text-primary")} />
+        ) : (
+          <MailOpen className="h-3.5 w-3.5 text-muted-foreground" />
+        )}
+      </div>
+      <Badge variant="secondary" className={cn("text-xs shrink-0", senderColor(message.sender))}>
+        {senderLabel(message.sender)}
+      </Badge>
+      <span className="flex-1 truncate">{message.content}</span>
+      {showProject && message.project && (
+        <Badge variant="secondary" className="text-xs shrink-0">{message.project}</Badge>
+      )}
+      {urgent && (
+        <Badge variant="destructive" className="text-xs shrink-0">urgent</Badge>
+      )}
+      <span className="text-xs text-muted-foreground shrink-0">{timeAgo(message.created_at)}</span>
+      <div className="flex items-center gap-1 shrink-0">
+        {unread && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0"
+            title="Mark read"
+            onClick={(e) => {
+              e.stopPropagation();
+              onMarkRead(message.id);
+            }}
+          >
+            <CheckCheck className="h-3 w-3" />
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0"
+          title="Archive"
+          onClick={(e) => {
+            e.stopPropagation();
+            onArchive(message.id);
+          }}
+        >
+          <Archive className="h-3 w-3" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function ComposeArea({
   projects,
   onSend,
@@ -166,8 +241,10 @@ function ComposeArea({
       setContent("");
       setPriority("normal");
       onSend();
-    } catch {
-      // Error handled silently — could add toast later
+    } catch (err) {
+      toast.error("Failed to send message", {
+        description: err instanceof Error ? err.message : undefined,
+      });
     } finally {
       setSending(false);
     }
@@ -219,22 +296,19 @@ function ComposeArea({
 }
 
 export default function MessagesPage() {
-  const { projects, loading: projectsLoading, error: projectsError } = useProjectSelector();
+  const filters = usePageFilters();
   const [messages, setMessages] = useState<Message[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [projectFilter, setProjectFilter] = useState<string[]>([]);
   const [showArchived, setShowArchived] = useState(false);
-
-  const showAll = projectFilter.length === 0;
 
   const loadMessages = useCallback(() => {
     setLoading(true);
     setError(null);
     api
       .messages({
-        project: showAll ? undefined : projectFilter.join(","),
+        project: filters.showAllProjects ? undefined : filters.projectFilter.join(","),
         include_archived: showArchived ? "true" : undefined,
         limit: "50",
       })
@@ -244,7 +318,7 @@ export default function MessagesPage() {
       })
       .catch((err) => setError(err?.message || "Failed to load messages"))
       .finally(() => setLoading(false));
-  }, [projectFilter, showArchived, showAll]);
+  }, [filters.projectFilter, showArchived, filters.showAllProjects]);
 
   useEffect(() => {
     loadMessages();
@@ -266,72 +340,83 @@ export default function MessagesPage() {
   };
 
   const handleMarkAllRead = async () => {
-    const proj = showAll ? undefined : projectFilter.join(",");
+    const proj = filters.showAllProjects ? undefined : filters.projectFilter.join(",");
     await api.markAllMessagesRead(proj);
     setMessages((prev) => prev.map((m) => ({ ...m, is_read: true })));
   };
 
   const unreadCount = messages.filter((m) => !m.is_read).length;
-  const projectOptions = projects.map((p) => ({ value: p.name, label: p.name }));
 
   return (
     <PageLayout
       title="Messages"
       titleExtra={
-        unreadCount > 0 ? (
-          <Button variant="outline" size="sm" onClick={handleMarkAllRead} className="gap-1">
-            <CheckCheck className="h-3.5 w-3.5" />
-            Mark all read
-          </Button>
-        ) : null
-      }
-      filters={
-        <div className="flex items-center gap-2 flex-wrap">
-          <MultiSelect
-            options={projectOptions}
-            value={projectFilter}
-            onValueChange={setProjectFilter}
-            placeholder="All projects"
-            searchPlaceholder="Search projects..."
-            maxCount={2}
-          />
-          <Button
-            variant={showArchived ? "default" : "outline"}
-            size="sm"
-            onClick={() => setShowArchived(!showArchived)}
-          >
-            {showArchived ? "Hide" : "Show"} archived
-          </Button>
-          {total > 0 && (
-            <span className="text-xs text-muted-foreground ml-auto">
-              {total} message{total !== 1 ? "s" : ""}
-              {unreadCount > 0 && ` (${unreadCount} unread)`}
-            </span>
+        <div className="flex items-center gap-2">
+          <DenseToggle dense={filters.dense} onToggle={() => filters.setDense((d) => !d)} />
+          {unreadCount > 0 && (
+            <Button variant="outline" size="sm" onClick={handleMarkAllRead} className="gap-1">
+              <CheckCheck className="h-3.5 w-3.5" />
+              Mark all read
+            </Button>
           )}
         </div>
       }
+      filters={
+        <PageFilters
+          filters={filters}
+          extra={
+            <>
+              <Button
+                variant={showArchived ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowArchived(!showArchived)}
+              >
+                {showArchived ? "Hide" : "Show"} archived
+              </Button>
+              {total > 0 && (
+                <span className="text-xs text-muted-foreground ml-auto">
+                  {total} message{total !== 1 ? "s" : ""}
+                  {unreadCount > 0 && ` (${unreadCount} unread)`}
+                </span>
+              )}
+            </>
+          }
+        />
+      }
     >
       <div className="space-y-4">
-        {!projectsLoading && projects.length > 0 && (
-          <ComposeArea projects={projects} onSend={loadMessages} />
+        {!filters.projectsLoading && filters.projects.length > 0 && (
+          <ComposeArea projects={filters.projects} onSend={loadMessages} />
         )}
 
-        {(loading && messages.length === 0) || projectsLoading ? (
+        {(loading && messages.length === 0) || filters.projectsLoading ? (
           <SkeletonList count={4} height="h-20" />
-        ) : error || projectsError ? (
-          <ErrorState message="Failed to load messages" detail={error || projectsError || undefined} />
+        ) : error ? (
+          <ErrorState message="Failed to load messages" detail={error} />
         ) : messages.length === 0 ? (
           <EmptyState
-            message={showAll ? "No messages yet." : `No messages for ${projectFilter.join(", ")}.`}
+            message={filters.showAllProjects ? "No messages yet." : `No messages for ${filters.projectFilter.join(", ")}.`}
             detail="Messages from agents and users will appear here."
           />
+        ) : filters.dense ? (
+          <div className="rounded-md border border-border divide-y divide-border">
+            {messages.map((m) => (
+              <MessageDenseRow
+                key={m.id}
+                message={m}
+                showProject={filters.showAllProjects}
+                onMarkRead={handleMarkRead}
+                onArchive={handleArchive}
+              />
+            ))}
+          </div>
         ) : (
           <div className="space-y-2">
             {messages.map((m) => (
               <MessageRow
                 key={m.id}
                 message={m}
-                showProject={showAll}
+                showProject={filters.showAllProjects}
                 onMarkRead={handleMarkRead}
                 onArchive={handleArchive}
               />

@@ -5,7 +5,8 @@ import { api, type TimelineMemory } from "@/lib/api";
 import { formatRelativeDate, formatTime } from "@/lib/format";
 import { useMemorySheet } from "@/lib/use-memory-sheet";
 import { useKeyboardNav } from "@/lib/use-keyboard-nav";
-import { useProjectSelector } from "@/lib/use-project-selector";
+import { usePageFilters } from "@/lib/use-page-filters";
+import { PageFilters, DenseToggle } from "@/components/page-filters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/error-state";
@@ -13,7 +14,6 @@ import { MemorySheet } from "@/components/memory-sheet";
 import { MemoryTypeBadge } from "@/components/memory-type-badge";
 import { ImportanceBadge } from "@/components/importance-badge";
 import { TagList } from "@/components/tag-list";
-import { MultiSelect } from "@/components/ui/multi-select";
 import { SkeletonList } from "@/components/skeleton-list";
 import { EmptyState } from "@/components/empty-state";
 import { PageLayout } from "@/components/page-layout";
@@ -155,31 +155,58 @@ function TimelineCard({
   );
 }
 
+function TimelineDenseRow({
+  memory,
+  onSelect,
+  isActive,
+  cardRef,
+}: {
+  memory: TimelineMemory;
+  onSelect?: (id: number) => void;
+  isActive?: boolean;
+  cardRef?: React.RefObject<HTMLDivElement | null>;
+}) {
+  return (
+    <div
+      ref={isActive ? cardRef : undefined}
+      className={`flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer ${isActive ? "bg-accent/30" : ""}`}
+      onClick={() => onSelect?.(memory.id)}
+    >
+      <span className="font-mono text-xs text-muted-foreground shrink-0">#{memory.id}</span>
+      <MemoryTypeBadge type={memory.memory_type} />
+      <span className="flex-1 truncate">{memory.summary || memory.content}</span>
+      <span className="text-xs text-muted-foreground shrink-0">{memory.project}</span>
+      <ImportanceBadge importance={memory.importance} />
+      <span className="text-xs text-muted-foreground shrink-0">{formatTime(memory.created_at)}</span>
+    </div>
+  );
+}
+
 export default function TimelinePage() {
-  const { projects, loading: projectsLoading } = useProjectSelector();
+  const filters = usePageFilters();
   const [items, setItems] = useState<TimelineMemory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [projectFilter, setProjectFilter] = useState<string[]>([]);
-  const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [days, setDays] = useState(7);
   const { sheetId, sheetOpen, setSheetOpen, openSheet } = useMemorySheet();
   const activeCardRef = useRef<HTMLDivElement | null>(null);
+
+  const typeOptions = MEMORY_TYPES.map((t) => ({ value: t, label: t }));
 
   useEffect(() => {
     setLoading(true);
     setError(null);
     api
       .timeline({
-        project: projectFilter.length ? projectFilter.join(",") : undefined,
-        type: typeFilter.length ? typeFilter.join(",") : undefined,
+        project: filters.showAllProjects ? undefined : filters.projectFilter.join(","),
+        type: filters.typeFilter.length ? filters.typeFilter.join(",") : undefined,
         days: String(days),
         limit: "200",
       })
       .then((data) => setItems(data.items))
       .catch((err) => setError(err?.message || "Failed to load timeline"))
       .finally(() => setLoading(false));
-  }, [projectFilter, typeFilter, days]);
+  }, [filters.projectFilter, filters.typeFilter, days, filters.showAllProjects]);
 
   const groups = groupByDate(items);
 
@@ -202,78 +229,86 @@ export default function TimelinePage() {
     }
   }, [activeIndex]);
 
-  const projectOptions = projects.map((p) => ({ value: p.name, label: p.name }));
-  const typeOptions = MEMORY_TYPES.map((t) => ({ value: t, label: t }));
-
   return (
     <PageLayout
       title="Timeline"
+      titleExtra={<DenseToggle dense={filters.dense} onToggle={() => filters.setDense((d) => !d)} />}
       filters={
-        <div className="flex items-center gap-2 flex-wrap">
-          <MultiSelect
-            options={projectOptions}
-            value={projectFilter}
-            onValueChange={setProjectFilter}
-            placeholder="All projects"
-            searchPlaceholder="Search projects…"
-            maxCount={2}
-          />
-          <MultiSelect
-            options={typeOptions}
-            value={typeFilter}
-            onValueChange={setTypeFilter}
-            placeholder="All types"
-            searchPlaceholder="Search types…"
-            maxCount={2}
-          />
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Range</span>
-            <div className="flex gap-1">
-              {DAY_PRESETS.map((p) => (
-                <Button
-                  key={p.value}
-                  variant={days === p.value ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setDays(p.value)}
-                >
-                  {p.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-        </div>
-      }
-    >
-      {(loading || projectsLoading) && <SkeletonList count={5} />}
-
-      {error && <ErrorState message="Failed to load timeline" detail={error} />}
-
-      {!loading && !projectsLoading && !error && items.length === 0 && (
-        <EmptyState message={`No memories in the last ${days} days.`} />
-      )}
-
-      {!loading && !projectsLoading && !error && items.length > 0 && (
-        <div className="space-y-6">
-          <ActivityHeatmap items={items} />
-          {Array.from(groups.entries()).map(([label, memories]) => (
-            <div key={label}>
-              <h2 className="mb-3 text-sm font-medium text-muted-foreground sticky top-0 z-[5] -mx-4 px-4 md:-mx-6 md:px-6 bg-background py-1.5 border-b border-border">
-                {label}
-                <span className="ml-2 text-xs">({memories.length})</span>
-              </h2>
-              <div className="space-y-2 border-l-2 border-border pl-4">
-                {memories.map((m) => (
-                  <TimelineCard
-                    key={m.id}
-                    memory={m}
-                    onSelect={openSheet}
-                    isActive={m.id === activeId}
-                    cardRef={activeCardRef}
-                  />
+        <PageFilters
+          filters={filters}
+          typeOptions={typeOptions}
+          typePlaceholder="All types"
+          extra={
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Range</span>
+              <div className="flex gap-1">
+                {DAY_PRESETS.map((p) => (
+                  <Button
+                    key={p.value}
+                    variant={days === p.value ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setDays(p.value)}
+                  >
+                    {p.label}
+                  </Button>
                 ))}
               </div>
             </div>
-          ))}
+          }
+        />
+      }
+    >
+      {(loading || filters.projectsLoading) && <SkeletonList count={5} />}
+
+      {error && <ErrorState message="Failed to load timeline" detail={error} />}
+
+      {!loading && !filters.projectsLoading && !error && items.length === 0 && (
+        <EmptyState message={`No memories in the last ${days} days.`} />
+      )}
+
+      {!loading && !filters.projectsLoading && !error && items.length > 0 && (
+        <div className="space-y-6">
+          <ActivityHeatmap items={items} />
+          {filters.dense ? (
+            <div className="rounded-md border border-border divide-y divide-border">
+              {Array.from(groups.entries()).map(([label, memories]) => (
+                <div key={label}>
+                  <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/30">
+                    {label} <span className="ml-1">({memories.length})</span>
+                  </div>
+                  {memories.map((m) => (
+                    <TimelineDenseRow
+                      key={m.id}
+                      memory={m}
+                      onSelect={openSheet}
+                      isActive={m.id === activeId}
+                      cardRef={activeCardRef}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : (
+            Array.from(groups.entries()).map(([label, memories]) => (
+              <div key={label}>
+                <h2 className="mb-3 text-sm font-medium text-muted-foreground sticky top-0 z-[5] -mx-4 px-4 md:-mx-6 md:px-6 bg-background py-1.5 border-b border-border">
+                  {label}
+                  <span className="ml-2 text-xs">({memories.length})</span>
+                </h2>
+                <div className="space-y-2 border-l-2 border-border pl-4">
+                  {memories.map((m) => (
+                    <TimelineCard
+                      key={m.id}
+                      memory={m}
+                      onSelect={openSheet}
+                      isActive={m.id === activeId}
+                      cardRef={activeCardRef}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       )}
 

@@ -387,10 +387,10 @@ def test_staleness_not_stale():
 
 def test_parse_vector():
     """pgvector string format should parse correctly."""
-    engine = ClusterEngine(MagicMock(), MagicMock())
+    from cairn.core.utils import parse_vector
 
-    vec = engine._parse_vector("[0.1,0.2,0.3]")
+    vec = parse_vector("[0.1,0.2,0.3]")
     assert vec == [0.1, 0.2, 0.3]
 
-    vec = engine._parse_vector("[0.0]")
+    vec = parse_vector("[0.0]")
     assert vec == [0.0]

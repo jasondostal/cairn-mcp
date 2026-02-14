@@ -9,7 +9,7 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
 from cairn.core.analytics import track_operation
-from cairn.core.utils import extract_json
+from cairn.core.utils import extract_json, parse_vector
 from cairn.embedding.interface import EmbeddingInterface
 from cairn.storage.database import Database
 
@@ -84,12 +84,7 @@ class ConsolidationEngine:
         ids = [r["id"] for r in rows]
         embeddings = []
         for r in rows:
-            vec_str = r["embedding"]
-            if isinstance(vec_str, str):
-                vec = [float(x) for x in vec_str.strip("[]").split(",")]
-            else:
-                vec = list(vec_str)
-            embeddings.append(vec)
+            embeddings.append(parse_vector(r["embedding"]))
 
         embeddings_matrix = np.array(embeddings)
         sim_matrix = cosine_similarity(embeddings_matrix)

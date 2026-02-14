@@ -5,7 +5,8 @@ import { api, type Memory } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { useMemorySheet } from "@/lib/use-memory-sheet";
 import { useKeyboardNav } from "@/lib/use-keyboard-nav";
-import { useProjectSelector } from "@/lib/use-project-selector";
+import { usePageFilters } from "@/lib/use-page-filters";
+import { PageFilters, DenseToggle } from "@/components/page-filters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,6 @@ import { MemorySheet } from "@/components/memory-sheet";
 import { MemoryTypeBadge } from "@/components/memory-type-badge";
 import { ImportanceBadge } from "@/components/importance-badge";
 import { TagList } from "@/components/tag-list";
-import { MultiSelect } from "@/components/ui/multi-select";
 import { SkeletonList } from "@/components/skeleton-list";
 import { PaginatedList } from "@/components/paginated-list";
 import { EmptyState } from "@/components/empty-state";
@@ -25,6 +25,8 @@ const MEMORY_TYPES = [
   "note", "decision", "rule", "code-snippet", "learning",
   "research", "discussion", "progress", "task", "debug", "design",
 ] as const;
+
+const TYPE_OPTIONS = MEMORY_TYPES.map((t) => ({ value: t, label: t }));
 
 function ScoreBreakdown({ score, components }: { score: number; components?: { vector: number; keyword: number; tag: number } }) {
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -136,11 +138,49 @@ function MemoryCard({ memory, onSelect, isActive }: { memory: Memory; onSelect?:
   );
 }
 
-function ResultsList({ results, onSelect }: { results: Memory[]; onSelect: (id: number) => void }) {
+function MemoryDenseRow({ memory, onSelect, isActive }: { memory: Memory; onSelect?: (id: number) => void; isActive?: boolean }) {
+  const truncated = memory.summary || (memory.content.length > 120 ? memory.content.slice(0, 120) + "\u2026" : memory.content);
+
+  return (
+    <div
+      className={`flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer ${isActive ? "bg-accent/30" : ""}`}
+      onClick={() => onSelect?.(memory.id)}
+    >
+      <span className="font-mono text-xs text-muted-foreground shrink-0">#{memory.id}</span>
+      <MemoryTypeBadge type={memory.memory_type} />
+      <span className="flex-1 truncate">{truncated}</span>
+      <span className="text-xs text-muted-foreground shrink-0">{memory.project}</span>
+      {memory.score !== undefined && (
+        <span className="font-mono text-xs text-muted-foreground shrink-0">
+          {(memory.score * 100).toFixed(0)}%
+        </span>
+      )}
+      <span className="shrink-0"><ImportanceBadge importance={memory.importance} /></span>
+      <span className="text-xs text-muted-foreground shrink-0">{formatDate(memory.created_at)}</span>
+    </div>
+  );
+}
+
+function ResultsList({ results, dense, onSelect }: { results: Memory[]; dense: boolean; onSelect: (id: number) => void }) {
   const { activeIndex } = useKeyboardNav({
     itemCount: results.length,
     onSelect: (i) => onSelect(results[i].id),
   });
+
+  if (dense) {
+    return (
+      <div className="rounded-md border border-border divide-y divide-border">
+        {results.map((m, i) => (
+          <MemoryDenseRow
+            key={m.id}
+            memory={m}
+            onSelect={onSelect}
+            isActive={i === activeIndex}
+          />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <PaginatedList
@@ -159,19 +199,14 @@ function ResultsList({ results, onSelect }: { results: Memory[]; onSelect: (id: 
 }
 
 export default function SearchPage() {
-  const { projects } = useProjectSelector();
+  const filters = usePageFilters({ defaultDense: false });
   const [query, setQuery] = useState("");
-  const [projectFilter, setProjectFilter] = useState<string[]>([]);
-  const [type, setType] = useState<string[]>([]);
   const [mode, setMode] = useState("semantic");
   const [results, setResults] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { sheetId, sheetOpen, setSheetOpen, openSheet } = useMemorySheet();
-
-  const projectOptions = projects.map((p) => ({ value: p.name, label: p.name }));
-  const typeOptions = MEMORY_TYPES.map((t) => ({ value: t, label: t }));
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -181,8 +216,8 @@ export default function SearchPage() {
     setError(null);
     try {
       const data = await api.search(query, {
-        project: projectFilter.length ? projectFilter.join(",") : undefined,
-        type: type.length ? type.join(",") : undefined,
+        project: filters.projectFilter.length ? filters.projectFilter.join(",") : undefined,
+        type: filters.typeFilter.length ? filters.typeFilter.join(",") : undefined,
         mode,
         limit: "100",
       });
@@ -198,6 +233,7 @@ export default function SearchPage() {
   return (
     <PageLayout
       title="Search"
+      titleExtra={<DenseToggle dense={filters.dense} onToggle={() => filters.setDense((d) => !d)} />}
       filters={
         <form onSubmit={handleSearch} className="flex flex-col gap-3 w-full">
           <div className="flex gap-2">
@@ -214,40 +250,29 @@ export default function SearchPage() {
               {loading ? "Searching\u2026" : "Search"}
             </Button>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <MultiSelect
-              options={projectOptions}
-              value={projectFilter}
-              onValueChange={setProjectFilter}
-              placeholder="All projects"
-              searchPlaceholder="Search projects…"
-              maxCount={2}
-            />
-            <MultiSelect
-              options={typeOptions}
-              value={type}
-              onValueChange={setType}
-              placeholder="All types"
-              searchPlaceholder="Search types…"
-              maxCount={2}
-            />
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Mode</span>
-              <div className="flex gap-1">
-                {["semantic", "keyword", "vector"].map((m) => (
-                  <Button
-                    key={m}
-                    type="button"
-                    variant={mode === m ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setMode(m)}
-                  >
-                    {m}
-                  </Button>
-                ))}
+          <PageFilters
+            filters={filters}
+            typeOptions={TYPE_OPTIONS}
+            typePlaceholder="All types"
+            extra={
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Mode</span>
+                <div className="flex gap-1">
+                  {["semantic", "keyword", "vector"].map((m) => (
+                    <Button
+                      key={m}
+                      type="button"
+                      variant={mode === m ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setMode(m)}
+                    >
+                      {m}
+                    </Button>
+                  ))}
+                </div>
               </div>
-            </div>
-          </div>
+            }
+          />
         </form>
       }
     >
@@ -260,7 +285,7 @@ export default function SearchPage() {
       )}
 
       {!loading && !error && results.length > 0 && (
-        <ResultsList results={results} onSelect={openSheet} />
+        <ResultsList results={results} dense={filters.dense} onSelect={openSheet} />
       )}
 
       <MemorySheet
