@@ -233,6 +233,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
             db, opencode,
             message_manager=_msg_mgr,
             default_agent=config.workspace.default_agent,
+            budget_tokens=config.budget.workspace,
         ),
         analytics_tracker=analytics_tracker,
         rollup_worker=rollup_worker,

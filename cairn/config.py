@@ -116,6 +116,16 @@ class WorkspaceConfig:
 
 
 @dataclass(frozen=True)
+class BudgetConfig:
+    rules: int = 3000           # Token budget for rules() responses
+    search: int = 4000          # Token budget for search() responses
+    recall: int = 8000          # Token budget for recall() responses
+    cairn_stack: int = 3000     # Token budget for cairns(action='stack') responses
+    insights: int = 4000        # Token budget for insights() responses
+    workspace: int = 6000       # Token budget for workspace build_context()
+
+
+@dataclass(frozen=True)
 class AuthConfig:
     enabled: bool = False
     api_key: str | None = None  # Static API key (checked via X-API-Key header)
@@ -144,6 +154,7 @@ class Config:
     neo4j: Neo4jConfig = field(default_factory=Neo4jConfig)
     reranker: RerankerConfig = field(default_factory=RerankerConfig)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
+    budget: BudgetConfig = field(default_factory=BudgetConfig)
     enrichment_enabled: bool = True
     transport: str = "stdio"  # "stdio" or "http"
     http_host: str = "0.0.0.0"
@@ -189,6 +200,9 @@ EDITABLE_KEYS: set[str] = {
     "terminal.backend", "terminal.max_sessions", "terminal.connect_timeout",
     # Workspace (OpenCode)
     "workspace.url", "workspace.password", "workspace.default_agent",
+    # Budget
+    "budget.rules", "budget.search", "budget.recall",
+    "budget.cairn_stack", "budget.insights", "budget.workspace",
     # Top-level
     "enrichment_enabled",
     "ingest_chunk_size", "ingest_chunk_overlap",
@@ -203,6 +217,7 @@ _SECTION_CLASSES = {
     "auth": AuthConfig,
     "terminal": TerminalConfig,
     "workspace": WorkspaceConfig,
+    "budget": BudgetConfig,
 }
 
 _BOOL_TRUTHY = {"true", "1", "yes"}
@@ -335,6 +350,12 @@ _ENV_MAP: dict[str, str] = {
     "workspace.url": "CAIRN_OPENCODE_URL",
     "workspace.password": "CAIRN_OPENCODE_PASSWORD",
     "workspace.default_agent": "CAIRN_OPENCODE_DEFAULT_AGENT",
+    "budget.rules": "CAIRN_BUDGET_RULES",
+    "budget.search": "CAIRN_BUDGET_SEARCH",
+    "budget.recall": "CAIRN_BUDGET_RECALL",
+    "budget.cairn_stack": "CAIRN_BUDGET_CAIRN_STACK",
+    "budget.insights": "CAIRN_BUDGET_INSIGHTS",
+    "budget.workspace": "CAIRN_BUDGET_WORKSPACE",
     "enrichment_enabled": "CAIRN_ENRICHMENT_ENABLED",
     "transport": "CAIRN_TRANSPORT",
     "http_host": "CAIRN_HTTP_HOST",
@@ -431,6 +452,14 @@ def load_config() -> Config:
             url=os.getenv("CAIRN_OPENCODE_URL", ""),
             password=os.getenv("CAIRN_OPENCODE_PASSWORD", ""),
             default_agent=os.getenv("CAIRN_OPENCODE_DEFAULT_AGENT", "cairn-build"),
+        ),
+        budget=BudgetConfig(
+            rules=int(os.getenv("CAIRN_BUDGET_RULES", "3000")),
+            search=int(os.getenv("CAIRN_BUDGET_SEARCH", "4000")),
+            recall=int(os.getenv("CAIRN_BUDGET_RECALL", "8000")),
+            cairn_stack=int(os.getenv("CAIRN_BUDGET_CAIRN_STACK", "3000")),
+            insights=int(os.getenv("CAIRN_BUDGET_INSIGHTS", "4000")),
+            workspace=int(os.getenv("CAIRN_BUDGET_WORKSPACE", "6000")),
         ),
         enrichment_enabled=os.getenv("CAIRN_ENRICHMENT_ENABLED", "true").lower() in ("true", "1", "yes"),
         transport=os.getenv("CAIRN_TRANSPORT", "stdio"),

@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from cairn.core.budget import TOKENS_PER_WORD, estimate_tokens
 from cairn.core.router import QueryRouter
 
 if TYPE_CHECKING:
@@ -24,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 # Token budget for final results
 DEFAULT_TOKEN_BUDGET = 10_000
-TOKENS_PER_WORD = 1.3
 
 
 class SearchV2:
@@ -224,7 +224,7 @@ class SearchV2:
 
         for c in candidates:
             content = c.get("content", "")
-            est_tokens = int(len(content.split()) * TOKENS_PER_WORD)
+            est_tokens = estimate_tokens(content)
             if total_tokens + est_tokens > budget and result:
                 break
             total_tokens += est_tokens

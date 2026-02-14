@@ -133,3 +133,29 @@ EVENT_BATCH_SIZE = 25              # default events per batch shipped by hooks
 MAX_EVENT_BATCH_SIZE = 200         # max events accepted in a single ingest call
 DIGEST_POLL_INTERVAL = 5.0         # seconds between DigestWorker poll cycles
 DIGEST_MAX_EVENTS_PER_BATCH = 50   # max events sent to LLM for a single digest
+
+
+# ============================================================
+# Context Budget (token limits for MCP tool responses)
+# ============================================================
+
+# Per-tool response budgets (tokens). 0 = disabled (no limit).
+BUDGET_RULES = 3000
+BUDGET_SEARCH = 4000
+BUDGET_RECALL = 8000
+BUDGET_CAIRN_STACK = 3000
+BUDGET_INSIGHTS = 4000
+BUDGET_WORKSPACE = 6000
+
+# Per-item content truncation limits (tokens)
+BUDGET_RULES_PER_ITEM = 300
+BUDGET_SEARCH_PER_ITEM = 200
+BUDGET_RECALL_PER_ITEM = 2000
+BUDGET_CAIRN_NARRATIVE_CHARS = 300
+BUDGET_INSIGHTS_PER_ITEM = 300
+
+# Workspace context allocation (percentage of total budget)
+WORKSPACE_ALLOC_RULES = 0.35
+WORKSPACE_ALLOC_MEMORIES = 0.30
+WORKSPACE_ALLOC_TRAIL = 0.20
+WORKSPACE_ALLOC_TASKS = 0.15
