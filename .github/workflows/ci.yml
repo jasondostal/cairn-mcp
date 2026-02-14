@@ -18,7 +18,9 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[dev]"
 
       - name: Run tests
         run: pytest tests/ --tb=short -q
