@@ -8,7 +8,7 @@
 #   3. Outputs context for Claude to load silently
 #
 # Configuration (env vars):
-#   CAIRN_URL      — Cairn API base URL (default: http://localhost:8002)
+#   CAIRN_URL      — Cairn API base URL (default: http://localhost:8000)
 #   CAIRN_PROJECT  — Project name (default: derived from cwd basename)
 
 set -euo pipefail
