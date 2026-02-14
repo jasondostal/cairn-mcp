@@ -178,6 +178,16 @@ export default function TasksPage() {
         task={selectedTask}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
+        onCompleted={() => {
+          setLoading(true);
+          api
+            .tasks(filters.showAllProjects ? undefined : filters.projectFilter.join(","), {
+              include_completed: showCompleted ? "true" : undefined,
+            })
+            .then((r) => setTasks(r.items))
+            .catch(() => {})
+            .finally(() => setLoading(false));
+        }}
       />
     </PageLayout>
   );

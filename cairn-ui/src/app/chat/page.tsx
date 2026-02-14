@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Send, Bot, User, Loader2, Wrench } from "lucide-react";
+import { Send, Bot, User, Loader2, Wrench, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ToolCallEntry {
@@ -16,6 +16,20 @@ interface Message {
   role: "user" | "assistant" | "system";
   content: string;
   toolCalls?: ToolCallEntry[];
+}
+
+const STORAGE_KEY = "cairnChat";
+const MAX_PERSISTED = 100;
+
+function loadMessages(): Message[] {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.slice(-MAX_PERSISTED) : [];
+  } catch {
+    return [];
+  }
 }
 
 function toolDisplayName(name: string): string {
@@ -32,18 +46,37 @@ function toolInputSummary(name: string, input: Record<string, unknown>): string 
 }
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(loadMessages);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [model, setModel] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Persist messages to sessionStorage
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-MAX_PERSISTED)));
+    } catch {
+      // quota exceeded — ignore
+    }
+  }, [messages]);
+
+  // Scroll to bottom after paint
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    });
   }, [messages]);
 
   useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const handleNewChat = useCallback(() => {
+    setMessages([]);
+    setModel(null);
+    sessionStorage.removeItem(STORAGE_KEY);
     inputRef.current?.focus();
   }, []);
 
@@ -96,11 +129,19 @@ export default function ChatPage() {
       <div className="shrink-0 border-b px-4 py-3 md:px-6">
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-semibold">Chat</h1>
-          {model && (
-            <span className="text-xs text-muted-foreground font-mono">
-              {model}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {model && (
+              <span className="text-xs text-muted-foreground font-mono">
+                {model}
+              </span>
+            )}
+            {messages.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={handleNewChat} className="h-7 px-2 text-xs">
+                <RotateCcw className="mr-1 h-3 w-3" />
+                New
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 

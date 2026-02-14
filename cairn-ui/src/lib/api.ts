@@ -569,6 +569,8 @@ export const api = {
   tasks: (project?: string, opts?: { include_completed?: string; limit?: string; offset?: string }) =>
     get<Paginated<Task>>("/tasks", { ...(project ? { project } : {}), ...opts }),
 
+  taskComplete: (id: number) => post<{ status: string }>(`/tasks/${id}/complete`, {}),
+
   thinking: (project?: string, opts?: { status?: string; limit?: string; offset?: string }) =>
     get<Paginated<ThinkingSequence>>("/thinking", { ...(project ? { project } : {}), ...opts }),
 

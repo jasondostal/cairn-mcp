@@ -482,6 +482,14 @@ def create_api(svc: Services) -> FastAPI:
         )
 
     # ------------------------------------------------------------------
+    # POST /tasks/{task_id}/complete — mark a task as completed
+    # ------------------------------------------------------------------
+    @router.post("/tasks/{task_id}/complete")
+    def api_task_complete(task_id: int = Path(...)):
+        task_manager.complete(task_id)
+        return {"status": "ok"}
+
+    # ------------------------------------------------------------------
     # GET /messages/unread-count — lightweight count for badge polling
     # ------------------------------------------------------------------
     @router.get("/messages/unread-count")

@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import {
   api,
   type Status,
-  type Project,
   type AnalyticsTimeseries,
   type ModelPerformance as MP,
   type ProjectBreakdown as PB,
@@ -14,7 +12,6 @@ import {
   type HeatmapResult,
 } from "@/lib/api";
 import { useFetch } from "@/lib/use-fetch";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageLayout } from "@/components/page-layout";
@@ -46,26 +43,6 @@ function TypeBadge({ type, count }: { type: string; count: number }) {
   );
 }
 
-function ProjectCard({ project }: { project: Project }) {
-  return (
-    <Link href={`/projects/${encodeURIComponent(project.name)}`}>
-      <Card className="transition-colors hover:border-primary/30">
-        <CardHeader className="p-4 pb-2">
-          <CardTitle className="text-sm font-medium">{project.name}</CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 pt-0">
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-semibold tabular-nums">
-              {project.memory_count}
-            </span>
-            <span className="text-sm text-muted-foreground">memories</span>
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
-  );
-}
-
 export default function Dashboard() {
   const [days, setDays] = useState(7);
   const daysStr = String(days);
@@ -75,9 +52,6 @@ export default function Dashboard() {
 
   const { data: status, loading: statusLoading, error: statusError } =
     useFetch<Status>(() => api.status(), [daysStr]);
-
-  const { data: projects } =
-    useFetch<Project[]>(() => api.projects().then((r) => r.items), [daysStr]);
 
   const { data: sparklines } =
     useFetch<EntitySparklines>(() => api.analyticsSparklines({ days: daysStr }), [daysStr]);
@@ -146,21 +120,18 @@ export default function Dashboard() {
         {/* KPI Strip with sparklines */}
         {sparklines && <SparklineKpiStrip data={sparklines} />}
 
-        {/* Operations + Token charts — 2 col */}
-        {timeseries && timeseries.series.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <OperationsBarChart series={timeseries.series} />
-            <TokenAreaChart series={timeseries.series} />
-          </div>
-        )}
-
-        {/* Memory Type Growth + Activity Heatmap */}
+        {/* Memory Type Growth + Token Usage — 2 col */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {memoryGrowth && memoryGrowth.series.length > 0 && (
             <MemoryTypeGrowthChart data={memoryGrowth} />
           )}
-          {heatmapData && <ActivityHeatmap heatmapData={heatmapData.days} />}
+          {timeseries && timeseries.series.length > 0 && (
+            <TokenAreaChart series={timeseries.series} />
+          )}
         </div>
+
+        {/* Activity Heatmap — full width */}
+        {heatmapData && <ActivityHeatmap heatmapData={heatmapData.days} />}
 
         {/* Health strip — compact horizontal */}
         <HealthStrip
@@ -169,16 +140,21 @@ export default function Dashboard() {
           digest={status.digest}
         />
 
+        {/* Operations Volume + Cost Projection — 2 col */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {timeseries && timeseries.series.length > 0 && (
+            <OperationsBarChart series={timeseries.series} />
+          )}
+          {modelsData && modelsData.items.length > 0 && (
+            <CostProjection models={modelsData.items} days={days} />
+          )}
+        </div>
+
         {/* Model Performance + Project Breakdown — 2 col tables */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {modelsData && <ModelPerformance items={modelsData.items} />}
           {projectsData && <ProjectBreakdown items={projectsData.items} />}
         </div>
-
-        {/* Cost Projection — full width */}
-        {modelsData && modelsData.items.length > 0 && (
-          <CostProjection models={modelsData.items} days={days} />
-        )}
 
         {/* Memory Types badges */}
         <div>
@@ -191,18 +167,6 @@ export default function Dashboard() {
               .map(([type, count]) => (
                 <TypeBadge key={type} type={type} count={count} />
               ))}
-          </div>
-        </div>
-
-        {/* Projects Grid — pushed to bottom */}
-        <div>
-          <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-            Projects
-          </h2>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
-            {(projects || []).map((p) => (
-              <ProjectCard key={p.id} project={p} />
-            ))}
           </div>
         </div>
       </div>

@@ -155,7 +155,7 @@ export function SidebarNav() {
             <span className="text-lg font-semibold tracking-tight">Cairn</span>
           </Link>
         </div>
-        <nav className="flex flex-1 flex-col gap-1 p-2">
+        <nav className="flex flex-1 flex-col gap-1 p-2 overflow-y-auto">
           <NavLinks />
         </nav>
         <SidebarFooter />

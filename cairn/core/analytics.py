@@ -608,7 +608,7 @@ class AnalyticsQueryEngine:
 
         items = []
         for r in current:
-            proj = r["project"] or "(no project)"
+            proj = r["project"] or "Unassigned"
             prev_ops = prev_map.get(r["project"], 0)
             curr_ops = r["ops"]
 
@@ -640,7 +640,7 @@ class AnalyticsQueryEngine:
         rows = self.db.execute(
             """
             SELECT
-                COALESCE(model, '(none)') as model,
+                COALESCE(model, 'System') as model,
                 COUNT(*) as calls,
                 COALESCE(SUM(tokens_in), 0) as tokens_in,
                 COALESCE(SUM(tokens_out), 0) as tokens_out,
@@ -650,7 +650,7 @@ class AnalyticsQueryEngine:
                 PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY latency_ms) as p99
             FROM usage_events
             WHERE timestamp >= %s
-            GROUP BY COALESCE(model, '(none)')
+            GROUP BY COALESCE(model, 'System')
             ORDER BY calls DESC
             """,
             (cutoff,),

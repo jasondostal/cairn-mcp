@@ -42,11 +42,11 @@ export function TokenAreaChart({ series }: { series: TimeseriesPoint[] }) {
           <AreaChart data={series} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
             <defs>
               <linearGradient id="gradIn" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.4} />
-                <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
+                <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.35} />
+                <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0.05} />
               </linearGradient>
               <linearGradient id="gradOut" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--chart-2)" stopOpacity={0.4} />
+                <stop offset="0%" stopColor="var(--chart-2)" stopOpacity={0.2} />
                 <stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0} />
               </linearGradient>
             </defs>
@@ -78,19 +78,19 @@ export function TokenAreaChart({ series }: { series: TimeseriesPoint[] }) {
             <Area
               type="monotone"
               dataKey="tokens_in"
-              stackId="1"
               stroke="var(--chart-1)"
               fill="url(#gradIn)"
-              strokeWidth={1.5}
+              fillOpacity={0.3}
+              strokeWidth={2}
               isAnimationActive={false}
             />
             <Area
               type="monotone"
               dataKey="tokens_out"
-              stackId="1"
               stroke="var(--chart-2)"
               fill="url(#gradOut)"
-              strokeWidth={1.5}
+              fillOpacity={0.15}
+              strokeWidth={2}
               isAnimationActive={false}
             />
           </AreaChart>
