@@ -1,135 +1,127 @@
 # Roadmap
 
-Current: **v0.18.0** — Pluggable providers, API auth, UI polish.
+Current: **v0.33.0** — Web terminal, inter-agent messages, live sessions, agentic chat.
 
 ---
 
-## v0.18.0 — Open Architecture + Dashboard Polish ✓
+## Next Up
 
-Bring your own LLM. Lock down the API. Make the dashboard feel alive.
+### Settings UI
+Runtime configuration without restarting. Env vars stay as boot defaults, a DB table stores runtime overrides, the UI edits the DB. Configurable: LLM model, chat system prompt, capability toggles (reranking, search_v2, query expansion), reranker backend. Env-only: DB creds, AWS keys, ports, CORS.
 
-- [x] **Pluggable LLM providers** — factory + registry pattern. Built-in: Ollama, Bedrock, Gemini, OpenAI-compatible (covers Groq, Together, Mistral, LM Studio, vLLM). Custom providers via `register_llm_provider()`.
-- [x] **Pluggable embedding providers** — same factory/registry pattern. Built-in: local SentenceTransformer.
-- [x] **Optional API key auth** — lightweight middleware, off by default. Configurable header for auth proxy compatibility (Authentik, Caddy, nginx). Health/swagger endpoints exempt. MCP unaffected.
-- [x] **Memory relations in API** — search results and memory detail include incoming/outgoing relationship data
-- [x] **Search score transparency** — vector/keyword/tag score components exposed per result
-- [x] **Thinking tree visualization** — hierarchical tree with collapsible branches, color-coded thought types
-- [x] **Keyboard navigation** — j/k and arrow keys on Search/Timeline, Enter to open, Esc to clear
-- [x] **Activity heatmap** — 52-day GitHub-style contribution graph on Timeline
-- [x] **Dense/compact views** — toggle on Docs, Tasks, Timeline pages
-- [x] **Toast notifications** — Sonner-based feedback for background operations
-- [x] **Capture inline entities** — @mentions → project, #hashtags → tags, URLs → URL field
-- [x] **Search score breakdown hover** — color-coded vector/keyword/tag contribution tooltip
-- [x] **Next.js auth middleware** — API key injected server-side on proxied requests
+### UI Interactive Editing
+Turn the dashboard from read-only into a working interface. Edit memories inline, complete/update tasks, edit markdown content, update task status — all from the browser.
 
-## v0.17.0 — Human Capture Surfaces ✓
+### Graph Entity Management
+UI for Neo4j knowledge graph entities: visualize entity nodes, tag and merge duplicates, correct entity types, browse relationships. Depends on graph extraction being populated.
 
-Agents remember. Now humans can too.
+### Graph Search Handlers
+Re-enable intent-routed graph search in search_v2. Backfill graph extraction for remaining conversations, tune merge strategy, validate quality. Target: improved multi-hop and relationship queries.
 
-- [x] **Capture UI** — `/capture` page with slash commands, keyboard-first, remembers last project
-- [x] **URL extraction** — paste a URL, get readable text via trafilatura
-- [x] **Browser bookmarklet** — one-click capture from any page
-- [x] **iOS Shortcut support** — share sheet → Cairn
-- [x] **Memory type on ingest** — thread `memory_type` through the full pipeline
+### Event-Digest Tension Detection
+During cairn synthesis, compare session event digests against high-importance project memories. Flag memories where agent behavior consistently diverges from stored knowledge. Catches gradual drift that contradiction-on-store misses.
 
-## v0.16.0 — Smart Ingestion Pipeline ✓
+---
 
-One endpoint, many doorways.
+## Shipped
 
-- [x] **Unified `POST /api/ingest`** — classify, chunk, dedup, route in one call
-- [x] **Chonkie chunking** — markdown-aware splitting for large documents
-- [x] **LLM content classification** — auto-route to doc, memory, or both
-- [x] **Content-hash dedup** — idempotent re-ingestion
-- [x] **Chunk→doc linkage** — `source_doc_id` traces chunks back to parent
+### v0.33.0 — Web Terminal + Messages ✓
 
-## v0.15.0 — Content Ingestion Endpoints ✓
+Browser-based SSH. Agent-to-agent messaging.
 
-REST write endpoints for humans and scripts.
+- [x] **Dual-backend web terminal** — native (xterm.js + WebSocket + asyncssh) or ttyd (iframe). Host management with encrypted credentials. Feature-flagged via `CAIRN_TERMINAL_BACKEND`.
+- [x] **Inter-agent messages** — `messages` MCP tool, Messages UI page, chat tool integration. Send, inbox, mark read, archive, priority.
+- [x] Migration 015 (messages), Migration 016 (ssh_hosts)
+- [x] 12 new REST endpoints + 1 WebSocket endpoint
 
-- [x] **`POST /api/ingest/doc`** — single document creation
-- [x] **`POST /api/ingest/docs`** — batch document creation with partial success
-- [x] **`POST /api/ingest/memory`** — store memory via REST (full pipeline)
+### v0.31.0 — Live Session Dashboard ✓
 
-## v0.14.0 — Docs Browser ✓
+Watch Claude Code sessions in real-time.
 
-Read your docs without leaving Cairn.
+- [x] **Live session dashboard** — `/sessions` page with active/recent sessions, event counts, digest status
+- [x] Click into a session to see every tool call with input, response, timestamp
+- [x] Active sessions pulse green, auto-refresh
 
-- [x] **Docs browser** — `/docs` list + detail with rendered markdown (GFM tables, task lists)
-- [x] **Expanded doc types** — primer, writeup, guide added to brief/prd/plan
-- [x] **Document titles** — migration 007, auto-fallback to first heading
-- [x] **Swagger moved** — `/docs` → `/swagger` to avoid collision
+### v0.30.0 — Agentic Chat ✓
 
-## v0.13.0 — Organic Memory Correction ✓
+The Chat page LLM can search memories, browse projects, and store knowledge.
 
-Memories aren't stale because they're old — they're stale because something newer says they're wrong.
+- [x] **7 chat tools** — search_memories, recall_memory, store_memory, list_projects, system_status, get_rules, list_tasks
+- [x] Tool calls shown as expandable blocks in the UI
+- [x] Graceful degradation for models without tool support
 
-- [x] **Contradiction escalation on store** — high-importance contradictions surfaced in `conflicts` response field
-- [x] **Contradiction-aware search ranking** — contradicted memories penalized 0.5x across all search modes
-- [x] **Thinking conclusion dupe rule** — global rule prevents storing conclusion text as separate memories
-- [x] **7 new tests** (94 total across 16 suites)
+### v0.29.0 — Chat Page ✓
 
-## v0.12.0 — Event Pipeline v2 ✓
+Direct LLM conversation in the browser.
 
-CAPTURE → SHIP → DIGEST → CRYSTALLIZE. Events flow, not batch.
+- [x] **Chat UI** — bubble-style messages, keyboard submit, multi-line, model name display
+- [x] `POST /api/chat` endpoint with OpenAI-style messages
 
-- [x] **Streaming event ingestion** — `POST /api/events/ingest` accepts batches of 25, idempotent upsert, 202 Accepted
-- [x] **DigestWorker** — background daemon thread digests event batches into rolling LLM summaries
-- [x] **Digest-aware cairn synthesis** — narratives built from pre-digested summaries instead of raw events
-- [x] **Migration 006** — `session_events` table with partial index for undigested batch polling
-- [x] **Hook rewrite** — dumb pipe capture (full tool_input + tool_response), incremental shipping, `.offset` sidecar
-- [x] **Pipeline v1 fallback** — old hooks still work, new hooks degrade gracefully against old server
-- [x] **`CAIRN_LLM_EVENT_DIGEST`** — independently toggleable via env var
-- [x] **17 new tests** (87 total across 14 suites)
+### v0.28.0 — LoCoMo Benchmark + Knowledge Graph ✓
 
-## v0.11.0 — Upsert Cairns + Event Archive ✓
+81.7% on the standard conversational memory benchmark.
 
-No more race conditions. No more lost events.
+- [x] **LoCoMo 81.7%** — validated against Maharana et al. (ACL 2024). All 5 categories.
+- [x] **Neo4j knowledge graph** — entity/statement/triple storage, BFS traversal, contradiction detection
+- [x] **Combined knowledge extraction** — single LLM call extracts entities, statements, triples, tags, importance
+- [x] **Intent-routed search (search_v2)** — 5 intent types with typed handlers
+- [x] **Cross-encoder reranking** — Bedrock-powered, +5.5 points on benchmark
+- [x] **Speaker attribution** — `author` field on memories
+- [x] **Reranker pluggable architecture** — local cross-encoder and Bedrock backends
 
-- [x] **Cairn upsert semantics** — agent and hook can both set a cairn for the same session, second merges into first
-- [x] **Server-side event archive** — `CAIRN_EVENT_ARCHIVE_DIR` env var for file-based JSONL archive
-- [x] **Setup script** — `scripts/setup-hooks.sh` for interactive hook installation
-- [x] **Hooks documentation overhaul** — rewritten README with Quick Start, troubleshooting, architecture diagram
+### v0.27.0 — Analytics Dashboard ✓
 
-## v0.10.0 — Knowledge Graph ✓
+Chart-heavy home page with full observability.
 
-See the shape of your memory.
+- [x] **Analytics instrumentation** — all backends emit usage events with model name, tokens, latency
+- [x] **8 analytics endpoints** — overview, timeseries, operations, projects, models, memory-growth, sparklines, heatmap
+- [x] **Dashboard redesign** — sparkline KPIs, operations/token charts, activity heatmap, model table
 
-- [x] **Knowledge graph visualization** — d3-force interactive graph at `/graph`, nodes by type, edges by relation
-- [x] **Graph REST endpoint** — `GET /api/graph` with project and relation_type filters
-- [x] **Cluster UX improvements** — better card layout, expandable samples, improved scatter plot
+### v0.26.0 — Behavioral Tool Descriptions ✓
 
-## v0.9.0 — Hardening ✓
+- [x] All 14 MCP tool docstrings rewritten with TRIGGER keywords, WHEN TO USE guidance, cross-tool references
 
-Stand taller. Fix what the red team found.
+### v0.25.0 — Layout Overhaul ✓
 
-- [x] **Connection pooling** — `psycopg_pool.ConnectionPool` with thread-local tracking, auto-recovery from INERROR state
-- [x] **Configurable CORS** — `CAIRN_CORS_ORIGINS` env var, defaults to `*`, lock down behind reverse proxy
-- [x] **Default LLM → Ollama** — free, local, runs on commodity hardware. Bedrock still supported.
-- [x] **Persistent event logs** — `~/.cairn/events/` via `CAIRN_EVENT_DIR` instead of `/tmp`
-- [x] **Eval transparency** — qualified 83.8% recall claim, documented methodology and limitations
-- [x] **RRF documentation** — k=60 origin, weight rationale, candidate pool inflation noted
-- [x] **Hook port fix** — 8002 → 8000
+- [x] **PageLayout + EmptyState** components, 15 pages migrated to fixed-header layout
 
-## v0.8.0 — Cairns UI + Backend Hygiene ✓
+### v0.24.0 — Multi-Select Filters ✓
 
-Cairns in the browser. Cross-project orientation at boot.
+- [x] **Multi-select filters** across all 9 list pages with typeahead, badges, comma-separated API params
 
-- [x] **Cairns UI page** — timeline view in cairn-ui with narrative, memory count, compress action
-- [x] **All-projects filter** — cairn stack, task list, and thinking sequences accept optional project (omit = all)
-- [x] **`get_project()` read-only lookup** — no phantom project creation on read paths
-- [x] **Migration 005** — partial indexes for performance
-- [x] **Cross-project boot** — session-start hook fetches cairns across all projects, not just active
+### v0.23.0 — Temporal Decay + Drift Detection ✓
 
-## v0.7.0 — Cairns (Episodic Session Memory) ✓
+- [x] **Recency as 4th RRF signal** — newer memories rank higher
+- [x] **`drift_check` MCP tool** — file content hash comparison for stale memories
+- [x] **OpenAI-compatible embedding backend**
+- [x] **Digest pipeline observability**
 
-Session history that builds itself.
+### v0.22.0 — Multi-IDE + Security ✓
 
-- [x] **Cairns table + migration** — 14th table, cairn_id FK on memories, zero breaking changes
-- [x] **CairnManager** — set, stack, get, compress operations
-- [x] **`cairns` MCP tool (#13)** — set markers, walk the trail, inspect, compress
-- [x] **REST endpoints** — GET /api/cairns, GET /api/cairns/:id, POST /api/cairns
-- [x] **Hook scripts** — session-start.sh, log-event.sh, session-end.sh for Claude Code lifecycle hooks
-- [x] **Motes (event stream)** — every tool call silently logged to /tmp JSONL, bundled into cairn at session end
-- [x] **Three-tier degradation** — hooks → organic rules → raw memories. Each tier works without the ones above it
-- [x] **LLM narrative synthesis** — cairn title and narrative generated from session memories, toggleable via env var
-- [x] **13 new tests** (68 total across 13 suites)
+- [x] **Multi-IDE hook adapters** — Cursor, Windsurf, Cline, Continue
+- [x] **SSRF protection** on URL ingestion
+- [x] **MCP endpoint auth enforcement**
+
+### v0.21.0 — Model Observability ✓
+
+- [x] Per-model health, invocation counts, token usage, error tracking for all backends
+
+### v0.20.0 — Bedrock Embeddings ✓
+
+- [x] **Bedrock Titan V2 embeddings** — 8,192 token context, configurable dimensions
+- [x] **Auto-reconciliation** — startup detects dimension mismatch and resizes automatically
+
+### v0.19.0 — HDBSCAN Clustering ✓
+
+- [x] **HDBSCAN replaces DBSCAN** — auto-tuned density thresholds, meaningful clusters
+
+### v0.18.0 — Open Architecture ✓
+
+- [x] **Pluggable LLM providers** — Ollama, Bedrock, Gemini, OpenAI-compatible
+- [x] **Pluggable embedding providers** — local SentenceTransformer, extensible
+- [x] **Optional API key auth** — configurable header, auth proxy compatible
+- [x] Keyboard navigation, activity heatmap, dense views, toast notifications
+
+### v0.17.0 and earlier ✓
+
+See [CHANGELOG.md](CHANGELOG.md) for the full history back to v0.1.0.

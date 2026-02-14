@@ -21,7 +21,7 @@ Your AI starts every session from scratch. Your best ideas vanish before you can
 
 **Agents remember across sessions.** Decisions, learnings, and dead ends are captured automatically. Session markers (*cairns*) let the next agent pick up where the last one left off. **Humans capture thoughts instantly.** Type a thought, slash-command it into a category, and move on. Grab a URL from your browser with one click. Share from your phone. Everything lands in the same searchable pool.
 
-Four containers. One `docker compose up`. 13 MCP tools, a REST API, a web dashboard, and browser/mobile capture.
+Four containers. One `docker compose up`. 15 MCP tools, a REST API, a web dashboard, a web terminal, and browser/mobile capture.
 
 <p align="center">
   <img src="images/cairn-capture-screenshot.jpg" alt="Cairn capture page with slash commands" width="700">
@@ -35,7 +35,9 @@ Four containers. One `docker compose up`. 13 MCP tools, a REST API, a web dashbo
 - **Hybrid search** — Vector similarity + full-text + tag matching via Reciprocal Rank Fusion. Cross-encoder reranking, chain-of-thought answer generation.
 - **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, importance score, and relationship links on store.
 - **Pattern discovery** — HDBSCAN clustering finds themes across memories. LLM writes the labels. Clusters refresh lazily.
-- **Web dashboard** — 11 pages. Chart-heavy home dashboard with KPI sparklines, operations/token/memory-growth charts, activity heatmap. Search with score breakdowns, knowledge graph, thinking trees, multi-select filters, Cmd+K, keyboard nav, dark mode.
+- **Web terminal** — SSH into your hosts from the browser. Two backends: native (xterm.js + WebSocket + asyncssh proxy with encrypted credential storage) or ttyd (iframe embed). Host management UI. Feature-flagged, disabled by default.
+- **Messages** — inter-agent communication. Agents leave notes for each other and for you. Inbox UI with project filtering, priority, and batch operations.
+- **Web dashboard** — 16 pages. Chart-heavy home dashboard with KPI sparklines, operations/token/memory-growth charts, activity heatmap. Search with score breakdowns, knowledge graph, thinking trees, live session viewer, agentic chat, multi-select filters, Cmd+K, keyboard nav, dark mode.
 - **Four containers, done** — MCP at `/mcp`, REST at `/api`, same process. PostgreSQL + pgvector, Neo4j knowledge graph. Bring your own LLM — Ollama, Bedrock, Gemini, or anything OpenAI-compatible.
 
 <h3 align="center">81.7% on LoCoMo</h3>
@@ -296,7 +298,7 @@ No hooks? No problem. The `cairns` tool works without them — the agent can cal
 </details>
 
 <details>
-<summary><strong>MCP Tools</strong> — 13 tools</summary>
+<summary><strong>MCP Tools</strong> — 15 tools</summary>
 
 | Tool | What it does |
 |------|-------------|
@@ -313,11 +315,13 @@ No hooks? No problem. The `cairns` tool works without them — the agent can cal
 | `synthesize` | Synthesize session memories into a coherent narrative |
 | `consolidate` | Find duplicate memories, recommend merges/promotions/inactivations |
 | `cairns` | Session markers — set at session end, walk the trail back, compress old ones |
+| `drift_check` | Compare file content hashes to detect stale code-related memories |
+| `messages` | Inter-agent messaging — send, inbox, mark read, archive, unread count |
 
 </details>
 
 <details>
-<summary><strong>REST API</strong> — 33 endpoints</summary>
+<summary><strong>REST API</strong> — 50 endpoints</summary>
 
 REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Optional API key auth when `CAIRN_AUTH_ENABLED=true`.
 
@@ -332,6 +336,11 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Opt
 | `GET /api/docs/:id` | Single document with full content |
 | `GET /api/clusters?project=&topic=` | Clusters with member lists |
 | `GET /api/tasks?project=` | Tasks for a project |
+| `GET /api/messages/unread-count?project=` | Unread message count |
+| `GET /api/messages?project=` | Message inbox |
+| `POST /api/messages` | Send a message |
+| `PATCH /api/messages/{id}` | Mark read or archive a message |
+| `POST /api/messages/mark-all-read?project=` | Mark all messages read |
 | `GET /api/thinking?project=&status=` | Thinking sequences |
 | `GET /api/thinking/:id` | Sequence detail with all thoughts |
 | `GET /api/rules?project=` | Behavioral rules |
@@ -357,6 +366,18 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Opt
 | `GET /api/analytics/memory-growth?days=&granularity=` | Cumulative memory counts by type |
 | `GET /api/analytics/sparklines?days=` | Entity creation sparklines (memories, cairns, projects, clusters) |
 | `GET /api/analytics/heatmap?days=` | Daily activity counts for heatmap visualization |
+| `POST /api/chat` | Send messages to the embedded LLM (agentic, with tool calling) |
+| `GET /api/sessions?project=` | Recent sessions with event counts and digest status |
+| `GET /api/sessions/{name}/events` | Event stream + digests for a session |
+| `GET /api/drift?project=` | Check for memories with stale file references |
+| `POST /api/drift` | Submit file hashes for drift comparison |
+| `GET /api/terminal/config` | Terminal backend mode and settings |
+| `GET /api/terminal/hosts` | List configured terminal hosts |
+| `POST /api/terminal/hosts` | Add a terminal host |
+| `GET /api/terminal/hosts/{id}` | Get host details |
+| `PATCH /api/terminal/hosts/{id}` | Update a terminal host |
+| `DELETE /api/terminal/hosts/{id}` | Soft-delete a terminal host |
+| `WS /api/terminal/ws/{host_id}` | WebSocket terminal proxy (native mode) |
 
 ```bash
 curl http://localhost:8000/api/status
@@ -458,6 +479,10 @@ All via environment variables:
 | `CAIRN_LLM_CONSOLIDATION` | `true` | Enable memory consolidation recommendations |
 | `CAIRN_LLM_CONFIDENCE_GATING` | `false` | Post-search quality assessment (advisory, high reasoning demand) |
 | `CAIRN_LLM_EVENT_DIGEST` | `true` | Digest event batches into rolling LLM summaries |
+| `CAIRN_TERMINAL_BACKEND` | `disabled` | Terminal mode: `native` (xterm.js + asyncssh), `ttyd` (iframe), or `disabled` |
+| `CAIRN_SSH_ENCRYPTION_KEY` | *(empty)* | Fernet key for encrypting SSH credentials (native mode). Generate: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
+| `CAIRN_TERMINAL_MAX_SESSIONS` | `5` | Max concurrent terminal sessions |
+| `CAIRN_TERMINAL_CONNECT_TIMEOUT` | `30` | SSH connect timeout in seconds (native mode) |
 
 </details>
 
@@ -496,9 +521,9 @@ All bulk operations support `--dry-run` for preview.
 
 ### Database Schema
 
-19 tables across 11 migrations:
+16 migrations:
 
-| Migration | Tables |
+| Migration | Tables / Changes |
 |-----------|--------|
 | **001 Core** | `projects`, `memories`, `memory_related_files`, `memory_related_memories` |
 | **002 Clustering** | `clusters`, `cluster_members`, `clustering_runs` |
@@ -511,6 +536,11 @@ All bulk operations support `--dry-run` for preview.
 | **009 Drift** | `file_hashes` JSONB column on `memories` for code-aware drift detection |
 | **010 Analytics** | `usage_events`, `metric_rollups`, `rollup_state` — usage tracking and pre-aggregated rollups |
 | **011 Dashboard Indexes** | Performance indexes for memory-growth, sparkline, and heatmap queries |
+| **012 Entities** | Neo4j entity tracking columns |
+| **013 Graph Edges** | Graph edge metadata |
+| **014 Author** | `author` column on `memories` for speaker attribution |
+| **015 Messages** | `messages` — inter-agent communication with priority and read state |
+| **016 SSH Hosts** | `ssh_hosts` — terminal host management with encrypted credentials |
 
 </details>
 
