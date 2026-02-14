@@ -38,7 +38,7 @@ You classify search queries for a personal memory system. The system stores memo
 - Also: "What is Caroline's phone number?" (entity + attribute)
 
 **aspect_query** — Query asks about a specific KIND of information about an entity or topic.
-- "What are Jason's preferences?" → entity_hints=["Jason"], aspects=["Preference"]
+- "What are Alice's preferences?" → entity_hints=["Alice"], aspects=["Preference"]
 - "What decisions were made about the database?" → entity_hints=["database"], aspects=["Decision"]
 - "What problems have we had with deployment?" → entity_hints=["deployment"], aspects=["Problem"]
 
@@ -47,7 +47,7 @@ You classify search queries for a personal memory system. The system stores memo
 - NOT temporal just because it mentions a date in passing
 
 **relationship** — Query asks about connections BETWEEN two or more entities.
-- "How are Jason and the EIS team related?" "What's the connection between Cairn and Neo4j?"
+- "How are Alice and the DevOps team related?" "What's the connection between Cairn and Neo4j?"
 - Requires 2+ entity_hints to be useful
 
 **exploratory** — Broad, vague, or topic-oriented. Doesn't fit above categories.
@@ -67,7 +67,7 @@ You classify search queries for a personal memory system. The system stores memo
 - **Relationship**: Connections between people/things
 
 ## Entity Hints
-Extract ALL named entities in the query — people, projects, technologies, places, organizations. Be generous. "What did we deploy to UTIL last week?" → ["UTIL"]. "How is Jason's Cairn project going?" → ["Jason", "Cairn"].
+Extract ALL named entities in the query — people, projects, technologies, places, organizations. Be generous. "What did we deploy to production last week?" → ["production"]. "How is Alice's Cairn project going?" → ["Alice", "Cairn"].
 
 ## Rules
 1. If the query mentions a specific entity AND asks about a property/aspect, prefer **aspect_query** over entity_lookup

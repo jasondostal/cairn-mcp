@@ -11,14 +11,14 @@ def test_entities_extracted_from_enrichment():
         "tags": ["docker", "deployment"],
         "importance": 0.7,
         "memory_type": "note",
-        "summary": "Deployed to UTIL.",
-        "entities": ["Docker", "UTIL", "Jason"],
+        "summary": "Deployed to prod-1.",
+        "entities": ["Docker", "prod-1", "Alice"],
     })
     enricher = Enricher(MockLLM(response))
-    result = enricher.enrich("Deployed Docker container to UTIL with Jason.")
+    result = enricher.enrich("Deployed Docker container to prod-1 with Alice.")
 
     assert "entities" in result
-    assert result["entities"] == ["Docker", "UTIL", "Jason"]
+    assert result["entities"] == ["Docker", "prod-1", "Alice"]
 
 
 def test_entities_preserve_case():
@@ -89,13 +89,13 @@ def test_entities_strips_whitespace():
         "importance": 0.5,
         "memory_type": "note",
         "summary": "Test.",
-        "entities": ["  Docker  ", "UTIL", "  "],
+        "entities": ["  Docker  ", "prod-1", "  "],
     })
     enricher = Enricher(MockLLM(response))
     result = enricher.enrich("content")
 
     # Empty strings after stripping should be filtered out
-    assert result["entities"] == ["Docker", "UTIL"]
+    assert result["entities"] == ["Docker", "prod-1"]
 
 
 def test_entities_handles_non_string_items():

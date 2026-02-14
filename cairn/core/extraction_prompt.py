@@ -14,12 +14,12 @@ You extract ENTITIES and STATEMENTS for a project-scoped KNOWLEDGE GRAPH that po
 The graph stores relationships between entities. Don't repeat structural context in fact text.
 
   CORRECT — concise fact, context from graph structure:
-    Statement: Jason → decided → Neo4j  |  fact: "Chose Neo4j for knowledge graph"  |  Decision
+    Statement: Alice → decided → Neo4j  |  fact: "Chose Neo4j for knowledge graph"  |  Decision
     Statement: Neo4j → outperforms → PostgreSQL  |  fact: "10x faster BFS traversal"  |  Knowledge
     At query time, the LLM infers "Neo4j was chosen over PostgreSQL" from graph proximity.
 
   WRONG — verbose fact that embeds context already in the graph:
-    Statement: Jason → decided → Neo4j  |  fact: "Jason decided to use Neo4j instead of PostgreSQL for the knowledge graph because BFS is 10x faster"
+    Statement: Alice → decided → Neo4j  |  fact: "Alice decided to use Neo4j instead of PostgreSQL for the knowledge graph because BFS is 10x faster"
     This repeats what the graph structure and neighboring statements already capture.
 
   Rules:
@@ -35,7 +35,7 @@ Without topic anchors, you can't trace "what was in that plan?" or "who was invo
   Pattern: Person → works_on → Topic, then Topic → targets → specific details
 
   Example — Migration plan:
-    Jason → leads → Database Migration         (person → topic link)
+    Alice → leads → Database Migration         (person → topic link)
     Database Migration → targets → zero downtime  (topic → detail)
     Database Migration → uses → PostgreSQL 16     (topic → detail)
     Database Migration → scheduled → Q2           (topic → temporal)
@@ -77,7 +77,7 @@ that the user didn't acknowledge are noise, not knowledge.
 ### 5. SPECIFICITY TEST
 "Is this specific to this project/user, or is it general knowledge?"
   - EXTRACT: "Cairn's LoCoMo score is 49.2%" (specific measurement)
-  - EXTRACT: "UTIL runs on 192.168.1.10" (specific infrastructure)
+  - EXTRACT: "Prod server runs on 10.0.0.5" (specific infrastructure)
   - SKIP: "Neo4j uses Cypher query language" (general knowledge, anyone can Google this)
   - SKIP: "Python is an interpreted language" (textbook fact)
 
@@ -88,13 +88,13 @@ Use all three levels where applicable:
 
   Person level — who someone IS, what they decided, what they relate to:
     Subject = person name. For: identity, relationships, decisions, goals, preferences.
-    "Jason → prefers → keyboard-first UI"
-    "Jason → decided → use Neo4j"
+    "Alice → prefers → keyboard-first UI"
+    "Alice → decided → use Neo4j"
 
   Person→Topic level — how someone relates to a topic:
     Subject = person name, Object = topic entity. Links people to their work.
-    "Jason → leads → v2 Migration"
-    "Jason → debugged → Search Pipeline"
+    "Alice → leads → v2 Migration"
+    "Alice → debugged → Search Pipeline"
 
   Topic level — what a plan/feature/system contains:
     Subject = topic entity. For: technical details, targets, components.
@@ -110,11 +110,11 @@ miss "what does the migration target?". Topic-only graphs miss "who decided this
 
 | Type | Extract for | Examples | Skip |
 |------|------------|----------|------|
-| Person | Named individuals | Jason, Sarah, Dr. Chen | Generic roles ("the developer") |
+| Person | Named individuals | Alice, Sarah, Dr. Chen | Generic roles ("the developer") |
 | Organization | Companies, teams | Anthropic, DevOps team, Snap Research | Unnamed groups |
-| Place | Locations, servers, regions | UTIL, CORTEX, us-east-1, NYC | Vague locations ("the office") |
+| Place | Locations, servers, regions | prod-1, staging, us-east-1, NYC | Vague locations ("the office") |
 | Event | Named occurrences with temporal scope | Sprint 3, Feb 10 incident, v0.27 release | Generic activities ("a meeting") |
-| Project | Named initiatives, repos | Cairn, CurioCraft, LoCoMo benchmark | Generic work ("the project") |
+| Project | Named initiatives, repos | Cairn, Acme App, LoCoMo benchmark | Generic work ("the project") |
 | Task | Specific work items | fix auth bug, deploy v2, JIRA-123 | Vague tasks ("some work") |
 | Technology | Dev tools, frameworks, infra | Neo4j, Python, Docker, pgvector, Bedrock | Business apps (→ Product) |
 | Product | Apps, services, platforms | Claude, AWS, Slack, GitHub | Programming tools (→ Technology) |
@@ -126,7 +126,7 @@ Key distinctions:
 - Event vs Action: happened at a specific time → Event. Habitual/ongoing → Action aspect on a statement.
 
 Entity naming rules:
-- Use the most complete, reusable form: "Jason Dostal" not "Jason" (unless only first name is known)
+- Use the most complete, reusable form: "Alice Chen" not "Alice" (unless only first name is known)
 - Keep names short (1-3 words): "Auth Flow" not "authentication flow implementation"
 - Names must be reusable across memories for deduplication: "Neo4j" not "the graph database"
 
@@ -159,10 +159,10 @@ If none clearly fit, use the closest match. Aspects are optional — omit rather
 Aspect details:
 
 - **Identity**: Slow-changing facts about what something IS. Role, location, configuration, specs.
-  "UTIL is the production server" | "Cairn uses PostgreSQL + pgvector" | "Jason is a developer"
+  "prod-1 is the production server" | "Cairn uses PostgreSQL + pgvector" | "Alice is a developer"
 
 - **Knowledge**: Expertise, skills, learned understanding. What someone or something KNOWS.
-  "Jason knows Python and TypeScript" | "Bedrock supports Titan V2 embeddings"
+  "Alice knows Python and TypeScript" | "Bedrock supports Titan V2 embeddings"
 
 - **Belief**: Opinions, assessments, evaluations. WHY someone thinks something.
   "Graph search will outperform flat vector search" | "Reranking is worth the latency cost"
@@ -171,7 +171,7 @@ Aspect details:
   "Prefers keyboard-first workflows" | "Always use Bedrock over Ollama for production"
 
 - **Action**: Activities, behaviors, things done. Observable DOING (ongoing or habitual).
-  "Runs benchmarks after every search change" | "Deploys via docker compose on CORTEX"
+  "Runs benchmarks after every search change" | "Deploys via docker compose on staging"
 
 - **Goal**: Intentions, targets, desired outcomes. What someone WANTS TO ACHIEVE.
   "Target 80%+ on LoCoMo benchmark" | "Planning to migrate production to Titan V2"
@@ -189,7 +189,7 @@ Aspect details:
   "Search recall is only 49.2%" | "Entity resolution creates too many duplicates"
 
 - **Relationship**: Connections between entities. WHO/WHAT relates to WHO/WHAT.
-  "Cairn depends on PostgreSQL" | "Jason works with Sarah on CurioCraft"
+  "Cairn depends on PostgreSQL" | "Alice works with Sarah on Acme App"
 
 Common misclassifications:
 - Health metrics, server specs, config values → Identity (not Event)
@@ -231,19 +231,19 @@ Importance scale:
 
 ### Example 1: Architecture decision with topic anchor
 
-Input: "We decided to use Neo4j for the knowledge graph instead of extending PostgreSQL. Jason tested both options and Neo4j's native BFS traversal was 10x faster for multi-hop queries. Planning to add it to docker-compose."
+Input: "We decided to use Neo4j for the knowledge graph instead of extending PostgreSQL. Alice tested both options and Neo4j's native BFS traversal was 10x faster for multi-hop queries. Planning to add it to docker-compose."
 
 ```json
 {
   "entities": [
-    {"name": "Jason", "entity_type": "Person", "attributes": {}},
+    {"name": "Alice", "entity_type": "Person", "attributes": {}},
     {"name": "Neo4j", "entity_type": "Technology", "attributes": {}},
     {"name": "PostgreSQL", "entity_type": "Technology", "attributes": {}},
     {"name": "Knowledge Graph", "entity_type": "Concept", "attributes": {}}
   ],
   "statements": [
-    {"subject": "Jason", "predicate": "decided", "object": "Neo4j", "fact": "Chose Neo4j for knowledge graph over PostgreSQL", "aspect": "Decision", "event_date": null},
-    {"subject": "Jason", "predicate": "tested", "object": "Neo4j", "fact": "Tested both Neo4j and PostgreSQL for graph", "aspect": "Action", "event_date": null},
+    {"subject": "Alice", "predicate": "decided", "object": "Neo4j", "fact": "Chose Neo4j for knowledge graph over PostgreSQL", "aspect": "Decision", "event_date": null},
+    {"subject": "Alice", "predicate": "tested", "object": "Neo4j", "fact": "Tested both Neo4j and PostgreSQL for graph", "aspect": "Action", "event_date": null},
     {"subject": "Neo4j", "predicate": "outperforms", "object": "PostgreSQL", "fact": "Neo4j BFS is 10x faster for multi-hop queries", "aspect": "Knowledge", "event_date": null},
     {"subject": "Knowledge Graph", "predicate": "uses", "object": "Neo4j", "fact": "Knowledge graph backed by Neo4j", "aspect": "Identity", "event_date": null}
   ],
@@ -276,25 +276,25 @@ Input: "The extract_json parser was failing on nested objects. The regex {[^{}]*
 
 ### Example 3: Infrastructure and deployment
 
-Input: "CORTEX is our dev box at 192.168.1.33. Runs docker compose with cairn, cairn-ui, cairn-db, and cairn-graph. Production is on UTIL. We don't use Ollama on CORTEX — too small, everything goes through Bedrock."
+Input: "staging is our dev box at 10.0.0.20. Runs docker compose with cairn, cairn-ui, cairn-db, and cairn-graph. Production is on prod-1. We don't use Ollama on staging — too small, everything goes through Bedrock."
 
 ```json
 {
   "entities": [
-    {"name": "CORTEX", "entity_type": "Place", "attributes": {"ip_address": "192.168.1.33", "role": "dev"}},
-    {"name": "UTIL", "entity_type": "Place", "attributes": {"role": "production"}},
+    {"name": "staging", "entity_type": "Place", "attributes": {"ip_address": "10.0.0.20", "role": "dev"}},
+    {"name": "prod-1", "entity_type": "Place", "attributes": {"role": "production"}},
     {"name": "Bedrock", "entity_type": "Product", "attributes": {}},
     {"name": "Ollama", "entity_type": "Technology", "attributes": {}}
   ],
   "statements": [
-    {"subject": "CORTEX", "predicate": "is", "object": "dev box", "fact": "CORTEX is the development server", "aspect": "Identity", "event_date": null},
-    {"subject": "CORTEX", "predicate": "runs", "object": "docker compose", "fact": "Runs cairn, cairn-ui, cairn-db, cairn-graph", "aspect": "Identity", "event_date": null},
-    {"subject": "UTIL", "predicate": "is", "object": "production server", "fact": "UTIL is the production server", "aspect": "Identity", "event_date": null},
-    {"subject": "CORTEX", "predicate": "uses", "object": "Bedrock", "fact": "CORTEX uses Bedrock, not Ollama", "aspect": "Decision", "event_date": null}
+    {"subject": "staging", "predicate": "is", "object": "dev box", "fact": "staging is the development server", "aspect": "Identity", "event_date": null},
+    {"subject": "staging", "predicate": "runs", "object": "docker compose", "fact": "Runs cairn, cairn-ui, cairn-db, cairn-graph", "aspect": "Identity", "event_date": null},
+    {"subject": "prod-1", "predicate": "is", "object": "production server", "fact": "prod-1 is the production server", "aspect": "Identity", "event_date": null},
+    {"subject": "staging", "predicate": "uses", "object": "Bedrock", "fact": "staging uses Bedrock, not Ollama", "aspect": "Decision", "event_date": null}
   ],
-  "tags": ["infrastructure", "cortex", "util", "bedrock", "deployment"],
+  "tags": ["infrastructure", "staging", "production", "bedrock", "deployment"],
   "importance": 0.7,
-  "summary": "CORTEX (192.168.1.33) is dev, UTIL is production. CORTEX uses Bedrock instead of Ollama."
+  "summary": "staging (10.0.0.20) is dev, prod-1 is production. staging uses Bedrock instead of Ollama."
 }
 ```
 

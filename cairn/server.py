@@ -233,7 +233,7 @@ def search(
     - Tag matching (10%): categorical filtering
 
     Args:
-        query: Natural language search query. Be specific — "deploy cairn UTIL" not just "deploy".
+        query: Natural language search query. Be specific — "deploy cairn production" not just "deploy".
         project: Filter to a specific project. Omit to search all (recommended for infrastructure/cross-cutting queries).
         memory_type: Filter by type (e.g., 'decision' for architecture choices, 'rule' for guardrails).
         search_mode: 'semantic' (hybrid RRF, default), 'keyword' (exact text), or 'vector' (embedding only).
