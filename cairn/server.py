@@ -1050,26 +1050,6 @@ def main():
         api = create_api(svc)
         mcp_app.mount("/api", api)
 
-        if final_config.auth.enabled and final_config.auth.api_key:
-            from starlette.middleware.base import BaseHTTPMiddleware
-            from starlette.responses import JSONResponse as StarletteJSONResponse
-
-            class MCPAuthMiddleware(BaseHTTPMiddleware):
-                async def dispatch(self, request, call_next):
-                    path = request.url.path.rstrip("/")
-                    if path.startswith("/mcp"):
-                        if request.method == "OPTIONS":
-                            return await call_next(request)
-                        token = request.headers.get(final_config.auth.header_name)
-                        if not token or token != final_config.auth.api_key:
-                            return StarletteJSONResponse(
-                                status_code=401,
-                                content={"detail": "Invalid or missing API key"},
-                            )
-                    return await call_next(request)
-
-            mcp_app.add_middleware(MCPAuthMiddleware)
-            logger.info("MCP endpoint auth enabled (header: %s)", final_config.auth.header_name)
 
         @asynccontextmanager
         async def combined_lifespan(app):
