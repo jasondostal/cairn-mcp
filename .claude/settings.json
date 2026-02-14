@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CAIRN_URL=http://util:8081 \"$CLAUDE_PROJECT_DIR\"/examples/hooks/session-start.sh",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/examples/hooks/session-start.sh",
             "timeout": 15
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CAIRN_URL=http://util:8081 \"$CLAUDE_PROJECT_DIR\"/examples/hooks/log-event.sh",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/examples/hooks/log-event.sh",
             "timeout": 5
           }
         ]
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CAIRN_URL=http://util:8081 \"$CLAUDE_PROJECT_DIR\"/examples/hooks/session-end.sh",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/examples/hooks/session-end.sh",
             "timeout": 30
           }
         ]
