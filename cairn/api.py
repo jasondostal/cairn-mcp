@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from cairn import __version__
 from cairn.config import EDITABLE_KEYS, apply_overrides, config_to_flat, env_values
 from cairn.core.constants import (
     MAX_EVENT_BATCH_SIZE,
@@ -108,7 +109,7 @@ def create_api(svc: Services) -> FastAPI:
 
     app = FastAPI(
         title="Cairn API",
-        version="0.34.2",
+        version=__version__,
         description="REST API for the Cairn web UI and content ingestion.",
         docs_url="/swagger",
         redoc_url=None,
