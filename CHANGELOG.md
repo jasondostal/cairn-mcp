@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.34.0] - 2026-02-14
+
+### Added
+- **Editable settings with DB persistence** — settings are now editable through the web UI
+  and persisted in a PostgreSQL `app_settings` table. Resolution order: dataclass default
+  → env var → DB override (highest priority wins). All changes require container restart
+  to take effect (~5s).
+  - **42 editable keys** — LLM backend/model/keys/URLs, reranker config, all 13 capability
+    flags, analytics settings, auth config, terminal config, enrichment toggle, ingest
+    chunk settings.
+  - **Read-only fields** — embedding (would invalidate all vectors), database, transport/port.
+  - **Source tracking** — per-field source badge (`default`/`env`/`db`) shows where each
+    value comes from.
+  - **Restart detection** — "Restart required" banner appears when DB overrides differ from
+    running config.
+  - **Reset** — per-field reset button removes DB override, reverting to env/default.
+- `GET /api/settings` — expanded response with `values`, `sources`, `editable` keys list,
+  and `pending_restart` flag. Secrets redacted server-side.
+- `PATCH /api/settings` — bulk update editable settings with enum/range/type validation.
+- `DELETE /api/settings/{key}` — remove single DB override.
+- Migration 017 — `app_settings` key-value table.
+- `cairn/storage/settings_store.py` — load, upsert, and delete setting overrides.
+- `config.py` additions: `EDITABLE_KEYS` whitelist, `apply_overrides()` for frozen
+  dataclass rebuilding, `config_to_flat()` serializer, `env_values()` snapshot.
+- Deferred service creation — module-level loads base config only; DB overrides applied
+  during lifespan after database connects. `create_services()` accepts optional `db` param.
+
+### Changed
+- Settings page fully rewritten — from read-only display to editable form with text inputs,
+  number inputs, switch toggles, select dropdowns, section-level save, and toast feedback.
+- Server lifecycle refactored — `_start_workers()` and `_stop_workers()` helpers eliminate
+  duplication between stdio and HTTP modes.
+- API version bumped to 0.34.0.
+
+### Security
+- `GET /api/settings` redacts secrets (`db.password`, API keys, encryption keys) server-side.
+  Previously returned all values in plaintext.
+
 ## [0.33.0] - 2026-02-13
 
 ### Added
@@ -844,7 +882,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.33.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.34.0...HEAD
+[0.34.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.31.0...v0.33.0
 [0.31.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.30.1...v0.31.0
 [0.30.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.29.0...v0.30.0

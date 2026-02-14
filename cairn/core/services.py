@@ -73,16 +73,18 @@ class Services:
     analytics_engine: AnalyticsQueryEngine | None
 
 
-def create_services(config: Config | None = None) -> Services:
+def create_services(config: Config | None = None, db: Database | None = None) -> Services:
     """Build all Cairn services from config.
 
     Args:
         config: Configuration to use. Loads from env if None.
+        db: Pre-connected database. Creates new one if None.
     """
     if config is None:
         config = load_config()
 
-    db = Database(config.db)
+    if db is None:
+        db = Database(config.db)
 
     # Analytics first — so the tracker singleton is available when backends emit events
     analytics_tracker = None
