@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api, type CairnDetail, type CairnStone } from "@/lib/api";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { useFetch } from "@/lib/use-fetch";
 import { useMemorySheet } from "@/lib/use-memory-sheet";
 import { Card, CardContent } from "@/components/ui/card";
