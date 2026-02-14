@@ -69,6 +69,8 @@ Four containers. One `docker compose up`. Done.
 
 <sub>Feature claims verified via official docs, GitHub repos, and published papers (Feb 2026). Mem0/Zep "partial" OSS: core is open source, advanced features require cloud. OpenAI "chat only" capture: users can say "remember this" in conversation. OpenAI "limited" sessions: references past chats but no structured session markers. Zep dashboard is cloud-only. Letta dashboard is their ADE (Agent Development Environment).</sub>
 
+> **Active development.** Cairn is under rabid, daily development. It's a real system used in production, but it's also a learning vehicle — the architecture evolves as we learn what actually works for agent memory. We strive to avoid major breaking changes, and migrations handle schema evolution automatically. That said: things move fast. If something breaks, open an issue. Benchmarks are periodically re-evaluated as the system evolves.
+
 ## Quick Start
 
 ### 1. Pull and run

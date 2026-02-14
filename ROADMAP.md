@@ -1,10 +1,16 @@
 # Roadmap
 
-Current: **v0.35.1** — QoL batch, README overhaul, docs accuracy pass.
+Current: **v0.36.x** — Agent workspace, context budgets, benchmark re-evaluation.
 
 ---
 
 ## Next Up
+
+### Benchmark Re-evaluation
+The LoCoMo 81.7% was measured against v0.28. Cairn has evolved significantly since — context budgets, workspace context assembly, new search paths, knowledge extraction changes. Re-run the full eval suite against the current system to establish an updated baseline. Results may go up (better enrichment) or down (budget truncation tradeoffs). Either way, we need honest numbers.
+
+### Agent Workspace Maturation
+The workspace/messaging system (OpenCode integration, inter-agent messages, session dispatch) is functional but early. Next steps: better session lifecycle management, message-driven task chains, workspace health monitoring, and agent coordination patterns. This is the foundation for multi-agent workflows — it needs to get robust before we build on top of it.
 
 ### UI Interactive Editing
 Turn the dashboard from read-only into a working interface. Edit memories inline, edit markdown content, update task status — all from the browser. (Task completion and terminal host editing shipped in v0.35.1.)
