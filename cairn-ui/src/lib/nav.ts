@@ -15,6 +15,7 @@ import {
   MessageCircle,
   Mail,
   Radio,
+  Boxes,
   Terminal,
   Settings,
 } from "lucide-react";
@@ -41,6 +42,7 @@ export const navItems: NavItem[] = [
   { href: "/tasks", label: "Tasks", icon: ListTodo },
   { href: "/thinking", label: "Thinking", icon: Brain },
   { href: "/rules", label: "Rules", icon: Shield },
+  { href: "/workspace", label: "Workspace", icon: Boxes },
   { href: "/terminal", label: "Terminal", icon: Terminal },
   { href: "/analytics", label: "Ops Log", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },

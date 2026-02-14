@@ -43,7 +43,7 @@ class LLMConfig:
     backend: str = "ollama"  # "ollama", "bedrock", "gemini", "openai", or registered name
 
     # Bedrock settings
-    bedrock_model: str = "us.meta.llama3-2-90b-instruct-v1:0"
+    bedrock_model: str = "moonshotai.kimi-k2.5"
     bedrock_region: str = "us-east-1"
 
     # Ollama settings
@@ -109,6 +109,13 @@ class TerminalConfig:
 
 
 @dataclass(frozen=True)
+class WorkspaceConfig:
+    url: str = ""                     # OpenCode headless server URL (e.g. http://cortex:8080)
+    password: str = ""                # OPENCODE_SERVER_PASSWORD on the worker
+    default_agent: str = "cairn-build"  # Default agent for new sessions
+
+
+@dataclass(frozen=True)
 class AuthConfig:
     enabled: bool = False
     api_key: str | None = None  # Static API key (checked via X-API-Key header)
@@ -136,6 +143,7 @@ class Config:
     analytics: AnalyticsConfig = field(default_factory=AnalyticsConfig)
     neo4j: Neo4jConfig = field(default_factory=Neo4jConfig)
     reranker: RerankerConfig = field(default_factory=RerankerConfig)
+    workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
     enrichment_enabled: bool = True
     transport: str = "stdio"  # "stdio" or "http"
     http_host: str = "0.0.0.0"
@@ -179,6 +187,8 @@ EDITABLE_KEYS: set[str] = {
     "auth.enabled", "auth.api_key", "auth.header_name",
     # Terminal
     "terminal.backend", "terminal.max_sessions", "terminal.connect_timeout",
+    # Workspace (OpenCode)
+    "workspace.url", "workspace.password", "workspace.default_agent",
     # Top-level
     "enrichment_enabled",
     "ingest_chunk_size", "ingest_chunk_overlap",
@@ -192,6 +202,7 @@ _SECTION_CLASSES = {
     "analytics": AnalyticsConfig,
     "auth": AuthConfig,
     "terminal": TerminalConfig,
+    "workspace": WorkspaceConfig,
 }
 
 _BOOL_TRUTHY = {"true", "1", "yes"}
@@ -321,6 +332,9 @@ _ENV_MAP: dict[str, str] = {
     "analytics.cost_embedding_per_1k": "CAIRN_ANALYTICS_COST_EMBEDDING",
     "analytics.cost_llm_input_per_1k": "CAIRN_ANALYTICS_COST_LLM_INPUT",
     "analytics.cost_llm_output_per_1k": "CAIRN_ANALYTICS_COST_LLM_OUTPUT",
+    "workspace.url": "CAIRN_OPENCODE_URL",
+    "workspace.password": "CAIRN_OPENCODE_PASSWORD",
+    "workspace.default_agent": "CAIRN_OPENCODE_DEFAULT_AGENT",
     "enrichment_enabled": "CAIRN_ENRICHMENT_ENABLED",
     "transport": "CAIRN_TRANSPORT",
     "http_host": "CAIRN_HTTP_HOST",
@@ -357,7 +371,7 @@ def load_config() -> Config:
         ),
         llm=LLMConfig(
             backend=os.getenv("CAIRN_LLM_BACKEND", "ollama"),
-            bedrock_model=os.getenv("CAIRN_BEDROCK_MODEL", "us.meta.llama3-2-90b-instruct-v1:0"),
+            bedrock_model=os.getenv("CAIRN_BEDROCK_MODEL", "moonshotai.kimi-k2.5"),
             bedrock_region=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
             ollama_url=os.getenv("CAIRN_OLLAMA_URL", "http://localhost:11434"),
             ollama_model=os.getenv("CAIRN_OLLAMA_MODEL", "qwen2.5-coder:7b"),
@@ -412,6 +426,11 @@ def load_config() -> Config:
             candidates=int(os.getenv("CAIRN_RERANK_CANDIDATES", "50")),
             bedrock_model=os.getenv("CAIRN_RERANKER_BEDROCK_MODEL", "amazon.rerank-v1:0"),
             bedrock_region=os.getenv("CAIRN_RERANKER_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1")),
+        ),
+        workspace=WorkspaceConfig(
+            url=os.getenv("CAIRN_OPENCODE_URL", ""),
+            password=os.getenv("CAIRN_OPENCODE_PASSWORD", ""),
+            default_agent=os.getenv("CAIRN_OPENCODE_DEFAULT_AGENT", "cairn-build"),
         ),
         enrichment_enabled=os.getenv("CAIRN_ENRICHMENT_ENABLED", "true").lower() in ("true", "1", "yes"),
         transport=os.getenv("CAIRN_TRANSPORT", "stdio"),
