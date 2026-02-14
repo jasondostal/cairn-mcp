@@ -82,11 +82,14 @@ def get_or_create_project(db: Database, project_name: str) -> int:
     return row["id"]
 
 
-def parse_vector(text: str) -> list[float]:
+def parse_vector(text: str | None) -> list[float] | None:
     """Parse a pgvector string like '[0.1,0.2,...]' into a list of floats.
 
     Handles both string representations and already-parsed sequences.
+    Returns None if input is None (no embedding stored).
     """
+    if text is None:
+        return None
     if isinstance(text, str):
         return [float(x) for x in text.strip("[]").split(",")]
     return list(text)

@@ -118,9 +118,16 @@ class ClusterEngine:
             return {"cluster_count": 0, "noise_count": 0, "memory_count": memory_count,
                     "duration_ms": self._elapsed_ms(start)}
 
-        # Parse embeddings into numpy array
+        # Parse embeddings into numpy array (skip memories without embeddings)
+        paired = [(r, parse_vector(r["embedding"])) for r in rows]
+        paired = [(r, v) for r, v in paired if v is not None]
+        if len(paired) < HDBSCAN_MIN_CLUSTER_SIZE:
+            self._record_run(project_id, memory_count, 0, 0, start)
+            return {"cluster_count": 0, "noise_count": 0, "memory_count": memory_count,
+                    "duration_ms": self._elapsed_ms(start)}
+        rows = [r for r, _ in paired]
         memory_ids = [r["id"] for r in rows]
-        embeddings = np.array([parse_vector(r["embedding"]) for r in rows])
+        embeddings = np.array([v for _, v in paired])
 
         # HDBSCAN on cosine metric — no precomputed distance matrix needed
         hdb = HDBSCAN(
@@ -307,8 +314,11 @@ class ClusterEngine:
             rows = [rows[i] for i in sorted(indices)]
             sampled = True
 
+        paired = [(r, parse_vector(r["embedding"])) for r in rows]
+        paired = [(r, v) for r, v in paired if v is not None]
+        rows = [r for r, _ in paired]
         memory_ids = [r["id"] for r in rows]
-        embeddings = np.array([parse_vector(r["embedding"]) for r in rows])
+        embeddings = np.array([v for _, v in paired])
 
         # t-SNE needs at least 2 samples; perplexity must be < n_samples
         n = len(embeddings)
