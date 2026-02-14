@@ -6,7 +6,7 @@ import json
 import logging
 from datetime import datetime, timezone, timedelta
 
-from fastapi import Depends, FastAPI, APIRouter, Query, Path, HTTPException, Request
+from fastapi import Depends, FastAPI, APIRouter, Query, Path, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -74,6 +74,7 @@ def create_api(svc: Services) -> FastAPI:
     cluster_engine = svc.cluster_engine
     project_manager = svc.project_manager
     task_manager = svc.task_manager
+    message_manager = svc.message_manager
     thinking_engine = svc.thinking_engine
     cairn_manager = svc.cairn_manager
     ingest_pipeline = svc.ingest_pipeline
@@ -91,7 +92,7 @@ def create_api(svc: Services) -> FastAPI:
 
     app = FastAPI(
         title="Cairn API",
-        version="0.27.2",
+        version="0.33.0",
         description="REST API for the Cairn web UI and content ingestion.",
         docs_url="/swagger",
         redoc_url=None,
@@ -101,7 +102,7 @@ def create_api(svc: Services) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=config.cors_origins,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
         allow_headers=["*"],
     )
 
@@ -321,6 +322,79 @@ def create_api(svc: Services) -> FastAPI:
             project=parse_multi(project), include_completed=include_completed,
             limit=limit, offset=offset,
         )
+
+    # ------------------------------------------------------------------
+    # GET /messages/unread-count — lightweight count for badge polling
+    # ------------------------------------------------------------------
+    @router.get("/messages/unread-count")
+    def api_messages_unread_count(
+        project: str | None = Query(None),
+    ):
+        count = message_manager.unread_count(project=project)
+        return {"count": count}
+
+    # ------------------------------------------------------------------
+    # GET /messages — inbox
+    # ------------------------------------------------------------------
+    @router.get("/messages")
+    def api_messages(
+        project: str | None = Query(None),
+        include_archived: bool = Query(False),
+        limit: int = Query(20, ge=1, le=100),
+        offset: int = Query(0, ge=0),
+    ):
+        return message_manager.inbox(
+            project=parse_multi(project),
+            include_archived=include_archived,
+            limit=limit, offset=offset,
+        )
+
+    # ------------------------------------------------------------------
+    # POST /messages — send a message
+    # ------------------------------------------------------------------
+    @router.post("/messages", status_code=201)
+    def api_send_message(body: dict):
+        content = body.get("content")
+        project = body.get("project")
+        sender = body.get("sender", "user")
+        priority = body.get("priority", "normal")
+        metadata = body.get("metadata")
+
+        if not content:
+            raise HTTPException(status_code=400, detail="content is required")
+        if not project:
+            raise HTTPException(status_code=400, detail="project is required")
+        if priority not in ("normal", "urgent"):
+            raise HTTPException(status_code=400, detail="priority must be 'normal' or 'urgent'")
+
+        return message_manager.send(
+            content=content, project=project,
+            sender=sender, priority=priority,
+            metadata=metadata,
+        )
+
+    # ------------------------------------------------------------------
+    # PATCH /messages/:id — update message (mark read, archive)
+    # ------------------------------------------------------------------
+    @router.patch("/messages/{message_id}")
+    def api_update_message(message_id: int = Path(...), body: dict = {}):
+        is_read = body.get("is_read")
+        archived = body.get("archived")
+
+        if is_read is True:
+            message_manager.mark_read(message_id)
+        if archived is True:
+            message_manager.archive(message_id)
+
+        return {"updated": True, "id": message_id}
+
+    # ------------------------------------------------------------------
+    # POST /messages/mark-all-read — bulk mark read
+    # ------------------------------------------------------------------
+    @router.post("/messages/mark-all-read")
+    def api_mark_all_read(body: dict = {}):
+        project = body.get("project")
+        return message_manager.mark_all_read(project=project)
 
     # ------------------------------------------------------------------
     # GET /thinking?project=&status=&limit=&offset=
@@ -1134,6 +1208,144 @@ def create_api(svc: Services) -> FastAPI:
         except Exception as e:
             logger.error("Agentic chat error: %s", e, exc_info=True)
             raise HTTPException(status_code=502, detail=f"LLM error: {e}")
+
+    # ------------------------------------------------------------------
+    # Terminal endpoints — host CRUD + config + WebSocket proxy
+    # ------------------------------------------------------------------
+    terminal_mgr = svc.terminal_host_manager
+    terminal_config = config.terminal
+
+    @router.get("/terminal/config")
+    def api_terminal_config():
+        return {
+            "backend": terminal_config.backend,
+            "max_sessions": terminal_config.max_sessions,
+        }
+
+    @router.get("/terminal/hosts")
+    def api_terminal_hosts():
+        if not terminal_mgr:
+            raise HTTPException(status_code=503, detail="Terminal not configured")
+        return terminal_mgr.list()
+
+    @router.post("/terminal/hosts", status_code=201)
+    def api_terminal_create_host(body: dict):
+        if not terminal_mgr:
+            raise HTTPException(status_code=503, detail="Terminal not configured")
+        try:
+            return terminal_mgr.create(
+                name=body.get("name", ""),
+                hostname=body.get("hostname", ""),
+                port=body.get("port", 22),
+                username=body.get("username"),
+                credential=body.get("credential"),
+                auth_method=body.get("auth_method", "password"),
+                ttyd_url=body.get("ttyd_url"),
+                description=body.get("description"),
+                metadata=body.get("metadata"),
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @router.get("/terminal/hosts/{host_id}")
+    def api_terminal_get_host(host_id: int = Path(...)):
+        if not terminal_mgr:
+            raise HTTPException(status_code=503, detail="Terminal not configured")
+        host = terminal_mgr.get(host_id)
+        if not host:
+            raise HTTPException(status_code=404, detail="Host not found")
+        return host
+
+    @router.patch("/terminal/hosts/{host_id}")
+    def api_terminal_update_host(host_id: int = Path(...), body: dict = {}):
+        if not terminal_mgr:
+            raise HTTPException(status_code=503, detail="Terminal not configured")
+        return terminal_mgr.update(host_id, **body)
+
+    @router.delete("/terminal/hosts/{host_id}")
+    def api_terminal_delete_host(host_id: int = Path(...)):
+        if not terminal_mgr:
+            raise HTTPException(status_code=503, detail="Terminal not configured")
+        return terminal_mgr.delete(host_id)
+
+    # ------------------------------------------------------------------
+    # WebSocket: Terminal proxy (native mode only)
+    # ------------------------------------------------------------------
+    if terminal_config.backend == "native" and terminal_mgr:
+        import asyncio
+
+        @app.websocket("/terminal/ws/{host_id}")
+        async def ws_terminal(websocket: WebSocket, host_id: int):
+            await websocket.accept()
+
+            host = terminal_mgr.get(host_id, decrypt=True)
+            if not host:
+                await websocket.close(code=4004, reason="Host not found")
+                return
+
+            credential = host.get("credential")
+            if not credential:
+                await websocket.close(code=4001, reason="No credentials available")
+                return
+
+            try:
+                import asyncssh
+
+                connect_kwargs = dict(
+                    host=host["hostname"],
+                    port=host["port"],
+                    username=host["username"],
+                    known_hosts=None,
+                    connect_timeout=terminal_config.connect_timeout,
+                )
+                if host["auth_method"] == "key":
+                    connect_kwargs["client_keys"] = [asyncssh.import_private_key(credential)]
+                else:
+                    connect_kwargs["password"] = credential
+
+                async with asyncssh.connect(**connect_kwargs) as conn:
+                    process = await conn.create_process(
+                        term_type="xterm-256color",
+                        term_size=(80, 24),
+                    )
+
+                    async def ws_to_ssh():
+                        try:
+                            while True:
+                                data = await websocket.receive_text()
+                                # Check for resize messages
+                                if data.startswith('{"type":"resize"'):
+                                    try:
+                                        msg = json.loads(data)
+                                        if msg.get("type") == "resize":
+                                            cols = msg.get("cols", 80)
+                                            rows = msg.get("rows", 24)
+                                            process.change_terminal_size(cols, rows)
+                                            continue
+                                    except (json.JSONDecodeError, TypeError):
+                                        pass
+                                process.stdin.write(data)
+                        except WebSocketDisconnect:
+                            pass
+
+                    async def ssh_to_ws():
+                        try:
+                            async for data in process.stdout:
+                                await websocket.send_text(data)
+                        except Exception:
+                            pass
+
+                    await asyncio.gather(ws_to_ssh(), ssh_to_ws())
+
+            except ImportError:
+                await websocket.close(code=4500, reason="asyncssh not installed")
+            except Exception as e:
+                logger.error("Terminal WebSocket error for host %d: %s", host_id, e)
+                try:
+                    await websocket.send_text(f"\r\n\x1b[31mConnection error: {e}\x1b[0m\r\n")
+                    await websocket.close(code=4500, reason=str(e)[:120])
+                except Exception:
+                    pass
 
     app.include_router(router)
     return app
