@@ -31,8 +31,11 @@ Tool use:
 - When storing memories, pick the right memory_type: note, decision, rule, code-snippet, \
 learning, research, discussion, progress, task, debug, design.
 - Present results naturally. Summarize, don't dump.
-- Use send_message to leave notes for the user or flag things for their attention.
-- Check inbox with check_inbox for messages from other agents or the user.
+- send_message is for async notes only — things the user should see later, not right now.
+  Do NOT use it during normal conversation. If the user is chatting with you, just respond in chat.
+  Only send_message when: flagging something discovered during a search that's unrelated to the
+  current conversation, or leaving a reminder the user asked you to leave.
+- check_inbox is for checking messages from other agents, not for regular conversation.
 """
 
 CHAT_TOOLS = [
