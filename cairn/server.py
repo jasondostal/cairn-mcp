@@ -49,6 +49,7 @@ drift_detector = None
 message_manager = None
 analytics_tracker = None
 rollup_worker = None
+workspace_manager = None
 
 
 def _init_services(svc):
@@ -57,7 +58,7 @@ def _init_services(svc):
     global search_v2_engine, cluster_engine, project_manager, task_manager
     global thinking_engine, session_synthesizer, consolidation_engine
     global cairn_manager, digest_worker, drift_detector, message_manager
-    global analytics_tracker, rollup_worker
+    global analytics_tracker, rollup_worker, workspace_manager
 
     _svc = svc
     config = svc.config
@@ -78,6 +79,7 @@ def _init_services(svc):
     message_manager = svc.message_manager
     analytics_tracker = svc.analytics_tracker
     rollup_worker = svc.rollup_worker
+    workspace_manager = svc.workspace_manager
 
 
 def _build_config_with_overrides(db_instance):

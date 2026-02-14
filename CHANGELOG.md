@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — v0.36.0 "Agent Workspace"
+
+### Added
+- **Agent Workspace** — Cairn as orchestration layer above OpenCode execution engines.
+  New `WorkspaceManager` bridges Cairn context (rules, memories, trail) with OpenCode
+  headless sessions. Agents spawn with injected project context and work autonomously.
+- **OpenCode client** (`cairn/integrations/opencode.py`) — typed Python client for the
+  OpenCode REST API (sessions, messages, agents, MCP registration, SSE streaming).
+  Pure stdlib `urllib` — no extra dependencies.
+- **Workspace config** (`WorkspaceConfig`) — `CAIRN_OPENCODE_URL`, `CAIRN_OPENCODE_PASSWORD`,
+  `CAIRN_OPENCODE_DEFAULT_AGENT` env vars. Added to `EDITABLE_KEYS` for UI management.
+- **Context modes** — `focused` (project rules + 3 task-relevant memories) vs `full`
+  (grimoire, trail, 5 memories, pending tasks). Focused is the default for autonomous
+  agents; full for interactive sessions.
+- **Message-by-reference spawning** — agents can be spawned from a Cairn message ID.
+  The agent receives a reference (`"Your task is in Cairn message #N"`) and pulls
+  instructions via MCP tools at runtime. No context injection for message-based spawns.
+- **Message detail view** — click any message to see full content in a dialog.
+  Message ID displayed as `#N` next to the icon in both card and dense row views.
+- **Spawn agent from message** — play button on each message row + "Spawn Agent" button
+  in the detail dialog. Creates a workspace session tied to the message.
+- **Workspace API endpoints** — 10 new REST routes under `/api/workspace/`:
+  health, list/create/get/delete sessions, send message, abort, diff, messages, agents,
+  context preview.
+- **Workspace UI page** — session list, create dialog with context mode selector,
+  session detail with message viewer.
+- **DB migration 018** — `workspace_sessions` table tracking session→project mapping.
+- **`MessageManager.get()`** — fetch a single message by ID (used for message-by-reference).
+- **Compose override** — `CAIRN_OPENCODE_URL` and `CAIRN_OPENCODE_PASSWORD` wired into
+  `docker-compose.override.yml` for dev deployments.
+
+### Changed
+- **Default Bedrock model** — `us.meta.llama3-2-90b-instruct-v1:0` → `moonshotai.kimi-k2.5`.
+- **MCP tool init delay** — 3-second delay between session creation and first async
+  message, allowing OpenCode to finish MCP tool initialization before the agent starts.
+
 ## [0.35.2] - 2026-02-14
 
 ### Fixed

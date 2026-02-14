@@ -87,6 +87,7 @@ def create_api(svc: Services) -> FastAPI:
     db = svc.db
     config = svc.config
     memory_store = svc.memory_store
+    workspace_manager = svc.workspace_manager
     search_engine = svc.search_engine
     cluster_engine = svc.cluster_engine
     project_manager = svc.project_manager
@@ -1518,6 +1519,99 @@ def create_api(svc: Services) -> FastAPI:
                     await websocket.close(code=4500, reason=str(e)[:120])
                 except Exception:
                     pass
+
+    # ── Workspace (OpenCode integration) ──────────────────────────────────
+
+    @router.get("/workspace/health")
+    def api_workspace_health():
+        """Check OpenCode worker health."""
+        return workspace_manager.health()
+
+    @router.get("/workspace/sessions")
+    def api_workspace_sessions(
+        project: str | None = Query(None),
+    ):
+        """List workspace sessions."""
+        return workspace_manager.list_sessions(project=project)
+
+    @router.post("/workspace/sessions", status_code=201)
+    def api_workspace_create_session(body: dict):
+        """Create a new workspace session with Cairn context injected.
+
+        Body: { project: str, task?: str, message_id?: int, fork_from?: str,
+               title?: str, agent?: str, inject_context?: bool,
+               context_mode?: "focused"|"full" }
+        """
+        project = body.get("project")
+        if not project:
+            raise HTTPException(status_code=400, detail="project is required")
+        return workspace_manager.create_session(
+            project=project,
+            task=body.get("task"),
+            message_id=body.get("message_id"),
+            fork_from=body.get("fork_from"),
+            title=body.get("title"),
+            agent=body.get("agent"),
+            inject_context=body.get("inject_context", True),
+            context_mode=body.get("context_mode", "focused"),
+        )
+
+    @router.get("/workspace/sessions/{session_id}")
+    def api_workspace_get_session(session_id: str = Path(...)):
+        """Get workspace session details."""
+        result = workspace_manager.get_session(session_id)
+        if "error" in result:
+            raise HTTPException(status_code=404, detail=result["error"])
+        return result
+
+    @router.delete("/workspace/sessions/{session_id}")
+    def api_workspace_delete_session(session_id: str = Path(...)):
+        """Delete a workspace session."""
+        return workspace_manager.delete_session(session_id)
+
+    @router.post("/workspace/sessions/{session_id}/message")
+    def api_workspace_send_message(session_id: str = Path(...), body: dict = {}):
+        """Send a message to a workspace session.
+
+        Body: { text: str, agent?: str, wait?: bool }
+        """
+        text = body.get("text")
+        if not text:
+            raise HTTPException(status_code=400, detail="text is required")
+        return workspace_manager.send_message(
+            session_id=session_id,
+            text=text,
+            agent=body.get("agent"),
+            wait=body.get("wait", True),
+        )
+
+    @router.post("/workspace/sessions/{session_id}/abort")
+    def api_workspace_abort_session(session_id: str = Path(...)):
+        """Abort a running workspace session."""
+        return workspace_manager.abort_session(session_id)
+
+    @router.get("/workspace/sessions/{session_id}/diff")
+    def api_workspace_get_diff(session_id: str = Path(...)):
+        """Get file diffs from a workspace session."""
+        return workspace_manager.get_diff(session_id)
+
+    @router.get("/workspace/sessions/{session_id}/messages")
+    def api_workspace_messages(session_id: str = Path(...)):
+        """Get messages from a workspace session."""
+        return workspace_manager.get_messages(session_id)
+
+    @router.get("/workspace/agents")
+    def api_workspace_agents():
+        """List available OpenCode agents."""
+        return workspace_manager.list_agents()
+
+    @router.get("/workspace/context/{project}")
+    def api_workspace_context(
+        project: str = Path(...),
+        task: str | None = Query(None),
+    ):
+        """Preview the Cairn context that would be injected into a session."""
+        return {"context": workspace_manager.build_context(project, task=task)}
 
     app.include_router(router)
     return app

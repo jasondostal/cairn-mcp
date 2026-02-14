@@ -20,6 +20,8 @@ from cairn.core.activation import ActivationEngine
 from cairn.core.memory import MemoryStore
 from cairn.core.messages import MessageManager
 from cairn.core.terminal import TerminalHostManager
+from cairn.core.workspace import WorkspaceManager
+from cairn.integrations.opencode import OpenCodeClient
 from cairn.core.projects import ProjectManager
 from cairn.core.reranker import get_reranker
 from cairn.core.reranker.interface import RerankerInterface
@@ -68,6 +70,8 @@ class Services:
     message_manager: MessageManager
     ingest_pipeline: IngestPipeline
     terminal_host_manager: TerminalHostManager | None
+    opencode: OpenCodeClient | None
+    workspace_manager: WorkspaceManager
     analytics_tracker: UsageTracker | None
     rollup_worker: RollupWorker | None
     analytics_engine: AnalyticsQueryEngine | None
@@ -192,6 +196,15 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
             terminal_host_manager = TerminalHostManager(db, config.terminal)
             logger.info("Terminal enabled: backend=%s", config.terminal.backend)
 
+    # OpenCode client (optional, for workspace feature)
+    opencode = None
+    if config.workspace.url:
+        opencode = OpenCodeClient(
+            url=config.workspace.url,
+            password=config.workspace.password,
+        )
+        logger.info("OpenCode workspace enabled: %s", config.workspace.url)
+
     return Services(
         config=config,
         db=db,
@@ -212,9 +225,15 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         cairn_manager=CairnManager(db, llm=llm, capabilities=capabilities),
         digest_worker=DigestWorker(db, llm=llm, capabilities=capabilities),
         drift_detector=DriftDetector(db),
-        message_manager=MessageManager(db),
+        message_manager=(_msg_mgr := MessageManager(db)),
         ingest_pipeline=IngestPipeline(db, project_manager, memory_store, llm, config),
         terminal_host_manager=terminal_host_manager,
+        opencode=opencode,
+        workspace_manager=WorkspaceManager(
+            db, opencode,
+            message_manager=_msg_mgr,
+            default_agent=config.workspace.default_agent,
+        ),
         analytics_tracker=analytics_tracker,
         rollup_worker=rollup_worker,
         analytics_engine=analytics_engine,

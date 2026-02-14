@@ -520,6 +520,51 @@ export interface HeatmapResult {
   days: HeatmapDay[];
 }
 
+// --- Workspace types ---
+
+export interface WorkspaceHealth {
+  status: "healthy" | "unhealthy" | "not_configured" | "unreachable";
+  version?: string;
+  error?: string;
+}
+
+export interface WorkspaceSession {
+  id: number;
+  session_id: string;
+  project: string;
+  agent: string;
+  title: string;
+  task: string | null;
+  created_at: string | null;
+  // From create response
+  context_injected?: boolean;
+  context_length?: number;
+  error?: string;
+}
+
+export interface WorkspaceMessagePart {
+  type: string; // "text" | "tool-invocation" | "tool-result"
+  text?: string;
+  toolName?: string;
+  args?: Record<string, unknown>;
+  result?: unknown;
+  [key: string]: unknown;
+}
+
+export interface WorkspaceMessage {
+  id: string;
+  role: "user" | "assistant";
+  parts: WorkspaceMessagePart[];
+  created_at: string | null;
+}
+
+export interface WorkspaceAgent {
+  id: string;
+  name: string | null;
+  description: string | null;
+  model: string | null;
+}
+
 // --- Terminal types ---
 
 export interface TerminalConfig {
@@ -649,6 +694,40 @@ export const api = {
 
   analyticsHeatmap: (opts?: { days?: string }) =>
     get<HeatmapResult>("/analytics/heatmap", opts),
+
+  workspaceHealth: () => get<WorkspaceHealth>("/workspace/health"),
+
+  workspaceSessions: (project?: string) =>
+    get<WorkspaceSession[]>("/workspace/sessions", project ? { project } : {}),
+
+  workspaceCreateSession: (body: {
+    project: string; task?: string; message_id?: number; fork_from?: string;
+    title?: string; agent?: string; inject_context?: boolean;
+    context_mode?: "focused" | "full";
+  }) => post<WorkspaceSession>("/workspace/sessions", body),
+
+  workspaceGetSession: (sessionId: string) =>
+    get<WorkspaceSession>(`/workspace/sessions/${sessionId}`),
+
+  workspaceDeleteSession: (sessionId: string) =>
+    del<{ session_id: string; status: string }>(`/workspace/sessions/${sessionId}`),
+
+  workspaceSendMessage: (sessionId: string, body: { text: string; agent?: string; wait?: boolean }) =>
+    post<{ session_id: string; response?: string; status?: string }>(`/workspace/sessions/${sessionId}/message`, body),
+
+  workspaceAbortSession: (sessionId: string) =>
+    post<{ session_id: string; status: string }>(`/workspace/sessions/${sessionId}/abort`, {}),
+
+  workspaceMessages: (sessionId: string) =>
+    get<WorkspaceMessage[]>(`/workspace/sessions/${sessionId}/messages`),
+
+  workspaceAgents: () => get<WorkspaceAgent[]>("/workspace/agents"),
+
+  workspaceDiff: (sessionId: string) =>
+    get<Array<Record<string, unknown>>>(`/workspace/sessions/${sessionId}/diff`),
+
+  workspaceContext: (project: string, task?: string) =>
+    get<{ context: string }>(`/workspace/context/${encodeURIComponent(project)}`, task ? { task } : {}),
 
   terminalConfig: () => get<TerminalConfig>("/terminal/config"),
 

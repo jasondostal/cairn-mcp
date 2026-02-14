@@ -19,9 +19,18 @@ import {
   CheckCheck,
   Send,
   AlertCircle,
+  Play,
+  Loader2,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 function timeAgo(dateStr: string): string {
   const seconds = Math.floor(
@@ -53,13 +62,16 @@ function MessageRow({
   showProject,
   onMarkRead,
   onArchive,
+  onSpawnAgent,
+  onViewDetail,
 }: {
   message: Message;
   showProject?: boolean;
   onMarkRead: (id: number) => void;
   onArchive: (id: number) => void;
+  onSpawnAgent: (message: Message) => void;
+  onViewDetail: (message: Message) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const unread = !message.is_read;
   const urgent = message.priority === "urgent";
 
@@ -75,20 +87,21 @@ function MessageRow({
         <div
           className="flex items-start gap-3 cursor-pointer"
           onClick={() => {
-            setExpanded(!expanded);
+            onViewDetail(message);
             if (unread) onMarkRead(message.id);
           }}
         >
-          <div className="mt-0.5 shrink-0">
+          <div className="mt-0.5 shrink-0 flex items-center gap-1.5">
             {unread ? (
               <Mail className={cn("h-4 w-4", urgent ? "text-red-500" : "text-primary")} />
             ) : (
               <MailOpen className="h-4 w-4 text-muted-foreground" />
             )}
+            <span className="text-xs text-muted-foreground font-mono">#{message.id}</span>
           </div>
           <div className="flex-1 min-w-0 space-y-1">
             <p className={cn("text-sm", unread && "font-medium")}>
-              {expanded ? message.content : message.content.length > 120 ? message.content.slice(0, 120) + "..." : message.content}
+              {message.content.length > 120 ? message.content.slice(0, 120) + "..." : message.content}
             </p>
             <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
               <Badge variant="secondary" className={cn("text-xs", senderColor(message.sender))}>
@@ -110,6 +123,18 @@ function MessageRow({
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              title="Spawn agent from this message"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSpawnAgent(message);
+              }}
+            >
+              <Play className="h-3.5 w-3.5" />
+            </Button>
             {unread && (
               <Button
                 variant="ghost"
@@ -148,11 +173,15 @@ function MessageDenseRow({
   showProject,
   onMarkRead,
   onArchive,
+  onSpawnAgent,
+  onViewDetail,
 }: {
   message: Message;
   showProject?: boolean;
   onMarkRead: (id: number) => void;
   onArchive: (id: number) => void;
+  onSpawnAgent: (message: Message) => void;
+  onViewDetail: (message: Message) => void;
 }) {
   const unread = !message.is_read;
   const urgent = message.priority === "urgent";
@@ -164,15 +193,17 @@ function MessageDenseRow({
         unread && "font-medium",
       )}
       onClick={() => {
+        onViewDetail(message);
         if (unread) onMarkRead(message.id);
       }}
     >
-      <div className="shrink-0">
+      <div className="shrink-0 flex items-center gap-1">
         {unread ? (
           <Mail className={cn("h-3.5 w-3.5", urgent ? "text-red-500" : "text-primary")} />
         ) : (
           <MailOpen className="h-3.5 w-3.5 text-muted-foreground" />
         )}
+        <span className="text-xs text-muted-foreground font-mono">#{message.id}</span>
       </div>
       <Badge variant="secondary" className={cn("text-xs shrink-0", senderColor(message.sender))}>
         {senderLabel(message.sender)}
@@ -186,6 +217,18 @@ function MessageDenseRow({
       )}
       <span className="text-xs text-muted-foreground shrink-0">{timeAgo(message.created_at)}</span>
       <div className="flex items-center gap-1 shrink-0">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0"
+          title="Spawn agent"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSpawnAgent(message);
+          }}
+        >
+          <Play className="h-3 w-3" />
+        </Button>
         {unread && (
           <Button
             variant="ghost"
@@ -295,6 +338,61 @@ function ComposeArea({
   );
 }
 
+function MessageDetailDialog({
+  message,
+  onClose,
+  onSpawnAgent,
+}: {
+  message: Message | null;
+  onClose: () => void;
+  onSpawnAgent: (message: Message) => void;
+}) {
+  if (!message) return null;
+  return (
+    <Dialog open={!!message} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span className="font-mono text-muted-foreground">#{message.id}</span>
+            <Badge variant="secondary" className={cn("text-xs", senderColor(message.sender))}>
+              {senderLabel(message.sender)}
+            </Badge>
+            {message.priority === "urgent" && (
+              <Badge variant="destructive" className="text-xs gap-1">
+                <AlertCircle className="h-3 w-3" />
+                urgent
+              </Badge>
+            )}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Badge variant="secondary" className="text-xs">{message.project}</Badge>
+            <span>{formatDate(message.created_at)}</span>
+            <span>({timeAgo(message.created_at)})</span>
+          </div>
+          <div className="rounded-md border border-border bg-muted/30 p-4 text-sm whitespace-pre-wrap break-words max-h-[400px] overflow-y-auto">
+            {message.content}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={onClose}>
+              Close
+            </Button>
+            <Button
+              size="sm"
+              className="gap-1"
+              onClick={() => onSpawnAgent(message)}
+            >
+              <Play className="h-3.5 w-3.5" />
+              Spawn Agent
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function MessagesPage() {
   const filters = usePageFilters();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -302,6 +400,8 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [detailMessage, setDetailMessage] = useState<Message | null>(null);
+  const [spawning, setSpawning] = useState<number | null>(null);
 
   const loadMessages = useCallback(() => {
     setLoading(true);    setError(null);    api
@@ -340,6 +440,30 @@ export default function MessagesPage() {
     const proj = filters.showAllProjects ? undefined : filters.projectFilter.join(",");
     await api.markAllMessagesRead(proj);
     setMessages((prev) => prev.map((m) => ({ ...m, is_read: true })));
+  };
+
+  const handleSpawnAgent = async (message: Message) => {
+    setSpawning(message.id);
+    try {
+      const session = await api.workspaceCreateSession({
+        project: message.project,
+        message_id: message.id,
+      });
+      if (session.error) {
+        toast.error("Failed to spawn agent", { description: session.error });
+      } else {
+        toast.success(`Agent spawned from message #${message.id}`, {
+          description: `Session: ${session.session_id?.slice(0, 16)}...`,
+        });
+        setDetailMessage(null);
+      }
+    } catch (err) {
+      toast.error("Failed to spawn agent", {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setSpawning(null);
+    }
   };
 
   const unreadCount = messages.filter((m) => !m.is_read).length;
@@ -404,6 +528,8 @@ export default function MessagesPage() {
                 showProject={filters.showAllProjects}
                 onMarkRead={handleMarkRead}
                 onArchive={handleArchive}
+                onSpawnAgent={handleSpawnAgent}
+                onViewDetail={setDetailMessage}
               />
             ))}
           </div>
@@ -416,11 +542,19 @@ export default function MessagesPage() {
                 showProject={filters.showAllProjects}
                 onMarkRead={handleMarkRead}
                 onArchive={handleArchive}
+                onSpawnAgent={handleSpawnAgent}
+                onViewDetail={setDetailMessage}
               />
             ))}
           </div>
         )}
       </div>
+
+      <MessageDetailDialog
+        message={detailMessage}
+        onClose={() => setDetailMessage(null)}
+        onSpawnAgent={handleSpawnAgent}
+      />
     </PageLayout>
   );
 }

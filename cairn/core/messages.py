@@ -51,6 +51,35 @@ class MessageManager:
             "created_at": row["created_at"].isoformat(),
         }
 
+    @track_operation("messages.get")
+    def get(self, message_id: int) -> dict | None:
+        """Get a single message by ID."""
+        row = self.db.execute_one(
+            """
+            SELECT m.id, m.sender, m.content, m.priority, m.is_read, m.archived,
+                   m.metadata, m.created_at, m.updated_at,
+                   p.name as project
+            FROM messages m
+            LEFT JOIN projects p ON m.project_id = p.id
+            WHERE m.id = %s
+            """,
+            (message_id,),
+        )
+        if not row:
+            return None
+        return {
+            "id": row["id"],
+            "project": row["project"],
+            "sender": row["sender"],
+            "content": row["content"],
+            "priority": row["priority"],
+            "is_read": row["is_read"],
+            "archived": row["archived"],
+            "metadata": row["metadata"] or {},
+            "created_at": row["created_at"].isoformat(),
+            "updated_at": row["updated_at"].isoformat(),
+        }
+
     @track_operation("messages.inbox")
     def inbox(
         self,
