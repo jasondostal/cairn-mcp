@@ -77,7 +77,10 @@ def process_one(row, svc, extract_only, embed_only):
         if not embed_only and svc.knowledge_extractor:
             created_at = row.get("created_at")
             created_at_str = created_at.isoformat() if created_at else None
-            result = svc.knowledge_extractor.extract(content, created_at=created_at_str)
+            author = row.get("author")
+            result = svc.knowledge_extractor.extract(
+                content, created_at=created_at_str, author=author,
+            )
             if result and (result.entities or result.statements):
                 stats = svc.knowledge_extractor.resolve_and_persist(
                     result, memory_id, project_id,
@@ -147,7 +150,7 @@ def main():
         # Fetch ALL memory IDs + content upfront (cheaper than batched queries with threads)
         rows = svc.db.execute(
             """
-            SELECT id, content, project_id, created_at FROM memories
+            SELECT id, content, project_id, created_at, author FROM memories
             WHERE is_active = true AND id > %s
             ORDER BY id ASC
             """,

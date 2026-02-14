@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cairn-mcp"
-version = "0.34.2"
+version = "0.35.0"
 description = "Persistent memory for agents and humans. Store, search, and discover patterns across persistent context."
 readme = "README.md"
 license = {text = "GPL-3.0-only"}

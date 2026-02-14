@@ -18,7 +18,14 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 
 CAIRN_URL="${CAIRN_URL:-http://localhost:8000}"
+CAIRN_API_KEY="${CAIRN_API_KEY:-}"
 CAIRN_PROJECT="${CAIRN_PROJECT:-$(basename "${CWD:-$(pwd)}")}"
+
+# Build auth header if API key is set
+AUTH_HEADER=()
+if [ -n "$CAIRN_API_KEY" ]; then
+    AUTH_HEADER=(-H "X-API-Key: ${CAIRN_API_KEY}")
+fi
 
 # Build session_name from date + session ID (last 8 chars for readability)
 SHORT_ID="${SESSION_ID: -8}"
@@ -41,7 +48,7 @@ jq -nc --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
        '{ts: $ts, type: $type, session: $session, project: $project, session_name: $session_name}' >> "$EVENT_LOG"
 
 # Fetch recent cairns across ALL projects (cross-project boot)
-CAIRNS=$(curl -sf "${CAIRN_URL}/api/cairns?limit=5" 2>/dev/null || echo "[]")
+CAIRNS=$(curl -sf "${AUTH_HEADER[@]}" "${CAIRN_URL}/api/cairns?limit=5" 2>/dev/null || echo "[]")
 
 # Build context output for Claude
 CAIRN_COUNT=$(echo "$CAIRNS" | jq 'length' 2>/dev/null || echo "0")

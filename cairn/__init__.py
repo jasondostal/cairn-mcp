@@ -1,3 +1,3 @@
 """Cairn: Semantic memory for AI agents."""
 
-__version__ = "0.34.2"
+__version__ = "0.35.0"
