@@ -147,7 +147,7 @@ class MemoryStore:
 
         memory_id = row["id"]
 
-        # Create relationships if specified
+        # Create caller-specified relationships (part of core write)
         if related_ids:
             for related_id in related_ids:
                 self.db.execute(
@@ -159,53 +159,66 @@ class MemoryStore:
                     (memory_id, related_id),
                 )
 
+        # Phase 1 commit: core memory is now safely persisted.
+        # Enrichment operations (relationship extraction, graph persist, etc.)
+        # run in a separate transaction so their failures can't roll back
+        # the primary INSERT.
+        self.db.commit()
+        logger.info("Stored memory #%d (type=%s, project=%s, enrich=%s)", memory_id, final_type, project, enrich)
+
+        # Phase 2: best-effort enrichment in a new transaction
         auto_relations = []
         conflicts = []
         rule_conflicts = None
         graph_stats = None
 
-        if extraction_result is not None:
-            # Knowledge extraction path: persist graph, skip old relationship pipeline
+        try:
+            if extraction_result is not None:
+                # Knowledge extraction path: persist graph, skip old relationship pipeline
+                try:
+                    graph_stats = self.knowledge_extractor.resolve_and_persist(
+                        extraction_result, memory_id, project_id,
+                    )
+                    logger.info(
+                        "Graph persist: %d entities created, %d merged, %d statements, %d contradictions",
+                        graph_stats.get("entities_created", 0),
+                        graph_stats.get("entities_merged", 0),
+                        graph_stats.get("statements_created", 0),
+                        graph_stats.get("contradictions_found", 0),
+                    )
+                except Exception:
+                    logger.warning("Graph persist failed (non-blocking)", exc_info=True)
+
+                # Rule conflict detection still applies
+                if final_type == "rule":
+                    rule_conflicts = self._check_rule_conflicts(content, project)
+
+            elif enrich:
+                # Legacy enrichment path
+                auto_relations = self._extract_relationships(memory_id, content, vector, project_id)
+
+                # Temporal edge: link to previous memory in same session
+                if session_name:
+                    self._create_temporal_edge(memory_id, session_name, project_id)
+
+                # Entity co-occurrence edges: memories sharing 2+ entities
+                if entities and len(entities) >= 2:
+                    self._create_entity_cooccurrence_edges(memory_id, entities, project_id)
+
+                # Escalate high-importance contradictions
+                conflicts = self._escalate_contradictions(auto_relations)
+
+                # Rule conflict detection
+                if final_type == "rule":
+                    rule_conflicts = self._check_rule_conflicts(content, project)
+
+            self.db.commit()
+        except Exception:
+            logger.warning("Enrichment transaction failed (memory #%d safe)", memory_id, exc_info=True)
             try:
-                graph_stats = self.knowledge_extractor.resolve_and_persist(
-                    extraction_result, memory_id, project_id,
-                )
-                logger.info(
-                    "Graph persist: %d entities created, %d merged, %d statements, %d contradictions",
-                    graph_stats.get("entities_created", 0),
-                    graph_stats.get("entities_merged", 0),
-                    graph_stats.get("statements_created", 0),
-                    graph_stats.get("contradictions_found", 0),
-                )
+                self.db.rollback()
             except Exception:
-                logger.warning("Graph persist failed (non-blocking)", exc_info=True)
-
-            # Rule conflict detection still applies
-            if final_type == "rule":
-                rule_conflicts = self._check_rule_conflicts(content, project)
-
-        elif enrich:
-            # Legacy enrichment path
-            auto_relations = self._extract_relationships(memory_id, content, vector, project_id)
-
-            # Temporal edge: link to previous memory in same session
-            if session_name:
-                self._create_temporal_edge(memory_id, session_name, project_id)
-
-            # Entity co-occurrence edges: memories sharing 2+ entities
-            if entities and len(entities) >= 2:
-                self._create_entity_cooccurrence_edges(memory_id, entities, project_id)
-
-            # Escalate high-importance contradictions
-            conflicts = self._escalate_contradictions(auto_relations)
-
-            # Rule conflict detection
-            if final_type == "rule":
-                rule_conflicts = self._check_rule_conflicts(content, project)
-
-        self.db.commit()
-
-        logger.info("Stored memory #%d (type=%s, project=%s, enrich=%s)", memory_id, final_type, project, enrich)
+                pass
 
         result = {
             "id": memory_id,
