@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.34.2] - 2026-02-14
+
+### Fixed
+- **Remove MCP endpoint auth** — `/mcp` no longer requires API key authentication.
+  Claude Code's HTTP transport forces OAuth discovery before connecting, which fails
+  with 404 on servers that use static API keys. This made MCP unreachable from Claude
+  Code. `/api` routes remain auth-gated when `CAIRN_AUTH_ENABLED=true`.
+
 ## [0.34.0] - 2026-02-14
 
 ### Added
@@ -882,7 +890,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.34.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.34.2...HEAD
+[0.34.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.34.0...v0.34.2
 [0.34.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.31.0...v0.33.0
 [0.31.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.30.1...v0.31.0
