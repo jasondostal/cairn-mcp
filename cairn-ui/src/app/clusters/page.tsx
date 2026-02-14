@@ -5,7 +5,8 @@ import Link from "next/link";
 import { api, type ClusterResult } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { useMemorySheet } from "@/lib/use-memory-sheet";
-import { useProjectSelector } from "@/lib/use-project-selector";
+import { usePageFilters } from "@/lib/use-page-filters";
+import { PageFilters, DenseToggle } from "@/components/page-filters";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,10 +14,9 @@ import { Input } from "@/components/ui/input";
 import { ErrorState } from "@/components/error-state";
 import { MemoryTypeBadge } from "@/components/memory-type-badge";
 import { MemorySheet } from "@/components/memory-sheet";
-import { MultiSelect } from "@/components/ui/multi-select";
 import { SkeletonList } from "@/components/skeleton-list";
 import { PageLayout } from "@/components/page-layout";
-import { Network, Eye, LayoutList, LayoutGrid, ArrowRight } from "lucide-react";
+import { Network, Eye, ArrowRight } from "lucide-react";
 
 type Cluster = ClusterResult["clusters"][number];
 
@@ -141,17 +141,15 @@ function ClusterDenseRow({ cluster, onMemorySelect }: { cluster: Cluster; onMemo
 }
 
 export default function ClustersPage() {
+  const filters = usePageFilters({ defaultDense: false });
   const [data, setData] = useState<ClusterResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [topic, setTopic] = useState("");
-  const [project, setProject] = useState<string[]>([]);
-  const [dense, setDense] = useState(false);
-  const { projects } = useProjectSelector();
   const { sheetId, sheetOpen, setSheetOpen, openSheet } = useMemorySheet();
 
   function load(proj?: string[]) {
-    const p = proj ?? project;
+    const p = proj ?? filters.projectFilter;
     setLoading(true);
     setError(null);
     api
@@ -169,10 +167,8 @@ export default function ClustersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const projectOptions = projects.map((p) => ({ value: p.name, label: p.name }));
-
   function handleProjectChange(value: string[]) {
-    setProject(value);
+    filters.setProjectFilter(value);
     load(value);
   }
 
@@ -180,15 +176,7 @@ export default function ClustersPage() {
     <PageLayout
       title="Clusters"
       titleExtra={<>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0"
-          onClick={() => setDense(!dense)}
-          title={dense ? "Card view" : "Dense view"}
-        >
-          {dense ? <LayoutGrid className="h-4 w-4" /> : <LayoutList className="h-4 w-4" />}
-        </Button>
+        <DenseToggle dense={filters.dense} onToggle={() => filters.setDense((d) => !d)} />
         <Button asChild variant="outline" size="sm">
           <Link href="/clusters/visualization">
             <Eye className="mr-1.5 h-4 w-4" />
@@ -198,13 +186,11 @@ export default function ClustersPage() {
       </>}
       filters={
         <div className="space-y-2">
-          <MultiSelect
-            options={projectOptions}
-            value={project}
-            onValueChange={handleProjectChange}
-            placeholder="All projects"
-            searchPlaceholder="Search projects…"
-            maxCount={2}
+          <PageFilters
+            filters={{
+              ...filters,
+              setProjectFilter: handleProjectChange,
+            }}
           />
           <div className="flex gap-2">
             <Input
@@ -241,7 +227,7 @@ export default function ClustersPage() {
           <p className="text-sm text-muted-foreground">
             {data.cluster_count} cluster{data.cluster_count !== 1 && "s"}
           </p>
-          {dense ? (
+          {filters.dense ? (
             <div className="rounded-md border border-border divide-y divide-border">
               {data.clusters.map((c) => (
                 <ClusterDenseRow key={c.id} cluster={c} onMemorySelect={openSheet} />

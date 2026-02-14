@@ -13,7 +13,7 @@ from sklearn.manifold import TSNE
 from sklearn.metrics.pairwise import cosine_distances
 
 from cairn.core.analytics import track_operation
-from cairn.core.utils import extract_json
+from cairn.core.utils import extract_json, parse_vector
 from cairn.embedding.interface import EmbeddingInterface
 from cairn.llm.prompts import build_cluster_summary_messages
 from cairn.storage.database import Database
@@ -120,7 +120,7 @@ class ClusterEngine:
 
         # Parse embeddings into numpy array
         memory_ids = [r["id"] for r in rows]
-        embeddings = np.array([self._parse_vector(r["embedding"]) for r in rows])
+        embeddings = np.array([parse_vector(r["embedding"]) for r in rows])
 
         # HDBSCAN on cosine metric — no precomputed distance matrix needed
         hdb = HDBSCAN(
@@ -231,7 +231,7 @@ class ClusterEngine:
             topic_vec = np.array(self.embedding.embed(topic)).reshape(1, -1)
             scored = []
             for c in clusters:
-                centroid = np.array(self._parse_vector(c["centroid"])).reshape(1, -1)
+                centroid = np.array(parse_vector(c["centroid"])).reshape(1, -1)
                 similarity = 1.0 - float(cosine_distances(topic_vec, centroid)[0, 0])
                 scored.append((similarity, c))
             scored.sort(key=lambda x: x[0], reverse=True)
@@ -308,7 +308,7 @@ class ClusterEngine:
             sampled = True
 
         memory_ids = [r["id"] for r in rows]
-        embeddings = np.array([self._parse_vector(r["embedding"]) for r in rows])
+        embeddings = np.array([parse_vector(r["embedding"]) for r in rows])
 
         # t-SNE needs at least 2 samples; perplexity must be < n_samples
         n = len(embeddings)
@@ -454,10 +454,6 @@ class ClusterEngine:
                 "SELECT COUNT(*) as count FROM memories WHERE is_active = true",
             )
         return row["count"] if row else 0
-
-    def _parse_vector(self, text: str) -> list[float]:
-        """Parse a pgvector string like '[0.1,0.2,...]' into a list of floats."""
-        return [float(x) for x in text.strip("[]").split(",")]
 
     def _elapsed_ms(self, start: float) -> int:
         return int((time.monotonic() - start) * 1000)

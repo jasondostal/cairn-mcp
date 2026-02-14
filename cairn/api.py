@@ -31,6 +31,20 @@ def parse_multi(param: str | None) -> list[str] | None:
     return parts if parts else None
 
 
+def _llm_model_name(config) -> str:
+    """Return the active LLM model name based on backend."""
+    backend = config.llm.backend
+    if backend == "ollama":
+        return config.llm.ollama_model
+    if backend == "bedrock":
+        return config.llm.bedrock_model
+    if backend == "gemini":
+        return config.llm.gemini_model
+    if backend == "openai":
+        return config.llm.openai_model
+    return backend
+
+
 class APIKeyAuthMiddleware(BaseHTTPMiddleware):
     """Optional API key authentication middleware.
 
@@ -123,6 +137,26 @@ def create_api(svc: Services) -> FastAPI:
     @router.get("/status")
     def api_status():
         return get_status(db, config)
+
+    # ------------------------------------------------------------------
+    # GET /settings — current configuration (read-only)
+    # ------------------------------------------------------------------
+    @router.get("/settings")
+    def api_settings():
+        from dataclasses import fields
+        caps = {f.name: getattr(config.capabilities, f.name) for f in fields(config.capabilities) if f.name != "active_list"}
+        return {
+            "embedding": {"backend": config.embedding.backend, "model": config.embedding.model, "dimensions": config.embedding.dimensions},
+            "llm": {"backend": config.llm.backend, "model": _llm_model_name(config)},
+            "reranker": {"backend": config.reranker.backend, "model": config.reranker.model, "candidates": config.reranker.candidates},
+            "terminal": {"backend": config.terminal.backend},
+            "auth": {"enabled": config.auth.enabled},
+            "analytics": {"enabled": config.analytics.enabled, "retention_days": config.analytics.retention_days},
+            "enrichment_enabled": config.enrichment_enabled,
+            "capabilities": caps,
+            "transport": config.transport,
+            "http_port": config.http_port,
+        }
 
     # ------------------------------------------------------------------
     # GET /timeline?project=&type=&days=&limit=&offset=
@@ -377,7 +411,8 @@ def create_api(svc: Services) -> FastAPI:
     # PATCH /messages/:id — update message (mark read, archive)
     # ------------------------------------------------------------------
     @router.patch("/messages/{message_id}")
-    def api_update_message(message_id: int = Path(...), body: dict = {}):
+    def api_update_message(message_id: int = Path(...), body: dict | None = None):
+        body = body or {}
         is_read = body.get("is_read")
         archived = body.get("archived")
 
@@ -392,7 +427,8 @@ def create_api(svc: Services) -> FastAPI:
     # POST /messages/mark-all-read — bulk mark read
     # ------------------------------------------------------------------
     @router.post("/messages/mark-all-read")
-    def api_mark_all_read(body: dict = {}):
+    def api_mark_all_read(body: dict | None = None):
+        body = body or {}
         project = body.get("project")
         return message_manager.mark_all_read(project=project)
 
@@ -1261,10 +1297,10 @@ def create_api(svc: Services) -> FastAPI:
         return host
 
     @router.patch("/terminal/hosts/{host_id}")
-    def api_terminal_update_host(host_id: int = Path(...), body: dict = {}):
+    def api_terminal_update_host(host_id: int = Path(...), body: dict | None = None):
         if not terminal_mgr:
             raise HTTPException(status_code=503, detail="Terminal not configured")
-        return terminal_mgr.update(host_id, **body)
+        return terminal_mgr.update(host_id, **(body or {}))
 
     @router.delete("/terminal/hosts/{host_id}")
     def api_terminal_delete_host(host_id: int = Path(...)):

@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PageLayout } from "@/components/page-layout";
 import { DocTypeBadge } from "@/components/doc-type-badge";
 import { Download, LayoutList, LayoutGrid, FileText, ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
 
 interface ProjectDetail {
   name: string;
@@ -148,8 +149,10 @@ function ExportButton({ project }: { project: string }) {
       a.download = `${project}-export.${ext}`;
       a.click();
       URL.revokeObjectURL(blobUrl);
-    } catch {
-      // Silently fail — the fetch error is visible in devtools
+    } catch (err) {
+      toast.error("Export failed", {
+        description: err instanceof Error ? err.message : undefined,
+      });
     } finally {
       setExporting(false);
     }

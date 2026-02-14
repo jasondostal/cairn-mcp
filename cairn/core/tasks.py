@@ -61,7 +61,7 @@ class TaskManager:
 
         Returns dict with 'total', 'limit', 'offset', and 'items' keys.
         """
-        status_filter = "" if include_completed else f" AND t.status = '{TaskStatus.PENDING}'"
+        status_filter = "" if include_completed else " AND t.status = %s"
 
         if project is not None:
             if isinstance(project, list):
@@ -77,11 +77,15 @@ class TaskManager:
             where = "TRUE"
             base_params = []
 
+        count_params: list = list(base_params)
+        if not include_completed:
+            count_params.append(TaskStatus.PENDING)
+
         # Get total count
         count_join = " LEFT JOIN projects p ON t.project_id = p.id" if isinstance(project, list) else ""
         count_row = self.db.execute_one(
             f"SELECT COUNT(*) as total FROM tasks t{count_join} WHERE {where}{status_filter}",
-            tuple(base_params),
+            tuple(count_params),
         )
         total = count_row["total"]
 
@@ -97,6 +101,8 @@ class TaskManager:
             ORDER BY t.created_at DESC
         """
         params: list = list(base_params)
+        if not include_completed:
+            params.append(TaskStatus.PENDING)
 
         if limit is not None:
             query += " LIMIT %s OFFSET %s"

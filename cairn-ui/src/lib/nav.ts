@@ -16,6 +16,7 @@ import {
   Mail,
   Radio,
   Terminal,
+  Settings,
 } from "lucide-react";
 
 export interface NavItem {
@@ -42,4 +43,5 @@ export const navItems: NavItem[] = [
   { href: "/rules", label: "Rules", icon: Shield },
   { href: "/terminal", label: "Terminal", icon: Terminal },
   { href: "/analytics", label: "Ops Log", icon: BarChart3 },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];

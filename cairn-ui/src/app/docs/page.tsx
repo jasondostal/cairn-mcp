@@ -4,17 +4,16 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, type Document } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { useProjectSelector } from "@/lib/use-project-selector";
+import { usePageFilters } from "@/lib/use-page-filters";
+import { PageFilters, DenseToggle } from "@/components/page-filters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/error-state";
-import { MultiSelect } from "@/components/ui/multi-select";
 import { SkeletonList } from "@/components/skeleton-list";
 import { DocTypeBadge } from "@/components/doc-type-badge";
 import { EmptyState } from "@/components/empty-state";
 import { PageLayout } from "@/components/page-layout";
-import { FileText, LayoutList, LayoutGrid } from "lucide-react";
+import { FileText } from "lucide-react";
 
 const DOC_TYPES = ["brief", "prd", "plan", "primer", "writeup", "guide"] as const;
 
@@ -89,86 +88,57 @@ function DocCard({ doc, showProject }: { doc: Document; showProject?: boolean })
 }
 
 export default function DocsPage() {
-  const { projects, loading: projectsLoading, error: projectsError } = useProjectSelector();
+  const filters = usePageFilters();
   const [docs, setDocs] = useState<Document[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [projectFilter, setProjectFilter] = useState<string[]>([]);
-  const [typeFilter, setTypeFilter] = useState<string[]>([]);
-  const [dense, setDense] = useState(true);
 
-  const showAll = projectFilter.length === 0;
+  const typeOptions = DOC_TYPES.map((t) => ({ value: t, label: t }));
 
   useEffect(() => {
     setLoading(true);
     setError(null);
     api
       .docs({
-        project: projectFilter.length ? projectFilter.join(",") : undefined,
-        doc_type: typeFilter.length ? typeFilter.join(",") : undefined,
+        project: filters.showAllProjects ? undefined : filters.projectFilter.join(","),
+        doc_type: filters.typeFilter.length ? filters.typeFilter.join(",") : undefined,
       })
       .then((r) => setDocs(r.items))
       .catch((err) => setError(err?.message || "Failed to load docs"))
       .finally(() => setLoading(false));
-  }, [projectFilter, typeFilter]);
-
-  const projectOptions = projects.map((p) => ({ value: p.name, label: p.name }));
-  const typeOptions = DOC_TYPES.map((t) => ({ value: t, label: t }));
+  }, [filters.projectFilter, filters.typeFilter, filters.showAllProjects]);
 
   return (
     <PageLayout
       title="Docs"
-      titleExtra={
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0"
-          onClick={() => setDense(!dense)}
-          title={dense ? "Card view" : "Dense view"}
-        >
-          {dense ? <LayoutGrid className="h-4 w-4" /> : <LayoutList className="h-4 w-4" />}
-        </Button>
-      }
+      titleExtra={<DenseToggle dense={filters.dense} onToggle={() => filters.setDense((d) => !d)} />}
       filters={
-        <div className="flex items-center gap-2 flex-wrap">
-          <MultiSelect
-            options={projectOptions}
-            value={projectFilter}
-            onValueChange={setProjectFilter}
-            placeholder="All projects"
-            searchPlaceholder="Search projects…"
-            maxCount={2}
-          />
-          <MultiSelect
-            options={typeOptions}
-            value={typeFilter}
-            onValueChange={setTypeFilter}
-            placeholder="All types"
-            searchPlaceholder="Search types…"
-            maxCount={2}
-          />
-        </div>
+        <PageFilters
+          filters={filters}
+          typeOptions={typeOptions}
+          typePlaceholder="All types"
+        />
       }
     >
-      {(loading || projectsLoading) && <SkeletonList count={4} height="h-24" />}
+      {(loading || filters.projectsLoading) && <SkeletonList count={4} height="h-24" />}
 
-      {(error || projectsError) && <ErrorState message="Failed to load docs" detail={error || projectsError || undefined} />}
+      {error && <ErrorState message="Failed to load docs" detail={error} />}
 
-      {!loading && !projectsLoading && !error && !projectsError && docs.length === 0 && (
+      {!loading && !filters.projectsLoading && !error && docs.length === 0 && (
         <EmptyState message="No documents found." />
       )}
 
-      {!loading && !projectsLoading && !error && !projectsError && docs.length > 0 && (
-        dense ? (
+      {!loading && !filters.projectsLoading && !error && docs.length > 0 && (
+        filters.dense ? (
           <div className="rounded-md border border-border divide-y divide-border">
             {docs.map((d) => (
-              <DocDenseRow key={d.id} doc={d} showProject={showAll} />
+              <DocDenseRow key={d.id} doc={d} showProject={filters.showAllProjects} />
             ))}
           </div>
         ) : (
           <div className="space-y-2">
             {docs.map((d) => (
-              <DocCard key={d.id} doc={d} showProject={showAll} />
+              <DocCard key={d.id} doc={d} showProject={filters.showAllProjects} />
             ))}
           </div>
         )

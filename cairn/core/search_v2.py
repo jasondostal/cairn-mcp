@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from cairn.core.handlers import HANDLERS, SearchContext, handle_exploratory
 from cairn.core.router import QueryRouter
 
 if TYPE_CHECKING:
@@ -115,38 +114,8 @@ class SearchV2:
             from cairn.core.router import RouterOutput
             route = RouterOutput()
 
-        # Step 3: Graph boost — get entity-matched candidates from graph handlers
-        # TODO: Re-enable once graph handlers are tuned. Currently dilutes RRF quality.
-        graph_candidates = []
-        if False and self.graph and route.entity_hints:
-            project_id = None
-            if project:
-                proj_row = self.db.execute_one(
-                    "SELECT id FROM projects WHERE name = %s", (project,)
-                )
-                if proj_row:
-                    project_id = proj_row["id"]
-
-            if project_id:
-                ctx = SearchContext(
-                    query=query,
-                    route=route,
-                    project_id=project_id,
-                    project_name=project,
-                    db=self.db,
-                    embedding=self.embedding,
-                    graph=self.graph,
-                    limit=limit,
-                )
-
-                try:
-                    handler = HANDLERS.get(route.query_type, handle_exploratory)
-                    graph_candidates = handler(ctx)
-                except Exception:
-                    logger.debug("Graph handler failed, RRF base is sufficient", exc_info=True)
-
-        # Step 4: Merge — RRF results are primary, graph adds what RRF missed
-        candidates = self._merge_rrf_and_graph(rrf_results, graph_candidates)
+        # Step 3: RRF results are the primary candidates
+        candidates = rrf_results
 
         if not candidates:
             return []
@@ -179,44 +148,6 @@ class SearchV2:
 
         # Step 8: Format
         return self._format_results(candidates, include_full)
-
-    def _merge_rrf_and_graph(
-        self,
-        rrf_results: list[dict],
-        graph_candidates: list[dict],
-    ) -> list[dict]:
-        """Merge RRF search results with graph handler candidates.
-
-        RRF results are already formatted (from legacy search _format_results).
-        Graph candidates are raw handler dicts (id, content, row, score).
-        Both get normalized to reranker-compatible format (id + content).
-        RRF results go first (they're multi-signal ranked), graph supplements.
-        """
-        seen_ids = set()
-        merged = []
-
-        # RRF results first — they have the best multi-signal ranking
-        for r in rrf_results:
-            rid = r.get("id")
-            if rid and rid not in seen_ids:
-                seen_ids.add(rid)
-                # Ensure content is available for reranking
-                content = r.get("content") or r.get("summary", "")
-                merged.append({
-                    "id": rid,
-                    "content": content,
-                    "row": r,  # Original formatted result as metadata
-                    "score": r.get("score", 0.0),
-                })
-
-        # Graph candidates — add what RRF missed
-        for c in graph_candidates:
-            cid = c.get("id")
-            if cid and cid not in seen_ids:
-                seen_ids.add(cid)
-                merged.append(c)
-
-        return merged
 
     def _entity_coverage_gate(
         self,
