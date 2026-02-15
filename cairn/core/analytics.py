@@ -673,6 +673,68 @@ class AnalyticsQueryEngine:
 
         return {"items": items, "days": days}
 
+    def daily_token_budget(self, days: int = 7) -> dict:
+        """Per-model daily token usage with estimated cost for budget monitoring."""
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+        # Cost rates from config (USD per 1k tokens)
+        input_rate = self._config.cost_llm_input_per_1k if self._config else 0.003
+        output_rate = self._config.cost_llm_output_per_1k if self._config else 0.015
+
+        rows = self.db.execute(
+            """
+            SELECT
+                date_trunc('day', timestamp)::date as day,
+                COALESCE(model, 'System') as model,
+                COALESCE(SUM(tokens_in), 0) as tokens_in,
+                COALESCE(SUM(tokens_out), 0) as tokens_out,
+                COALESCE(SUM(tokens_in + tokens_out), 0) as tokens_total,
+                COUNT(*) as calls
+            FROM usage_events
+            WHERE timestamp >= %s
+            GROUP BY day, COALESCE(model, 'System')
+            ORDER BY day DESC, tokens_total DESC
+            """,
+            (cutoff,),
+        )
+
+        total_cost = 0.0
+        items = []
+        for r in rows:
+            cost_in = r["tokens_in"] / 1000 * input_rate
+            cost_out = r["tokens_out"] / 1000 * output_rate
+            cost = round(cost_in + cost_out, 4)
+            total_cost += cost
+            items.append({
+                "day": r["day"].isoformat(),
+                "model": r["model"],
+                "tokens_in": r["tokens_in"],
+                "tokens_out": r["tokens_out"],
+                "tokens_total": r["tokens_total"],
+                "calls": r["calls"],
+                "cost_usd": cost,
+            })
+
+        # Daily totals for quick summary
+        daily_totals: dict[str, dict] = {}
+        for item in items:
+            day = item["day"]
+            if day not in daily_totals:
+                daily_totals[day] = {"tokens_total": 0, "cost_usd": 0.0, "calls": 0}
+            daily_totals[day]["tokens_total"] += item["tokens_total"]
+            daily_totals[day]["cost_usd"] = round(daily_totals[day]["cost_usd"] + item["cost_usd"], 4)
+            daily_totals[day]["calls"] += item["calls"]
+
+        return {
+            "items": items,
+            "daily_totals": [
+                {"day": day, **totals} for day, totals in sorted(daily_totals.items(), reverse=True)
+            ],
+            "total_cost_usd": round(total_cost, 4),
+            "rates": {"input_per_1k": input_rate, "output_per_1k": output_rate},
+            "days": days,
+        }
+
     def get_summary(self) -> dict:
         """Quick summary for the status endpoint."""
         total_row = self.db.execute_one(

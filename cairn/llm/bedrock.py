@@ -86,13 +86,14 @@ class BedrockLLM(LLMInterface):
                 if result_text is None:
                     raise ValueError(f"No text block in Bedrock response: {[list(b.keys()) for b in content]}")
                 latency_ms = (time.monotonic() - t0) * 1000
-                input_est = sum(len(m.get("content", "")) for m in messages) // 4
-                output_est = len(result_text) // 4
+                usage = response.get("usage", {})
+                tokens_in = usage.get("inputTokens") or sum(len(m.get("content", "")) for m in messages) // 4
+                tokens_out = usage.get("outputTokens") or len(result_text) // 4
                 if stats.llm_stats:
-                    stats.llm_stats.record_call(tokens_est=input_est + output_est)
+                    stats.llm_stats.record_call(tokens_est=tokens_in + tokens_out)
                 stats.emit_usage_event(
                     "llm.generate", self.model_id,
-                    tokens_in=input_est, tokens_out=output_est, latency_ms=latency_ms,
+                    tokens_in=tokens_in, tokens_out=tokens_out, latency_ms=latency_ms,
                 )
                 return result_text
             except ClientError as e:
@@ -181,16 +182,17 @@ class BedrockLLM(LLMInterface):
                         ))
 
                 latency_ms = (time.monotonic() - t0) * 1000
-                input_est = sum(
+                usage = response.get("usage", {})
+                tokens_in = usage.get("inputTokens") or sum(
                     len(m.get("content", "")) for m in messages
                     if isinstance(m.get("content"), str)
                 ) // 4
-                output_est = (len(text or "") + sum(len(str(tc.input)) for tc in tool_calls)) // 4
+                tokens_out = usage.get("outputTokens") or (len(text or "") + sum(len(str(tc.input)) for tc in tool_calls)) // 4
                 if stats.llm_stats:
-                    stats.llm_stats.record_call(tokens_est=input_est + output_est)
+                    stats.llm_stats.record_call(tokens_est=tokens_in + tokens_out)
                 stats.emit_usage_event(
                     "llm.generate_with_tools", self.model_id,
-                    tokens_in=input_est, tokens_out=output_est, latency_ms=latency_ms,
+                    tokens_in=tokens_in, tokens_out=tokens_out, latency_ms=latency_ms,
                 )
 
                 return LLMResponse(

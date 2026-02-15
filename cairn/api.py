@@ -1270,6 +1270,12 @@ def create_api(svc: Services) -> FastAPI:
         ):
             return analytics_engine.activity_heatmap(days=days)
 
+        @router.get("/analytics/token-budget")
+        def api_analytics_token_budget(
+            days: int = Query(7, ge=1, le=365),
+        ):
+            return analytics_engine.daily_token_budget(days=days)
+
     # ------------------------------------------------------------------
     # POST /chat — agentic LLM chat with tool calling
     # ------------------------------------------------------------------

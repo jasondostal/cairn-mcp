@@ -355,7 +355,7 @@ No hooks? No problem. Memories stored with a `session_name` are still grouped, s
 </details>
 
 <details>
-<summary><strong>REST API</strong> — 55 endpoints</summary>
+<summary><strong>REST API</strong> — 56 endpoints</summary>
 
 REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Optional API key auth when `CAIRN_AUTH_ENABLED=true`.
 
@@ -404,6 +404,7 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Opt
 | `GET /api/analytics/memory-growth?days=&granularity=` | Cumulative memory counts by type |
 | `GET /api/analytics/sparklines?days=` | Entity creation sparklines (memories, cairns, projects, clusters) |
 | `GET /api/analytics/heatmap?days=` | Daily activity counts for heatmap visualization |
+| `GET /api/analytics/token-budget?days=` | Per-model daily token usage with estimated USD cost |
 | `POST /api/chat` | Send messages to the embedded LLM (agentic, with tool calling) |
 | `GET /api/sessions?project=` | Recent sessions with event counts and digest status |
 | `GET /api/sessions/{name}/events` | Event stream + digests for a session |
@@ -535,6 +536,16 @@ All via environment variables:
 | `CAIRN_KNOWLEDGE_EXTRACTION` | `false` | Enable combined entity/statement/triple extraction on store |
 | `CAIRN_SEARCH_V2` | `false` | Enable intent-routed search with graph handlers |
 | `CAIRN_CAIRN_NARRATIVES` | `false` | Enable LLM narrative generation on cairn set (legacy, off by default) |
+| `CAIRN_ROUTER_ENABLED` | `false` | Enable model router for per-tier LLM routing |
+| `CAIRN_ROUTER_CAPABLE_BACKEND` | *(empty)* | Backend for capable tier (extraction). Falls back to `CAIRN_LLM_BACKEND` |
+| `CAIRN_ROUTER_CAPABLE_MODEL` | *(empty)* | Model for capable tier |
+| `CAIRN_ROUTER_CAPABLE_BUDGET` | `0` | Daily token budget for capable tier (0 = unlimited) |
+| `CAIRN_ROUTER_FAST_BACKEND` | *(empty)* | Backend for fast tier (enrichment, digest, clustering) |
+| `CAIRN_ROUTER_FAST_MODEL` | *(empty)* | Model for fast tier |
+| `CAIRN_ROUTER_FAST_BUDGET` | `0` | Daily token budget for fast tier |
+| `CAIRN_ROUTER_CHAT_BACKEND` | *(empty)* | Backend for chat tier (user-facing) |
+| `CAIRN_ROUTER_CHAT_MODEL` | *(empty)* | Model for chat tier |
+| `CAIRN_ROUTER_CHAT_BUDGET` | `0` | Daily token budget for chat tier |
 
 </details>
 
