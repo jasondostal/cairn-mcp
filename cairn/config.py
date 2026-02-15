@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field, fields, replace
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from cairn.graph.config import Neo4jConfig
 
@@ -88,32 +91,45 @@ class RerankerConfig:
 
 @dataclass(frozen=True)
 class LLMCapabilities:
-    query_expansion: bool = False  # off by default — fires LLM on every search, unproven benefit
+    # --- Stable capabilities ---
     relationship_extract: bool = True
     rule_conflict_check: bool = True
     session_synthesis: bool = True
     consolidation: bool = True
-    confidence_gating: bool = False  # off by default — high reasoning demand
-    event_digest: bool = True  # digest event batches via LLM
-    reranking: bool = False  # off by default — cross-encoder reranking
-    type_routing: bool = False  # off by default — query intent classification + type boost
-    spreading_activation: bool = False  # off by default — graph-based retrieval
-    mca_gate: bool = False  # off by default — keyword coverage pre-filter (MCA)
-    knowledge_extraction: bool = False  # off by default — combined extraction + Neo4j graph
-    search_v2: bool = False  # off by default — intent-routed search with graph handlers
-    cairn_narratives: bool = False  # off by default in v0.37.0 — LLM narrative on cairn set
+    event_digest: bool = True           # digest event batches via LLM
+    reranking: bool = False             # cross-encoder reranking (requires model download)
+    knowledge_extraction: bool = False  # Neo4j graph extraction (requires Neo4j)
+    search_v2: bool = False             # intent-routed search with token budgets
+
+    # --- Experimental capabilities ---
+    # These work but have unproven benefit/cost ratios or high resource demands.
+    # Included in the 'enterprise' profile. May change behavior between releases.
+    query_expansion: bool = False       # EXPERIMENTAL: LLM on every search, unproven benefit
+    confidence_gating: bool = False     # EXPERIMENTAL: high reasoning demand per query
+    type_routing: bool = False          # EXPERIMENTAL: query intent classification + type boost
+    spreading_activation: bool = False  # EXPERIMENTAL: graph-based spreading activation retrieval
+    mca_gate: bool = False              # EXPERIMENTAL: keyword coverage pre-filter (MCA)
+    cairn_narratives: bool = False      # EXPERIMENTAL: LLM narrative generation on cairn set
 
     def active_list(self) -> list[str]:
         """Return names of enabled capabilities."""
         return [
             name for name in (
-                "query_expansion", "relationship_extract", "rule_conflict_check",
-                "session_synthesis", "consolidation", "confidence_gating",
-                "event_digest", "reranking", "type_routing", "spreading_activation",
-                "mca_gate", "knowledge_extraction", "search_v2", "cairn_narratives",
+                "relationship_extract", "rule_conflict_check",
+                "session_synthesis", "consolidation",
+                "event_digest", "reranking", "knowledge_extraction", "search_v2",
+                "query_expansion", "confidence_gating", "type_routing",
+                "spreading_activation", "mca_gate", "cairn_narratives",
             )
             if getattr(self, name)
         ]
+
+
+# Capabilities marked as experimental — may change behavior between releases.
+EXPERIMENTAL_CAPABILITIES: frozenset[str] = frozenset({
+    "query_expansion", "confidence_gating", "type_routing",
+    "spreading_activation", "mca_gate", "cairn_narratives",
+})
 
 
 @dataclass(frozen=True)
@@ -126,7 +142,7 @@ class TerminalConfig:
 
 @dataclass(frozen=True)
 class WorkspaceConfig:
-    url: str = ""                     # OpenCode headless server URL (e.g. http://cortex:8080)
+    url: str = ""                     # OpenCode headless server URL (e.g. http://worker:8080)
     password: str = ""                # OPENCODE_SERVER_PASSWORD on the worker
     default_agent: str = "cairn-build"  # Default agent for new sessions
 
@@ -173,6 +189,7 @@ class Config:
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
     budget: BudgetConfig = field(default_factory=BudgetConfig)
     enrichment_enabled: bool = True
+    profile: str = ""  # Active CAIRN_PROFILE name (empty = no profile)
     transport: str = "stdio"  # "stdio" or "http"
     http_host: str = "0.0.0.0"
     http_port: int = 8000
@@ -239,6 +256,48 @@ _SECTION_CLASSES = {
 }
 
 _BOOL_TRUTHY = {"true", "1", "yes"}
+
+# --- Tiered profiles ---
+# CAIRN_PROFILE sets capability defaults for common deployment patterns.
+# Individual env vars always override profile defaults.
+# Only env vars that DIFFER from hardcoded defaults need to be listed.
+PROFILE_PRESETS: dict[str, dict[str, str]] = {
+    # Vector-only: embedding + search, no LLM. Cheapest deployment.
+    "vector": {
+        "CAIRN_ENRICHMENT_ENABLED": "false",
+        "CAIRN_LLM_RELATIONSHIP_EXTRACT": "false",
+        "CAIRN_LLM_RULE_CONFLICT_CHECK": "false",
+        "CAIRN_LLM_SESSION_SYNTHESIS": "false",
+        "CAIRN_LLM_CONSOLIDATION": "false",
+        "CAIRN_LLM_EVENT_DIGEST": "false",
+    },
+    # LLM-enriched: summaries, relationships, synthesis. Matches current defaults.
+    "enriched": {
+        "CAIRN_ENRICHMENT_ENABLED": "true",
+    },
+    # Knowledge graph: enriched + Neo4j extraction + enhanced search pipeline.
+    "knowledge": {
+        "CAIRN_ENRICHMENT_ENABLED": "true",
+        "CAIRN_KNOWLEDGE_EXTRACTION": "true",
+        "CAIRN_SEARCH_V2": "true",
+        "CAIRN_TYPE_ROUTING": "true",
+        "CAIRN_RERANKING": "true",
+    },
+    # Enterprise: all features enabled, including experimental.
+    "enterprise": {
+        "CAIRN_ENRICHMENT_ENABLED": "true",
+        "CAIRN_KNOWLEDGE_EXTRACTION": "true",
+        "CAIRN_SEARCH_V2": "true",
+        "CAIRN_TYPE_ROUTING": "true",
+        "CAIRN_RERANKING": "true",
+        "CAIRN_SPREADING_ACTIVATION": "true",
+        "CAIRN_MCA_GATE": "true",
+        "CAIRN_LLM_QUERY_EXPANSION": "true",
+        "CAIRN_LLM_CONFIDENCE_GATING": "true",
+        "CAIRN_ROUTER_ENABLED": "true",
+        "CAIRN_CAIRN_NARRATIVES": "true",
+    },
+}
 
 
 def _coerce(value: str, target_type: type) -> Any:
@@ -377,6 +436,7 @@ _ENV_MAP: dict[str, str] = {
     "budget.insights": "CAIRN_BUDGET_INSIGHTS",
     "budget.workspace": "CAIRN_BUDGET_WORKSPACE",
     "enrichment_enabled": "CAIRN_ENRICHMENT_ENABLED",
+    "profile": "CAIRN_PROFILE",
     "transport": "CAIRN_TRANSPORT",
     "http_host": "CAIRN_HTTP_HOST",
     "http_port": "CAIRN_HTTP_PORT",
@@ -391,7 +451,26 @@ def env_values() -> dict[str, str | None]:
 
 
 def load_config() -> Config:
-    """Load configuration from environment variables."""
+    """Load configuration from environment variables.
+
+    If CAIRN_PROFILE is set, profile defaults are injected via
+    os.environ.setdefault() — individual env vars always win.
+    """
+    # --- Profile resolution (must run before any os.getenv reads) ---
+    profile_name = os.getenv("CAIRN_PROFILE", "").lower().strip()
+    if profile_name:
+        preset = PROFILE_PRESETS.get(profile_name)
+        if preset:
+            for var, val in preset.items():
+                os.environ.setdefault(var, val)
+            logger.info("Profile applied: %s (%d defaults)", profile_name, len(preset))
+        else:
+            logger.warning(
+                "Unknown CAIRN_PROFILE '%s' (valid: %s)",
+                profile_name, ", ".join(sorted(PROFILE_PRESETS)),
+            )
+            profile_name = ""
+
     return Config(
         db=DatabaseConfig(
             host=os.getenv("CAIRN_DB_HOST", "localhost"),
@@ -501,6 +580,7 @@ def load_config() -> Config:
             workspace=int(os.getenv("CAIRN_BUDGET_WORKSPACE", "6000")),
         ),
         enrichment_enabled=os.getenv("CAIRN_ENRICHMENT_ENABLED", "true").lower() in ("true", "1", "yes"),
+        profile=profile_name,
         transport=os.getenv("CAIRN_TRANSPORT", "stdio"),
         http_host=os.getenv("CAIRN_HTTP_HOST", "0.0.0.0"),
         http_port=int(os.getenv("CAIRN_HTTP_PORT", "8000")),

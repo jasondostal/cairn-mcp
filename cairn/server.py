@@ -39,7 +39,6 @@ db = None
 graph_provider = None
 memory_store = None
 search_engine = None
-search_v2_engine = None
 cluster_engine = None
 project_manager = None
 task_manager = None
@@ -57,7 +56,7 @@ workspace_manager = None
 def _init_services(svc):
     """Assign module globals from a Services instance."""
     global _svc, config, db, graph_provider, memory_store, search_engine
-    global search_v2_engine, cluster_engine, project_manager, task_manager
+    global cluster_engine, project_manager, task_manager
     global thinking_engine, session_synthesizer, consolidation_engine
     global digest_worker, drift_detector, message_manager
     global analytics_tracker, rollup_worker, workspace_manager
@@ -68,7 +67,6 @@ def _init_services(svc):
     graph_provider = svc.graph_provider
     memory_store = svc.memory_store
     search_engine = svc.search_engine
-    search_v2_engine = svc.search_v2
     cluster_engine = svc.cluster_engine
     project_manager = svc.project_manager
     task_manager = svc.task_manager
@@ -314,9 +312,7 @@ def search(
         if search_mode not in VALID_SEARCH_MODES:
             return {"error": f"invalid search_mode: {search_mode}. Must be one of: {', '.join(VALID_SEARCH_MODES)}"}
 
-        # Use search_v2 when enabled (transparent swap)
-        active_engine = search_v2_engine if search_v2_engine else search_engine
-        results = active_engine.search(
+        results = search_engine.search(
             query=query,
             project=project,
             memory_type=memory_type,

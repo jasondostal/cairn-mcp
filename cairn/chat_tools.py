@@ -177,8 +177,7 @@ class ChatToolExecutor:
         self, query: str, project: str | None = None,
         memory_type: str | None = None, limit: int = 10,
     ) -> dict:
-        search = self.svc.search_v2 or self.svc.search_engine
-        results = search.search(
+        results = self.svc.search_engine.search(
             query=query, project=project,
             memory_type=memory_type, limit=min(limit, 20),
             include_full=False,
