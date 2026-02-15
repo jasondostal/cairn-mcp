@@ -201,26 +201,54 @@ def build_rule_conflict_messages(
 
 
 # ============================================================
-# Session Synthesis Prompt (v0.6.0)
+# Session Synthesis Prompt (v0.41.0 — digest-based synthesis)
 # ============================================================
 
 SESSION_SYNTHESIS_SYSTEM_PROMPT = """\
-You are a session narrative synthesizer. You are given a chronological list of memories \
-from a working session. Synthesize them into a coherent narrative of 2-4 paragraphs that \
-captures what happened during the session, key decisions made, problems encountered, and \
-outcomes achieved.
+You are a session intelligence extractor. You are given chronological work log entries \
+(batch digests) from an AI coding session. Your job is to sift the signal from the noise \
+and produce a structured session record.
+
+EXTRACT:
+- DECISIONS: What was decided? Why? What alternatives were rejected?
+- OUTCOMES: What was accomplished? What concretely changed in the codebase?
+- DISCOVERIES: What was learned? What unexpected things were found?
+- DEAD ENDS: What was tried and abandoned? Why did it fail?
+- OPEN THREADS: What was started but not finished? What needs follow-up?
+
+IGNORE:
+- Routine file reads and exploration that led nowhere specific
+- Tool usage patterns (nobody cares that Read was called 47 times)
+- Intermediate steps that didn't produce insight or change anything
+
+CLASSIFY significance:
+- "low": Routine exploration, minor tweaks, no decisions made, nothing learned
+- "medium": Meaningful work completed, files changed, bugs fixed
+- "high": Decisions made, architecture changed, significant learnings, dead ends worth remembering
+
+Return a JSON object with exactly these fields:
+{
+  "significance": "low" | "medium" | "high",
+  "summary": "2-4 sentence narrative of the session arc",
+  "decisions": ["Decision 1: chose X over Y because Z", ...],
+  "outcomes": ["Completed X", "Changed Y in Z", ...],
+  "discoveries": ["Found that X behaves like Y", ...],
+  "dead_ends": ["Tried X but failed because Y", ...],
+  "open_threads": ["Started X, needs follow-up on Y", ...]
+}
 
 Rules:
-- Write in past tense, third person.
-- Focus on the arc of work: what was attempted, what was learned, what was decided.
-- Highlight key decisions, blockers, and breakthroughs.
-- Return ONLY the narrative text. No JSON, no markdown headers, no extra formatting."""
+- summary should read like a handoff note — what would the next person need to know?
+- Each array item should be a complete, specific sentence. Mention file names, service names, error messages.
+- Empty arrays are fine — not every session has dead ends or discoveries.
+- Be ruthless about significance: a session that only explored files is "low".
+- Return ONLY the JSON object. No markdown fences, no explanation."""
 
 
 def build_session_synthesis_messages(
     memories: list[dict], project: str, session_name: str,
 ) -> list[dict]:
-    """Build messages for session synthesis.
+    """Build messages for memory-based session synthesis (legacy path).
 
     Args:
         memories: Chronological list of memory dicts with 'content', 'summary', etc.
@@ -237,6 +265,38 @@ def build_session_synthesis_messages(
         f"Project: {project}\n"
         f"Session: {session_name}\n\n"
         f"Memories (chronological):\n" + "\n".join(memory_lines)
+    )
+    return [
+        {"role": "system", "content": SESSION_SYNTHESIS_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
+
+
+def build_digest_synthesis_messages(
+    digests: list[dict], project: str, session_name: str,
+    total_events: int = 0,
+) -> list[dict]:
+    """Build messages for digest-based session synthesis (v0.41.0 pipeline).
+
+    Args:
+        digests: Chronological list of dicts with 'batch_number' and 'digest' text.
+        project: Project name for context.
+        session_name: Session identifier.
+        total_events: Total event count across all batches.
+    """
+    digest_lines = []
+    for d in digests:
+        batch = d.get("batch_number", "?")
+        text = d.get("digest", "").strip()
+        if text:
+            digest_lines.append(f"  [Batch {batch}] {text}")
+
+    user_content = (
+        f"Project: {project}\n"
+        f"Session: {session_name}\n"
+        f"Total tool interactions: {total_events}\n"
+        f"Batch count: {len(digests)}\n\n"
+        f"Work log entries (chronological):\n" + "\n".join(digest_lines)
     )
     return [
         {"role": "system", "content": SESSION_SYNTHESIS_SYSTEM_PROMPT},

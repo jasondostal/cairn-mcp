@@ -62,10 +62,14 @@ if [ "$UNSHIPPED" -ge "$BATCH_SIZE" ]; then
         SESSION_NAME="$(date -u +%Y-%m-%d)-${SHORT_ID}"
     fi
 
-    # Read project from first event
-    PROJECT=$(grep -v '^$' "$EVENT_LOG" | head -1 | jq -r '.project // empty' 2>/dev/null || true)
+    # Read project and agent metadata from first event
+    FIRST_EVENT=$(grep -v '^$' "$EVENT_LOG" | head -1)
+    PROJECT=$(echo "$FIRST_EVENT" | jq -r '.project // empty' 2>/dev/null || true)
     CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
     PROJECT="${PROJECT:-$(basename "${CWD:-$(pwd)}")}"
+    AGENT_ID=$(echo "$FIRST_EVENT" | jq -r '.agent_id // empty' 2>/dev/null || true)
+    AGENT_TYPE=$(echo "$FIRST_EVENT" | jq -r '.agent_type // "interactive"' 2>/dev/null || true)
+    PARENT_SESSION=$(echo "$FIRST_EVENT" | jq -r '.parent_session // empty' 2>/dev/null || true)
 
     # Calculate batch number (0-indexed)
     BATCH_NUMBER=$((SHIPPED / BATCH_SIZE))
@@ -73,13 +77,16 @@ if [ "$UNSHIPPED" -ge "$BATCH_SIZE" ]; then
     # Extract the unshipped events (skip first SHIPPED lines, take BATCH_SIZE)
     EVENTS=$(grep -v '^$' "$EVENT_LOG" | tail -n +"$((SHIPPED + 1))" | head -n "$BATCH_SIZE" | jq -s '.')
 
-    # Build payload
+    # Build payload with agent metadata
     PAYLOAD=$(jq -nc \
         --arg project "$PROJECT" \
         --arg session_name "$SESSION_NAME" \
         --argjson batch_number "$BATCH_NUMBER" \
         --argjson events "$EVENTS" \
-        '{project: $project, session_name: $session_name, batch_number: $batch_number, events: $events}')
+        --arg agent_id "$AGENT_ID" \
+        --arg agent_type "$AGENT_TYPE" \
+        --arg parent_session "$PARENT_SESSION" \
+        '{project: $project, session_name: $session_name, batch_number: $batch_number, events: $events, agent_id: $agent_id, agent_type: $agent_type} + (if $parent_session != "" then {parent_session: $parent_session} else {} end)')
 
     # Ship in background — non-blocking, fire-and-forget
     # Only update offset on success (curl exit code 0)

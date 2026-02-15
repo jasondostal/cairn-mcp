@@ -38,13 +38,20 @@ OFFSET_FILE="${EVENT_LOG}.offset"
 echo "" > "$EVENT_LOG"
 echo "0" > "$OFFSET_FILE"
 
+# Agent metadata — interactive sessions from Claude Code
+AGENT_TYPE="${CAIRN_AGENT_TYPE:-interactive}"
+PARENT_SESSION="${CAIRN_PARENT_SESSION:-}"
+
 # Log the session start event (includes session_name so session-end.sh can read it back)
 jq -nc --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
        --arg type "session_start" \
        --arg session "$SESSION_ID" \
        --arg project "$CAIRN_PROJECT" \
        --arg session_name "$SESSION_NAME" \
-       '{ts: $ts, type: $type, session: $session, project: $project, session_name: $session_name}' >> "$EVENT_LOG"
+       --arg agent_id "$SESSION_ID" \
+       --arg agent_type "$AGENT_TYPE" \
+       --arg parent_session "$PARENT_SESSION" \
+       '{ts: $ts, type: $type, session: $session, project: $project, session_name: $session_name, agent_id: $agent_id, agent_type: $agent_type, parent_session: $parent_session}' >> "$EVENT_LOG"
 
 # Output session context — Claude Code adds stdout from SessionStart hooks to context
 echo "Session name for this session: ${SESSION_NAME}"

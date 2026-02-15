@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.41.0] - 2026-02-15 — "Session Intelligence"
+
+### Changed
+- **Pipeline redesign: digests are now working state** — `DigestWorker` no longer creates
+  per-batch memories. Batch digests stay in `session_events.digest` as intermediate
+  summaries. This eliminates the N-memories-per-session noise problem (previously ~21
+  low-value `progress` memories per long session, each triggering extraction).
+- **Session close now synthesizes** — `POST /api/sessions/{name}/close` gathers all batch
+  digests and runs LLM synthesis to produce one structured session narrative with:
+  significance classification, summary, decisions, outcomes, discoveries, dead ends,
+  and open threads. Only medium/high significance sessions create a memory.
+- **`SESSION_SYNTHESIS_PROMPT` rewritten** — structured JSON output replacing the previous
+  freeform narrative prompt. New `build_digest_synthesis_messages()` builder for the
+  digest-based synthesis path.
+- **`is_active` uses explicit lifecycle** — sessions list endpoint now uses `closed_at IS NULL`
+  instead of the unreliable "last event within 2 hours" heuristic.
+
+### Added
+- **Multi-agent schema** — `agent_id`, `agent_type` (default: `interactive`),
+  `parent_session` columns on `session_events`. Ingest API (`POST /api/events/ingest`)
+  accepts these fields. Hooks pass agent metadata from session start event.
+- **Session lifecycle columns** — `closed_at` (TIMESTAMPTZ) and `synthesis` (JSONB) on
+  `session_events`. Close endpoint sets both.
+- **Migration 020** — `020_session_agent_metadata.sql`: agent identity columns, session
+  lifecycle columns, indexes for parent session queries and closed session lookups.
+
+### Removed
+- **`DigestWorker._store_digest_memory()`** — the per-batch memory creation method that
+  was the primary source of memory store noise and unnecessary LLM token consumption.
+- **`memory_store` parameter from `DigestWorker`** — no longer needed since digests
+  don't create memories.
+
 ## [0.40.0] - 2026-02-15 — "Tiered Profiles + Contributor DX"
 
 ### Added

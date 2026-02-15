@@ -1,22 +1,21 @@
 # Roadmap
 
-Current: **v0.40.x** — Tiered profiles, unified search, contributor DX.
+Current: **v0.41.x** — Session intelligence, multi-agent ready pipeline.
 
 ---
 
 ## Next Up
 
-### v0.41.0 — Graph Deepening
+### v0.42.0 — Graph Deepening
 
 Implement the "Everything is a Node" decision from v0.37.0 beyond memories and entities.
 
 - [ ] Thinking sequences → graph entity nodes with THOUGHT edges
 - [ ] Tasks → graph entity nodes with ASSIGNED_TO, BLOCKS, LINKED_TO edges
-- [ ] Sessions → formalized episodic nodes
 - [ ] Cross-project entity bridges — shared entities surface inter-project connections
 - [ ] One query model for everything knowledge-related
 
-### v0.42.0 — Graph-Augmented Search
+### v0.43.0 — Graph-Augmented Search
 
 Move search from signal fusion toward retrieval strategy selection based on query shape. SearchV2 is already the sole entry point (v0.40.0); this release adds meaningful strategy dispatch.
 
@@ -24,7 +23,7 @@ Move search from signal fusion toward retrieval strategy selection based on quer
 - [ ] Re-enable and validate graph search handlers (entity_lookup, aspect_query, relationship, temporal)
 - [ ] Vector similarity remains primary fallback for queries with no entity anchors
 
-### v0.43.0 — Single-Pass Boot
+### v0.44.0 — Single-Pass Boot
 
 Replace the multi-call boot sequence with a unified orientation tool.
 
@@ -52,6 +51,18 @@ Replace the multi-call boot sequence with a unified orientation tool.
 ---
 
 ## Shipped
+
+### v0.41.0 — "Session Intelligence" ✓
+
+Event pipeline redesign. Batch digests are now intermediate working state — only session-level synthesis produces durable knowledge. Multi-agent ready.
+
+- [x] **Pipeline redesign: CAPTURE → BATCH → DIGEST → SYNTHESIZE → EXTRACT** — DigestWorker no longer creates per-batch memories. Session close synthesizes all batch digests into one structured session narrative via LLM.
+- [x] **Significance filter** — synthesis classifies sessions as low/medium/high. Low = DB record only (no memory, no graph noise). Medium/High = one memory with extraction.
+- [x] **Structured synthesis output** — JSON with significance, summary, decisions[], outcomes[], discoveries[], dead_ends[], open_threads[]. Knowledge extractor gets rich input instead of 2-sentence batch summaries.
+- [x] **Multi-agent schema** — `agent_id`, `agent_type` (interactive/background/ci/autonomous), `parent_session` columns on session_events. Ingest API and hooks pass agent metadata. Ready for spawned agent tracking.
+- [x] **Session lifecycle fix** — `is_active` uses explicit `closed_at` column instead of 2-hour heuristic. Sessions marked closed with synthesis result stored as JSONB.
+- [x] **Sessions → formalized episodic nodes** — sessions now have structured metadata, lifecycle tracking, and synthesis records (from v0.41.0 Graph Deepening roadmap item).
+- [x] Migration 020 (agent metadata + session lifecycle)
 
 ### v0.40.0 — "Tiered Profiles + Contributor DX" ✓
 
