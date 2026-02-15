@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from cairn import __version__
-from cairn.config import Config
+from cairn.config import Config, EXPERIMENTAL_CAPABILITIES
 from cairn.core import stats
 from cairn.core.analytics import track_operation
 from cairn.storage.database import Database
@@ -48,6 +48,7 @@ def get_status(db: Database, config: Config) -> dict:
     result = {
         "version": __version__,
         "status": "healthy",
+        "profile": config.profile or None,
         "memories": memory_count["count"],
         "projects": project_count["count"],
         "types": {r["memory_type"]: r["count"] for r in type_counts},
@@ -55,6 +56,10 @@ def get_status(db: Database, config: Config) -> dict:
         "clustering": clustering_info,
         "models": models,
         "llm_capabilities": config.capabilities.active_list(),
+        "experimental_capabilities": sorted(
+            c for c in config.capabilities.active_list()
+            if c in EXPERIMENTAL_CAPABILITIES
+        ),
     }
 
     # Digest pipeline observability

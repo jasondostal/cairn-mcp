@@ -56,8 +56,7 @@ class Services:
     graph_provider: GraphProvider | None
     knowledge_extractor: KnowledgeExtractor | None
     memory_store: MemoryStore
-    search_engine: SearchEngine
-    search_v2: SearchV2 | None
+    search_engine: SearchV2  # unified search — wraps SearchEngine
     cluster_engine: ClusterEngine
     project_manager: ProjectManager
     task_manager: TaskManager
@@ -183,28 +182,30 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     )
     project_manager = ProjectManager(db)
 
-    # Legacy search engine (always built — used as fallback for search_v2)
-    legacy_search = SearchEngine(
+    # RRF search engine (core signal fusion)
+    rrf_engine = SearchEngine(
         db, embedding, llm=llm_fast, capabilities=capabilities,
         reranker=reranker, rerank_candidates=config.reranker.candidates,
         activation_engine=activation_engine,
         graph_provider=graph_provider,
     )
 
-    # Search v2 (optional, intent-routed with graph handlers)
-    search_v2 = None
+    # Unified search — always wraps SearchEngine
+    # Passthrough when search_v2 capability is off, enhanced pipeline when on
+    unified_search = SearchV2(
+        db=db,
+        embedding=embedding,
+        graph=graph_provider,
+        llm=llm_fast,
+        capabilities=capabilities,
+        reranker=reranker,
+        rerank_candidates=config.reranker.candidates,
+        fallback_engine=rrf_engine,
+    )
     if capabilities.search_v2:
-        search_v2 = SearchV2(
-            db=db,
-            embedding=embedding,
-            graph=graph_provider,
-            llm=llm_fast,
-            capabilities=capabilities,
-            reranker=reranker,
-            rerank_candidates=config.reranker.candidates,
-            fallback_engine=legacy_search,
-        )
-        logger.info("Search v2 enabled (intent-routed)")
+        logger.info("Search: enhanced mode (intent routing + token budgets)")
+    else:
+        logger.info("Search: standard mode (RRF hybrid)")
 
     # Terminal host manager (optional, based on config)
     terminal_host_manager = None
@@ -233,8 +234,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         graph_provider=graph_provider,
         knowledge_extractor=knowledge_extractor,
         memory_store=memory_store,
-        search_engine=legacy_search,
-        search_v2=search_v2,
+        search_engine=unified_search,
         cluster_engine=ClusterEngine(db, embedding, llm=llm_fast),
         project_manager=project_manager,
         task_manager=TaskManager(db),

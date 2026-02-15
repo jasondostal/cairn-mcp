@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.40.0] - 2026-02-15 — "Tiered Profiles + Contributor DX"
+
+### Added
+- **`CAIRN_PROFILE` env var** — 4 named deployment profiles set capability defaults per
+  tier. `vector` (no LLM, cheapest), `enriched` (default behavior), `knowledge` (+ Neo4j
+  graph + enhanced search), `enterprise` (all features including experimental). Individual
+  env vars always override profile defaults. Uses `os.environ.setdefault()` — zero overhead
+  when no profile is set.
+- **`EXPERIMENTAL_CAPABILITIES` set** — 6 capabilities explicitly labeled as experimental:
+  `query_expansion`, `confidence_gating`, `type_routing`, `spreading_activation`, `mca_gate`,
+  `cairn_narratives`. Status API response includes `experimental_capabilities` list. Settings
+  API response includes `experimental` key listing experimental setting paths.
+- **Settings API enhancements** — `GET /api/settings` response now includes `profiles`
+  (available profile names), `active_profile` (current profile or null), and `experimental`
+  (list of experimental capability keys).
+- **Status API profile field** — `GET /api/status` and MCP `status` tool response now
+  include `profile` (active profile name or null).
+
+### Changed
+- **`api.py` split into route modules** — the 1641-line monolithic `cairn/api.py` is
+  replaced by `cairn/api/` package with 16 focused modules: `core.py` (status, settings),
+  `search.py`, `knowledge.py` (projects, docs, clusters, rules, graph), `tasks.py`,
+  `messages.py`, `thinking.py`, `deprecated.py`, `ingest.py`, `sessions.py`, `analytics.py`,
+  `chat.py`, `terminal.py`, `workspace.py`, `export.py`, plus `utils.py` (shared helpers)
+  and `__init__.py` (orchestrator). Each module exports `register_routes(router, svc, **kw)`.
+  Largest module is `ingest.py` at 261 lines.
+- **Unified search pipeline** — `SearchV2` is now the sole search entry point. The
+  `search_v2` field removed from `Services` dataclass; `search_engine` field type changed
+  from `SearchEngine` to `SearchV2`. In passthrough mode (capabilities.search_v2=False),
+  delegates directly to `SearchEngine` with zero overhead. In enhanced mode, adds intent
+  routing, reranking, entity coverage gating, and token budget enforcement. Graceful
+  degradation chain: enhanced pipeline → SearchEngine (RRF) → vector-only → empty results.
+- **`LLMCapabilities` field reordering** — stable capabilities grouped first (8 fields),
+  experimental capabilities grouped second (6 fields) with `EXPERIMENTAL` comments.
+  `active_list()` method updated to match new ordering.
+- **`Config` dataclass** — new `profile: str = ""` field records the active CAIRN_PROFILE
+  name for reporting.
+
+### Fixed
+- **Session close NameError** — `POST /sessions/{name}/close` endpoint referenced
+  `digest_worker` variable that was never extracted from `svc` in the `create_api()` factory.
+  Would cause `NameError` at runtime. Latent since v0.39.0, never triggered due to curl auth
+  header issues blocking end-to-end testing. Fixed in the new `cairn/api/sessions.py` module.
+
+### Removed
+- **`cairn/api.py`** — monolithic API file deleted, replaced by `cairn/api/` package.
+- **`search_v2` field on `Services`** — SearchV2 is always available via `search_engine`.
+
 ## [0.39.0] - 2026-02-15 — "Event Pipeline Repair"
 
 ### Added
@@ -1120,7 +1168,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.39.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.40.0...HEAD
+[0.40.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.39.0...v0.40.0
 [0.39.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.38.0...v0.39.0
 [0.38.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.37.0...v0.38.0
 [0.37.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.36.1...v0.37.0

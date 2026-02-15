@@ -1,7 +1,17 @@
-"""Intent-routed search engine (v2).
+"""Unified search engine.
 
-Pipeline: route → handler dispatch → entity coverage gate → reranking → format.
-Falls back to existing SearchEngine.hybrid_search() if Neo4j is unreachable.
+Always instantiated as the single search entry point. Two modes:
+
+- **Passthrough** (capabilities.search_v2=false): Delegates directly to
+  SearchEngine (RRF hybrid search). Zero overhead.
+- **Enhanced** (capabilities.search_v2=true): Adds intent routing, entity
+  coverage gate, cross-encoder reranking, and token budget enforcement.
+
+Graceful degradation chain:
+  Enhanced pipeline → SearchEngine (RRF) → vector-only → empty results.
+
+On any failure in the enhanced pipeline, falls back to SearchEngine
+transparently. The caller never needs to know which path executed.
 """
 
 from __future__ import annotations
@@ -9,7 +19,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from cairn.core.budget import TOKENS_PER_WORD, estimate_tokens
+from cairn.core.budget import estimate_tokens
 from cairn.core.router import QueryRouter
 
 if TYPE_CHECKING:
@@ -23,12 +33,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Token budget for final results
+# Token budget for final results (enhanced mode only)
 DEFAULT_TOKEN_BUDGET = 10_000
 
 
 class SearchV2:
-    """Intent-routed search with graph handlers and entity coverage gate."""
+    """Unified search engine — single entry point for all search operations.
+
+    Wraps SearchEngine and optionally adds enhanced pipeline features
+    (intent routing, entity coverage gate, reranking, token budgets)
+    when capabilities.search_v2 is enabled.
+    """
 
     def __init__(
         self,
@@ -50,23 +65,37 @@ class SearchV2:
         self.rerank_candidates = rerank_candidates
         self.fallback_engine = fallback_engine
 
-        # Router requires LLM
-        self.router = QueryRouter(llm) if llm else None
+        # Enhanced mode: intent routing + entity coverage + token budgets
+        self.enhanced = (
+            capabilities is not None
+            and capabilities.search_v2
+        )
+
+        # Router requires LLM (only initialized in enhanced mode)
+        self.router = QueryRouter(llm) if (llm and self.enhanced) else None
 
     def search(
         self,
         query: str,
-        project: str | None = None,
-        memory_type: str | None = None,
+        project: str | list[str] | None = None,
+        memory_type: str | list[str] | None = None,
         search_mode: str = "semantic",
         limit: int = 10,
         include_full: bool = False,
     ) -> list[dict]:
-        """Run intent-routed search pipeline.
+        """Search memories.
 
-        Falls back to legacy search on any critical failure.
+        In passthrough mode, delegates directly to SearchEngine.
+        In enhanced mode, runs the intent-routed pipeline with
+        fallback to SearchEngine on any failure.
         """
-        # Non-semantic modes bypass v2 entirely
+        # Passthrough mode: delegate directly to SearchEngine
+        if not self.enhanced:
+            return self._fallback_search(
+                query, project, memory_type, search_mode, limit, include_full,
+            )
+
+        # Enhanced mode: non-semantic modes bypass the v2 pipeline
         if search_mode != "semantic":
             return self._fallback_search(
                 query, project, memory_type, search_mode, limit, include_full,
@@ -75,27 +104,33 @@ class SearchV2:
         try:
             return self._routed_search(query, project, memory_type, limit, include_full)
         except Exception:
-            logger.warning("SearchV2 pipeline failed, falling back to legacy", exc_info=True)
+            logger.warning("Enhanced search pipeline failed, falling back to RRF", exc_info=True)
             return self._fallback_search(
                 query, project, memory_type, search_mode, limit, include_full,
             )
 
+    def assess_confidence(self, query: str, results: list[dict]) -> dict | None:
+        """Passthrough to SearchEngine's confidence assessment."""
+        if self.fallback_engine:
+            return self.fallback_engine.assess_confidence(query, results)
+        return None
+
     def _routed_search(
         self,
         query: str,
-        project: str | None,
-        memory_type: str | None,
+        project: str | list[str] | None,
+        memory_type: str | list[str] | None,
         limit: int,
         include_full: bool,
     ) -> list[dict]:
-        """Core v2 pipeline: RRF base + graph boost + rerank.
+        """Enhanced pipeline: RRF base + intent routing + rerank + token budget.
 
-        Strategy: Legacy RRF search provides the strong multi-signal base.
-        Graph handlers contribute additional entity-matched candidates that
-        RRF might miss. Reranking sorts everything by relevance.
+        Strategy: SearchEngine (RRF) provides the strong multi-signal base.
+        Intent routing informs graph-based boosting. Reranking sorts by
+        cross-encoder relevance. Token budget trims the tail.
         """
 
-        # Step 1: RRF base — always run legacy search for a solid candidate pool
+        # Step 1: RRF base — always run SearchEngine for a solid candidate pool
         rrf_results = []
         if self.fallback_engine:
             rrf_results = self.fallback_engine.search(
@@ -120,7 +155,7 @@ class SearchV2:
         if not candidates:
             return []
 
-        # Step 5: Reranking with relevance threshold
+        # Step 4: Reranking
         use_reranker = (
             self.reranker is not None
             and self.capabilities is not None
@@ -130,15 +165,15 @@ class SearchV2:
             try:
                 candidates = self.reranker.rerank(query, candidates, limit=limit)
             except Exception:
-                logger.warning("Reranking failed in v2, using merge order", exc_info=True)
+                logger.warning("Reranking failed, using RRF order", exc_info=True)
                 candidates = candidates[:limit]
         else:
             candidates = candidates[:limit]
 
-        # Step 6: Token budget — drop least relevant from tail
+        # Step 5: Token budget — drop least relevant from tail
         candidates = self._apply_token_budget(candidates)
 
-        # Step 7: Filter by memory_type if requested
+        # Step 6: Filter by memory_type if requested
         if memory_type:
             types = [memory_type] if isinstance(memory_type, str) else memory_type
             candidates = [
@@ -146,7 +181,7 @@ class SearchV2:
                 if c.get("row", {}).get("memory_type") in types
             ]
 
-        # Step 8: Format
+        # Step 7: Format
         return self._format_results(candidates, include_full)
 
     def _entity_coverage_gate(
@@ -163,7 +198,6 @@ class SearchV2:
             return candidates
 
         try:
-            # Resolve entity hints to UUIDs
             query_entity_uuids = set()
             for hint in route.entity_hints:
                 name_embedding = self.embedding.embed(hint)
@@ -176,7 +210,6 @@ class SearchV2:
             if not query_entity_uuids:
                 return candidates
 
-            # For each candidate, check if it has statements referencing any query entities
             filtered = []
             for c in candidates:
                 memory_id = c["id"]
@@ -184,7 +217,6 @@ class SearchV2:
                 if has_overlap:
                     filtered.append(c)
 
-            # If gate filtered everything, return original (don't return empty)
             if not filtered:
                 logger.debug("Entity coverage gate filtered all %d candidates, keeping original", len(candidates))
                 return candidates
@@ -204,7 +236,6 @@ class SearchV2:
     ) -> bool:
         """Check if a memory's graph statements reference any of the query entities."""
         try:
-            # Find statements linked to this memory (episode_id)
             for entity_uuid in query_entity_uuids:
                 episodes = self.graph.find_entity_episodes(entity_uuid)
                 if memory_id in episodes:
@@ -265,7 +296,6 @@ class SearchV2:
                 "score": round(c.get("score", 0.0), 6),
             }
 
-            # Include rerank score if present
             if "rerank_score" in c:
                 result["rerank_score"] = round(c["rerank_score"], 4)
 
@@ -276,13 +306,13 @@ class SearchV2:
     def _fallback_search(
         self,
         query: str,
-        project: str | None,
-        memory_type: str | None,
+        project: str | list[str] | None,
+        memory_type: str | list[str] | None,
         search_mode: str,
         limit: int,
         include_full: bool,
     ) -> list[dict]:
-        """Fall back to legacy SearchEngine."""
+        """Delegate to SearchEngine (RRF hybrid search)."""
         if self.fallback_engine:
             return self.fallback_engine.search(
                 query=query,

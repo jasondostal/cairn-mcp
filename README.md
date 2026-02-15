@@ -355,7 +355,7 @@ No hooks? No problem. Memories stored with a `session_name` are still grouped, s
 </details>
 
 <details>
-<summary><strong>REST API</strong> — 57 endpoints</summary>
+<summary><strong>REST API</strong> — 68 endpoints</summary>
 
 REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Optional API key auth when `CAIRN_AUTH_ENABLED=true`.
 
@@ -418,6 +418,17 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Opt
 | `PATCH /api/terminal/hosts/{id}` | Update a terminal host |
 | `DELETE /api/terminal/hosts/{id}` | Soft-delete a terminal host |
 | `WS /api/terminal/ws/{host_id}` | WebSocket terminal proxy (native mode) |
+| `GET /api/workspace/health` | Workspace backend health |
+| `GET /api/workspace/sessions` | List workspace sessions |
+| `POST /api/workspace/sessions` | Create a workspace session |
+| `GET /api/workspace/sessions/{id}` | Session detail |
+| `DELETE /api/workspace/sessions/{id}` | Delete a workspace session |
+| `POST /api/workspace/sessions/{id}/message` | Send message to workspace agent |
+| `POST /api/workspace/sessions/{id}/abort` | Abort running workspace session |
+| `GET /api/workspace/sessions/{id}/diff` | Get session diff |
+| `GET /api/workspace/sessions/{id}/messages` | Get session messages |
+| `GET /api/workspace/agents` | List available workspace agents |
+| `GET /api/workspace/context-preview` | Preview context that would be injected |
 
 ```bash
 curl http://localhost:8000/api/status

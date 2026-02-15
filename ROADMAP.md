@@ -1,32 +1,10 @@
 # Roadmap
 
-Current: **v0.39.x** — Event pipeline repair, digest-to-graph wiring.
+Current: **v0.40.x** — Tiered profiles, unified search, contributor DX.
 
 ---
 
 ## Next Up
-
-### v0.40.0 — Tiered Profiles + Contributor DX
-
-**Tiered configuration profiles.** 14 capability flags create a complex configuration surface. Introduce named profiles that set all flags for a deployment tier:
-
-| Profile | Stack | LLM Required | Neo4j Required |
-|---------|-------|:---:|:---:|
-| `vector` | Postgres + embeddings + basic search | No | No |
-| `enriched` | + LLM enrichment (tags, summary, importance) | Yes | No |
-| `knowledge` | + extraction + entity resolution + contradiction detection | Yes | Yes |
-| `enterprise` | + model router + analytics + workspace + terminal | Yes | Yes |
-
-- [ ] `CAIRN_PROFILE` env var — sets capability flags, feature toggles, and defaults per tier
-- [ ] Docker Compose profiles (`docker compose --profile vector up` vs `--profile knowledge up`)
-- [ ] Per-tier MCP prompt examples in docs
-- [ ] Each tier degrades to the one below it (Neo4j down → enriched; LLM down → vector)
-
-**Contributor DX.**
-
-- [ ] Split `api.py` (1500+ lines, single closure) into route modules
-- [ ] Label experimental features explicitly (spreading activation, MCA gate, confidence gating)
-- [ ] Document the search pipeline end-to-end for contributors
 
 ### v0.41.0 — Graph Deepening
 
@@ -40,10 +18,9 @@ Implement the "Everything is a Node" decision from v0.37.0 beyond memories and e
 
 ### v0.42.0 — Graph-Augmented Search
 
-Move search from signal fusion toward retrieval strategy selection based on query shape.
+Move search from signal fusion toward retrieval strategy selection based on query shape. SearchV2 is already the sole entry point (v0.40.0); this release adds meaningful strategy dispatch.
 
 - [ ] Intent router selects retrieval strategy: vector (vague queries), graph traversal (entity-anchored), aspect-filtered (structured queries like "X's preferences")
-- [ ] SearchV2 becomes the sole search entry point with clearly documented strategy dispatch
 - [ ] Re-enable and validate graph search handlers (entity_lookup, aspect_query, relationship, temporal)
 - [ ] Vector similarity remains primary fallback for queries with no entity anchors
 
@@ -75,6 +52,16 @@ Replace the multi-call boot sequence with a unified orientation tool.
 ---
 
 ## Shipped
+
+### v0.40.0 — "Tiered Profiles + Contributor DX" ✓
+
+Configuration profiles, unified search, and codebase split for maintainability.
+
+- [x] **`CAIRN_PROFILE` env var** — 4 named profiles (`vector`, `enriched`, `knowledge`, `enterprise`) set capability flags and feature toggles per deployment tier. Individual env vars always override profile defaults.
+- [x] **Unified search pipeline** — `SearchV2` is now the sole search entry point. Passthrough mode (zero overhead) when `search_v2` capability is off; enhanced pipeline (intent routing + reranking + token budgets) when on. Graceful degradation: enhanced → RRF → vector → empty.
+- [x] **`api.py` split into route modules** — 1641-line monolith replaced by `cairn/api/` package with 16 focused modules using `register_routes(router, svc)` pattern. Largest module: 261 lines.
+- [x] **Experimental feature labels** — `EXPERIMENTAL_CAPABILITIES` set marks 6 capabilities (query_expansion, confidence_gating, type_routing, spreading_activation, mca_gate, cairn_narratives). Status and settings API responses include experimental labels.
+- [x] **Bug fix: session close NameError** — `digest_worker` variable was never extracted from `svc` in the session close endpoint (latent since v0.39.0).
 
 ### v0.39.0 — "Event Pipeline Repair" ✓
 
