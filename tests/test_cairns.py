@@ -83,8 +83,8 @@ class TestCairnSet:
         assert result["status"] == "already_exists"
         assert result["id"] == 5
 
-    def test_set_with_llm_synthesizes_narrative(self):
-        """When LLM is available, cairn gets title and narrative."""
+    def test_set_with_llm_skips_narrative_v037(self):
+        """v0.37.0: cairn_narratives defaults off, LLM is not called even when available."""
         db = _make_db()
         stones = [_make_stone(1, "Decided to use PostgreSQL"), _make_stone(2, "Implemented connection pool")]
 
@@ -94,8 +94,8 @@ class TestCairnSet:
             {"first_event": None, "last_event": None},  # no session_events
             {             # INSERT RETURNING
                 "id": 10,
-                "title": "PostgreSQL Integration and Connection Pooling",
-                "narrative": "The session focused on database setup.",
+                "title": "Session: test-session",
+                "narrative": None,
                 "memory_count": 2,
                 "started_at": datetime(2026, 2, 8, 12, 0, 0, tzinfo=timezone.utc),
                 "set_at": datetime(2026, 2, 8, 14, 0, 0, tzinfo=timezone.utc),
@@ -104,14 +104,13 @@ class TestCairnSet:
         db.execute.side_effect = [stones, [], None]  # stones, no digests, UPDATE
 
         llm = MagicMock()
-        llm.generate.return_value = '{"title": "PostgreSQL Integration and Connection Pooling", "narrative": "The session focused on database setup."}'
-
         caps = LLMCapabilities(session_synthesis=True)
         manager = CairnManager(db, llm=llm, capabilities=caps)
         result = manager.set("test-project", "test-session")
 
         assert result["id"] == 10
-        llm.generate.assert_called_once()
+        assert result["narrative"] is None
+        llm.generate.assert_not_called()
 
     def test_set_graceful_degradation_no_llm(self):
         """Without LLM, cairn is created with fallback title and no narrative."""
@@ -184,8 +183,8 @@ class TestCairnSet:
         insert_call = db.execute_one.call_args_list[3]
         assert insert_call[0][1][4] is not None  # events param is not None
 
-    def test_set_with_events_triggers_llm_even_without_stones(self):
-        """When events (motes) are provided but no stones exist, LLM synthesis still runs."""
+    def test_set_with_events_skips_narrative_v037(self):
+        """v0.37.0: events provided but cairn_narratives off, LLM not called."""
         db = _make_db()
 
         db.execute_one.side_effect = [
@@ -194,8 +193,8 @@ class TestCairnSet:
             {"first_event": None, "last_event": None},  # no session_events
             {             # INSERT RETURNING
                 "id": 10,
-                "title": "Hook Session: Codebase Exploration",
-                "narrative": "The session explored the codebase via tool calls.",
+                "title": "Session: hook-session",
+                "narrative": None,
                 "memory_count": 0,
                 "started_at": datetime(2026, 2, 8, 14, 0, 0, tzinfo=timezone.utc),
                 "set_at": datetime(2026, 2, 8, 14, 0, 0, tzinfo=timezone.utc),
@@ -204,8 +203,6 @@ class TestCairnSet:
         db.execute.side_effect = [[], []]  # no stones, no digests
 
         llm = MagicMock()
-        llm.generate.return_value = '{"title": "Hook Session: Codebase Exploration", "narrative": "The session explored the codebase via tool calls."}'
-
         caps = LLMCapabilities(session_synthesis=True)
         manager = CairnManager(db, llm=llm, capabilities=caps)
 
@@ -218,15 +215,11 @@ class TestCairnSet:
         result = manager.set("test-project", "hook-session", events=events)
 
         assert result["id"] == 10
-        # LLM was called even though there were 0 stones
-        llm.generate.assert_called_once()
-        # Verify the messages passed to LLM contain mote-aware content
-        messages = llm.generate.call_args[0][0]
-        assert "Mote timeline" in messages[1]["content"]
-        assert "tool_call" in messages[1]["content"]
+        assert result["narrative"] is None
+        llm.generate.assert_not_called()
 
-    def test_set_with_events_and_stones_uses_mote_prompt(self):
-        """When both events and stones are present, mote-aware prompt is used."""
+    def test_set_with_events_and_stones_skips_narrative_v037(self):
+        """v0.37.0: events + stones present but cairn_narratives off, no LLM call."""
         db = _make_db()
         stones = [_make_stone(1, "Decided to use PostgreSQL")]
 
@@ -236,8 +229,8 @@ class TestCairnSet:
             {"first_event": None, "last_event": None},  # no session_events
             {
                 "id": 10,
-                "title": "Database Setup with PostgreSQL",
-                "narrative": "The session set up PostgreSQL.",
+                "title": "Session: test-session",
+                "narrative": None,
                 "memory_count": 1,
                 "started_at": datetime(2026, 2, 8, 12, 0, 0, tzinfo=timezone.utc),
                 "set_at": datetime(2026, 2, 8, 14, 0, 0, tzinfo=timezone.utc),
@@ -246,8 +239,6 @@ class TestCairnSet:
         db.execute.side_effect = [stones, [], None]  # stones, no digests, UPDATE
 
         llm = MagicMock()
-        llm.generate.return_value = '{"title": "Database Setup with PostgreSQL", "narrative": "The session set up PostgreSQL."}'
-
         caps = LLMCapabilities(session_synthesis=True)
         manager = CairnManager(db, llm=llm, capabilities=caps)
 
@@ -256,13 +247,8 @@ class TestCairnSet:
         ]
         result = manager.set("test-project", "test-session", events=events)
 
-        llm.generate.assert_called_once()
-        messages = llm.generate.call_args[0][0]
-        # System prompt should be the mote-aware variant
-        assert "Motes" in messages[0]["content"]
-        # User content should have both stones and motes
-        assert "Stones (chronological):" in messages[1]["content"]
-        assert "Mote timeline" in messages[1]["content"]
+        assert result["narrative"] is None
+        llm.generate.assert_not_called()
 
 
 class TestCairnOrphanReconciliation:
@@ -358,8 +344,8 @@ class TestCairnOrphanReconciliation:
 class TestCairnSetWithDigests:
     """Tests for CairnManager.set() with Pipeline v2 digests."""
 
-    def test_set_uses_digests_when_available(self):
-        """When session_events have digests, cairn uses digest narrative prompt."""
+    def test_set_with_digests_skips_narrative_v037(self):
+        """v0.37.0: digests present but cairn_narratives off, no LLM call."""
         db = _make_db()
         stones = [_make_stone(1, "Decided to use streaming pipeline")]
 
@@ -374,8 +360,8 @@ class TestCairnSetWithDigests:
             {"first_event": None, "last_event": None},  # no session_events
             {             # INSERT RETURNING
                 "id": 10,
-                "title": "Implemented Streaming Event Pipeline",
-                "narrative": "The session implemented a streaming event pipeline.",
+                "title": "Session: test-session",
+                "narrative": None,
                 "memory_count": 1,
                 "started_at": datetime(2026, 2, 9, 12, 0, 0, tzinfo=timezone.utc),
                 "set_at": datetime(2026, 2, 9, 14, 0, 0, tzinfo=timezone.utc),
@@ -385,20 +371,16 @@ class TestCairnSetWithDigests:
         db.execute.side_effect = [stones, digests, None]
 
         llm = MagicMock()
-        llm.generate.return_value = '{"title": "Implemented Streaming Event Pipeline", "narrative": "The session implemented a streaming event pipeline."}'
-
         caps = LLMCapabilities(session_synthesis=True)
         manager = CairnManager(db, llm=llm, capabilities=caps)
         result = manager.set("test-project", "test-session")
 
         assert result["id"] == 10
-        llm.generate.assert_called_once()
-        # Verify the digest narrative prompt was used (contains "Work log digests")
-        messages = llm.generate.call_args[0][0]
-        assert "digests" in messages[0]["content"].lower() or "Work log digests" in messages[1]["content"]
+        assert result["narrative"] is None
+        llm.generate.assert_not_called()
 
-    def test_set_falls_back_to_raw_events_when_no_digests(self):
-        """When no digests exist, cairn falls back to raw events (Pipeline v1)."""
+    def test_set_without_digests_skips_narrative_v037(self):
+        """v0.37.0: no digests, cairn_narratives off, no LLM call."""
         db = _make_db()
         stones = [_make_stone(1)]
 
@@ -409,29 +391,24 @@ class TestCairnSetWithDigests:
             {             # INSERT RETURNING
                 "id": 10,
                 "title": "Session: test-session",
-                "narrative": "Explored the codebase.",
+                "narrative": None,
                 "memory_count": 1,
                 "started_at": datetime(2026, 2, 9, 12, 0, 0, tzinfo=timezone.utc),
                 "set_at": datetime(2026, 2, 9, 14, 0, 0, tzinfo=timezone.utc),
             },
         ]
-        # No digests available
         db.execute.side_effect = [stones, [], None]  # stones, empty digests, UPDATE
 
         events = [{"type": "tool_call", "tool": "Read", "ts": "2026-02-09T12:00:00Z"}]
 
         llm = MagicMock()
-        llm.generate.return_value = '{"title": "Session: test-session", "narrative": "Explored the codebase."}'
-
         caps = LLMCapabilities(session_synthesis=True)
         manager = CairnManager(db, llm=llm, capabilities=caps)
         result = manager.set("test-project", "test-session", events=events)
 
         assert result["id"] == 10
-        llm.generate.assert_called_once()
-        # Verify the mote timeline prompt was used (Pipeline v1 fallback)
-        messages = llm.generate.call_args[0][0]
-        assert "Mote timeline" in messages[1]["content"] or "Motes" in messages[0]["content"]
+        assert result["narrative"] is None
+        llm.generate.assert_not_called()
 
 
 class TestCairnStack:
