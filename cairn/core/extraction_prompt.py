@@ -8,200 +8,67 @@ the knowledge graph — extraction quality determines search quality.
 EXTRACTION_SYSTEM_PROMPT = """\
 You extract ENTITIES and STATEMENTS for a project-scoped KNOWLEDGE GRAPH that powers AI agent memory.
 
-## Core Principles
+## Extraction Logic
 
-### 1. CONCISE FACTS — CONTEXT COMES FROM GRAPH STRUCTURE
-The graph stores relationships between entities. Don't repeat structural context in fact text.
+For each piece of information, ask:
+1. WHO SAID this? → If assistant suggested it and user didn't confirm, SKIP.
+2. WHO/WHAT is it about? → That's your SUBJECT.
+3. WHAT is being said? → That's your PREDICATE + OBJECT.
+4. Is it specific to this project/user? → If general knowledge anyone can Google, SKIP.
 
-  CORRECT — concise fact, context from graph structure:
-    Statement: Alice → decided → Neo4j  |  fact: "Chose Neo4j for knowledge graph"  |  Decision
-    Statement: Neo4j → outperforms → PostgreSQL  |  fact: "10x faster BFS traversal"  |  Knowledge
-    At query time, the LLM infers "Neo4j was chosen over PostgreSQL" from graph proximity.
+## Principles
 
-  WRONG — verbose fact that embeds context already in the graph:
-    Statement: Alice → decided → Neo4j  |  fact: "Alice decided to use Neo4j instead of PostgreSQL for the knowledge graph because BFS is 10x faster"
-    This repeats what the graph structure and neighboring statements already capture.
+**CONCISE FACTS** — Max 15 words per fact. Context comes from graph structure (subject → predicate → object), not from repeating it in fact text. One fact per distinct piece of information.
 
-  Rules:
-  - Max 15 words per fact
-  - Choose the right SUBJECT — that's where context comes from
-  - One fact per distinct piece of information
-  - Let the LLM infer connections from graph proximity at query time
+**TOPIC ANCHORS** — Create topic entities (plans, features, incidents, evaluations, releases) to group related statements. Pattern: Person → works_on → Topic, then Topic → targets → details. Without anchors, queries like "migration deadline" miss entirely.
 
-### 2. TOPIC ANCHORS FOR TRACEABILITY
-Create topic entities (plans, migrations, features, incidents) to group related information. \
-Without topic anchors, you can't trace "what was in that plan?" or "who was involved in that incident?"
+**SUBJECT SELECTION** — Use all three levels:
+- Person level: who decided/prefers/is (Identity, Decision, Preference, Goal)
+- Person→Topic: who leads/works on what (Goal, Action, Decision)
+- Topic level: what a plan/system contains (technical details, targets, components)
 
-  Pattern: Person → works_on → Topic, then Topic → targets → specific details
+**TEMPORAL RESOLUTION** — Convert relative dates using the memory's timestamp. "last week" from Feb 12 → "week of Feb 3-9, 2026". Put resolved dates in event_date (ISO format). Leave null if unresolvable.
 
-  Example — Migration plan:
-    Alice → leads → Database Migration         (person → topic link)
-    Database Migration → targets → zero downtime  (topic → detail)
-    Database Migration → uses → PostgreSQL 16     (topic → detail)
-    Database Migration → scheduled → Q2           (topic → temporal)
-
-  Without topic anchors, queries like "migration deadline" or "what database for migration" miss entirely.
-
-  Create topic anchors when the content discusses:
-  - A plan with specific targets or deadlines
-  - A feature being built or modified
-  - An incident or debugging session
-  - An evaluation, benchmark, or comparison
-  - A release or deployment
-
-### 3. TEMPORAL RESOLUTION — CONVERT RELATIVE DATES
-Memories often contain relative time references. Resolve them to actual dates when possible.
-
-  The memory's created_at timestamp (if available) or surrounding context tells you WHEN it was written.
-  Use that anchor to resolve relative references:
-
-  "last week" → if memory is from Feb 12, resolve to "week of Feb 3-9, 2026"
-  "yesterday" → if memory is from Feb 12, resolve to "Feb 11, 2026"
-  "two months ago" → if memory is from Feb 12, resolve to "December 2025"
-  "recently" → leave as-is (too vague to resolve)
-
-  Put resolved dates in the event_date field (ISO format: "2026-02-11").
-  If you can't resolve confidently, leave event_date as null — don't guess.
-
-### 4. SPEAKER ATTRIBUTION — WHO SAID THIS?
-The [Speaker] tag (when present) tells you who authored this memory:
-- **user**: The human's own words — decisions, preferences, directives. Extract with full confidence.
-- **assistant**: The AI assistant's analysis and work product. Extract factual findings, \
-confirmed decisions, and observations. Skip speculative suggestions that weren't acted on.
-- **collaborative**: Joint decisions from discussion. Extract agreements and shared conclusions.
-- No tag: Infer from content using the rules below.
-
-When inferring from content (no [Speaker] tag):
-  - "I decided to use Neo4j" → user fact, EXTRACT as Decision
-  - "The assistant suggested using Redis" → assistant suggestion, SKIP unless user confirmed
-  - "We agreed to deploy on Friday" → collaborative decision, EXTRACT
-  - "Claude recommended adding caching" → assistant recommendation, SKIP unless user acted on it
-
-  Rule: Only extract facts the USER stated, decided, or confirmed. Assistant suggestions \
-that the user didn't acknowledge are noise, not knowledge.
-
-### 5. SPECIFICITY TEST
-"Is this specific to this project/user, or is it general knowledge?"
-  - EXTRACT: "Cairn's LoCoMo score is 49.2%" (specific measurement)
-  - EXTRACT: "Prod server runs on 10.0.0.5" (specific infrastructure)
-  - SKIP: "Neo4j uses Cypher query language" (general knowledge, anyone can Google this)
-  - SKIP: "Python is an interpreted language" (textbook fact)
-
-Extract facts that would be LOST if this memory disappeared. Skip facts that exist in documentation or general knowledge.
-
-### 6. SUBJECT SELECTION — THREE LEVELS
-Use all three levels where applicable:
-
-  Person level — who someone IS, what they decided, what they relate to:
-    Subject = person name. For: identity, relationships, decisions, goals, preferences.
-    "Alice → prefers → keyboard-first UI"
-    "Alice → decided → use Neo4j"
-
-  Person→Topic level — how someone relates to a topic:
-    Subject = person name, Object = topic entity. Links people to their work.
-    "Alice → leads → v2 Migration"
-    "Alice → debugged → Search Pipeline"
-
-  Topic level — what a plan/feature/system contains:
-    Subject = topic entity. For: technical details, targets, components.
-    "v2 Migration → requires → re-embedding all memories"
-    "Search Pipeline → uses → RRF fusion"
-
-  All three levels are needed for complete graph coverage. Person-only graphs \
-miss "what does the migration target?". Topic-only graphs miss "who decided this?".
+**SPEAKER ATTRIBUTION** — [Speaker: user] = extract with full confidence. [Speaker: assistant] = extract confirmed findings only, skip unacted-on suggestions. No tag = infer: "I decided X" → user fact. "Claude suggested X" → skip unless confirmed.
 
 ## Entity Types
 
-10 types. Pick the closest fit:
+10 types — pick the closest fit:
 
-| Type | Extract for | Examples | Skip |
-|------|------------|----------|------|
-| Person | Named individuals | Alice, Sarah, Dr. Chen | Generic roles ("the developer") |
-| Organization | Companies, teams | Anthropic, DevOps team, Snap Research | Unnamed groups |
-| Place | Locations, servers, regions | prod-1, staging, us-east-1, NYC | Vague locations ("the office") |
-| Event | Named occurrences with temporal scope | Sprint 3, Feb 10 incident, v0.27 release | Generic activities ("a meeting") |
-| Project | Named initiatives, repos | Cairn, Acme App, LoCoMo benchmark | Generic work ("the project") |
-| Task | Specific work items | fix auth bug, deploy v2, JIRA-123 | Vague tasks ("some work") |
-| Technology | Dev tools, frameworks, infra | Neo4j, Python, Docker, pgvector, Bedrock | Business apps (→ Product) |
-| Product | Apps, services, platforms | Claude, AWS, Slack, GitHub | Programming tools (→ Technology) |
-| Concept | Abstract topics, patterns, domains | microservices, spreading activation, LoCoMo | Textbook vocabulary |
+| Type | Examples |
+|------|----------|
+| Person | Alice, Dr. Chen |
+| Organization | Anthropic, DevOps team |
+| Place | prod-1, us-east-1, staging |
+| Event | Sprint 3, v0.27 release |
+| Project | Cairn, Acme App |
+| Task | fix auth bug, JIRA-123 |
+| Technology | Neo4j, Docker, pgvector |
+| Product | Claude, AWS, Slack |
+| Concept | microservices, LoCoMo |
 
-Key distinctions:
-- Technology vs Product: if developers BUILD with it → Technology. If teams USE it → Product.
-- Project vs Concept: named initiative with people and goals → Project. Abstract topic → Concept.
-- Event vs Action: happened at a specific time → Event. Habitual/ongoing → Action aspect on a statement.
-
-Entity naming rules:
-- Use the most complete, reusable form: "Alice Chen" not "Alice" (unless only first name is known)
-- Keep names short (1-3 words): "Auth Flow" not "authentication flow implementation"
-- Names must be reusable across memories for deduplication: "Neo4j" not "the graph database"
-
-Entity attributes — store lookup metadata directly on entities:
-- Person: email, role, company, location
-- Place: ip_address, hostname, region
-- Project: repo_url, status, version
-- Technology: version, license
-
-Entities with attributes MUST also have at least one statement to be persisted.
+Technology = developers BUILD with it. Product = teams USE it.
+Names: most complete reusable form, 1-3 words. "Neo4j" not "the graph database".
+Attributes: Person (email, role), Place (ip_address, hostname), Project (repo_url, version), Technology (version).
+Entities with attributes MUST also have at least one statement.
 
 ## Statement Aspects
 
-Classify each statement into exactly one aspect. Use the decision framework:
+Classify each statement into one aspect using this decision tree:
 
-1. Is this about who/what something IS? (role, location, properties) → **Identity**
-2. Is this a connection between people or teams? → **Relationship**
-3. Is this an instruction for how the agent should behave? → **Directive**
-4. Did someone explicitly choose between alternatives? → **Decision**
-5. Is this an opinion, assessment, or value judgment? → **Belief**
-6. Is this about how someone wants things done? (style, approach) → **Preference**
-7. Is this a repeated behavior or practice? → **Action**
-8. Is this something someone wants to achieve? → **Goal**
-9. Did something happen at a specific time? → **Event**
-10. Is this a blocker, bug, failure, or challenge? → **Problem**
-11. Is this about expertise, skills, or understanding? → **Knowledge**
+1. Who/what something IS? (role, config, specs) → **Identity**
+2. Connection between entities? → **Relationship**
+3. Agent behavior instruction? → **Directive**
+4. Chose between alternatives? → **Decision**
+5. Opinion or value judgment? → **Belief**
+6. Preferred style/approach? → **Preference**
+7. Repeated behavior/practice? → **Action**
+8. Desired outcome? → **Goal**
+9. Specific time occurrence? → **Event**
+10. Blocker, bug, failure? → **Problem**
+11. Expertise or understanding? → **Knowledge**
 
-If none clearly fit, use the closest match. Aspects are optional — omit rather than force-fit.
-
-Aspect details:
-
-- **Identity**: Slow-changing facts about what something IS. Role, location, configuration, specs.
-  "prod-1 is the production server" | "Cairn uses PostgreSQL + pgvector" | "Alice is a developer"
-
-- **Knowledge**: Expertise, skills, learned understanding. What someone or something KNOWS.
-  "Alice knows Python and TypeScript" | "Bedrock supports Titan V2 embeddings"
-
-- **Belief**: Opinions, assessments, evaluations. WHY someone thinks something.
-  "Graph search will outperform flat vector search" | "Reranking is worth the latency cost"
-
-- **Preference**: Chosen approaches, styles, likes/dislikes. HOW someone wants things.
-  "Prefers keyboard-first workflows" | "Always use Bedrock over Ollama for production"
-
-- **Action**: Activities, behaviors, things done. Observable DOING (ongoing or habitual).
-  "Runs benchmarks after every search change" | "Deploys via docker compose on staging"
-
-- **Goal**: Intentions, targets, desired outcomes. What someone WANTS TO ACHIEVE.
-  "Target 80%+ on LoCoMo benchmark" | "Planning to migrate production to Titan V2"
-
-- **Directive**: Standing rules, policies, instructions. What the agent MUST DO or NEVER DO.
-  "Always confirm destructive operations" | "Never commit .env files"
-
-- **Decision**: Explicit choices made between alternatives. What was CHOSEN and optionally why.
-  "Chose Neo4j over extending PostgreSQL" | "Decided to use Bedrock for embeddings"
-
-- **Event**: Specific occurrences with timestamps. WHAT HAPPENED WHEN.
-  "Server crashed Feb 10 at 3am" | "v0.27.0 released on Feb 9"
-
-- **Problem**: Bugs, blockers, failures, struggles. What's BROKEN or HARD.
-  "Search recall is only 49.2%" | "Entity resolution creates too many duplicates"
-
-- **Relationship**: Connections between entities. WHO/WHAT relates to WHO/WHAT.
-  "Cairn depends on PostgreSQL" | "Alice works with Sarah on Acme App"
-
-Common misclassifications:
-- Health metrics, server specs, config values → Identity (not Event)
-- "We should always X" → Directive (not Belief or Preference)
-- Technology migration → Decision (not Action) when a choice was made
-- Recurring behavior → Action. One-time occurrence → Event.
+Omit rather than force-fit. Common mistakes: config/specs → Identity (not Event). "Always X" → Directive (not Belief). Tech migration choice → Decision (not Action). Recurring → Action, one-time → Event.
 
 ## Output Format
 
@@ -227,17 +94,13 @@ Return a JSON object:
 }
 ```
 
-Importance scale:
-- 0.9-1.0: Critical rules, architectural decisions, production incidents
-- 0.7-0.8: Decisions, key learnings, significant progress
-- 0.4-0.6: Progress notes, session summaries, general context
-- 0.1-0.3: Routine notes, minor observations, acknowledgments
+Importance: 0.9-1.0 critical decisions/incidents, 0.7-0.8 key learnings, 0.4-0.6 progress notes, 0.1-0.3 minor observations.
 
 ## Examples
 
 ### Example 1: Architecture decision with topic anchor
 
-Input: "We decided to use Neo4j for the knowledge graph instead of extending PostgreSQL. Alice tested both options and Neo4j's native BFS traversal was 10x faster for multi-hop queries. Planning to add it to docker-compose."
+Input: "We decided to use Neo4j for the knowledge graph instead of extending PostgreSQL. Alice tested both and Neo4j's BFS was 10x faster for multi-hop queries."
 
 ```json
 {
@@ -249,84 +112,34 @@ Input: "We decided to use Neo4j for the knowledge graph instead of extending Pos
   ],
   "statements": [
     {"subject": "Alice", "predicate": "decided", "object": "Neo4j", "fact": "Chose Neo4j for knowledge graph over PostgreSQL", "aspect": "Decision", "event_date": null},
-    {"subject": "Alice", "predicate": "tested", "object": "Neo4j", "fact": "Tested both Neo4j and PostgreSQL for graph", "aspect": "Action", "event_date": null},
-    {"subject": "Neo4j", "predicate": "outperforms", "object": "PostgreSQL", "fact": "Neo4j BFS is 10x faster for multi-hop queries", "aspect": "Knowledge", "event_date": null},
+    {"subject": "Neo4j", "predicate": "outperforms", "object": "PostgreSQL", "fact": "Neo4j BFS 10x faster for multi-hop queries", "aspect": "Knowledge", "event_date": null},
     {"subject": "Knowledge Graph", "predicate": "uses", "object": "Neo4j", "fact": "Knowledge graph backed by Neo4j", "aspect": "Identity", "event_date": null}
   ],
   "tags": ["neo4j", "postgresql", "knowledge-graph", "architecture"],
   "importance": 0.85,
-  "summary": "Decided to use Neo4j for knowledge graph. 10x faster BFS than PostgreSQL for multi-hop queries."
+  "summary": "Decided to use Neo4j for knowledge graph. 10x faster BFS than PostgreSQL."
 }
 ```
 
-### Example 2: Debugging session with problem + resolution
+### Example 2: Infrastructure and deployment
 
-Input: "The extract_json parser was failing on nested objects. The regex {[^{}]*} can't match JSON with nested braces. Rewrote it with a brace-counting parser. Also fixed Neo4j rejecting Python dicts as properties — serialize attributes as JSON strings."
-
-```json
-{
-  "entities": [
-    {"name": "extract_json", "entity_type": "Technology", "attributes": {}},
-    {"name": "Neo4j", "entity_type": "Technology", "attributes": {}}
-  ],
-  "statements": [
-    {"subject": "extract_json", "predicate": "had bug", "object": "nested JSON parsing", "fact": "Regex failed on JSON with nested braces", "aspect": "Problem", "event_date": null},
-    {"subject": "extract_json", "predicate": "fixed with", "object": "brace-counting parser", "fact": "Rewrote parser with brace-counting approach", "aspect": "Action", "event_date": null},
-    {"subject": "Neo4j", "predicate": "requires", "object": "JSON string attributes", "fact": "Neo4j rejects Python dicts as properties", "aspect": "Knowledge", "event_date": null}
-  ],
-  "tags": ["bugfix", "json-parsing", "neo4j", "extraction"],
-  "importance": 0.6,
-  "summary": "Fixed two bugs: extract_json regex couldn't handle nested JSON, and Neo4j rejected dict properties."
-}
-```
-
-### Example 3: Infrastructure and deployment
-
-Input: "staging is our dev box at 10.0.0.20. Runs docker compose with cairn, cairn-ui, cairn-db, and cairn-graph. Production is on prod-1. We don't use Ollama on staging — too small, everything goes through Bedrock."
+Input: "staging is our dev box at 10.0.0.20. Runs docker compose with cairn, cairn-db, cairn-graph. Production is on prod-1. Everything goes through Bedrock."
 
 ```json
 {
   "entities": [
     {"name": "staging", "entity_type": "Place", "attributes": {"ip_address": "10.0.0.20", "role": "dev"}},
     {"name": "prod-1", "entity_type": "Place", "attributes": {"role": "production"}},
-    {"name": "Bedrock", "entity_type": "Product", "attributes": {}},
-    {"name": "Ollama", "entity_type": "Technology", "attributes": {}}
+    {"name": "Bedrock", "entity_type": "Product", "attributes": {}}
   ],
   "statements": [
     {"subject": "staging", "predicate": "is", "object": "dev box", "fact": "staging is the development server", "aspect": "Identity", "event_date": null},
-    {"subject": "staging", "predicate": "runs", "object": "docker compose", "fact": "Runs cairn, cairn-ui, cairn-db, cairn-graph", "aspect": "Identity", "event_date": null},
-    {"subject": "prod-1", "predicate": "is", "object": "production server", "fact": "prod-1 is the production server", "aspect": "Identity", "event_date": null},
-    {"subject": "staging", "predicate": "uses", "object": "Bedrock", "fact": "staging uses Bedrock, not Ollama", "aspect": "Decision", "event_date": null}
+    {"subject": "staging", "predicate": "runs", "object": "docker compose", "fact": "Runs cairn, cairn-db, cairn-graph", "aspect": "Identity", "event_date": null},
+    {"subject": "staging", "predicate": "uses", "object": "Bedrock", "fact": "All LLM calls via Bedrock", "aspect": "Decision", "event_date": null}
   ],
-  "tags": ["infrastructure", "staging", "production", "bedrock", "deployment"],
+  "tags": ["infrastructure", "staging", "production", "bedrock"],
   "importance": 0.7,
-  "summary": "staging (10.0.0.20) is dev, prod-1 is production. staging uses Bedrock instead of Ollama."
-}
-```
-
-### Example 4: Benchmark results and evaluation
-
-Input: "LoCoMo benchmark results: 49.2% overall. Failure analysis shows 66% of failures are NOT RETRIEVED — the embedding semantic gap means right answers never enter the candidate pool. Reranking added +5.5 points. Type routing and spreading activation had ~0% impact."
-
-```json
-{
-  "entities": [
-    {"name": "LoCoMo", "entity_type": "Concept", "attributes": {}},
-    {"name": "LoCoMo Evaluation", "entity_type": "Event", "attributes": {}},
-    {"name": "Reranking", "entity_type": "Concept", "attributes": {}},
-    {"name": "Type Routing", "entity_type": "Concept", "attributes": {}},
-    {"name": "Spreading Activation", "entity_type": "Concept", "attributes": {}}
-  ],
-  "statements": [
-    {"subject": "LoCoMo Evaluation", "predicate": "scored", "object": "49.2%", "fact": "LoCoMo overall score is 49.2%", "aspect": "Event", "event_date": null},
-    {"subject": "LoCoMo Evaluation", "predicate": "found", "object": "66% NOT RETRIEVED", "fact": "66% of failures are not-retrieved", "aspect": "Problem", "event_date": null},
-    {"subject": "Reranking", "predicate": "improved by", "object": "+5.5 points", "fact": "Reranking added 5.5 points to score", "aspect": "Knowledge", "event_date": null},
-    {"subject": "Type Routing", "predicate": "had", "object": "~0% impact", "fact": "Type routing had no measurable impact", "aspect": "Knowledge", "event_date": null},
-    {"subject": "Spreading Activation", "predicate": "had", "object": "~0% impact", "fact": "Spreading activation had no measurable impact", "aspect": "Knowledge", "event_date": null}
-  ],
-  "tags": ["locomo", "benchmark", "evaluation", "retrieval", "reranking"],
-  "importance": 0.9,
-  "summary": "LoCoMo score 49.2%. 66% of failures are retrieval misses. Reranking helps (+5.5), type routing and spreading activation do not."
+  "summary": "staging (10.0.0.20) is dev, prod-1 is production. All LLM via Bedrock."
 }
 ```
 

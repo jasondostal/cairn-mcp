@@ -29,13 +29,12 @@ VALID_ASPECTS = {
 
 
 ROUTER_SYSTEM_PROMPT = """\
-You classify search queries for a personal memory system. The system stores memories about a user's life, work, projects, and conversations.
+You classify search queries for a project-scoped memory system. The system stores memories about projects, decisions, infrastructure, and work.
 
 ## Query Types
 
 **entity_lookup** — Query names a specific person, project, technology, or thing and wants info about it.
 - "Who is Sarah?" "What is Cairn?" "Tell me about Redis"
-- Also: "What is Caroline's phone number?" (entity + attribute)
 
 **aspect_query** — Query asks about a specific KIND of information about an entity or topic.
 - "What are Alice's preferences?" → entity_hints=["Alice"], aspects=["Preference"]
@@ -78,26 +77,23 @@ Extract ALL named entities in the query — people, projects, technologies, plac
 
 ## Examples
 
-Query: "What foods does Caroline like?"
-→ {"query_type": "aspect_query", "aspects": ["Preference"], "entity_hints": ["Caroline"], "temporal": {"after": null, "before": null}, "confidence": 0.9}
+Query: "What database does the project use?"
+→ {"query_type": "aspect_query", "aspects": ["Identity"], "entity_hints": ["database"], "temporal": {"after": null, "before": null}, "confidence": 0.9}
 
-Query: "Who is Melanie?"
-→ {"query_type": "entity_lookup", "aspects": ["Identity"], "entity_hints": ["Melanie"], "temporal": {"after": null, "before": null}, "confidence": 0.95}
+Query: "Who is Alice?"
+→ {"query_type": "entity_lookup", "aspects": ["Identity"], "entity_hints": ["Alice"], "temporal": {"after": null, "before": null}, "confidence": 0.95}
 
-Query: "What happened at the concert last month?"
-→ {"query_type": "temporal", "aspects": ["Event"], "entity_hints": ["concert"], "temporal": {"after": "last month", "before": null}, "confidence": 0.85}
+Query: "What happened during the deploy last week?"
+→ {"query_type": "temporal", "aspects": ["Event"], "entity_hints": ["deploy"], "temporal": {"after": "last week", "before": null}, "confidence": 0.85}
 
-Query: "How do Caroline and Melanie know each other?"
-→ {"query_type": "relationship", "aspects": ["Relationship"], "entity_hints": ["Caroline", "Melanie"], "temporal": {"after": null, "before": null}, "confidence": 0.9}
+Query: "How are Alice and the DevOps team connected?"
+→ {"query_type": "relationship", "aspects": ["Relationship"], "entity_hints": ["Alice", "DevOps team"], "temporal": {"after": null, "before": null}, "confidence": 0.9}
 
-Query: "What do we know about cooking?"
-→ {"query_type": "exploratory", "aspects": [], "entity_hints": ["cooking"], "temporal": {"after": null, "before": null}, "confidence": 0.7}
+Query: "What do we know about caching?"
+→ {"query_type": "exploratory", "aspects": [], "entity_hints": ["caching"], "temporal": {"after": null, "before": null}, "confidence": 0.7}
 
-Query: "What books has Caroline read?"
-→ {"query_type": "aspect_query", "aspects": ["Action", "Preference"], "entity_hints": ["Caroline"], "temporal": {"after": null, "before": null}, "confidence": 0.85}
-
-Query: "What are Caroline's hobbies?"
-→ {"query_type": "aspect_query", "aspects": ["Preference", "Action", "Identity"], "entity_hints": ["Caroline"], "temporal": {"after": null, "before": null}, "confidence": 0.9}
+Query: "What decisions were made about the API?"
+→ {"query_type": "aspect_query", "aspects": ["Decision"], "entity_hints": ["API"], "temporal": {"after": null, "before": null}, "confidence": 0.85}
 
 Return ONLY the JSON object."""
 

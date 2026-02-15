@@ -73,7 +73,7 @@ class RerankerConfig:
 
 @dataclass(frozen=True)
 class LLMCapabilities:
-    query_expansion: bool = True
+    query_expansion: bool = False  # off by default — fires LLM on every search, unproven benefit
     relationship_extract: bool = True
     rule_conflict_check: bool = True
     session_synthesis: bool = True
@@ -406,7 +406,7 @@ def load_config() -> Config:
             openai_api_key=os.getenv("CAIRN_OPENAI_API_KEY", ""),
         ),
         capabilities=LLMCapabilities(
-            query_expansion=os.getenv("CAIRN_LLM_QUERY_EXPANSION", "true").lower() in ("true", "1", "yes"),
+            query_expansion=os.getenv("CAIRN_LLM_QUERY_EXPANSION", "false").lower() in ("true", "1", "yes"),
             relationship_extract=os.getenv("CAIRN_LLM_RELATIONSHIP_EXTRACT", "true").lower() in ("true", "1", "yes"),
             rule_conflict_check=os.getenv("CAIRN_LLM_RULE_CONFLICT_CHECK", "true").lower() in ("true", "1", "yes"),
             session_synthesis=os.getenv("CAIRN_LLM_SESSION_SYNTHESIS", "true").lower() in ("true", "1", "yes"),
