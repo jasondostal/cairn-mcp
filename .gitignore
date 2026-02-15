@@ -49,3 +49,14 @@ screenshot.jpg
 # Internal dev notes
 RETRIEVAL_POSTMORTEM.md
 V2_PROGRESS.md
+EVAL_STATE.md
+*.jpg
+
+# One-off scripts (contain hardcoded dev values)
+judge_comparison.py
+rejudge_strict.py
+scripts/curate_memories.py
+eval/quick_failure_check.py
+
+# Claude Code local settings
+.claude/

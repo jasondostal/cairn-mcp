@@ -22,12 +22,17 @@ def estimate_tokens(text: str) -> int:
 
 
 def estimate_tokens_for_dict(data: Any) -> int:
-    """Estimate token count for a dict/list by JSON-serializing first."""
+    """Estimate token count for a dict/list by JSON-serializing first.
+
+    Uses chars/4 instead of word-split heuristic because JSON has high
+    punctuation density (brackets, quotes, colons) that tokenizers split
+    on — word-split massively underestimates structured data.
+    """
     try:
         text = json.dumps(data, default=str)
     except (TypeError, ValueError):
         text = str(data)
-    return estimate_tokens(text)
+    return max(1, len(text) // 4)
 
 
 def truncate_to_budget(
