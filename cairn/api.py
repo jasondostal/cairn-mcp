@@ -1026,6 +1026,51 @@ def create_api(svc: Services) -> FastAPI:
             "digests": digests,
         }
 
+    # ------------------------------------------------------------------
+    # POST /sessions/{session_name}/close — mark session closed, digest pending batches
+    # ------------------------------------------------------------------
+    @router.post("/sessions/{session_name}/close")
+    def api_session_close(session_name: str = Path(...)):
+        """Close a session: digest any pending batches immediately.
+
+        Called by session-end hooks after shipping final events. Triggers
+        synchronous digestion of undigested batches for this session so
+        the knowledge graph is populated before the next session starts.
+        """
+        # Find all undigested batches for this session
+        rows = db.execute(
+            """
+            SELECT se.id, se.batch_number
+            FROM session_events se
+            WHERE se.session_name = %s AND se.digest IS NULL
+            ORDER BY se.batch_number ASC
+            """,
+            (session_name,),
+        )
+
+        digested = 0
+        for row in rows:
+            result = digest_worker.digest_immediate(row["id"])
+            if result:
+                # Store digest as progress memory (same as background path)
+                project_row = db.execute_one(
+                    """
+                    SELECT p.name FROM session_events se
+                    LEFT JOIN projects p ON se.project_id = p.id
+                    WHERE se.id = %s
+                    """,
+                    (row["id"],),
+                )
+                project_name = project_row["name"] if project_row and project_row["name"] else "unknown"
+                digest_worker._store_digest_memory(result, project_name, session_name, row["batch_number"])
+                digested += 1
+
+        return {
+            "session_name": session_name,
+            "pending_batches": len(rows),
+            "digested": digested,
+        }
+
     # ==================================================================
     # INGEST — write endpoints for content ingestion
     # ==================================================================
