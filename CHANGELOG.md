@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.0] - 2026-02-15 — "Event Pipeline Repair"
+
+### Added
+- **`POST /sessions/{name}/close` endpoint** — synchronous session teardown. Finds all
+  undigested batches for a session, calls `digest_immediate()` on each, stores digest
+  memories. Returns `{session_name, pending_batches, digested}`. Called by the session-end
+  hook to ensure all session activity enters the knowledge graph before the next session.
+- **DigestWorker → MemoryStore wiring** — `DigestWorker` now accepts an optional
+  `memory_store` param. After digesting a batch, it stores the digest as a `progress`
+  memory via `MemoryStore.store()`. This triggers the normal extraction pipeline
+  (entities → graph → trail). Best-effort: failures logged but don't block digestion.
+
+### Changed
+- **`session-end.sh` rewritten** — removed dead `/api/cairns` POST and `V2_AVAILABLE`
+  fallback. Now ships final event batch, then calls `POST /api/sessions/{name}/close`
+  to trigger synchronous digestion. Events archived to `~/.cairn/events/archive/`.
+- **`session-start.sh` simplified** — removed dead `/api/cairns?limit=5` fetch that
+  referenced the cairns API dropped in v0.37.0. Now just initializes event log and
+  outputs session context.
+- **`create_services()` updated** — passes `memory_store` to `DigestWorker` constructor
+  so digest output feeds the full memory pipeline.
+
 ## [0.38.0] - 2026-02-15 — "Token Observatory"
 
 ### Added
@@ -1098,7 +1120,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.38.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.39.0...HEAD
+[0.39.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.38.0...v0.39.0
 [0.38.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.37.0...v0.38.0
 [0.37.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.36.1...v0.37.0
 [0.36.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.36.0...v0.36.1

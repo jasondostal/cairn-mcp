@@ -1,19 +1,12 @@
 # Roadmap
 
-Current: **v0.38.x** — Model router, token observability, cost tracking.
+Current: **v0.39.x** — Event pipeline repair, digest-to-graph wiring.
 
 ---
 
 ## Next Up
 
-### v0.39.0 — Event Pipeline Repair + Tiered Profiles
-
-**Event pipeline end-to-end fix.** The hook → event → digest pipeline is well-engineered but broken at both ends: hooks are not installed by default (they live in `examples/hooks/`), and `session-end.sh` still posts to `/api/cairns` which was removed in v0.37.0. The DigestWorker runs but nothing consumes its output. Fix: reconnect hooks, update session-end for post-cairn world, wire digest output to `KnowledgeExtractor` so session activity enters the knowledge graph automatically. `trail()` picks it up with no additional work.
-
-- [ ] Fix `session-end.sh` — remove dead `/api/cairns` reference, add `POST /api/sessions/{name}/close`
-- [ ] Wire `DigestWorker._process_one_batch()` → `KnowledgeExtractor.extract()` after digest write
-- [ ] Hook installation docs per IDE (Claude Code, Cursor, Windsurf, Cline)
-- [ ] Validate full pipeline: hook capture → event ingest → digest → extraction → graph → trail
+### v0.40.0 — Tiered Profiles + Contributor DX
 
 **Tiered configuration profiles.** 14 capability flags create a complex configuration surface. Introduce named profiles that set all flags for a deployment tier:
 
@@ -35,7 +28,7 @@ Current: **v0.38.x** — Model router, token observability, cost tracking.
 - [ ] Label experimental features explicitly (spreading activation, MCA gate, confidence gating)
 - [ ] Document the search pipeline end-to-end for contributors
 
-### v0.40.0 — Graph Deepening
+### v0.41.0 — Graph Deepening
 
 Implement the "Everything is a Node" decision from v0.37.0 beyond memories and entities.
 
@@ -45,7 +38,7 @@ Implement the "Everything is a Node" decision from v0.37.0 beyond memories and e
 - [ ] Cross-project entity bridges — shared entities surface inter-project connections
 - [ ] One query model for everything knowledge-related
 
-### v0.41.0 — Graph-Augmented Search
+### v0.42.0 — Graph-Augmented Search
 
 Move search from signal fusion toward retrieval strategy selection based on query shape.
 
@@ -54,13 +47,14 @@ Move search from signal fusion toward retrieval strategy selection based on quer
 - [ ] Re-enable and validate graph search handlers (entity_lookup, aspect_query, relationship, temporal)
 - [ ] Vector similarity remains primary fallback for queries with no entity anchors
 
-### v0.42.0 — Single-Pass Boot
+### v0.43.0 — Single-Pass Boot
 
 Replace the multi-call boot sequence with a unified orientation tool.
 
 - [ ] `orient(project)` — one MCP tool returning rules, recent trail, open tasks, relevant learnings
 - [ ] Individual tools (rules, trail, search, tasks) remain available for granular use
 - [ ] Graph-backed: one traversal assembles full session context
+
 
 ### Ongoing
 
@@ -81,6 +75,16 @@ Replace the multi-call boot sequence with a unified orientation tool.
 ---
 
 ## Shipped
+
+### v0.39.0 — "Event Pipeline Repair" ✓
+
+Digest output now feeds the knowledge graph. Session activity enters the graph automatically.
+
+- [x] **`session-end.sh` rewritten** — removed dead `/api/cairns` POST, now calls `POST /api/sessions/{name}/close`
+- [x] **DigestWorker → MemoryStore wiring** — digests stored as `progress` memories, triggering extraction → graph → trail
+- [x] **`POST /sessions/{name}/close` endpoint** — synchronous session teardown with immediate digestion
+- [x] **`session-start.sh` simplified** — removed dead `/api/cairns?limit=5` fetch
+- [x] **Full pipeline validated** — hook capture → event ingest → digest → memory store → extraction → graph → trail
 
 ### v0.38.0 — "Token Observatory" ✓
 
