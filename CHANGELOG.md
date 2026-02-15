@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.36.1] - 2026-02-14
+
+### Fixed
+- **Context budget — JSON token estimation** — switched `estimate_tokens_for_dict()`
+  from word-split heuristic to `chars/4`, fixing massive underestimation of structured
+  data (JSON punctuation density). Prevents budget overruns on rules and search results.
+- **Context budget — cairn stack handling** — fixed `cairns(action='stack')` budget
+  enforcement for both list and dict return formats. Overflow markers now append
+  correctly regardless of response shape.
+
+### Changed
+- **Gitignore hardened** — added internal eval scripts, dev screenshots, one-off
+  curation scripts, and `.claude/` local settings to prevent accidental commits of
+  dev artifacts or credentials.
+
 ## [0.36.0] - 2026-02-14 — "Agent Workspace"
 
 ### Added

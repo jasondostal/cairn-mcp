@@ -953,8 +953,9 @@ def cairns(
 
             # Apply budget cap to stack results
             budget = config.budget.cairn_stack
-            if budget > 0 and isinstance(result, dict) and "cairns" in result:
-                cairn_items = result["cairns"]
+            # stack() returns a list (or dict with "cairns" key)
+            cairn_items = result["cairns"] if isinstance(result, dict) and "cairns" in result else result
+            if budget > 0 and isinstance(cairn_items, list) and cairn_items:
                 # Truncate narratives before budget check
                 for item in cairn_items:
                     narrative = item.get("narrative", "")
@@ -967,9 +968,13 @@ def cairns(
                         "Use cairns(action='get', cairn_id=N) for detail."
                     ),
                 )
-                result["cairns"] = cairn_items
                 if meta["omitted"] > 0:
-                    result["_overflow"] = meta["overflow_message"]
+                    cairn_items.append({"_overflow": meta["overflow_message"]})
+                # Write back
+                if isinstance(result, dict) and "cairns" in result:
+                    result["cairns"] = cairn_items
+                else:
+                    result = cairn_items
             return result
 
         if action == CairnAction.GET:
