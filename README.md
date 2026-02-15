@@ -324,8 +324,8 @@ The setup script detects your installed IDEs, configures MCP connections, and op
 **What happens (Pipeline v2):**
 1. **Session starts** — hook initializes an event log in `~/.cairn/events/`
 2. **Every tool call** — hook captures full `tool_input` and `tool_response` (capped at 2000 chars), appends to the log. Every 25 events, a batch is shipped to `POST /api/events/ingest` in the background.
-3. **Between batches** — DigestWorker on the server digests each batch into a 2-4 sentence LLM summary, producing rolling context.
-4. **Session ends** — hook ships any remaining events. Events are archived to `~/.cairn/events/archive/`.
+3. **Between batches** — DigestWorker on the server digests each batch into a 2-4 sentence LLM summary, stored as a `progress` memory that feeds the knowledge graph via the extraction pipeline.
+4. **Session ends** — hook ships any remaining events, then calls `POST /sessions/{name}/close` to digest any pending batches synchronously. Events are archived to `~/.cairn/events/archive/`.
 
 No hooks? No problem. Memories stored with a `session_name` are still grouped, searchable, and connected through the knowledge graph. `trail()` works from graph data and memory queries — hooks just add richer event-level detail.
 
@@ -355,7 +355,7 @@ No hooks? No problem. Memories stored with a `session_name` are still grouped, s
 </details>
 
 <details>
-<summary><strong>REST API</strong> — 56 endpoints</summary>
+<summary><strong>REST API</strong> — 57 endpoints</summary>
 
 REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Optional API key auth when `CAIRN_AUTH_ENABLED=true`.
 
@@ -408,6 +408,7 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Opt
 | `POST /api/chat` | Send messages to the embedded LLM (agentic, with tool calling) |
 | `GET /api/sessions?project=` | Recent sessions with event counts and digest status |
 | `GET /api/sessions/{name}/events` | Event stream + digests for a session |
+| `POST /api/sessions/{name}/close` | Close session: digest pending batches, store as memories |
 | `GET /api/drift?project=` | Check for memories with stale file references |
 | `POST /api/drift` | Submit file hashes for drift comparison |
 | `GET /api/terminal/config` | Terminal backend mode and settings |
