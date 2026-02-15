@@ -312,7 +312,6 @@ export interface SessionInfo {
   first_event: string | null;
   last_event: string | null;
   is_active: boolean;
-  has_cairn: boolean;
 }
 
 export interface SessionEvent {
@@ -487,13 +486,11 @@ export interface EntitySparklines {
   totals: {
     memories: number;
     projects: number;
-    cairns: number;
     clusters: number;
   };
   sparklines: {
     memories: SparklinePoint[];
     projects: SparklinePoint[];
-    cairns: SparklinePoint[];
     clusters: SparklinePoint[];
   };
   days: number;

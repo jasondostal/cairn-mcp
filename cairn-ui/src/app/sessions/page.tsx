@@ -11,7 +11,6 @@ import {
   Play,
   Square,
   Loader2,
-  Landmark,
   FileText,
   RefreshCw,
 } from "lucide-react";
@@ -113,11 +112,6 @@ function SessionList({
               <span>{s.total_events} events</span>
               {s.digested_count > 0 && (
                 <span>{s.digested_count}/{s.batch_count} digested</span>
-              )}
-              {s.has_cairn && (
-                <span className="flex items-center gap-0.5">
-                  <Landmark className="h-3 w-3" /> cairn set
-                </span>
               )}
               {s.last_event && <span>{timeAgo(s.last_event)}</span>}
             </div>

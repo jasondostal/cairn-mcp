@@ -1,13 +1,13 @@
 # Roadmap
 
-Current: **v0.36.x** — Agent workspace, context budgets, benchmark re-evaluation.
+Current: **v0.37.x** — Graph-centric architecture, entity resolution, trail-based boot orientation.
 
 ---
 
 ## Next Up
 
 ### Benchmark Re-evaluation
-The LoCoMo 81.7% was measured against v0.28. Cairn has evolved significantly since — context budgets, workspace context assembly, new search paths, knowledge extraction changes. Re-run the full eval suite against the current system to establish an updated baseline. Results may go up (better enrichment) or down (budget truncation tradeoffs). Either way, we need honest numbers.
+The LoCoMo 81.7% was measured against v0.28. Cairn has evolved significantly since — graph-aware search signals, entity canonicalization, contradiction scoping, context budgets. Re-run the full eval suite against the current system to establish an updated baseline. The graph neighbor signal in RRF should help multi-hop queries. We need honest numbers.
 
 ### Agent Workspace Maturation
 The workspace/messaging system (OpenCode integration, inter-agent messages, session dispatch) is functional but early. Next steps: better session lifecycle management, message-driven task chains, workspace health monitoring, and agent coordination patterns. This is the foundation for multi-agent workflows — it needs to get robust before we build on top of it.
@@ -16,17 +16,44 @@ The workspace/messaging system (OpenCode integration, inter-agent messages, sess
 Turn the dashboard from read-only into a working interface. Edit memories inline, edit markdown content, update task status — all from the browser. (Task completion and terminal host editing shipped in v0.35.1.)
 
 ### Graph Entity Management
-UI for Neo4j knowledge graph entities: visualize entity nodes, tag and merge duplicates, correct entity types, browse relationships. Depends on graph extraction being populated.
+UI for Neo4j knowledge graph entities: visualize entity nodes, tag and merge duplicates, correct entity types, browse relationships. The dedup script (`cairn/scripts/dedup_entities.py`) handles bulk cleanup; the UI is for ongoing curation.
 
 ### Graph Search Handlers
-Re-enable intent-routed graph search in search_v2. Backfill graph extraction for remaining conversations, tune merge strategy, validate quality. Target: improved multi-hop and relationship queries.
+Re-enable intent-routed graph search in search_v2. The graph neighbor signal is now in core RRF (v0.37.0); search_v2's dedicated graph handlers need quality validation and tuning. Target: improved multi-hop and relationship queries.
+
+### Knowledge Graph Hardening
+v0.37.0 laid the foundation — entity extraction, resolution, contradiction scoping, graph-aware search. Now make it trustworthy at scale. Entity resolution precision (are we merging the right things? missing obvious dupes?). Threshold tuning on the two-tier matcher. Canonicalization quality — does the known-entities hint actually reduce fragmentation, or does the LLM ignore it? Temporal lifecycle management — when should `invalid_at` propagate through related statements? Graph search weight tuning — the 35/20/15/15/10/5 split is a first guess. Measure, adjust, measure again.
+
+### Test Infrastructure
+201 unit tests, zero integration tests, zero UI tests. The unit tests mock everything — they validate logic in isolation but don't catch wiring bugs (wrong SQL, broken migrations, mismatched API contracts). Next steps: integration tests that stand up Postgres + Neo4j in containers and exercise real store→search→extract round-trips. API contract tests for the 55 REST endpoints. UI smoke tests (Playwright) for critical flows — search, capture, settings. CI should run the integration suite on every PR, not just lint and unit tests.
 
 ### Event-Digest Tension Detection
-During cairn synthesis, compare session event digests against high-importance project memories. Flag memories where agent behavior consistently diverges from stored knowledge. Catches gradual drift that contradiction-on-store misses.
+Compare session event digests against high-importance project memories. Flag memories where agent behavior consistently diverges from stored knowledge. Catches gradual drift that contradiction-on-store misses.
 
 ---
 
 ## Shipped
+
+### v0.37.0 — "Everything is a Node" ✓
+
+Graph-centric architecture pivot. Cairns retired in favor of knowledge graph trail.
+
+- [x] **`trail()` replaces `cairns()`** — boot orientation via Neo4j entity activity, not pre-computed summaries
+- [x] **Migration 019** — drops `cairns` table and `cairn_id` FK
+- [x] **Graph-aware RRF signal** — memories sharing entities with top candidates get relevance boost
+- [x] **Entity canonicalization** — extraction LLM receives known entity hints, reducing duplicates
+- [x] **Two-tier entity resolution** — type-scoped (0.85) with type-agnostic fallback (0.95)
+- [x] **Dangling object resolution** — post-extraction pass links string objects to entities
+- [x] **Contradiction aspect scoping** — only Identity/Preference/Belief/Directive contradict; events accumulate
+- [x] **Temporal graph queries** — `recent_activity()`, `session_context()`, `temporal_entities()`
+- [x] **Entity merge** — `merge_entities()` on graph provider + `dedup_entities.py` script
+- [x] **Export/import scripts** — curated memory migration tooling with timestamp preservation
+
+### v0.36.x — Agent Workspace + Budgets ✓
+
+- [x] **Agent Workspace** — Cairn as orchestration layer above OpenCode sessions
+- [x] **Context budget system** — cap MCP tool response sizes
+- [x] **Gitignore hardening** — prevent accidental commits of dev artifacts
 
 ### v0.35.1 — QoL Batch + Docs ✓
 

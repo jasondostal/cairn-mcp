@@ -77,8 +77,17 @@ class MemoryStore:
         extraction_result = None
         if use_extraction:
             try:
+                # Fetch known entities for canonicalization
+                known_entities = None
+                try:
+                    known_entities = self.knowledge_extractor.graph.get_known_entities(
+                        project_id, limit=200,
+                    )
+                except Exception:
+                    logger.debug("Failed to fetch known entities for canonicalization", exc_info=True)
+
                 extraction_result = self.knowledge_extractor.extract(
-                    content, author=author,
+                    content, author=author, known_entities=known_entities,
                 )
             except Exception:
                 logger.warning("Knowledge extraction failed, falling back to enrichment", exc_info=True)
@@ -186,6 +195,15 @@ class MemoryStore:
                         graph_stats.get("statements_created", 0),
                         graph_stats.get("contradictions_found", 0),
                     )
+
+                    # Post-extraction: resolve dangling string objects
+                    try:
+                        resolved = self.knowledge_extractor.resolve_dangling_objects(project_id)
+                        if resolved > 0:
+                            graph_stats["objects_resolved"] = resolved
+                    except Exception:
+                        logger.debug("Dangling object resolution failed (non-blocking)", exc_info=True)
+
                 except Exception:
                     logger.warning("Graph persist failed (non-blocking)", exc_info=True)
 

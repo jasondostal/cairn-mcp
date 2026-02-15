@@ -52,6 +52,14 @@ RRF_WEIGHTS_WITH_ACTIVATION = {
     "recency": 0.05,
     "tag": 0.10,
 }
+RRF_WEIGHTS_WITH_GRAPH = {
+    "vector": 0.35,
+    "graph": 0.20,
+    "keyword": 0.15,
+    "recency": 0.15,
+    "entity": 0.10,
+    "tag": 0.05,
+}
 
 # Query type affinity map — maps query intent to memory types that are most likely relevant.
 QUERY_TYPE_AFFINITY = {
@@ -78,7 +86,7 @@ class MemoryAction:
 
 
 # ============================================================
-# Cairns (Episodic)
+# Cairns (Episodic) — deprecated in v0.37.0, kept for backward compat
 # ============================================================
 
 class CairnAction:
@@ -90,7 +98,7 @@ class CairnAction:
     ALL = {SET, STACK, GET, COMPRESS}
 
 
-MAX_CAIRN_STACK = 50  # max cairns returned by stack
+MAX_CAIRN_STACK = 50  # deprecated — kept for backward compat
 
 
 # ============================================================

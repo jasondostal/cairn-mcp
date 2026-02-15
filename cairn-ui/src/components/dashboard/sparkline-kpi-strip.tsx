@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { EntitySparklines, SparklinePoint } from "@/lib/api";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
-import { Database, Landmark, FolderOpen, Network } from "lucide-react";
+import { Database, FolderOpen, Network } from "lucide-react";
 
 function MiniSparkline({ data, color }: { data: SparklinePoint[]; color: string }) {
   if (!data.length) return <div className="h-[36px]" />;
@@ -51,14 +51,13 @@ interface KpiDef {
 
 const KPI_DEFS: KpiDef[] = [
   { key: "memories", label: "Memories", icon: Database, color: "var(--chart-1)" },
-  { key: "cairns", label: "Cairns", icon: Landmark, color: "var(--chart-2)" },
   { key: "projects", label: "Projects", icon: FolderOpen, color: "var(--chart-3)" },
   { key: "clusters", label: "Clusters", icon: Network, color: "var(--chart-4)" },
 ];
 
 export function SparklineKpiStrip({ data }: { data: EntitySparklines }) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="grid grid-cols-3 gap-3">
       {KPI_DEFS.map(({ key, label, icon: Icon, color }) => {
         const total = data.totals[key];
         const sparkline = data.sparklines[key];

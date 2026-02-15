@@ -619,21 +619,35 @@ class WorkspaceManager:
         return [dict(r) for r in rows]
 
     def _fetch_trail(self, project: str, limit: int = 3) -> list[dict]:
-        """Fetch recent cairns for a project."""
+        """Fetch recent session activity for a project.
+
+        v0.37.0: queries recent memories grouped by session instead of cairns table.
+        """
         project_id = get_project(self.db, project)
         if not project_id:
             return []
         rows = self.db.execute(
             """
-            SELECT id, session_name, title, narrative, set_at
-            FROM cairns
-            WHERE project_id = %s
-            ORDER BY set_at DESC
+            SELECT session_name, MAX(summary) AS narrative,
+                   MAX(created_at) AS set_at, COUNT(*) AS memory_count
+            FROM memories
+            WHERE project_id = %s AND is_active = true
+              AND session_name IS NOT NULL
+            GROUP BY session_name
+            ORDER BY MAX(created_at) DESC
             LIMIT %s
             """,
             (project_id, limit),
         )
-        return [dict(r) for r in rows]
+        return [
+            {
+                "session_name": r["session_name"],
+                "title": r["session_name"],
+                "narrative": r["narrative"] or "",
+                "set_at": r["set_at"],
+            }
+            for r in rows
+        ]
 
     def _search_memories(self, project: str, query: str, limit: int = 5) -> list[dict]:
         """Quick keyword search for relevant memories."""

@@ -5,6 +5,71 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.0] - 2026-02-15 — "Everything is a Node"
+
+### Architecture
+- **Cairns → trail()** — the `cairns` MCP tool is replaced by `trail()`, which queries
+  the Neo4j knowledge graph for recent entity activity instead of reading pre-computed
+  session summaries. Boot orientation now shows *what entities changed* and *what facts
+  were added*, not just narrative digests. Falls back to a recent-memory query when the
+  graph backend is unavailable.
+- **Cairns table dropped** — Migration 019 removes the `cairns` table and `cairn_id` FK
+  from `memories`. Session continuity now comes from the graph (entities/statements
+  linked to episodes) and temporal memory queries. `session_name` on memories is preserved.
+- **Graph-aware RRF search signal** — new "graph neighbors" signal in hybrid search.
+  When Neo4j is available, memories sharing entities with top candidates get a relevance
+  boost. New `RRF_WEIGHTS_WITH_GRAPH` weight set (vector 35%, graph 20%, keyword 15%,
+  recency 15%, entity 10%, tag 5%).
+
+### Added
+- **Entity canonicalization** — extraction LLM receives a `[Known entities]` hint with
+  up to 200 existing entity names/types from the project's graph. Reduces duplicate
+  entity creation by guiding the LLM to reuse existing names.
+- **Two-tier entity resolution** — type-scoped match (0.85 threshold) with fallback to
+  type-agnostic match (0.95 threshold). Merges entities like "Motes (Project)" and
+  "Motes (Concept)" that differ only in type classification.
+- **Dangling object resolution** — post-extraction pass embeds string `object_value`
+  fields on statements and links them to matching entities (>0.90 similarity).
+- **Temporal graph queries** — `recent_activity()`, `session_context()`, and
+  `temporal_entities()` methods on the graph provider for time-windowed entity queries.
+- **Entity merge** — `merge_entities()` moves all SUBJECT/OBJECT relationships from
+  duplicate to canonical entity and deletes the duplicate node.
+- **Contradiction aspect scoping** — only Identity, Preference, Belief, and Directive
+  aspects trigger contradiction invalidation. Event/Action/Knowledge aspects accumulate
+  rather than contradict. Temporal evolution (different `valid_at` dates) no longer
+  treated as contradiction.
+- **Entity dedup script** — `cairn/scripts/dedup_entities.py` for one-time
+  case-insensitive name dedup and identity alias merging in Neo4j.
+- **Export/import scripts** — `cairn/scripts/export_keepers.py` and `import_keepers.py`
+  for curated memory migration with optional timestamp preservation via Postgres.
+
+### Changed
+- **MCP instructions** — boot sequence step 2 updated: `cairns(action='stack')` →
+  `trail()`.
+- **`store` tool description** — removed cairns reference from "DON'T STORE" guidance.
+- **`synthesize` tool** — no longer references cairn-setting as a follow-up action.
+- **Cairn API endpoints** — `GET/POST /api/cairns` return deprecation notices. POST
+  still accepted silently for hook backward compatibility during transition.
+- **Dashboard KPI strip** — cairns sparkline removed; grid reduced from 4 to 3 columns.
+- **Sessions page** — removed "cairn set" badge from session list.
+- **Status endpoint** — `cairns` count removed from response.
+- **Sparkline API** — `cairns` removed from totals and sparklines responses.
+- **`cairn_narratives` capability flag** — new toggle (default: off) gates LLM narrative
+  generation on cairn set. Cairns created during transition period skip the expensive
+  LLM call.
+- **SearchEngine** — accepts optional `graph_provider` for graph neighbor signal.
+- **Services** — `cairn_manager` field deprecated (set to None). `SearchEngine` now
+  receives graph provider.
+
+### Removed
+- **Cairn narrative prompts** — `CAIRN_NARRATIVE_SYSTEM_PROMPT`,
+  `CAIRN_MOTE_NARRATIVE_SYSTEM_PROMPT`, `CAIRN_DIGEST_NARRATIVE_SYSTEM_PROMPT` and their
+  builder functions removed from `cairn/llm/prompts.py`. Stubs raise
+  `NotImplementedError` for backward compatibility.
+- **CairnManager instantiation** — `create_services()` no longer creates a CairnManager.
+- **Cairn-related imports** — `CairnAction`, `MAX_CAIRN_STACK`,
+  `BUDGET_CAIRN_NARRATIVE_CHARS` removed from server module.
+
 ## [0.36.1] - 2026-02-14
 
 ### Fixed
@@ -1000,7 +1065,11 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.35.1...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.37.0...HEAD
+[0.37.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.36.1...v0.37.0
+[0.36.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.36.0...v0.36.1
+[0.36.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.35.2...v0.36.0
+[0.35.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.35.1...v0.35.2
 [0.35.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.35.0...v0.35.1
 [0.35.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.34.2...v0.35.0
 [0.34.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.34.0...v0.34.2

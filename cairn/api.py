@@ -94,7 +94,7 @@ def create_api(svc: Services) -> FastAPI:
     task_manager = svc.task_manager
     message_manager = svc.message_manager
     thinking_engine = svc.thinking_engine
-    cairn_manager = svc.cairn_manager
+    # cairn_manager removed in v0.37.0
     ingest_pipeline = svc.ingest_pipeline
     def _release_db_conn():
         """Release DB connection after each API request.
@@ -591,41 +591,24 @@ def create_api(svc: Services) -> FastAPI:
             raise HTTPException(status_code=404, detail="Thinking sequence not found")
 
     # ------------------------------------------------------------------
-    # GET /cairns?project=&limit=
+    # Cairn endpoints removed in v0.37.0 — trail() replaces boot orientation
+    # POST /cairns still accepted (hooks may still call it during transition)
     # ------------------------------------------------------------------
     @router.get("/cairns")
     def api_cairns(
-        project: str | None = Query(None, description="Project name (omit for all projects)"),
+        project: str | None = Query(None),
         limit: int = Query(20, ge=1, le=50),
     ):
-        return cairn_manager.stack(project=parse_multi(project), limit=limit)
+        return {"deprecated": "Cairns removed in v0.37.0. Use trail() tool for boot orientation."}
 
-    # ------------------------------------------------------------------
-    # POST /cairns — set a cairn (used by hooks)
-    # ------------------------------------------------------------------
     @router.post("/cairns")
     def api_set_cairn(body: dict):
-        project = body.get("project")
-        session_name = body.get("session_name")
-        events = body.get("events")
+        # Accept silently during transition — hooks may still call this
+        return {"status": "accepted", "deprecated": "Cairns removed in v0.37.0"}
 
-        if not project:
-            raise HTTPException(status_code=400, detail="project is required")
-        if not session_name:
-            raise HTTPException(status_code=400, detail="session_name is required")
-
-        result = cairn_manager.set(project, session_name, events=events)
-        return result
-
-    # ------------------------------------------------------------------
-    # GET /cairns/:id — single cairn with full detail + linked stones
-    # ------------------------------------------------------------------
     @router.get("/cairns/{cairn_id}")
     def api_cairn_detail(cairn_id: int = Path(...)):
-        try:
-            return cairn_manager.get(cairn_id)
-        except ValueError:
-            raise HTTPException(status_code=404, detail="Cairn not found")
+        return {"deprecated": "Cairns removed in v0.37.0"}
 
     # ------------------------------------------------------------------
     # GET /rules?project=&limit=&offset=
@@ -978,17 +961,6 @@ def create_api(svc: Services) -> FastAPI:
             tuple(params) + (limit,),
         )
 
-        # Check which sessions have cairns set
-        session_names = [r["session_name"] for r in rows]
-        cairn_set = set()
-        if session_names:
-            placeholders = ",".join(["%s"] * len(session_names))
-            cairn_rows = db.execute(
-                f"SELECT DISTINCT session_name FROM cairns WHERE session_name IN ({placeholders}) AND set_at IS NOT NULL",
-                tuple(session_names),
-            )
-            cairn_set = {r["session_name"] for r in cairn_rows}
-
         items = [
             {
                 "session_name": r["session_name"],
@@ -999,7 +971,6 @@ def create_api(svc: Services) -> FastAPI:
                 "first_event": r["first_event"].isoformat() if r["first_event"] else None,
                 "last_event": r["last_event"].isoformat() if r["last_event"] else None,
                 "is_active": r["is_active"],
-                "has_cairn": r["session_name"] in cairn_set,
             }
             for r in rows
         ]

@@ -440,6 +440,102 @@ class Neo4jGraphProvider(GraphProvider):
             )
             return [r["episode_id"] for r in result if r["episode_id"] is not None]
 
+    def get_known_entities(
+        self,
+        project_id: int,
+        limit: int = 200,
+    ) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (e:Entity)
+                WHERE e.project_id = $pid
+                RETURN DISTINCT e.name AS name, e.entity_type AS entity_type
+                ORDER BY e.name
+                LIMIT $limit
+                """,
+                pid=project_id,
+                limit=limit,
+            )
+            return [{"name": r["name"], "entity_type": r["entity_type"]} for r in result]
+
+    def find_similar_entities_any_type(
+        self,
+        embedding: list[float],
+        project_id: int,
+        threshold: float = 0.95,
+    ) -> list[Entity]:
+        with self._session() as session:
+            result = session.run(
+                """
+                CALL db.index.vector.queryNodes('entity_name_vec', 5, $embedding)
+                YIELD node, score
+                WHERE node.project_id = $pid AND score > $threshold
+                RETURN node.uuid AS uuid, node.name AS name, node.entity_type AS entity_type,
+                       node.project_id AS project_id, node.attributes AS attributes, score
+                ORDER BY score DESC
+                """,
+                embedding=embedding,
+                pid=project_id,
+                threshold=threshold,
+            )
+            return [
+                Entity(
+                    uuid=r["uuid"],
+                    name=r["name"],
+                    entity_type=r["entity_type"],
+                    project_id=r["project_id"],
+                    attributes=json.loads(r["attributes"]) if r["attributes"] else {},
+                )
+                for r in result
+            ]
+
+    def merge_entities(
+        self,
+        canonical_id: str,
+        duplicate_id: str,
+    ) -> dict:
+        with self._session() as session:
+            # Move SUBJECT relationships
+            subj_result = session.run(
+                """
+                MATCH (dup:Entity {uuid: $dup_id})-[r:SUBJECT]->(s:Statement)
+                MATCH (canon:Entity {uuid: $canon_id})
+                MERGE (canon)-[:SUBJECT {predicate: r.predicate}]->(s)
+                DELETE r
+                RETURN count(r) AS moved
+                """,
+                dup_id=duplicate_id,
+                canon_id=canonical_id,
+            )
+            subj_moved = subj_result.single()["moved"]
+
+            # Move OBJECT relationships
+            obj_result = session.run(
+                """
+                MATCH (dup:Entity {uuid: $dup_id})-[r:OBJECT]->(s:Statement)
+                MATCH (canon:Entity {uuid: $canon_id})
+                MERGE (canon)-[:OBJECT]->(s)
+                DELETE r
+                RETURN count(r) AS moved
+                """,
+                dup_id=duplicate_id,
+                canon_id=canonical_id,
+            )
+            obj_moved = obj_result.single()["moved"]
+
+            # Delete duplicate entity
+            session.run(
+                "MATCH (e:Entity {uuid: $dup_id}) DELETE e",
+                dup_id=duplicate_id,
+            )
+
+            return {
+                "subject_edges_moved": subj_moved,
+                "object_edges_moved": obj_moved,
+                "duplicate_deleted": duplicate_id,
+            }
+
     def search_entities_fulltext(
         self,
         query: str,
@@ -471,3 +567,138 @@ class Neo4jGraphProvider(GraphProvider):
                 )
                 for r in result
             ]
+
+    # -- Temporal queries (v0.37.0) --
+
+    def recent_activity(
+        self,
+        project_id: int | None,
+        since: str,
+        limit: int = 20,
+    ) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (subj:Entity)-[:SUBJECT]->(s:Statement)
+                WHERE ($pid IS NULL OR s.project_id = $pid)
+                  AND s.created_at > $since AND s.invalid_at IS NULL
+                OPTIONAL MATCH (obj:Entity)-[:OBJECT]->(s)
+                RETURN s.uuid AS uuid, s.fact AS fact, s.aspect AS aspect,
+                       s.episode_id AS episode_id, s.created_at AS created_at,
+                       subj.name AS subject_name, subj.entity_type AS subject_type,
+                       obj.name AS object_name, obj.entity_type AS object_type
+                ORDER BY s.created_at DESC
+                LIMIT $limit
+                """,
+                pid=project_id,
+                since=since,
+                limit=limit,
+            )
+            return [dict(r) for r in result]
+
+    def session_context(
+        self,
+        episode_ids: list[int],
+        project_id: int,
+    ) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (subj:Entity)-[:SUBJECT]->(s:Statement)
+                WHERE s.episode_id IN $episode_ids AND s.invalid_at IS NULL
+                OPTIONAL MATCH (obj:Entity)-[:OBJECT]->(s)
+                RETURN s.episode_id AS episode_id, s.fact AS fact, s.aspect AS aspect,
+                       subj.name AS subject, obj.name AS object
+                ORDER BY s.episode_id, s.created_at
+                """,
+                episode_ids=episode_ids,
+            )
+            return [dict(r) for r in result]
+
+    def temporal_entities(
+        self,
+        project_id: int,
+        since: str,
+        until: str | None = None,
+    ) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (e:Entity)-[:SUBJECT|OBJECT]-(s:Statement)
+                WHERE s.project_id = $pid AND s.created_at > $since
+                  AND ($until IS NULL OR s.created_at < $until)
+                  AND s.invalid_at IS NULL
+                RETURN e.uuid AS uuid, e.name AS name, e.entity_type AS entity_type,
+                       count(s) AS activity_count
+                ORDER BY activity_count DESC
+                """,
+                pid=project_id,
+                since=since,
+                until=until,
+            )
+            return [dict(r) for r in result]
+
+    # -- Object linking + graph search (v0.37.0) --
+
+    def find_dangling_objects(
+        self,
+        project_id: int,
+    ) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (s:Statement)
+                WHERE s.project_id = $pid AND s.object_value IS NOT NULL
+                  AND s.invalid_at IS NULL
+                RETURN s.uuid AS uuid, s.object_value AS object_value
+                """,
+                pid=project_id,
+            )
+            return [dict(r) for r in result]
+
+    def link_object_entity(
+        self,
+        statement_id: str,
+        entity_id: str,
+    ) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (obj:Entity {uuid: $entity_id})
+                MATCH (stmt:Statement {uuid: $statement_id})
+                MERGE (obj)-[:OBJECT]->(stmt)
+                SET stmt.object_value = NULL
+                """,
+                entity_id=entity_id,
+                statement_id=statement_id,
+            )
+
+    def graph_neighbor_episodes(
+        self,
+        candidate_episode_ids: list[int],
+        project_id: int,
+        limit: int = 50,
+    ) -> dict[int, int]:
+        if not candidate_episode_ids:
+            return {}
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (e:Entity)-[:SUBJECT|OBJECT]-(s1:Statement)
+                WHERE s1.episode_id IN $candidate_ids AND s1.invalid_at IS NULL
+                WITH collect(DISTINCT e) AS shared_entities,
+                     collect(DISTINCT s1.episode_id) AS seeds
+                UNWIND shared_entities AS e
+                MATCH (e)-[:SUBJECT|OBJECT]-(s2:Statement)
+                WHERE s2.invalid_at IS NULL
+                  AND NOT s2.episode_id IN seeds
+                  AND s2.project_id = $pid
+                RETURN s2.episode_id AS memory_id, count(DISTINCT e) AS shared_entities
+                ORDER BY shared_entities DESC
+                LIMIT $limit
+                """,
+                candidate_ids=candidate_episode_ids,
+                pid=project_id,
+                limit=limit,
+            )
+            return {r["memory_id"]: r["shared_entities"] for r in result}

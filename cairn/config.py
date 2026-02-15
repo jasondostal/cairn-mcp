@@ -86,6 +86,7 @@ class LLMCapabilities:
     mca_gate: bool = False  # off by default — keyword coverage pre-filter (MCA)
     knowledge_extraction: bool = False  # off by default — combined extraction + Neo4j graph
     search_v2: bool = False  # off by default — intent-routed search with graph handlers
+    cairn_narratives: bool = False  # off by default in v0.37.0 — LLM narrative on cairn set
 
     def active_list(self) -> list[str]:
         """Return names of enabled capabilities."""
@@ -94,7 +95,7 @@ class LLMCapabilities:
                 "query_expansion", "relationship_extract", "rule_conflict_check",
                 "session_synthesis", "consolidation", "confidence_gating",
                 "event_digest", "reranking", "type_routing", "spreading_activation",
-                "mca_gate", "knowledge_extraction", "search_v2",
+                "mca_gate", "knowledge_extraction", "search_v2", "cairn_narratives",
             )
             if getattr(self, name)
         ]
@@ -190,6 +191,7 @@ EDITABLE_KEYS: set[str] = {
     "capabilities.type_routing", "capabilities.spreading_activation",
     "capabilities.mca_gate", "capabilities.knowledge_extraction",
     "capabilities.search_v2",
+    "capabilities.cairn_narratives",
     # Analytics
     "analytics.enabled", "analytics.retention_days",
     "analytics.cost_embedding_per_1k", "analytics.cost_llm_input_per_1k",
@@ -336,6 +338,7 @@ _ENV_MAP: dict[str, str] = {
     "capabilities.mca_gate": "CAIRN_MCA_GATE",
     "capabilities.knowledge_extraction": "CAIRN_KNOWLEDGE_EXTRACTION",
     "capabilities.search_v2": "CAIRN_SEARCH_V2",
+    "capabilities.cairn_narratives": "CAIRN_CAIRN_NARRATIVES",
     "terminal.backend": "CAIRN_TERMINAL_BACKEND",
     "terminal.max_sessions": "CAIRN_TERMINAL_MAX_SESSIONS",
     "terminal.connect_timeout": "CAIRN_TERMINAL_CONNECT_TIMEOUT",
@@ -416,6 +419,7 @@ def load_config() -> Config:
             mca_gate=os.getenv("CAIRN_MCA_GATE", "false").lower() in ("true", "1", "yes"),
             knowledge_extraction=os.getenv("CAIRN_KNOWLEDGE_EXTRACTION", "false").lower() in ("true", "1", "yes"),
             search_v2=os.getenv("CAIRN_SEARCH_V2", "false").lower() in ("true", "1", "yes"),
+            cairn_narratives=os.getenv("CAIRN_CAIRN_NARRATIVES", "false").lower() in ("true", "1", "yes"),
         ),
         terminal=TerminalConfig(
             backend=os.getenv("CAIRN_TERMINAL_BACKEND", "disabled"),
