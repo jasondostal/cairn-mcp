@@ -69,12 +69,21 @@ if [ -f "$EVENT_LOG" ]; then
 
         EVENTS=$(grep -v '^$' "$EVENT_LOG" | tail -n +"$((SHIPPED + 1))" | jq -s '.')
 
+        # Read agent metadata from first event
+        FIRST_EVENT=$(grep -v '^$' "$EVENT_LOG" | head -1)
+        AGENT_ID=$(echo "$FIRST_EVENT" | jq -r '.agent_id // empty' 2>/dev/null || true)
+        AGENT_TYPE=$(echo "$FIRST_EVENT" | jq -r '.agent_type // "interactive"' 2>/dev/null || true)
+        PARENT_SESSION_VAL=$(echo "$FIRST_EVENT" | jq -r '.parent_session // empty' 2>/dev/null || true)
+
         PAYLOAD=$(jq -nc \
             --arg project "$CAIRN_PROJECT" \
             --arg session_name "$SESSION_NAME" \
             --argjson batch_number "$BATCH_NUMBER" \
             --argjson events "$EVENTS" \
-            '{project: $project, session_name: $session_name, batch_number: $batch_number, events: $events}')
+            --arg agent_id "$AGENT_ID" \
+            --arg agent_type "$AGENT_TYPE" \
+            --arg parent_session "$PARENT_SESSION_VAL" \
+            '{project: $project, session_name: $session_name, batch_number: $batch_number, events: $events, agent_id: $agent_id, agent_type: $agent_type} + (if $parent_session != "" then {parent_session: $parent_session} else {} end)')
 
         # Ship final batch — synchronous (we're at session end)
         HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" -X POST "${CAIRN_URL}/api/events/ingest" \

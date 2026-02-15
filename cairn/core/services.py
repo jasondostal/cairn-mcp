@@ -242,7 +242,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         session_synthesizer=SessionSynthesizer(db, llm=llm_fast, capabilities=capabilities),
         consolidation_engine=ConsolidationEngine(db, embedding, llm=llm_fast, capabilities=capabilities),
         cairn_manager=None,  # removed in v0.37.0
-        digest_worker=DigestWorker(db, llm=llm_fast, capabilities=capabilities, memory_store=memory_store),
+        digest_worker=DigestWorker(db, llm=llm_fast, capabilities=capabilities),
         drift_detector=DriftDetector(db),
         message_manager=(_msg_mgr := MessageManager(db)),
         ingest_pipeline=IngestPipeline(db, project_manager, memory_store, llm_fast, config),

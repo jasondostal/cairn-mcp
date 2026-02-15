@@ -42,6 +42,11 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 detail=f"batch exceeds max size of {MAX_EVENT_BATCH_SIZE} events",
             )
 
+        # Agent metadata (optional, multi-agent support)
+        agent_id = body.get("agent_id")
+        agent_type = body.get("agent_type", "interactive")
+        parent_session = body.get("parent_session")
+
         project_id = get_or_create_project(db, project)
 
         existing = db.execute_one(
@@ -53,11 +58,14 @@ def register_routes(router: APIRouter, svc: Services, **kw):
 
         row = db.execute_one(
             """
-            INSERT INTO session_events (project_id, session_name, batch_number, raw_events, event_count)
-            VALUES (%s, %s, %s, %s::jsonb, %s)
+            INSERT INTO session_events
+                (project_id, session_name, batch_number, raw_events, event_count,
+                 agent_id, agent_type, parent_session)
+            VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s, %s)
             RETURNING id
             """,
-            (project_id, session_name, batch_number, json.dumps(events), len(events)),
+            (project_id, session_name, batch_number, json.dumps(events), len(events),
+             agent_id, agent_type, parent_session),
         )
         db.commit()
 
