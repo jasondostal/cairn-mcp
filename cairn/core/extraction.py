@@ -32,6 +32,10 @@ VALID_ASPECTS = {
     "Goal", "Directive", "Decision", "Event", "Problem", "Relationship",
 }
 
+# Aspects where same subject+predicate means contradiction.
+# Event/Action/Knowledge accumulate — they don't contradict.
+CONTRADICTING_ASPECTS = {"Identity", "Preference", "Belief", "Directive"}
+
 VALID_ENTITY_TYPES = {
     "Person", "Organization", "Place", "Event", "Project",
     "Task", "Technology", "Product", "Concept",
@@ -133,6 +137,7 @@ class KnowledgeExtractor:
 
     def extract(
         self, content: str, created_at: str | None = None, author: str | None = None,
+        known_entities: list[dict] | None = None,
     ) -> ExtractionResult | None:
         """Run extraction LLM call and parse result.
 
@@ -140,12 +145,16 @@ class KnowledgeExtractor:
             content: Memory text to extract from.
             created_at: ISO timestamp for resolving relative dates.
             author: Voice attribution ("user", "assistant", "collaborative").
+            known_entities: Existing entity names/types for canonicalization.
 
         Returns ExtractionResult on success, None on total failure.
         Retries once on parse failure.
         """
         try:
-            messages = build_extraction_messages(content, created_at=created_at, author=author)
+            messages = build_extraction_messages(
+                content, created_at=created_at, author=author,
+                known_entities=known_entities,
+            )
             raw = self.llm.generate(messages, max_tokens=2048)
             return self._parse(raw)
         except Exception as first_error:
@@ -183,25 +192,41 @@ class KnowledgeExtractor:
         for entity in result.entities:
             try:
                 name_embedding = self._cached_embed(entity.name)
+
+                # Try type-scoped match first (0.85 threshold)
                 similar = self.graph.find_similar_entities(
                     name_embedding, entity.entity_type, project_id,
                 )
                 if similar:
-                    # Merge: reuse existing entity
                     entity_map[entity.name] = similar[0].uuid
                     entities_merged += 1
-                    logger.debug("Entity merged: %s -> %s", entity.name, similar[0].uuid)
-                else:
-                    # Create new entity
-                    uuid = self.graph.create_entity(
-                        name=entity.name,
-                        entity_type=entity.entity_type,
-                        embedding=name_embedding,
-                        project_id=project_id,
-                        attributes=entity.attributes,
+                    logger.debug("Entity merged (type-scoped): %s -> %s", entity.name, similar[0].uuid)
+                    continue
+
+                # Fallback: type-agnostic match (0.95 threshold — stricter)
+                similar_any = self.graph.find_similar_entities_any_type(
+                    name_embedding, project_id, threshold=0.95,
+                )
+                if similar_any:
+                    entity_map[entity.name] = similar_any[0].uuid
+                    entities_merged += 1
+                    logger.debug(
+                        "Entity merged (type-agnostic): %s (%s) -> %s (%s)",
+                        entity.name, entity.entity_type,
+                        similar_any[0].name, similar_any[0].entity_type,
                     )
-                    entity_map[entity.name] = uuid
-                    entities_created += 1
+                    continue
+
+                # Create new entity
+                uuid = self.graph.create_entity(
+                    name=entity.name,
+                    entity_type=entity.entity_type,
+                    embedding=name_embedding,
+                    project_id=project_id,
+                    attributes=entity.attributes,
+                )
+                entity_map[entity.name] = uuid
+                entities_created += 1
             except Exception:
                 logger.warning("Entity resolution failed for %s", entity.name, exc_info=True)
 
@@ -218,10 +243,19 @@ class KnowledgeExtractor:
                     continue
 
                 # Check for contradictions (same subject + predicate)
+                # Only flag contradictions within Identity, Preference, Belief,
+                # Directive aspects. Event/Action/Knowledge accumulate.
                 existing = self.graph.find_contradictions(
                     subject_uuid, stmt.predicate, project_id,
                 )
                 for old_stmt in existing:
+                    # Skip if the old statement's aspect isn't in contradicting set
+                    if old_stmt.aspect not in CONTRADICTING_ASPECTS:
+                        continue
+                    # Skip if both have valid_at dates and they differ (temporal evolution)
+                    if (old_stmt.valid_at and stmt.event_date
+                            and old_stmt.valid_at != stmt.event_date):
+                        continue
                     self.graph.invalidate_statement(old_stmt.uuid, invalidated_by="extraction")
                     contradictions_found += 1
 
@@ -256,6 +290,44 @@ class KnowledgeExtractor:
             "statements_created": statements_created,
             "contradictions_found": contradictions_found,
         }
+
+    def resolve_dangling_objects(self, project_id: int) -> int:
+        """Post-extraction pass: resolve string object_value against known entities.
+
+        For each statement with a string object_value, embed it and search for
+        matching entities. If a match is found (>0.90), link the entity and clear
+        the string value.
+
+        Returns count of resolved objects.
+        """
+        resolved = 0
+        try:
+            dangling = self.graph.find_dangling_objects(project_id)
+            if not dangling:
+                return 0
+
+            for stmt in dangling:
+                try:
+                    obj_embedding = self._cached_embed(stmt["object_value"])
+                    matches = self.graph.find_similar_entities_any_type(
+                        obj_embedding, project_id, threshold=0.90,
+                    )
+                    if matches:
+                        self.graph.link_object_entity(stmt["uuid"], matches[0].uuid)
+                        resolved += 1
+                        logger.debug(
+                            "Resolved dangling object: '%s' -> entity %s",
+                            stmt["object_value"], matches[0].name,
+                        )
+                except Exception:
+                    logger.debug("Failed to resolve object '%s'", stmt["object_value"], exc_info=True)
+
+        except Exception:
+            logger.warning("Dangling object resolution failed", exc_info=True)
+
+        if resolved > 0:
+            logger.info("Resolved %d dangling objects (project_id=%d)", resolved, project_id)
+        return resolved
 
     def extract_enrichment_fields(self, result: ExtractionResult) -> dict:
         """Extract enrichment-compatible fields from ExtractionResult.

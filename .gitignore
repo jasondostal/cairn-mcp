@@ -50,6 +50,7 @@ screenshot.jpg
 RETRIEVAL_POSTMORTEM.md
 V2_PROGRESS.md
 EVAL_STATE.md
+migration.md
 *.jpg
 
 # One-off scripts (contain hardcoded dev values)

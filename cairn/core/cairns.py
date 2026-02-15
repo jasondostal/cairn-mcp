@@ -159,12 +159,16 @@ class CairnManager:
             return {"skipped": True, "reason": "empty session", "session_name": session_name, "project": project}
 
         # Synthesize narrative via LLM (graceful degradation)
+        # v0.37.0: cairn_narratives flag gates LLM synthesis (default: off).
+        # When off, cairns are still created for backward compat but without
+        # the expensive LLM narrative call.
         title = None
         narrative = None
         can_synthesize = (
             self.llm is not None
             and self.capabilities is not None
             and self.capabilities.session_synthesis
+            and getattr(self.capabilities, "cairn_narratives", False)
             and has_content
         )
 
@@ -292,6 +296,7 @@ class CairnManager:
             self.llm is not None
             and self.capabilities is not None
             and self.capabilities.session_synthesis
+            and getattr(self.capabilities, "cairn_narratives", False)
         )
 
         if can_synthesize:

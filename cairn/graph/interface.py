@@ -156,6 +156,39 @@ class GraphProvider(ABC):
         """Find episode IDs of statements matching given aspects."""
 
     @abstractmethod
+    def get_known_entities(
+        self,
+        project_id: int,
+        limit: int = 200,
+    ) -> list[dict]:
+        """Return existing entity names and types for canonicalization."""
+
+    @abstractmethod
+    def find_similar_entities_any_type(
+        self,
+        embedding: list[float],
+        project_id: int,
+        threshold: float = 0.95,
+    ) -> list[Entity]:
+        """Find entities with similar name embeddings, ignoring entity_type.
+
+        Used as fallback for type-agnostic entity resolution (e.g. merging
+        'Motes (Project)' and 'Motes (Concept)' into a single entity).
+        Higher threshold than type-scoped matching to avoid false merges.
+        """
+
+    @abstractmethod
+    def merge_entities(
+        self,
+        canonical_id: str,
+        duplicate_id: str,
+    ) -> dict:
+        """Merge duplicate entity into canonical. Moves all relationships.
+
+        Returns dict with counts of moved relationships.
+        """
+
+    @abstractmethod
     def search_entities_fulltext(
         self,
         query: str,
@@ -163,3 +196,56 @@ class GraphProvider(ABC):
         limit: int = 10,
     ) -> list[Entity]:
         """Fulltext search over entity names."""
+
+    @abstractmethod
+    def recent_activity(
+        self,
+        project_id: int | None,
+        since: str,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Recent statements with their subject/object entities. Boot orientation."""
+
+    @abstractmethod
+    def session_context(
+        self,
+        episode_ids: list[int],
+        project_id: int,
+    ) -> list[dict]:
+        """Given memory IDs (episodes), return their entities and statements."""
+
+    @abstractmethod
+    def temporal_entities(
+        self,
+        project_id: int,
+        since: str,
+        until: str | None = None,
+    ) -> list[dict]:
+        """Entities active (had statements created) in a time window."""
+
+    @abstractmethod
+    def find_dangling_objects(
+        self,
+        project_id: int,
+    ) -> list[dict]:
+        """Find statements with string object_value (unlinked to entities)."""
+
+    @abstractmethod
+    def link_object_entity(
+        self,
+        statement_id: str,
+        entity_id: str,
+    ) -> None:
+        """Create OBJECT edge and clear object_value on a statement."""
+
+    @abstractmethod
+    def graph_neighbor_episodes(
+        self,
+        candidate_episode_ids: list[int],
+        project_id: int,
+        limit: int = 50,
+    ) -> dict[int, int]:
+        """Find memories sharing entities with candidates.
+
+        Returns {episode_id: shared_entity_count} for episodes NOT in candidates.
+        """

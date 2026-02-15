@@ -39,6 +39,7 @@ from cairn.core.constants import (
     RRF_WEIGHTS_DEFAULT,
     RRF_WEIGHTS_WITH_ACTIVATION,
     RRF_WEIGHTS_WITH_ENTITIES,
+    RRF_WEIGHTS_WITH_GRAPH,
     TYPE_ROUTING_BOOST,
 )
 from cairn.core.mca import MCA_POOL_MULTIPLIER, MCAGate
@@ -49,6 +50,7 @@ if TYPE_CHECKING:
     from cairn.config import LLMCapabilities
     from cairn.core.activation import ActivationEngine
     from cairn.core.reranker.interface import RerankerInterface
+    from cairn.graph.interface import GraphProvider
     from cairn.llm.interface import LLMInterface
 
 logger = logging.getLogger(__name__)
@@ -77,6 +79,7 @@ class SearchEngine:
         reranker: RerankerInterface | None = None,
         rerank_candidates: int = 50,
         activation_engine: ActivationEngine | None = None,
+        graph_provider: GraphProvider | None = None,
     ):
         self.db = db
         self.embedding = embedding
@@ -85,6 +88,7 @@ class SearchEngine:
         self.reranker = reranker
         self.rerank_candidates = rerank_candidates
         self.activation_engine = activation_engine
+        self.graph_provider = graph_provider
         self._mca_gate: MCAGate | None = None
         if capabilities is not None and capabilities.mca_gate:
             self._mca_gate = MCAGate()
@@ -416,9 +420,42 @@ class SearchEngine:
             except Exception:
                 logger.debug("Spreading activation failed", exc_info=True)
 
+        # Signal 7: Graph neighbors (memories sharing entities with candidates)
+        graph_ranks = {}
+        if self.graph_provider is not None:
+            try:
+                # Use top vector + keyword candidates as seeds
+                seed_ids = list(set(list(vector_ranks.keys())[:15] + list(keyword_ranks.keys())[:5]))
+                if seed_ids:
+                    # Resolve project_id for graph scoping
+                    graph_project_id = None
+                    if project and not isinstance(project, list):
+                        proj_row = self.db.execute_one(
+                            "SELECT id FROM projects WHERE name = %s", (project,)
+                        )
+                        if proj_row:
+                            graph_project_id = proj_row["id"]
+
+                    if graph_project_id:
+                        neighbor_scores = self.graph_provider.graph_neighbor_episodes(
+                            seed_ids, graph_project_id, limit=candidate_limit,
+                        )
+                        if neighbor_scores:
+                            # Convert to ranks (sorted by shared entity count desc)
+                            sorted_neighbors = sorted(
+                                neighbor_scores.items(), key=lambda x: x[1], reverse=True,
+                            )
+                            graph_ranks = {
+                                mid: rank + 1 for rank, (mid, _) in enumerate(sorted_neighbors)
+                            }
+            except Exception:
+                logger.debug("Graph neighbor signal failed", exc_info=True)
+
         # Dynamic weight selection based on available signals
         if activation_ranks and entity_ranks:
             weights = RRF_WEIGHTS_WITH_ACTIVATION
+        elif graph_ranks:
+            weights = RRF_WEIGHTS_WITH_GRAPH
         elif entity_ranks:
             weights = RRF_WEIGHTS_WITH_ENTITIES
         else:
@@ -428,6 +465,7 @@ class SearchEngine:
         all_ids = (
             set(vector_ranks) | set(keyword_ranks) | set(recency_ranks)
             | set(tag_ranks) | set(entity_ranks) | set(activation_ranks)
+            | set(graph_ranks)
         )
         if not all_ids:
             return []
@@ -455,6 +493,9 @@ class SearchEngine:
             if "activation" in weights and memory_id in activation_ranks:
                 components["activation"] = weights["activation"] * (1.0 / (RRF_K + activation_ranks[memory_id]))
                 score += components["activation"]
+            if "graph" in weights and memory_id in graph_ranks:
+                components["graph"] = weights["graph"] * (1.0 / (RRF_K + graph_ranks[memory_id]))
+                score += components["graph"]
             scored[memory_id] = score
             score_components[memory_id] = components
 

@@ -8,11 +8,11 @@ from mcp.server.fastmcp import FastMCP
 from cairn.config import apply_overrides, load_config
 from cairn.core.budget import apply_list_budget, truncate_to_budget
 from cairn.core.constants import (
-    BUDGET_CAIRN_NARRATIVE_CHARS, BUDGET_INSIGHTS_PER_ITEM,
+    BUDGET_INSIGHTS_PER_ITEM,
     BUDGET_RECALL_PER_ITEM, BUDGET_RULES_PER_ITEM, BUDGET_SEARCH_PER_ITEM,
-    MAX_CAIRN_STACK, MAX_CONTENT_SIZE, MAX_LIMIT, MAX_NAME_LENGTH,
+    MAX_CONTENT_SIZE, MAX_LIMIT, MAX_NAME_LENGTH,
     MAX_RECALL_IDS, VALID_MEMORY_TYPES, VALID_SEARCH_MODES,
-    CairnAction, MemoryAction,
+    MemoryAction,
 )
 from cairn.core.services import create_services
 from cairn.core.status import get_status
@@ -46,7 +46,6 @@ task_manager = None
 thinking_engine = None
 session_synthesizer = None
 consolidation_engine = None
-cairn_manager = None
 digest_worker = None
 drift_detector = None
 message_manager = None
@@ -60,7 +59,7 @@ def _init_services(svc):
     global _svc, config, db, graph_provider, memory_store, search_engine
     global search_v2_engine, cluster_engine, project_manager, task_manager
     global thinking_engine, session_synthesizer, consolidation_engine
-    global cairn_manager, digest_worker, drift_detector, message_manager
+    global digest_worker, drift_detector, message_manager
     global analytics_tracker, rollup_worker, workspace_manager
 
     _svc = svc
@@ -76,7 +75,6 @@ def _init_services(svc):
     thinking_engine = svc.thinking_engine
     session_synthesizer = svc.session_synthesizer
     consolidation_engine = svc.consolidation_engine
-    cairn_manager = svc.cairn_manager
     digest_worker = svc.digest_worker
     drift_detector = svc.drift_detector
     message_manager = svc.message_manager
@@ -168,7 +166,7 @@ mcp_kwargs = dict(
         "\n"
         "SESSION STARTUP SEQUENCE:\n"
         "1. rules() — load behavioral guardrails (global + active project)\n"
-        "2. cairns(action='stack') — walk recent session markers across all projects\n"
+        "2. trail() — walk recent activity across all projects (graph-aware orientation)\n"
         "3. search(query='learning', memory_type='learning', limit=5) — surface recent learnings\n"
         "Then summarize the landscape and ask what we're working on.\n"
         "\n"
@@ -220,7 +218,7 @@ def store(
     - Learning discovered — something that should persist across sessions
 
     DON'T STORE:
-    - Every small step during a task (cairns handle session tracking)
+    - Every small step during a task (wait for completion)
     - Mid-conversation thoughts (wait for conclusions)
     - Incremental progress updates (one summary at the end is better)
     - Duplicate information already stored (search first!)
@@ -835,9 +833,7 @@ def synthesize(
     """Synthesize session memories into a coherent narrative.
 
     WHEN TO USE: Session wrap-up — creating a narrative summary of what happened.
-    Usually called before setting a cairn, or when reviewing past session work.
-
-    PATTERN: synthesize (create narrative) → cairns(action='set') (mark session end)
+    On-demand session review, or when reviewing past session work.
 
     Fetches all memories for a session and uses LLM to create a narrative summary.
     Falls back to a structured list of memory summaries when LLM is unavailable.
@@ -890,108 +886,146 @@ def consolidate(
 
 
 # ============================================================
-# Tool 13: cairns
+# Tool 13: trail
 # ============================================================
 
 @mcp.tool()
-def cairns(
-    action: str,
+def trail(
     project: str | None = None,
-    session_name: str | None = None,
-    cairn_id: int | None = None,
-    events: list | None = None,
+    since: str | None = None,
     limit: int = 20,
-) -> dict | list[dict]:
-    """Set, view, and manage episodic session markers (cairns).
+) -> dict:
+    """Walk the recent activity trail. Boot orientation — what happened recently.
 
-    A cairn marks the end of a session. It links all stones (memories) from that
-    session into a navigable trail marker with an LLM-synthesized narrative.
+    Returns recent knowledge graph activity: entities modified, facts added,
+    decisions made. Use this at session start for graph-aware orientation
+    (step 2 of the boot sequence).
 
-    WHEN TO USE:
-    - Session START: stack (view recent cairns across projects for orientation — step 2 of boot sequence)
-    - Session END: set (mark session complete, link memories, generate narrative)
-    - Context recovery: get (examine a specific past session in detail)
-
-    PATTERN:
-    - Boot: cairns(action='stack') → read recent trail markers
-    - Wrap-up: synthesize() → cairns(action='set') → mark session end
-
-    TRIGGER: "what did we do last time", "wrap up", "end of session", "set a cairn",
-    "show me recent sessions", "what's the trail look like"
-
-    Actions:
-    - 'set': Set a cairn at the end of a session. Links stones, synthesizes narrative.
-    - 'stack': View the trail — cairns for a project (or all projects), newest first.
-    - 'get': Examine a single cairn with full detail and linked stones.
-    - 'compress': Clear event detail, keep narrative. For storage management.
+    Falls back to recent memories if graph is unavailable.
 
     Args:
-        action: One of 'set', 'stack', 'get', 'compress'.
-        project: Project name (required for set, optional for stack — omit for all projects).
-        session_name: Session identifier (required for set). Must match memories' session_name.
-        cairn_id: Cairn ID (required for get, compress).
-        events: Optional ordered event log for set (from hooks). Stored as JSONB.
-        limit: Maximum cairns to return for stack (default 20, max 50).
+        project: Filter to a specific project. Omit for all projects.
+        since: ISO date string (default: 7 days ago). How far back to look.
+        limit: Maximum activity items to return (default 20).
     """
+    from datetime import datetime, timedelta, timezone
+
     try:
-        if action not in CairnAction.ALL:
-            return {"error": f"invalid action: {action}. Must be one of: {', '.join(sorted(CairnAction.ALL))}"}
+        # Default: 7 days ago
+        if not since:
+            since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
 
-        if action == CairnAction.SET:
-            if not project or not project.strip():
-                return {"error": "project is required for set"}
-            if not session_name or not session_name.strip():
-                return {"error": "session_name is required for set"}
-            if len(session_name) > MAX_NAME_LENGTH:
-                return {"error": f"session_name exceeds {MAX_NAME_LENGTH} character limit"}
-            return cairn_manager.set(project, session_name, events=events)
+        # Resolve project_id if specified
+        project_id = None
+        if project:
+            from cairn.core.utils import get_project
+            project_id = get_project(db, project)
 
-        if action == CairnAction.STACK:
-            stack_limit = min(limit, MAX_CAIRN_STACK)
-            proj = project.strip() if project and project.strip() else None
-            result = cairn_manager.stack(proj, limit=stack_limit)
-
-            # Apply budget cap to stack results
-            budget = config.budget.cairn_stack
-            # stack() returns a list (or dict with "cairns" key)
-            cairn_items = result["cairns"] if isinstance(result, dict) and "cairns" in result else result
-            if budget > 0 and isinstance(cairn_items, list) and cairn_items:
-                # Truncate narratives before budget check
-                for item in cairn_items:
-                    narrative = item.get("narrative", "")
-                    if len(narrative) > BUDGET_CAIRN_NARRATIVE_CHARS:
-                        item["narrative"] = narrative[:BUDGET_CAIRN_NARRATIVE_CHARS] + "..."
-                cairn_items, meta = apply_list_budget(
-                    cairn_items, budget, "narrative",
-                    overflow_message=(
-                        "...{omitted} older cairns omitted. "
-                        "Use cairns(action='get', cairn_id=N) for detail."
-                    ),
+        # Try graph-based trail first
+        if graph_provider:
+            try:
+                activity = graph_provider.recent_activity(
+                    project_id=project_id, since=since, limit=limit,
                 )
-                if meta["omitted"] > 0:
-                    cairn_items.append({"_overflow": meta["overflow_message"]})
-                # Write back
-                if isinstance(result, dict) and "cairns" in result:
-                    result["cairns"] = cairn_items
-                else:
-                    result = cairn_items
-            return result
+                if activity:
+                    # Group by session (episode_id → session_name lookup)
+                    episode_ids = list({a["episode_id"] for a in activity if a.get("episode_id")})
+                    session_map = {}
+                    if episode_ids:
+                        placeholders = ",".join(["%s"] * len(episode_ids))
+                        rows = db.execute(
+                            f"SELECT id, session_name FROM memories WHERE id IN ({placeholders})",
+                            tuple(episode_ids),
+                        )
+                        session_map = {r["id"]: r["session_name"] for r in rows}
 
-        if action == CairnAction.GET:
-            if not cairn_id:
-                return {"error": "cairn_id is required for get"}
-            return cairn_manager.get(cairn_id)
+                    # Build structured response
+                    sessions: dict[str, dict] = {}
+                    for a in activity:
+                        session_name = session_map.get(a.get("episode_id"), "unknown")
+                        if session_name not in sessions:
+                            sessions[session_name] = {
+                                "session_name": session_name,
+                                "entities_touched": set(),
+                                "key_facts": [],
+                                "time_range": {"earliest": a.get("created_at"), "latest": a.get("created_at")},
+                            }
+                        s = sessions[session_name]
+                        if a.get("subject_name"):
+                            s["entities_touched"].add(a["subject_name"])
+                        if a.get("object_name"):
+                            s["entities_touched"].add(a["object_name"])
+                        if len(s["key_facts"]) < 5:
+                            s["key_facts"].append(a.get("fact", ""))
+                        # Update time range
+                        ts = a.get("created_at")
+                        if ts:
+                            if not s["time_range"]["earliest"] or ts < s["time_range"]["earliest"]:
+                                s["time_range"]["earliest"] = ts
+                            if not s["time_range"]["latest"] or ts > s["time_range"]["latest"]:
+                                s["time_range"]["latest"] = ts
 
-        if action == CairnAction.COMPRESS:
-            if not cairn_id:
-                return {"error": "cairn_id is required for compress"}
-            return cairn_manager.compress(cairn_id)
+                    # Convert sets to lists for JSON serialization
+                    session_list = []
+                    for s in sessions.values():
+                        s["entities_touched"] = sorted(s["entities_touched"])
+                        session_list.append(s)
 
-        return {"error": f"Unknown action: {action}"}
-    except ValueError as e:
-        return {"error": str(e)}
+                    result = {
+                        "source": "graph",
+                        "since": since,
+                        "sessions": session_list[:10],
+                    }
+
+                    # Apply budget
+                    budget = config.budget.cairn_stack
+                    if budget > 0:
+                        result_str = str(result)
+                        from cairn.core.budget import estimate_tokens
+                        if estimate_tokens(result_str) > budget:
+                            # Trim facts and sessions to fit budget
+                            for s in result["sessions"]:
+                                s["key_facts"] = s["key_facts"][:3]
+                            result["sessions"] = result["sessions"][:5]
+
+                    return result
+            except Exception:
+                logger.debug("Graph trail failed, falling back to memory query", exc_info=True)
+
+        # Fallback: simple memory query
+        rows = db.execute(
+            """
+            SELECT m.session_name, m.memory_type, m.summary,
+                   m.created_at, p.name AS project
+            FROM memories m
+            LEFT JOIN projects p ON m.project_id = p.id
+            WHERE m.is_active = true AND m.created_at > %s
+            """
+            + (" AND m.project_id = %s" if project_id else "")
+            + " ORDER BY m.created_at DESC LIMIT %s",
+            (since,) + ((project_id,) if project_id else ()) + (limit,),
+        )
+
+        sessions: dict[str, list] = {}
+        for r in rows:
+            sn = r["session_name"] or "no-session"
+            sessions.setdefault(sn, []).append({
+                "type": r["memory_type"],
+                "summary": r["summary"] or "",
+                "project": r["project"],
+            })
+
+        return {
+            "source": "memory",
+            "since": since,
+            "sessions": [
+                {"session_name": sn, "memories": mems[:5]}
+                for sn, mems in list(sessions.items())[:10]
+            ],
+        }
+
     except Exception as e:
-        logger.exception("cairns failed")
+        logger.exception("trail failed")
         return {"error": f"Internal error: {e}"}
 
 

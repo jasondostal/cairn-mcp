@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from cairn.config import Config, LLMCapabilities, load_config
 from cairn.core.analytics import AnalyticsQueryEngine, RollupWorker, UsageTracker, init_analytics_tracker
-from cairn.core.cairns import CairnManager
+# CairnManager removed in v0.37.0 — trail() + temporal graph queries replace cairns
 from cairn.core.clustering import ClusterEngine
 from cairn.core.digest import DigestWorker
 from cairn.core.consolidation import ConsolidationEngine
@@ -64,7 +64,7 @@ class Services:
     thinking_engine: ThinkingEngine
     session_synthesizer: SessionSynthesizer
     consolidation_engine: ConsolidationEngine
-    cairn_manager: CairnManager
+    cairn_manager: object  # deprecated — kept as None for backward compat
     digest_worker: DigestWorker
     drift_detector: DriftDetector
     message_manager: MessageManager
@@ -170,6 +170,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         db, embedding, llm=llm, capabilities=capabilities,
         reranker=reranker, rerank_candidates=config.reranker.candidates,
         activation_engine=activation_engine,
+        graph_provider=graph_provider,
     )
 
     # Search v2 (optional, intent-routed with graph handlers)
@@ -222,7 +223,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         thinking_engine=ThinkingEngine(db),
         session_synthesizer=SessionSynthesizer(db, llm=llm, capabilities=capabilities),
         consolidation_engine=ConsolidationEngine(db, embedding, llm=llm, capabilities=capabilities),
-        cairn_manager=CairnManager(db, llm=llm, capabilities=capabilities),
+        cairn_manager=None,  # removed in v0.37.0
         digest_worker=DigestWorker(db, llm=llm, capabilities=capabilities),
         drift_detector=DriftDetector(db),
         message_manager=(_msg_mgr := MessageManager(db)),

@@ -35,7 +35,7 @@ Four containers. One `docker compose up`. Done.
 
 ## What you get
 
-- **Session continuity** — Cairns mark the trail. Motes capture what happened. Narratives synthesize why it mattered. Next session starts warm, not cold.
+- **Session continuity** — The knowledge graph tracks entities and facts across sessions. `trail()` walks recent activity at boot — what entities changed, what facts were added. Next session starts warm, not cold.
 - **Quick capture** — Slash commands (`/decision`, `/learning`), URL extraction, browser bookmarklet, iOS Shortcut. Keyboard-first, Tana-inspired.
 - **Smart ingestion** — Text, URLs, or both. Auto-classifies, chunks large documents, deduplicates, and routes. One endpoint, many doorways.
 - **Hybrid search** — Vector similarity + full-text + tag matching via Reciprocal Rank Fusion. Cross-encoder reranking, chain-of-thought answer generation.
@@ -62,7 +62,7 @@ Four containers. One `docker compose up`. Done.
 | **Web dashboard** | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ |
 | **MCP native** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **Knowledge graph** | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ |
-| **Session continuity** | ✅ | ⚠️ | ❌ | ❌ | ❌ | ❌ |
+| **Session continuity** | ✅ (graph) | ⚠️ | ❌ | ❌ | ❌ | ❌ |
 | **Cross-encoder reranking** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **Clustering / patterns** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **Agent dispatch** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -285,20 +285,20 @@ Most agent memory systems require the agent to explicitly decide what's worth re
 
 | Tier | How it works | Agent effort | What's captured |
 |------|-------------|-------------|----------------|
-| **Tier 3: Hook-automated** | IDE lifecycle hooks (Claude Code, Cursor, Windsurf, Cline) silently log every tool call as a *mote* (lightweight event). At session end, the full event stream is crystallized into a cairn with an LLM-synthesized narrative. | Zero | Everything — files read, edits made, commands run, searches performed |
-| **Tier 2: Tool-assisted** | Agent calls `cairns(action="set")` at session end to mark a trail marker. Works without hooks. | One tool call | All memories stored during the session |
-| **Tier 1: Organic** | Agent stores memories via behavioral rules — decisions, learnings, dead ends. Works without cairns. | Per-insight | Deliberate observations the agent deems important |
+| **Tier 3: Hook-automated** | IDE lifecycle hooks (Claude Code, Cursor, Windsurf, Cline) silently log every tool call as a *mote* (lightweight event). Events are shipped in batches and digested into rolling summaries. | Zero | Everything — files read, edits made, commands run, searches performed |
+| **Tier 2: Graph-enriched** | Every stored memory is embedded, enriched, and its entities/facts extracted into the Neo4j knowledge graph. The graph connects memories through shared entities automatically. | Zero (on store) | Entity relationships, facts, temporal evolution |
+| **Tier 1: Organic** | Agent stores memories via behavioral rules — decisions, learnings, dead ends. | Per-insight | Deliberate observations the agent deems important |
 
-The tiers are additive and degrade gracefully. With all three active, a session produces: a rich narrative synthesized from both the mote timeline *and* stored memories, linked trail markers for next session's context, and individually searchable memories with auto-enrichment. Remove the hooks? Tier 2 and 1 still work. Agent forgets to set a cairn? The organic memories are still there.
+The tiers are additive and degrade gracefully. With all three active, a session produces: rich entity-linked knowledge in the graph, individually searchable memories with auto-enrichment, and a mote timeline of what actually happened. Remove the hooks? Tier 2 and 1 still work. No Neo4j? Memories are still embedded and searchable via PostgreSQL.
 
-**Next session, the agent walks the trail back.** Session-start hooks (or adapter equivalents) load recent cairn narratives into context — the agent picks up where the last one left off, not from a blank slate.
+**Next session, the agent walks the trail.** `trail()` queries the knowledge graph for recent entity activity — what changed, what facts were added — giving the agent graph-aware orientation instead of a blank slate.
 
 </details>
 
 <details>
 <summary><strong>Session Capture & Hooks</strong></summary>
 
-Cairn can automatically capture your entire session — every tool call logged as a lightweight event (*mote*), crystallized into a cairn when the session ends. Next session, the agent starts with context instead of a blank slate.
+Cairn can automatically capture your entire session — every tool call logged as a lightweight event (*mote*), digested into rolling summaries. Next session, `trail()` gives graph-aware orientation instead of a blank slate.
 
 **Quick setup:**
 
@@ -322,14 +322,12 @@ The setup script detects your installed IDEs, configures MCP connections, and op
 \*Windsurf: session initializes on first tool use. No session-end hook — the agent calls `cairns(action="set")` directly.
 
 **What happens (Pipeline v2):**
-1. **Session starts** — hook fetches recent cairns for context, creates an event log in `~/.cairn/events/`
+1. **Session starts** — hook initializes an event log in `~/.cairn/events/`
 2. **Every tool call** — hook captures full `tool_input` and `tool_response` (capped at 2000 chars), appends to the log. Every 25 events, a batch is shipped to `POST /api/events/ingest` in the background.
 3. **Between batches** — DigestWorker on the server digests each batch into a 2-4 sentence LLM summary, producing rolling context.
-4. **Session ends** — hook ships any remaining events, then POSTs a cairn. The server synthesizes a narrative from the pre-digested summaries — not raw events. Events are archived to `~/.cairn/events/archive/`.
+4. **Session ends** — hook ships any remaining events. Events are archived to `~/.cairn/events/archive/`.
 
-The agent (via MCP tool) and the hook (via REST POST) can both set a cairn for the same session — whichever arrives first creates it, the second merges in what was missing. No race conditions.
-
-No hooks? No problem. The `cairns` tool works without them — the agent can call `cairns(action="set")` directly. And even without cairns, memories stored with a `session_name` are still grouped and searchable.
+No hooks? No problem. Memories stored with a `session_name` are still grouped, searchable, and connected through the knowledge graph. `trail()` works from graph data and memory queries — hooks just add richer event-level detail.
 
 </details>
 
@@ -350,7 +348,7 @@ No hooks? No problem. The `cairns` tool works without them — the agent can cal
 | `status` | System health, counts, embedding model info, active LLM capabilities |
 | `synthesize` | Synthesize session memories into a coherent narrative |
 | `consolidate` | Find duplicate memories, recommend merges/promotions/inactivations |
-| `cairns` | Session markers — set at session end, walk the trail back, compress old ones |
+| `trail` | Walk recent activity — graph-aware boot orientation across projects |
 | `drift_check` | Compare file content hashes to detect stale code-related memories |
 | `messages` | Inter-agent messaging — send, inbox, mark read, archive, unread count |
 
@@ -385,9 +383,9 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Opt
 | `GET /api/thinking/:id` | Sequence detail with all thoughts |
 | `GET /api/rules?project=` | Behavioral rules |
 | `GET /api/timeline?project=&type=&days=` | Memory activity feed (multi-select filters) |
-| `GET /api/cairns?project=` | Session trail — cairns newest first |
-| `GET /api/cairns/:id` | Single cairn with linked memories |
-| `POST /api/cairns` | Set a cairn (used by session-end hook) |
+| `GET /api/cairns?project=` | *Deprecated in v0.37.0* — returns deprecation notice |
+| `GET /api/cairns/:id` | *Deprecated in v0.37.0* — returns deprecation notice |
+| `POST /api/cairns` | *Deprecated in v0.37.0* — accepted silently for hook backward compat |
 | `GET /api/events?session_name=&project=` | Event batches with digest status |
 | `POST /api/events/ingest` | Ship event batch (202 Accepted, idempotent) |
 | `POST /api/ingest` | Smart ingestion — text, URL, or both. Classify, chunk, dedup, route. |
@@ -442,7 +440,7 @@ Browser         Bookmarklet / iOS     MCP Client (Claude, etc.)     curl / scrip
 cairn-ui          |                                                               |
                   |  core: memory, search, enrichment, clustering, ingest        |
                   |        extraction, router, reranker, search_v2              |
-                  |        projects, tasks, thinking, cairns                     |
+                  |        projects, tasks, thinking, trail                      |
                   |        synthesis, consolidation, digest                      |
                   |                                                               |
                   |  graph: Neo4j (entities, statements, triples, BFS)          |
@@ -536,6 +534,7 @@ All via environment variables:
 | `CAIRN_NEO4J_DATABASE` | `neo4j` | Neo4j database name |
 | `CAIRN_KNOWLEDGE_EXTRACTION` | `false` | Enable combined entity/statement/triple extraction on store |
 | `CAIRN_SEARCH_V2` | `false` | Enable intent-routed search with graph handlers |
+| `CAIRN_CAIRN_NARRATIVES` | `false` | Enable LLM narrative generation on cairn set (legacy, off by default) |
 
 </details>
 
@@ -574,7 +573,7 @@ All bulk operations support `--dry-run` for preview.
 
 ### Database Schema
 
-17 migrations:
+19 migrations:
 
 | Migration | Tables / Changes |
 |-----------|--------|
@@ -595,6 +594,8 @@ All bulk operations support `--dry-run` for preview.
 | **015 Messages** | `messages` — inter-agent communication with priority and read state |
 | **016 SSH Hosts** | `ssh_hosts` — terminal host management with encrypted credentials |
 | **017 Settings** | `app_settings` — runtime config persistence with key-value store |
+| **018 Workspace** | `workspace_sessions` — agent workspace session tracking |
+| **019 Drop Cairns** | Removes `cairns` table and `cairn_id` FK from `memories` |
 
 </details>
 

@@ -753,7 +753,6 @@ class AnalyticsQueryEngine:
             SELECT
                 (SELECT COUNT(*) FROM memories WHERE is_active = true) as memories,
                 (SELECT COUNT(*) FROM projects) as projects,
-                (SELECT COUNT(*) FROM cairns WHERE set_at IS NOT NULL) as cairns,
                 (SELECT COUNT(*) FROM clusters) as clusters
             """,
             (),
@@ -763,13 +762,11 @@ class AnalyticsQueryEngine:
             "totals": {
                 "memories": totals["memories"] if totals else 0,
                 "projects": totals["projects"] if totals else 0,
-                "cairns": totals["cairns"] if totals else 0,
                 "clusters": totals["clusters"] if totals else 0,
             },
             "sparklines": {
                 "memories": _daily_counts("memories", "created_at"),
                 "projects": _daily_counts("projects", "created_at"),
-                "cairns": _daily_counts("cairns", "set_at"),
                 "clusters": _daily_counts("clusters", "created_at"),
             },
             "days": days,

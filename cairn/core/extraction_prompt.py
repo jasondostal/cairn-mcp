@@ -337,6 +337,7 @@ def build_extraction_messages(
     content: str,
     created_at: str | None = None,
     author: str | None = None,
+    known_entities: list[dict] | None = None,
 ) -> list[dict]:
     """Build messages for the combined extraction LLM call.
 
@@ -346,6 +347,8 @@ def build_extraction_messages(
             resolving relative dates ("last week", "yesterday").
         author: Voice attribution ("user", "assistant", "collaborative").
             Passed as [Speaker] tag to guide extraction filtering.
+        known_entities: Existing entity names/types for canonicalization.
+            When provided, appended to guide the LLM to reuse existing names.
     """
     user_content = content
     metadata_parts = []
@@ -355,6 +358,18 @@ def build_extraction_messages(
         metadata_parts.append(f"[Speaker: {author}]")
     if metadata_parts:
         user_content = "\n".join(metadata_parts) + f"\n\n{content}"
+
+    # Append known entities for canonicalization
+    if known_entities:
+        entity_list = ", ".join(
+            f"{e['name']} ({e['entity_type']})" for e in known_entities[:100]
+        )
+        user_content += (
+            f"\n\n[Known entities in this project: {entity_list}]\n"
+            "Use these exact names when referring to known entities. "
+            "Only create new entities for genuinely new concepts."
+        )
+
     return [
         {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
         {"role": "user", "content": user_content},

@@ -24,7 +24,6 @@ def get_status(db: Database, config: Config) -> dict:
         """
     )
 
-    cairn_count = db.execute_one("SELECT COUNT(*) as count FROM cairns WHERE set_at IS NOT NULL")
     cluster_count = db.execute_one("SELECT COUNT(*) as count FROM clusters")
     last_clustering = db.execute_one(
         "SELECT created_at, cluster_count, memory_count FROM clustering_runs "
@@ -50,7 +49,6 @@ def get_status(db: Database, config: Config) -> dict:
         "version": __version__,
         "status": "healthy",
         "memories": memory_count["count"],
-        "cairns": cairn_count["count"],
         "projects": project_count["count"],
         "types": {r["memory_type"]: r["count"] for r in type_counts},
         "clusters": cluster_count["count"],
