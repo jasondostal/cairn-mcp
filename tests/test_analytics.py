@@ -290,8 +290,8 @@ class TestEntityCountsSparkline:
         assert result["totals"]["projects"] == 5
         assert "sparklines" in result
         assert "memories" in result["sparklines"]
-        # 4 entity types queried (memories, projects, cairns, clusters)
-        assert db.execute.call_count == 4
+        # 3 entity types queried (memories, projects, clusters — cairns removed in v0.37.0)
+        assert db.execute.call_count == 3
 
 
 class TestActivityHeatmap:
