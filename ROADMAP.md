@@ -1,20 +1,13 @@
 # Roadmap
 
-Current: **v0.37.x** — Graph-centric architecture, entity resolution, trail-based boot orientation.
+Current: **v0.38.x** — Model router, token observability, cost tracking.
 
 ---
 
 ## Next Up
 
-### Model Router + Token Observability
-80M tokens burned on Llama 90B in a single day (2026-02-12). Never again. Two parts:
-
-**Observability first:** Per-model daily token tracking (input/output separately), cost estimation by operation type (enrichment, extraction, chat, reranking), alerting on volume spikes, cost dashboards in the UI. The `usage_events` table already captures per-call data — aggregate it into actionable views with budget thresholds.
-
-**Smart model router:** Route LLM calls by task complexity instead of one-model-fits-all. Simple enrichment (tag extraction, summary) gets a cheap/fast model. Knowledge extraction and contradiction detection get the capable model. Chat gets whatever's configured. Per-model daily token budgets with automatic fallback to cheaper models when limits hit. The router becomes the single gateway for all LLM calls — every token goes through it, every token gets tracked.
-
 ### Prompt Engineering Audit
-All prompts were modeled after RedPlanetHQ/core during early development and haven't been systematically reviewed since. Full audit needed: token efficiency (are we wasting context window?), output format reliability (JSON parsing failures?), instruction clarity (does the LLM actually follow our rules?), few-shot example quality, and prompt-model fit (prompts tuned for one model may underperform on another). The extraction prompt alone is 325 lines — is all of that earning its keep?
+All prompts were modeled after a well-structured open-source MCP server during early development and haven't been systematically reviewed since. Full audit needed: token efficiency (are we wasting context window?), output format reliability (JSON parsing failures?), instruction clarity (does the LLM actually follow our rules?), few-shot example quality, and prompt-model fit (prompts tuned for one model may underperform on another). The extraction prompt was 325 lines before the v0.38.0 tightening — continued optimization possible.
 
 ### Benchmark Re-evaluation
 The LoCoMo 81.7% was measured against v0.28. Cairn has evolved significantly since — graph-aware search signals, entity canonicalization, contradiction scoping, context budgets. Re-run the full eval suite against the current system to establish an updated baseline. The graph neighbor signal in RRF should help multi-hop queries. We need honest numbers.
@@ -43,6 +36,16 @@ Compare session event digests against high-importance project memories. Flag mem
 ---
 
 ## Shipped
+
+### v0.38.0 — "Token Observatory" ✓
+
+Model router and token cost tracking. Never burn 80M tokens in a day again.
+
+- [x] **Model router** — `ModelRouter` routes LLM calls by task complexity: `capable` (extraction), `fast` (enrichment, digest, clustering), `chat` (user-facing). Per-tier daily token budgets with automatic fallback. `OperationLLM` wrapper means zero changes to callers.
+- [x] **Actual token counts** — all 4 LLM backends extract real token counts from API responses instead of `len(text)//4` estimation
+- [x] **Token budget analytics** — `GET /api/analytics/token-budget` with per-model daily usage, estimated USD cost, and configurable rates
+- [x] **Extraction prompt tightened** — 325 → 137 lines (41% reduction, saves ~1,100 input tokens per store)
+- [x] **Query expansion default OFF** — eliminates 3-5 unnecessary LLM calls per session boot
 
 ### v0.37.0 — "Everything is a Node" ✓
 

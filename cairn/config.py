@@ -61,6 +61,21 @@ class LLMConfig:
 
 
 @dataclass(frozen=True)
+class ModelTierConfig:
+    backend: str = ""   # "bedrock", "ollama", etc. Empty = use llm.backend
+    model: str = ""     # Model ID. Empty = use llm.{backend}_model
+    daily_budget: int = 0  # Max tokens/day. 0 = unlimited
+
+
+@dataclass(frozen=True)
+class RouterConfig:
+    enabled: bool = False
+    capable: ModelTierConfig = field(default_factory=ModelTierConfig)
+    fast: ModelTierConfig = field(default_factory=ModelTierConfig)
+    chat: ModelTierConfig = field(default_factory=ModelTierConfig)
+
+
+@dataclass(frozen=True)
 class RerankerConfig:
     backend: str = "local"  # "local", "bedrock", or registered provider name
     model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
@@ -153,6 +168,7 @@ class Config:
     auth: AuthConfig = field(default_factory=AuthConfig)
     analytics: AnalyticsConfig = field(default_factory=AnalyticsConfig)
     neo4j: Neo4jConfig = field(default_factory=Neo4jConfig)
+    router: RouterConfig = field(default_factory=RouterConfig)
     reranker: RerankerConfig = field(default_factory=RerankerConfig)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
     budget: BudgetConfig = field(default_factory=BudgetConfig)
@@ -322,6 +338,7 @@ _ENV_MAP: dict[str, str] = {
     "llm.openai_base_url": "CAIRN_OPENAI_BASE_URL",
     "llm.openai_model": "CAIRN_OPENAI_MODEL",
     "llm.openai_api_key": "CAIRN_OPENAI_API_KEY",
+    "router.enabled": "CAIRN_ROUTER_ENABLED",
     "reranker.backend": "CAIRN_RERANKER_BACKEND",
     "reranker.model": "CAIRN_RERANKER_MODEL",
     "reranker.candidates": "CAIRN_RERANK_CANDIDATES",
@@ -444,6 +461,24 @@ def load_config() -> Config:
             user=os.getenv("CAIRN_NEO4J_USER", "neo4j"),
             password=os.getenv("CAIRN_NEO4J_PASSWORD", "cairn-dev-password"),
             database=os.getenv("CAIRN_NEO4J_DATABASE", "neo4j"),
+        ),
+        router=RouterConfig(
+            enabled=os.getenv("CAIRN_ROUTER_ENABLED", "false").lower() in ("true", "1", "yes"),
+            capable=ModelTierConfig(
+                backend=os.getenv("CAIRN_ROUTER_CAPABLE_BACKEND", ""),
+                model=os.getenv("CAIRN_ROUTER_CAPABLE_MODEL", ""),
+                daily_budget=int(os.getenv("CAIRN_ROUTER_CAPABLE_BUDGET", "0")),
+            ),
+            fast=ModelTierConfig(
+                backend=os.getenv("CAIRN_ROUTER_FAST_BACKEND", ""),
+                model=os.getenv("CAIRN_ROUTER_FAST_MODEL", ""),
+                daily_budget=int(os.getenv("CAIRN_ROUTER_FAST_BUDGET", "0")),
+            ),
+            chat=ModelTierConfig(
+                backend=os.getenv("CAIRN_ROUTER_CHAT_BACKEND", ""),
+                model=os.getenv("CAIRN_ROUTER_CHAT_MODEL", ""),
+                daily_budget=int(os.getenv("CAIRN_ROUTER_CHAT_BUDGET", "0")),
+            ),
         ),
         reranker=RerankerConfig(
             backend=os.getenv("CAIRN_RERANKER_BACKEND", "local"),

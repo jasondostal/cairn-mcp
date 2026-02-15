@@ -53,13 +53,13 @@ class OllamaLLM(LLMInterface):
                 if content is None:
                     raise ValueError(f"Unexpected Ollama response structure: {list(result.keys())}")
                 latency_ms = (time.monotonic() - t0) * 1000
-                input_est = sum(len(m.get("content", "")) for m in messages) // 4
-                output_est = len(content) // 4
+                tokens_in = result.get("prompt_eval_count") or sum(len(m.get("content", "")) for m in messages) // 4
+                tokens_out = result.get("eval_count") or len(content) // 4
                 if stats.llm_stats:
-                    stats.llm_stats.record_call(tokens_est=input_est + output_est)
+                    stats.llm_stats.record_call(tokens_est=tokens_in + tokens_out)
                 stats.emit_usage_event(
                     "llm.generate", self.model,
-                    tokens_in=input_est, tokens_out=output_est, latency_ms=latency_ms,
+                    tokens_in=tokens_in, tokens_out=tokens_out, latency_ms=latency_ms,
                 )
                 return content
             except (urllib.error.URLError, TimeoutError, ConnectionError) as e:

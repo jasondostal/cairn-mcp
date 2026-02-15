@@ -5,7 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.38.0] - 2026-02-15 — "Token Observatory"
+
+### Added
+- **Model router** — new `ModelRouter` routes LLM operations to different backends by
+  tier: `capable` (extraction, knowledge extraction), `fast` (enrichment, digest,
+  clustering, synthesis, consolidation, classification), `chat` (user-facing). Each
+  tier can use a different backend+model with independent daily token budgets.
+  Over-budget tiers fall back to the `fast` tier. Disabled by default (`CAIRN_ROUTER_ENABLED`).
+- **Actual token counts** — all 4 LLM backends (Bedrock, OpenAI-compatible, Ollama,
+  Gemini) now extract real token counts from API responses instead of `len(text)//4`
+  estimation. Falls back to estimation when usage data is missing.
+- **Token budget analytics** — `GET /api/analytics/token-budget?days=7` returns per-model
+  daily token usage with estimated USD cost (using configured `cost_llm_input_per_1k` /
+  `cost_llm_output_per_1k` rates), daily totals, and period total.
+- **RouterConfig** — new `RouterConfig` and `ModelTierConfig` dataclasses with env var
+  support: `CAIRN_ROUTER_ENABLED`, `CAIRN_ROUTER_{CAPABLE,FAST,CHAT}_{BACKEND,MODEL,BUDGET}`.
+- `cairn/llm/router.py` — `ModelRouter` (tier routing, budget enforcement, backend dedup)
+  and `OperationLLM` (thin `LLMInterface` wrapper bound to a tier).
+- 17 new tests in `tests/test_model_router.py` covering tier resolution, delegation,
+  budget enforcement, daily counter reset, and disabled router defaults.
 
 ### Changed
 - **Extraction prompt tightened** — 325 → 137 lines, ~2,700 → ~1,600 tokens (41% reduction).
@@ -441,7 +460,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Behavioral tool descriptions** — all 14 MCP tool docstrings rewritten with
   TRIGGER keywords, WHEN TO USE guidance, PATTERN/WORKFLOW sections, and cross-tool
   references. Tool descriptions now coach agent behavior rather than just documenting
-  API surface. Inspired by analysis of MiniMe/Recallium and cortex-mcp-kit patterns.
+  API surface. Inspired by analysis of prior art and competitive MCP server patterns.
 - **Server instructions enriched** — top-level MCP instructions now include the
   "search before guessing" principle, session startup sequence, mid-task search
   reminder, progressive disclosure pattern, and storage philosophy.
@@ -610,7 +629,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Pluggable LLM providers** — LLM backend is now a factory with a provider registry. Built-in: Ollama, Bedrock, Gemini, and OpenAI-compatible (covers OpenAI, Groq, Together, Mistral, LM Studio, vLLM, and anything that speaks the OpenAI chat format). Custom providers can be registered via `register_llm_provider(name, factory_fn)`. Zero SDK dependencies for Gemini and OpenAI — pure `urllib` with built-in retry logic.
 - **Pluggable embedding providers** — embedding engine abstracted behind `EmbeddingInterface` with the same factory/registry pattern. Built-in: `local` (SentenceTransformer, unchanged). Custom providers via `register_embedding_provider(name, factory_fn)`.
-- **Optional API key auth** — lightweight middleware on all `/api` routes. Off by default. When enabled, checks `X-API-Key` header (header name configurable for auth proxy compatibility). Health, swagger, and OpenAPI endpoints exempt. MCP endpoint unaffected. Compatible with Authentik, Caddy, nginx, or any reverse proxy that injects auth headers.
+- **Optional API key auth** — lightweight middleware on all `/api` routes. Off by default. When enabled, checks `X-API-Key` header (header name configurable for auth proxy compatibility). Health, swagger, and OpenAPI endpoints exempt. MCP endpoint unaffected. Compatible with any reverse proxy or forward-auth provider that injects auth headers.
 - **Memory relations in API responses** — `GET /api/memories/:id` and search results now include a `relations` array showing incoming/outgoing relationships (extends, contradicts, implements, depends_on, related) with direction, summary, and linked memory type.
 - **Search score transparency** — search results include `score_components` object breaking down the vector, keyword, and tag contributions to the final RRF score.
 - **Thinking tree visualization** — `/thinking/:id` redesigned as a hierarchical tree with collapsible branches, color-coded thought types, and a tree/list view toggle.
@@ -1000,13 +1019,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Multi-stage production Dockerfile (deps → build → standalone runner)
 - `.dockerignore` for efficient Docker builds
 - `cairn-ui` service in `docker-compose.yml`
-- Recallium migration script (`scripts/migrate_recallium.py`)
+- Legacy migration script (`scripts/migrate_recallium.py`)
 
 ### Fixed
 - `CAIRN_API_URL` set at Docker build time so Next.js rewrites resolve correctly in standalone mode
 
 ### Infrastructure
-- Reverse proxy configuration (SWAG + Authentik forward auth)
+- Reverse proxy configuration with forward auth
 - Dark mode by default
 
 ## [0.3.0] - 2026-02-07
@@ -1079,7 +1098,8 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.37.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.38.0...HEAD
+[0.38.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.37.0...v0.38.0
 [0.37.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.36.1...v0.37.0
 [0.36.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.36.0...v0.36.1
 [0.36.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.35.2...v0.36.0

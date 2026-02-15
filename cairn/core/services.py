@@ -114,13 +114,31 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
 
     # LLM enrichment (optional, graceful if disabled)
     llm = None
+    llm_capable = None
+    llm_fast = None
+    llm_chat = None
     enricher = None
     if config.enrichment_enabled:
         try:
-            llm = get_llm(config.llm)
-            init_llm_stats(config.llm.backend, llm.get_model_name())
-            enricher = Enricher(llm)
-            logger.info("Enrichment enabled: %s", config.llm.backend)
+            if config.router.enabled:
+                from cairn.llm.router import ModelRouter
+                router = ModelRouter(config.router, config.llm)
+                llm_capable = router.for_operation("capable")
+                llm_fast = router.for_operation("fast")
+                llm_chat = router.for_operation("chat")
+                llm = llm_chat  # default for components that don't have a tier assignment
+                init_llm_stats(config.llm.backend, router.get_model_name())
+                enricher = Enricher(llm_fast)
+                logger.info("Model router enabled: capable=%s, fast=%s, chat=%s",
+                            llm_capable.get_model_name(), llm_fast.get_model_name(), llm_chat.get_model_name())
+            else:
+                llm = get_llm(config.llm)
+                llm_capable = llm
+                llm_fast = llm
+                llm_chat = llm
+                init_llm_stats(config.llm.backend, llm.get_model_name())
+                enricher = Enricher(llm)
+                logger.info("Enrichment enabled: %s", config.llm.backend)
         except Exception:
             logger.warning("Failed to initialize LLM, enrichment disabled", exc_info=True)
     else:
@@ -133,8 +151,8 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     knowledge_extractor = None
     if capabilities.knowledge_extraction:
         graph_provider = get_graph_provider(config.neo4j)
-        if graph_provider and llm:
-            knowledge_extractor = KnowledgeExtractor(llm, embedding, graph_provider)
+        if graph_provider and llm_capable:
+            knowledge_extractor = KnowledgeExtractor(llm_capable, embedding, graph_provider)
             logger.info("Knowledge extraction enabled (Neo4j graph)")
         elif not graph_provider:
             logger.warning("Knowledge extraction requested but Neo4j not available (set CAIRN_GRAPH_BACKEND=neo4j)")
@@ -160,14 +178,14 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         logger.info("Spreading activation enabled")
 
     memory_store = MemoryStore(
-        db, embedding, enricher=enricher, llm=llm, capabilities=capabilities,
+        db, embedding, enricher=enricher, llm=llm_capable, capabilities=capabilities,
         knowledge_extractor=knowledge_extractor,
     )
     project_manager = ProjectManager(db)
 
     # Legacy search engine (always built — used as fallback for search_v2)
     legacy_search = SearchEngine(
-        db, embedding, llm=llm, capabilities=capabilities,
+        db, embedding, llm=llm_fast, capabilities=capabilities,
         reranker=reranker, rerank_candidates=config.reranker.candidates,
         activation_engine=activation_engine,
         graph_provider=graph_provider,
@@ -180,7 +198,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
             db=db,
             embedding=embedding,
             graph=graph_provider,
-            llm=llm,
+            llm=llm_fast,
             capabilities=capabilities,
             reranker=reranker,
             rerank_candidates=config.reranker.candidates,
@@ -210,24 +228,24 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         config=config,
         db=db,
         embedding=embedding,
-        llm=llm,
+        llm=llm_chat,
         enricher=enricher,
         graph_provider=graph_provider,
         knowledge_extractor=knowledge_extractor,
         memory_store=memory_store,
         search_engine=legacy_search,
         search_v2=search_v2,
-        cluster_engine=ClusterEngine(db, embedding, llm=llm),
+        cluster_engine=ClusterEngine(db, embedding, llm=llm_fast),
         project_manager=project_manager,
         task_manager=TaskManager(db),
         thinking_engine=ThinkingEngine(db),
-        session_synthesizer=SessionSynthesizer(db, llm=llm, capabilities=capabilities),
-        consolidation_engine=ConsolidationEngine(db, embedding, llm=llm, capabilities=capabilities),
+        session_synthesizer=SessionSynthesizer(db, llm=llm_fast, capabilities=capabilities),
+        consolidation_engine=ConsolidationEngine(db, embedding, llm=llm_fast, capabilities=capabilities),
         cairn_manager=None,  # removed in v0.37.0
-        digest_worker=DigestWorker(db, llm=llm, capabilities=capabilities),
+        digest_worker=DigestWorker(db, llm=llm_fast, capabilities=capabilities),
         drift_detector=DriftDetector(db),
         message_manager=(_msg_mgr := MessageManager(db)),
-        ingest_pipeline=IngestPipeline(db, project_manager, memory_store, llm, config),
+        ingest_pipeline=IngestPipeline(db, project_manager, memory_store, llm_fast, config),
         terminal_host_manager=terminal_host_manager,
         opencode=opencode,
         workspace_manager=WorkspaceManager(
