@@ -6,32 +6,77 @@ Current: **v0.38.x** — Model router, token observability, cost tracking.
 
 ## Next Up
 
-### Prompt Engineering Audit
-All prompts were modeled after a well-structured open-source MCP server during early development and haven't been systematically reviewed since. Full audit needed: token efficiency (are we wasting context window?), output format reliability (JSON parsing failures?), instruction clarity (does the LLM actually follow our rules?), few-shot example quality, and prompt-model fit (prompts tuned for one model may underperform on another). The extraction prompt was 325 lines before the v0.38.0 tightening — continued optimization possible.
+### v0.39.0 — Event Pipeline Repair + Tiered Profiles
 
-### Benchmark Re-evaluation
-The LoCoMo 81.7% was measured against v0.28. Cairn has evolved significantly since — graph-aware search signals, entity canonicalization, contradiction scoping, context budgets. Re-run the full eval suite against the current system to establish an updated baseline. The graph neighbor signal in RRF should help multi-hop queries. We need honest numbers.
+**Event pipeline end-to-end fix.** The hook → event → digest pipeline is well-engineered but broken at both ends: hooks are not installed by default (they live in `examples/hooks/`), and `session-end.sh` still posts to `/api/cairns` which was removed in v0.37.0. The DigestWorker runs but nothing consumes its output. Fix: reconnect hooks, update session-end for post-cairn world, wire digest output to `KnowledgeExtractor` so session activity enters the knowledge graph automatically. `trail()` picks it up with no additional work.
 
-### Agent Workspace Maturation
-The workspace/messaging system (OpenCode integration, inter-agent messages, session dispatch) is functional but early. Next steps: better session lifecycle management, message-driven task chains, workspace health monitoring, and agent coordination patterns. This is the foundation for multi-agent workflows — it needs to get robust before we build on top of it.
+- [ ] Fix `session-end.sh` — remove dead `/api/cairns` reference, add `POST /api/sessions/{name}/close`
+- [ ] Wire `DigestWorker._process_one_batch()` → `KnowledgeExtractor.extract()` after digest write
+- [ ] Hook installation docs per IDE (Claude Code, Cursor, Windsurf, Cline)
+- [ ] Validate full pipeline: hook capture → event ingest → digest → extraction → graph → trail
 
-### UI Interactive Editing
-Turn the dashboard from read-only into a working interface. Edit memories inline, edit markdown content, update task status — all from the browser. (Task completion and terminal host editing shipped in v0.35.1.)
+**Tiered configuration profiles.** 14 capability flags create a complex configuration surface. Introduce named profiles that set all flags for a deployment tier:
 
-### Graph Entity Management
-UI for Neo4j knowledge graph entities: visualize entity nodes, tag and merge duplicates, correct entity types, browse relationships. The dedup script (`cairn/scripts/dedup_entities.py`) handles bulk cleanup; the UI is for ongoing curation.
+| Profile | Stack | LLM Required | Neo4j Required |
+|---------|-------|:---:|:---:|
+| `vector` | Postgres + embeddings + basic search | No | No |
+| `enriched` | + LLM enrichment (tags, summary, importance) | Yes | No |
+| `knowledge` | + extraction + entity resolution + contradiction detection | Yes | Yes |
+| `enterprise` | + model router + analytics + workspace + terminal | Yes | Yes |
 
-### Graph Search Handlers
-Re-enable intent-routed graph search in search_v2. The graph neighbor signal is now in core RRF (v0.37.0); search_v2's dedicated graph handlers need quality validation and tuning. Target: improved multi-hop and relationship queries.
+- [ ] `CAIRN_PROFILE` env var — sets capability flags, feature toggles, and defaults per tier
+- [ ] Docker Compose profiles (`docker compose --profile vector up` vs `--profile knowledge up`)
+- [ ] Per-tier MCP prompt examples in docs
+- [ ] Each tier degrades to the one below it (Neo4j down → enriched; LLM down → vector)
 
-### Knowledge Graph Hardening
-v0.37.0 laid the foundation — entity extraction, resolution, contradiction scoping, graph-aware search. Now make it trustworthy at scale. Entity resolution precision (are we merging the right things? missing obvious dupes?). Threshold tuning on the two-tier matcher. Canonicalization quality — does the known-entities hint actually reduce fragmentation, or does the LLM ignore it? Temporal lifecycle management — when should `invalid_at` propagate through related statements? Graph search weight tuning — the 35/20/15/15/10/5 split is a first guess. Measure, adjust, measure again.
+**Contributor DX.**
 
-### Test Infrastructure
-201 unit tests, zero integration tests, zero UI tests. The unit tests mock everything — they validate logic in isolation but don't catch wiring bugs (wrong SQL, broken migrations, mismatched API contracts). Next steps: integration tests that stand up Postgres + Neo4j in containers and exercise real store→search→extract round-trips. API contract tests for the 55 REST endpoints. UI smoke tests (Playwright) for critical flows — search, capture, settings. CI should run the integration suite on every PR, not just lint and unit tests.
+- [ ] Split `api.py` (1500+ lines, single closure) into route modules
+- [ ] Label experimental features explicitly (spreading activation, MCA gate, confidence gating)
+- [ ] Document the search pipeline end-to-end for contributors
 
-### Event-Digest Tension Detection
-Compare session event digests against high-importance project memories. Flag memories where agent behavior consistently diverges from stored knowledge. Catches gradual drift that contradiction-on-store misses.
+### v0.40.0 — Graph Deepening
+
+Implement the "Everything is a Node" decision from v0.37.0 beyond memories and entities.
+
+- [ ] Thinking sequences → graph entity nodes with THOUGHT edges
+- [ ] Tasks → graph entity nodes with ASSIGNED_TO, BLOCKS, LINKED_TO edges
+- [ ] Sessions → formalized episodic nodes
+- [ ] Cross-project entity bridges — shared entities surface inter-project connections
+- [ ] One query model for everything knowledge-related
+
+### v0.41.0 — Graph-Augmented Search
+
+Move search from signal fusion toward retrieval strategy selection based on query shape.
+
+- [ ] Intent router selects retrieval strategy: vector (vague queries), graph traversal (entity-anchored), aspect-filtered (structured queries like "X's preferences")
+- [ ] SearchV2 becomes the sole search entry point with clearly documented strategy dispatch
+- [ ] Re-enable and validate graph search handlers (entity_lookup, aspect_query, relationship, temporal)
+- [ ] Vector similarity remains primary fallback for queries with no entity anchors
+
+### v0.42.0 — Single-Pass Boot
+
+Replace the multi-call boot sequence with a unified orientation tool.
+
+- [ ] `orient(project)` — one MCP tool returning rules, recent trail, open tasks, relevant learnings
+- [ ] Individual tools (rules, trail, search, tasks) remain available for granular use
+- [ ] Graph-backed: one traversal assembles full session context
+
+### Ongoing
+
+**Benchmark re-evaluation.** LoCoMo 81.7% was measured at v0.28. Re-run against current system. The graph neighbor signal, entity canonicalization, and contradiction scoping should affect scores. Publish updated numbers.
+
+**Knowledge graph hardening.** Entity resolution precision, canonicalization quality, threshold tuning, temporal lifecycle management, graph search weight tuning. Measure, adjust, measure again.
+
+**Test infrastructure.** Integration tests with real Postgres + Neo4j containers. API contract tests for REST endpoints. UI smoke tests (Playwright). CI should run integration suite on PRs, not just lint and unit tests.
+
+**UI interactive editing.** Edit memories inline, update markdown content, manage task status from the browser.
+
+**Graph entity management UI.** Visualize entity nodes, merge duplicates, correct types, browse relationships from the dashboard.
+
+**Plugin development guide.** Tutorial for adding custom embedding/LLM/reranker backends. The plugin registry pattern is a core extensibility feature — it needs documentation.
+
+**Eval framework as CLI.** Let users run LoCoMo against their own config (`cairn eval --profile knowledge`). Answer "does switching to Ollama embeddings hurt my score?"
 
 ---
 
