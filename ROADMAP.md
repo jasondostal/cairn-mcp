@@ -6,6 +6,16 @@ Current: **v0.37.x** — Graph-centric architecture, entity resolution, trail-ba
 
 ## Next Up
 
+### Model Router + Token Observability
+80M tokens burned on Llama 90B in a single day (2026-02-12). Never again. Two parts:
+
+**Observability first:** Per-model daily token tracking (input/output separately), cost estimation by operation type (enrichment, extraction, chat, reranking), alerting on volume spikes, cost dashboards in the UI. The `usage_events` table already captures per-call data — aggregate it into actionable views with budget thresholds.
+
+**Smart model router:** Route LLM calls by task complexity instead of one-model-fits-all. Simple enrichment (tag extraction, summary) gets a cheap/fast model. Knowledge extraction and contradiction detection get the capable model. Chat gets whatever's configured. Per-model daily token budgets with automatic fallback to cheaper models when limits hit. The router becomes the single gateway for all LLM calls — every token goes through it, every token gets tracked.
+
+### Prompt Engineering Audit
+All prompts were modeled after RedPlanetHQ/core during early development and haven't been systematically reviewed since. Full audit needed: token efficiency (are we wasting context window?), output format reliability (JSON parsing failures?), instruction clarity (does the LLM actually follow our rules?), few-shot example quality, and prompt-model fit (prompts tuned for one model may underperform on another). The extraction prompt alone is 325 lines — is all of that earning its keep?
+
 ### Benchmark Re-evaluation
 The LoCoMo 81.7% was measured against v0.28. Cairn has evolved significantly since — graph-aware search signals, entity canonicalization, contradiction scoping, context budgets. Re-run the full eval suite against the current system to establish an updated baseline. The graph neighbor signal in RRF should help multi-hop queries. We need honest numbers.
 

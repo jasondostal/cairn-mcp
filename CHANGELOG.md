@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **Extraction prompt tightened** — 325 → 137 lines, ~2,700 → ~1,600 tokens (41% reduction).
+  Added Core-inspired 4-question extraction logic, compressed principles to single paragraphs,
+  removed per-aspect descriptions (kept decision tree only), reduced from 4 to 2 examples.
+  Saves ~1,100 input tokens per memory store.
+- **Router prompt decontaminated** — replaced LoCoMo benchmark examples (Caroline, Melanie)
+  with generic project-relevant examples. Fixed "personal memory system" → "project-scoped
+  memory system" in prompt description.
+- **Query expansion default OFF** — `query_expansion` capability changed from `True` to
+  `False`. Fires an LLM call on every `search()`, `rules()`, `trail()` with unproven benefit.
+  Eliminates 3-5 unnecessary LLM calls per session boot. Still available via env var or UI.
+
 ## [0.37.0] - 2026-02-15 — "Everything is a Node"
 
 ### Architecture
