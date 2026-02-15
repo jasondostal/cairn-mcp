@@ -1,4 +1,9 @@
-"""DigestWorker — background thread that processes event batches into LLM digests."""
+"""DigestWorker — background thread that processes event batches into LLM digests.
+
+After digesting a batch, the worker optionally stores the digest as a memory
+(type: progress) via MemoryStore. This triggers the normal extraction pipeline,
+so session activity enters the knowledge graph automatically and shows up in trail().
+"""
 
 from __future__ import annotations
 
@@ -13,6 +18,7 @@ from cairn.core import stats as stats_mod
 
 if TYPE_CHECKING:
     from cairn.config import LLMCapabilities
+    from cairn.core.memory import MemoryStore
     from cairn.llm.interface import LLMInterface
     from cairn.storage.database import Database
 
@@ -25,6 +31,10 @@ class DigestWorker:
     Runs as a daemon thread. Polls session_events for rows where digest IS NULL,
     processes one at a time via LLM, and updates the row with the digest text.
 
+    When a memory_store is provided, each digest is also stored as a progress
+    memory. This feeds the normal extraction pipeline (entities, statements,
+    graph) so session activity appears in trail() without manual store() calls.
+
     Graceful degradation: if LLM fails, the batch stays undigested and retries
     on the next poll cycle (with backoff on repeated errors).
     """
@@ -33,10 +43,12 @@ class DigestWorker:
         self, db: Database, *,
         llm: LLMInterface | None = None,
         capabilities: LLMCapabilities | None = None,
+        memory_store: MemoryStore | None = None,
     ):
         self.db = db
         self.llm = llm
         self.capabilities = capabilities
+        self.memory_store = memory_store
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -169,17 +181,47 @@ class DigestWorker:
             return False
 
         now = datetime.now(timezone.utc)
+        digest_clean = digest_text.strip()
         self.db.execute(
             "UPDATE session_events SET digest = %s, digested_at = %s WHERE id = %s",
-            (digest_text.strip(), now, batch_id),
+            (digest_clean, now, batch_id),
         )
         self.db.commit()
 
         if stats_mod.digest_stats:
             stats_mod.digest_stats.record_batch(len(events), duration)
 
-        logger.info("DigestWorker: digested batch %d → %d chars (%.2fs)", batch_id, len(digest_text.strip()), duration)
+        # Store digest as a progress memory — triggers extraction → graph.
+        self._store_digest_memory(digest_clean, project, session_name, batch_number)
+
+        logger.info("DigestWorker: digested batch %d → %d chars (%.2fs)", batch_id, len(digest_clean), duration)
         return True
+
+    def _store_digest_memory(
+        self, digest: str, project: str, session_name: str, batch_number: int,
+    ) -> None:
+        """Store a digest as a progress memory so it enters the knowledge graph.
+
+        Best-effort: failures are logged but do not affect the digest pipeline.
+        """
+        if not self.memory_store:
+            return
+        try:
+            self.memory_store.store(
+                content=f"[Session activity — {session_name}, batch {batch_number}]\n{digest}",
+                project=project,
+                memory_type="progress",
+                importance=0.3,
+                tags=["auto-digest", "session-activity"],
+                session_name=session_name,
+                author="system",
+            )
+            logger.info("DigestWorker: stored digest memory for %s batch %d", session_name, batch_number)
+        except Exception:
+            logger.warning(
+                "DigestWorker: failed to store digest memory for %s batch %d",
+                session_name, batch_number, exc_info=True,
+            )
 
     def digest_immediate(self, batch_id: int) -> str | None:
         """Synchronous digest path for testing — process a specific batch by ID.

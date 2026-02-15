@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # Cairn Hook: SessionStart
-# Loads recent cairn context and initializes the session event log.
+# Initializes the session event log and outputs boot context.
 #
 # What it does:
-#   1. Fetches the most recent cairns across ALL projects via REST API
-#   2. Creates a fresh event log file for this session
-#   3. Outputs context for Claude to load silently
+#   1. Creates a fresh event log file for this session
+#   2. Outputs session_name and project for Claude to use when storing memories
 #
 # Configuration (env vars):
 #   CAIRN_URL      — Cairn API base URL (default: http://localhost:8000)
@@ -47,20 +46,9 @@ jq -nc --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
        --arg session_name "$SESSION_NAME" \
        '{ts: $ts, type: $type, session: $session, project: $project, session_name: $session_name}' >> "$EVENT_LOG"
 
-# Fetch recent cairns across ALL projects (cross-project boot)
-CAIRNS=$(curl -sf "${AUTH_HEADER[@]}" "${CAIRN_URL}/api/cairns?limit=5" 2>/dev/null || echo "[]")
-
-# Build context output for Claude
-CAIRN_COUNT=$(echo "$CAIRNS" | jq 'length' 2>/dev/null || echo "0")
-
-CONTEXT="Session name for this session: ${SESSION_NAME}\nActive project: ${CAIRN_PROJECT}\nUse this as session_name when storing memories via cairn.\n\n"
-
-if [ "$CAIRN_COUNT" -gt 0 ]; then
-    CONTEXT+="Recent session history (all projects):\n"
-    CONTEXT+=$(echo "$CAIRNS" | jq -r '.[] | "- [\(.set_at // "unknown")] [\(.project // "unknown")] \(.title // "Untitled") (\(.memory_count) stones)\n  \(.narrative // "No narrative")\n"' 2>/dev/null || echo "")
-fi
-
-# Output context — Claude Code adds stdout from SessionStart hooks to context
-echo "$CONTEXT"
+# Output session context — Claude Code adds stdout from SessionStart hooks to context
+echo "Session name for this session: ${SESSION_NAME}"
+echo "Active project: ${CAIRN_PROJECT}"
+echo "Use this as session_name when storing memories via cairn."
 
 exit 0

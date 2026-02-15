@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
-# Cairn Hook: SessionEnd (Pipeline v2)
-# Ships any remaining unshipped events as a final batch, then sets a cairn.
+# Cairn Hook: SessionEnd
+# Ships any remaining unshipped events as a final batch, then closes the session.
 #
 # What it does:
 #   1. Ships any unshipped events remaining in the log as a final batch
-#   2. POSTs to /api/cairns WITHOUT events payload — server pulls digests from session_events
+#   2. POSTs to /api/sessions/{name}/close — digests pending batches and stores
+#      them as progress memories, feeding the knowledge graph
 #   3. Archives event log + offset file to ~/.cairn/events/archive/
-#
-# Backward compatibility:
-#   - If /api/events/ingest returns 404 (old server), events are shipped via POST /api/cairns
-#     as the raw events payload (Pipeline v1 fallback)
 #
 # Configuration (env vars):
 #   CAIRN_URL      — Cairn API base URL (default: http://localhost:8000)
@@ -56,8 +53,7 @@ if [ -f "$EVENT_LOG" ]; then
            '{ts: $ts, type: $type, reason: $reason}' >> "$EVENT_LOG"
 fi
 
-# Ship any remaining unshipped events as final batch(es)
-V2_AVAILABLE=true
+# Ship any remaining unshipped events as final batch
 if [ -f "$EVENT_LOG" ]; then
     TOTAL_LINES=$(grep -c -v '^$' "$EVENT_LOG" 2>/dev/null || echo "0")
 
@@ -69,10 +65,8 @@ if [ -f "$EVENT_LOG" ]; then
     UNSHIPPED=$((TOTAL_LINES - SHIPPED))
 
     if [ "$UNSHIPPED" -gt 0 ]; then
-        # Calculate batch number
         BATCH_NUMBER=$((SHIPPED / BATCH_SIZE))
 
-        # Extract remaining events
         EVENTS=$(grep -v '^$' "$EVENT_LOG" | tail -n +"$((SHIPPED + 1))" | jq -s '.')
 
         PAYLOAD=$(jq -nc \
@@ -82,7 +76,7 @@ if [ -f "$EVENT_LOG" ]; then
             --argjson events "$EVENTS" \
             '{project: $project, session_name: $session_name, batch_number: $batch_number, events: $events}')
 
-        # Ship final batch — synchronous this time (we're at session end)
+        # Ship final batch — synchronous (we're at session end)
         HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" -X POST "${CAIRN_URL}/api/events/ingest" \
             -H "Content-Type: application/json" \
             "${AUTH_HEADER[@]}" \
@@ -90,37 +84,14 @@ if [ -f "$EVENT_LOG" ]; then
 
         if [ "$HTTP_CODE" = "202" ] || [ "$HTTP_CODE" = "200" ]; then
             echo "$TOTAL_LINES" > "$OFFSET_FILE"
-        elif [ "$HTTP_CODE" = "404" ]; then
-            # Old server — /api/events/ingest doesn't exist
-            V2_AVAILABLE=false
         fi
     fi
 fi
 
-# Set the cairn via POST /api/cairns
-if [ "$V2_AVAILABLE" = true ]; then
-    # Pipeline v2: server pulls digests from session_events — no events payload needed
-    PAYLOAD=$(jq -nc \
-        --arg project "$CAIRN_PROJECT" \
-        --arg session_name "$SESSION_NAME" \
-        '{project: $project, session_name: $session_name}')
-else
-    # Pipeline v1 fallback: ship raw events in cairn payload
-    EVENTS="[]"
-    if [ -f "$EVENT_LOG" ]; then
-        EVENTS=$(grep -v '^$' "$EVENT_LOG" | jq -s '.' 2>/dev/null || echo "[]")
-    fi
-    PAYLOAD=$(jq -nc \
-        --arg project "$CAIRN_PROJECT" \
-        --arg session_name "$SESSION_NAME" \
-        --argjson events "$EVENTS" \
-        '{project: $project, session_name: $session_name, events: $events}')
-fi
-
-RESULT=$(curl -sf -X POST "${CAIRN_URL}/api/cairns" \
+# Close the session — digests pending batches and stores them as graph knowledge
+RESULT=$(curl -sf -X POST "${CAIRN_URL}/api/sessions/${SESSION_NAME}/close" \
     -H "Content-Type: application/json" \
     "${AUTH_HEADER[@]}" \
-    -d "$PAYLOAD" \
     2>/dev/null || echo '{"error": "failed to reach cairn"}')
 
 # Archive event log + offset file (preserve for replay/debugging)
@@ -129,12 +100,8 @@ mkdir -p "$ARCHIVE_DIR"
 mv "$EVENT_LOG" "$ARCHIVE_DIR/" 2>/dev/null || true
 mv "$OFFSET_FILE" "$ARCHIVE_DIR/" 2>/dev/null || true
 
-EVENT_COUNT=0
-if [ -f "$EVENT_LOG" ]; then
-    EVENT_COUNT=$(grep -c -v '^$' "$EVENT_LOG" 2>/dev/null || echo "0")
-fi
-
 # Log result to stderr (visible in debug mode)
-echo "Cairn set for session ${SESSION_NAME}: $(echo "$RESULT" | jq -r '.title // .error // "unknown"' 2>/dev/null)" >&2
+DIGESTED=$(echo "$RESULT" | jq -r '.digested // "?"' 2>/dev/null)
+echo "Cairn session closed: ${SESSION_NAME} (digested: ${DIGESTED})" >&2
 
 exit 0
