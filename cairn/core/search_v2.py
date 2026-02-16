@@ -20,6 +20,8 @@ import logging
 from typing import TYPE_CHECKING
 
 from cairn.core.budget import estimate_tokens
+from cairn.core.constants import HANDLER_CONFIDENCE_THRESHOLD
+from cairn.core.handlers import HANDLERS, SearchContext, _blend_results
 from cairn.core.router import QueryRouter
 
 if TYPE_CHECKING:
@@ -149,8 +151,54 @@ class SearchV2:
             from cairn.core.router import RouterOutput
             route = RouterOutput()
 
-        # Step 3: RRF results are the primary candidates
+        # Step 3: Handler dispatch — intent-weighted blending
+        ENTITY_ANCHORED = {"entity_lookup", "aspect_query", "relationship"}
         candidates = rrf_results
+
+        try:
+            project_id = self._resolve_project_id(project) if project else None
+
+            if (
+                self.router
+                and route.confidence >= HANDLER_CONFIDENCE_THRESHOLD
+                and route.query_type in ENTITY_ANCHORED
+                and self.graph
+            ):
+                # High-confidence entity-anchored: handler primary, RRF backfills
+                ctx = SearchContext(
+                    query=query, route=route, project_id=project_id,
+                    project_name=project if isinstance(project, str) else None,
+                    db=self.db, embedding=self.embedding, graph=self.graph,
+                    limit=limit,
+                )
+                handler = HANDLERS.get(route.query_type)
+                if handler:
+                    handler_results = handler(ctx)
+                    if handler_results:
+                        candidates = _blend_results(handler_results, rrf_results, limit * 3)
+
+            elif (
+                self.router
+                and route.confidence >= HANDLER_CONFIDENCE_THRESHOLD
+                and route.query_type in {"temporal", "exploratory"}
+            ):
+                # Temporal/exploratory: RRF primary, handler supplements
+                ctx = SearchContext(
+                    query=query, route=route, project_id=project_id,
+                    project_name=project if isinstance(project, str) else None,
+                    db=self.db, embedding=self.embedding, graph=self.graph,
+                    limit=limit,
+                )
+                handler = HANDLERS.get(route.query_type)
+                if handler:
+                    handler_results = handler(ctx)
+                    if handler_results:
+                        candidates = _blend_results(rrf_results, handler_results, limit * 3)
+
+            # else: low confidence or no router — candidates stays as rrf_results
+        except Exception:
+            logger.warning("Handler dispatch failed, using RRF results only", exc_info=True)
+            candidates = rrf_results
 
         if not candidates:
             return []
@@ -302,6 +350,16 @@ class SearchV2:
             results.append(result)
 
         return results
+
+    def _resolve_project_id(self, project: str | list[str] | None) -> int | None:
+        """Resolve project name to ID for SearchContext."""
+        if not project or not isinstance(project, str):
+            return None
+        try:
+            from cairn.core.utils import get_project
+            return get_project(self.db, project)
+        except Exception:
+            return None
 
     def _fallback_search(
         self,

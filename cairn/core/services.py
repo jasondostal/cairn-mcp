@@ -237,8 +237,14 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         search_engine=unified_search,
         cluster_engine=ClusterEngine(db, embedding, llm=llm_fast),
         project_manager=project_manager,
-        task_manager=TaskManager(db),
-        thinking_engine=ThinkingEngine(db),
+        task_manager=TaskManager(db, graph=graph_provider),
+        thinking_engine=ThinkingEngine(
+            db,
+            graph=graph_provider,
+            knowledge_extractor=knowledge_extractor,
+            embedding=embedding,
+            thought_extraction=capabilities.thought_extraction,
+        ),
         session_synthesizer=SessionSynthesizer(db, llm=llm_fast, capabilities=capabilities),
         consolidation_engine=ConsolidationEngine(db, embedding, llm=llm_fast, capabilities=capabilities),
         cairn_manager=None,  # removed in v0.37.0

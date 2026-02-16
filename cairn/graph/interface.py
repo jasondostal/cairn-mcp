@@ -29,6 +29,36 @@ class Statement:
     invalidated_by: str | None = None
 
 
+@dataclass
+class ThinkingSequenceNode:
+    """A thinking sequence node in the knowledge graph."""
+    uuid: str
+    pg_id: int
+    project_id: int
+    goal: str
+    status: str
+
+
+@dataclass
+class ThoughtNode:
+    """A thought node in the knowledge graph."""
+    uuid: str
+    pg_id: int
+    sequence_uuid: str
+    thought_type: str
+    content: str
+
+
+@dataclass
+class TaskNode:
+    """A task node in the knowledge graph."""
+    uuid: str
+    pg_id: int
+    project_id: int
+    description: str
+    status: str
+
+
 class GraphProvider(ABC):
     """Abstract base for knowledge graph backends."""
 
@@ -249,3 +279,65 @@ class GraphProvider(ABC):
 
         Returns {episode_id: shared_entity_count} for episodes NOT in candidates.
         """
+
+    # -- Thinking sequence + task graph nodes (v0.44.0) --
+
+    @abstractmethod
+    def create_thinking_sequence(
+        self,
+        pg_id: int,
+        project_id: int,
+        goal: str,
+        status: str = "active",
+    ) -> str:
+        """Create a ThinkingSequence node. Returns UUID."""
+
+    @abstractmethod
+    def create_thought(
+        self,
+        pg_id: int,
+        sequence_uuid: str,
+        thought_type: str,
+        content: str,
+        content_embedding: list[float] | None = None,
+    ) -> str:
+        """Create a Thought node linked to its sequence via CONTAINS. Returns UUID."""
+
+    @abstractmethod
+    def complete_thinking_sequence(self, sequence_uuid: str) -> None:
+        """Mark a ThinkingSequence node as completed."""
+
+    @abstractmethod
+    def create_task(
+        self,
+        pg_id: int,
+        project_id: int,
+        description: str,
+        status: str = "pending",
+    ) -> str:
+        """Create a Task node. Returns UUID."""
+
+    @abstractmethod
+    def complete_task(self, task_uuid: str) -> None:
+        """Mark a Task node as completed."""
+
+    @abstractmethod
+    def link_task_to_memory(self, task_uuid: str, episode_id: int) -> None:
+        """Create LINKED_TO edge between Task and Statement(s) for a memory."""
+
+    @abstractmethod
+    def link_thought_to_entities(
+        self,
+        thought_uuid: str,
+        entity_uuids: list[str],
+    ) -> None:
+        """Create MENTIONS edges from Thought to Entity nodes."""
+
+    @abstractmethod
+    def recent_thinking_activity(
+        self,
+        project_id: int | None,
+        since: str,
+        limit: int = 10,
+    ) -> list[dict]:
+        """Recent thinking sequences with their goals and thought counts."""

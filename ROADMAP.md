@@ -1,36 +1,10 @@
 # Roadmap
 
-Current: **v0.43.x** — Operator controls, settings hardened.
+Current: **v0.46.x** — Single-pass boot, graph-augmented search, graph deepening.
 
 ---
 
 ## Next Up
-
-### v0.44.0 — Graph Deepening
-
-Implement the "Everything is a Node" decision from v0.37.0 beyond memories and entities.
-
-- [ ] Thinking sequences → graph entity nodes with THOUGHT edges
-- [ ] Tasks → graph entity nodes with ASSIGNED_TO, BLOCKS, LINKED_TO edges
-- [ ] Cross-project entity bridges — shared entities surface inter-project connections
-- [ ] One query model for everything knowledge-related
-
-### v0.45.0 — Graph-Augmented Search
-
-Move search from signal fusion toward retrieval strategy selection based on query shape. SearchV2 is already the sole entry point (v0.40.0); this release adds meaningful strategy dispatch.
-
-- [ ] Intent router selects retrieval strategy: vector (vague queries), graph traversal (entity-anchored), aspect-filtered (structured queries like "X's preferences")
-- [ ] Re-enable and validate graph search handlers (entity_lookup, aspect_query, relationship, temporal)
-- [ ] Vector similarity remains primary fallback for queries with no entity anchors
-
-### v0.46.0 — Single-Pass Boot
-
-Replace the multi-call boot sequence with a unified orientation tool.
-
-- [ ] `orient(project)` — one MCP tool returning rules, recent trail, open tasks, relevant learnings
-- [ ] Individual tools (rules, trail, search, tasks) remain available for granular use
-- [ ] Graph-backed: one traversal assembles full session context
-
 
 ### Ongoing
 

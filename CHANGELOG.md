@@ -5,6 +5,70 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.46.0] - 2026-02-15 — "Single-Pass Boot"
+
+### Added
+- **`orient()` MCP tool** — single-call session boot returning rules, trail, learnings,
+  and tasks with tiered budget allocation (30/25/25/20) and surplus flow between sections.
+- **`BUDGET_ORIENT`** constant (6000 tokens default) and `budget.orient` editable config key.
+- **Orient allocation constants** — `ORIENT_ALLOC_RULES`, `ORIENT_ALLOC_LEARNINGS`,
+  `ORIENT_ALLOC_TRAIL`, `ORIENT_ALLOC_TASKS` in constants.py.
+
+### Changed
+- **Trail refactored** — extracted `_fetch_trail_data()` helper shared by `trail()` and
+  `orient()`, eliminating code duplication.
+- **MCP instructions updated** — boot sequence guidance now recommends `orient()` as primary,
+  individual tools (rules, trail, search, tasks) as granular fallback.
+
+## [0.45.0] - 2026-02-15 — "Graph-Augmented Search"
+
+### Added
+- **Handler dispatch in SearchV2** — the 5 fully-implemented handlers (entity_lookup,
+  aspect_query, relationship, temporal, exploratory) are now wired into the enhanced
+  search pipeline with intent-weighted blending.
+- **Intent-weighted blending strategy** — entity-anchored queries (high confidence) use
+  handler results as primary with RRF backfill; temporal/exploratory queries use RRF as
+  primary with handler supplements. Low confidence falls through to RRF-only.
+- **`HANDLER_CONFIDENCE_THRESHOLD`** constant (0.6) — minimum router confidence to dispatch
+  a handler.
+- **`_resolve_project_id()`** in SearchV2 — resolves project name to ID for SearchContext.
+- **Test coverage** — `test_search_v2.py` (dispatch logic), `test_router.py` (classification),
+  `test_handlers.py` (blend + fallback behavior). 31 new tests.
+
+### Changed
+- **SearchV2 `_routed_search()`** — replaced `candidates = rrf_results` passthrough with
+  conditional handler dispatch wrapped in try/except for graceful RRF fallback.
+
+## [0.44.0] - 2026-02-15 — "Graph Deepening"
+
+### Added
+- **Thinking sequences in Neo4j** — `ThinkingSequence` and `Thought` nodes with `CONTAINS`
+  edges. Dual-write on `start()`, `add_thought()`, `conclude()`.
+- **Tasks in Neo4j** — `Task` nodes with `LINKED_TO` edges to Statement nodes. Dual-write
+  on `create()`, `complete()`, `link_memories()`.
+- **Eventual-consistency dual-write** — PG is source of truth; graph writes are best-effort
+  with `graph_uuid` and `graph_synced` columns for repair tracking.
+- **`graph_repair.py`** — repair sweep module that retries `graph_synced=false` records
+  for thinking_sequences, thoughts, and tasks.
+- **`thought_extraction` capability** — toggleable entity extraction from thinking sequences:
+  `"off"` (default), `"on_conclude"`, or `"on_every_thought"`.
+- **Migration 021** — `graph_uuid` (UUID) and `graph_synced` (BOOLEAN) columns on
+  thinking_sequences, thoughts, and tasks. Partial indexes for repair sweep.
+- **Neo4j schema extensions** — ThinkingSequence, Thought, Task node types with UUID
+  uniqueness constraints, project/pg_id indexes, and Thought content vector index (1024-dim).
+- **Graph interface extensions** — 8 new abstract methods: `create_thinking_sequence`,
+  `create_thought`, `complete_thinking_sequence`, `create_task`, `complete_task`,
+  `link_task_to_memory`, `link_thought_to_entities`, `recent_thinking_activity`.
+- **3 new dataclasses** — `ThinkingSequenceNode`, `ThoughtNode`, `TaskNode` in graph interface.
+- **Trail thinking activity** — `_fetch_trail_data()` includes thinking sequences from graph
+  when available.
+
+### Changed
+- **`ThinkingEngine.__init__`** — accepts optional `graph`, `knowledge_extractor`, `embedding`,
+  and `thought_extraction` parameters for dual-write and extraction.
+- **`TaskManager.__init__`** — accepts optional `graph` parameter for dual-write.
+- **`create_services()`** — wires graph provider into TaskManager and ThinkingEngine constructors.
+
 ## [0.43.0] - 2026-02-15 — "Operator Controls"
 
 ### Added
