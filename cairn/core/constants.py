@@ -111,6 +111,50 @@ class TaskStatus:
 
 
 # ============================================================
+# Work Items (v0.47.0)
+# ============================================================
+
+class WorkItemStatus:
+    OPEN = "open"
+    READY = "ready"
+    IN_PROGRESS = "in_progress"
+    BLOCKED = "blocked"
+    DONE = "done"
+    CANCELLED = "cancelled"
+
+    TRANSITIONS = {
+        OPEN: {READY, IN_PROGRESS, BLOCKED, CANCELLED},
+        READY: {IN_PROGRESS, BLOCKED, CANCELLED},
+        IN_PROGRESS: {DONE, BLOCKED, CANCELLED},
+        BLOCKED: {OPEN, READY, IN_PROGRESS, CANCELLED},
+        DONE: set(),
+        CANCELLED: set(),
+    }
+
+    ACTIVE = {OPEN, READY, IN_PROGRESS, BLOCKED}
+    TERMINAL = {DONE, CANCELLED}
+    ALL = ACTIVE | TERMINAL
+
+
+class WorkItemType:
+    EPIC = "epic"
+    TASK = "task"
+    SUBTASK = "subtask"
+
+    ALL = {EPIC, TASK, SUBTASK}
+
+    # Auto-infer child type from parent
+    CHILD_TYPE = {
+        EPIC: TASK,
+        TASK: SUBTASK,
+        SUBTASK: SUBTASK,
+    }
+
+
+SHORT_ID_PREFIX = "wi-"
+
+
+# ============================================================
 # Thinking Sequences
 # ============================================================
 

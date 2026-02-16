@@ -50,6 +50,7 @@ consolidation_engine = None
 digest_worker = None
 drift_detector = None
 message_manager = None
+work_item_manager = None
 analytics_tracker = None
 rollup_worker = None
 workspace_manager = None
@@ -61,6 +62,7 @@ def _init_services(svc):
     global cluster_engine, project_manager, task_manager
     global thinking_engine, session_synthesizer, consolidation_engine
     global digest_worker, drift_detector, message_manager
+    global work_item_manager
     global analytics_tracker, rollup_worker, workspace_manager
 
     _svc = svc
@@ -72,6 +74,7 @@ def _init_services(svc):
     cluster_engine = svc.cluster_engine
     project_manager = svc.project_manager
     task_manager = svc.task_manager
+    work_item_manager = svc.work_item_manager
     thinking_engine = svc.thinking_engine
     session_synthesizer = svc.session_synthesizer
     consolidation_engine = svc.consolidation_engine
@@ -726,6 +729,181 @@ def tasks(
 
 
 # ============================================================
+# Tool 17: work_items
+# ============================================================
+
+@mcp.tool()
+def work_items(
+    action: str,
+    project: str | None = None,
+    title: str | None = None,
+    description: str | None = None,
+    item_type: str | None = None,
+    priority: int | None = None,
+    parent_id: int | None = None,
+    work_item_id: int | str | None = None,
+    blocker_id: int | str | None = None,
+    blocked_id: int | str | None = None,
+    assignee: str | None = None,
+    status: str | None = None,
+    session_name: str | None = None,
+    metadata: dict | None = None,
+    acceptance_criteria: str | None = None,
+    memory_ids: list[int] | None = None,
+    include_children: bool = False,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict | list[dict]:
+    """Manage hierarchical work items: epics, tasks, and subtasks.
+
+    TRIGGER — Use when the user wants to track, plan, or dispatch work:
+    - "create a task", "add a work item", "plan this epic"
+    - "what's ready to work on", "what's unblocked", "dispatch queue"
+    - "claim this", "I'm working on", "assign to"
+    - "block", "depends on", "unblock"
+    - "mark done", "complete", "finish"
+    - "what's the status of", "show me work items"
+
+    WHEN TO USE: For structured work tracking with hierarchy and dependencies.
+    Use flat tasks() for simple reminders; use work_items() for real work management.
+
+    STATUS FLOW: open → ready → in_progress → done
+                 Any active state → blocked (when dependency added)
+                 blocked → open (when all blockers resolve)
+                 Any active state → cancelled
+
+    HIERARCHY: epic → task → subtask (auto-inferred via add_child)
+
+    Actions:
+    - 'create': Create a new work item. Requires project, title.
+    - 'update': Update fields. Requires work_item_id.
+    - 'claim': Atomically claim an item. Requires work_item_id, assignee.
+    - 'complete': Mark done + auto-unblock dependents. Requires work_item_id.
+    - 'add_child': Add child item to parent. Requires work_item_id (parent), title.
+    - 'block': Add dependency. Requires blocker_id, blocked_id.
+    - 'unblock': Remove dependency. Requires blocker_id, blocked_id.
+    - 'list': Filtered list. Optional project, status, item_type, assignee.
+    - 'ready': Dispatch queue — unblocked, unassigned items. Requires project.
+    - 'get': Full detail for one item. Requires work_item_id.
+    - 'link_memories': Link memories to item. Requires work_item_id, memory_ids.
+
+    Args:
+        action: One of the actions listed above.
+        project: Project name (required for create, list, ready).
+        title: Work item title (required for create, add_child).
+        description: Detailed description.
+        item_type: 'epic', 'task', or 'subtask' (default 'task').
+        priority: Higher = more urgent (default 0).
+        parent_id: Parent work item ID (for create with explicit parent).
+        work_item_id: Work item ID or short_id (for update, claim, complete, get, add_child, link_memories).
+        blocker_id: Blocker work item ID/short_id (for block, unblock).
+        blocked_id: Blocked work item ID/short_id (for block, unblock).
+        assignee: Agent or person name (for claim).
+        status: Filter by status (for list) or new status (for update).
+        session_name: Associate with a session.
+        metadata: Additional JSON metadata.
+        acceptance_criteria: Definition of done.
+        memory_ids: Memory IDs to link (for link_memories).
+        include_children: Include subtree in list results.
+        limit: Max results for list/ready (default 20).
+        offset: Pagination offset for list.
+    """
+    try:
+        if action == "create":
+            if not project or not title:
+                return {"error": "project and title are required for create"}
+            return work_item_manager.create(
+                project=project, title=title, description=description,
+                item_type=item_type or "task", priority=priority or 0,
+                parent_id=parent_id, session_name=session_name,
+                metadata=metadata, acceptance_criteria=acceptance_criteria,
+            )
+
+        if action == "update":
+            if not work_item_id:
+                return {"error": "work_item_id is required for update"}
+            fields = {}
+            if title is not None:
+                fields["title"] = title
+            if description is not None:
+                fields["description"] = description
+            if status is not None:
+                fields["status"] = status
+            if priority is not None:
+                fields["priority"] = priority
+            if assignee is not None:
+                fields["assignee"] = assignee
+            if acceptance_criteria is not None:
+                fields["acceptance_criteria"] = acceptance_criteria
+            if item_type is not None:
+                fields["item_type"] = item_type
+            if session_name is not None:
+                fields["session_name"] = session_name
+            if metadata is not None:
+                fields["metadata"] = metadata
+            return work_item_manager.update(work_item_id, **fields)
+
+        if action == "claim":
+            if not work_item_id or not assignee:
+                return {"error": "work_item_id and assignee are required for claim"}
+            return work_item_manager.claim(work_item_id, assignee)
+
+        if action == "complete":
+            if not work_item_id:
+                return {"error": "work_item_id is required for complete"}
+            return work_item_manager.complete(work_item_id)
+
+        if action == "add_child":
+            if not work_item_id or not title:
+                return {"error": "work_item_id (parent) and title are required for add_child"}
+            return work_item_manager.add_child(
+                parent_id=work_item_id, title=title, description=description,
+                priority=priority or 0, session_name=session_name,
+                metadata=metadata, acceptance_criteria=acceptance_criteria,
+            )
+
+        if action == "block":
+            if not blocker_id or not blocked_id:
+                return {"error": "blocker_id and blocked_id are required for block"}
+            return work_item_manager.block(blocker_id, blocked_id)
+
+        if action == "unblock":
+            if not blocker_id or not blocked_id:
+                return {"error": "blocker_id and blocked_id are required for unblock"}
+            return work_item_manager.unblock(blocker_id, blocked_id)
+
+        if action == "list":
+            return work_item_manager.list_items(
+                project=project, status=status, item_type=item_type,
+                assignee=assignee, parent_id=parent_id,
+                include_children=include_children,
+                limit=min(limit, MAX_LIMIT), offset=offset,
+            )
+
+        if action == "ready":
+            if not project:
+                return {"error": "project is required for ready"}
+            return work_item_manager.ready_queue(project, limit=min(limit, MAX_LIMIT))
+
+        if action == "get":
+            if not work_item_id:
+                return {"error": "work_item_id is required for get"}
+            return work_item_manager.get(work_item_id)
+
+        if action == "link_memories":
+            if not work_item_id or not memory_ids:
+                return {"error": "work_item_id and memory_ids are required for link_memories"}
+            return work_item_manager.link_memories(work_item_id, memory_ids)
+
+        return {"error": f"Unknown action: {action}"}
+    except ValueError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        logger.exception("work_items failed")
+        return {"error": f"Internal error: {e}"}
+
+
+# ============================================================
 # Tool 9: think
 # ============================================================
 
@@ -1157,14 +1335,42 @@ def orient(project: str | None = None) -> dict:
             budget_tasks += budget_trail
 
         # --- Section 4: Tasks (20% + surplus) ---
+        # Try work items first; fall back to flat tasks if none exist
         tasks_data = []
         try:
             if project:
-                tasks_result = task_manager.list_tasks(project, include_completed=False)
-                tasks_data = tasks_result.get("items", [])
+                # Work items: ready queue + active (in_progress) items
+                wi_ready = work_item_manager.ready_queue(project, limit=10)
+                wi_active = work_item_manager.list_items(
+                    project=project, status="in_progress", limit=10,
+                )
+                wi_items = []
+                for item in wi_ready.get("items", []):
+                    wi_items.append({
+                        "short_id": item.get("short_id", ""),
+                        "title": item.get("title", ""),
+                        "priority": item.get("priority", 0),
+                        "item_type": item.get("item_type", "task"),
+                        "status": "ready",
+                    })
+                for item in wi_active.get("items", []):
+                    wi_items.append({
+                        "short_id": item.get("short_id", ""),
+                        "title": item.get("title", ""),
+                        "assignee": item.get("assignee"),
+                        "item_type": item.get("item_type", "task"),
+                        "status": "in_progress",
+                    })
+                if wi_items:
+                    tasks_data = wi_items
+                else:
+                    # Fall back to flat tasks
+                    tasks_result = task_manager.list_tasks(project, include_completed=False)
+                    tasks_data = tasks_result.get("items", [])
             if tasks_data:
+                content_key = "title" if tasks_data and "title" in tasks_data[0] else "description"
                 tasks_data, tasks_meta = apply_list_budget(
-                    tasks_data, budget_tasks, "description",
+                    tasks_data, budget_tasks, content_key,
                     overflow_message="...{omitted} more tasks omitted.",
                 )
                 if tasks_meta["omitted"] > 0:

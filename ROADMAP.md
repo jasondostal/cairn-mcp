@@ -6,6 +6,60 @@ Current: **v0.46.x** — Single-pass boot, graph-augmented search, graph deepeni
 
 ## Next Up
 
+### v0.47.0 — "Work Management"
+
+Graph-native work items. Hierarchical decomposition. Agent-ready dispatch.
+
+Replaces the flat `tasks` system with first-class Neo4j nodes that participate in the knowledge graph — linked to entities, memories, sessions, and decisions.
+
+**Data Model**
+
+- [ ] **WorkItem Neo4j nodes** — type (epic/task/subtask), status (open/ready/in_progress/blocked/done/cancelled), priority, title, description, acceptance criteria
+- [ ] **Graph edges** — `PARENT_OF` (hierarchy), `BLOCKS` (dependencies), `ASSIGNED_TO` (agent/user), `RELATES_TO` (entities, memories, decisions)
+- [ ] **Hierarchical IDs** — Beads-style short hash parent (`wi-a3f8`), dotted children (`.1`), grandchildren (`.1.1`). Graph owns relationships, IDs are conversational convenience.
+- [ ] **Postgres backing table** — `work_items` with core fields + JSONB metadata. Source of truth for list queries and RRF integration. Neo4j for graph traversal.
+- [ ] **Migration** — `work_items` table, deprecation path for flat `tasks`
+
+**Backend**
+
+- [ ] **`ready` semantics** — Cypher query: "work items with no open blockers" traverses `BLOCKS` edges. The core dispatch primitive.
+- [ ] **Atomic claiming** — status + assignee in one operation, prevents race conditions in multi-agent scenarios
+- [ ] **REST API** — CRUD, hierarchy ops (add child, move), status transitions, bulk queries (by project, by status, by assignee, ready queue)
+- [ ] **MCP tools** — `work_items` tool with actions: create, list, update, claim, complete, add_child, block, unblock. Replaces flat `tasks` tool.
+- [ ] **Semantic search integration** — work items participate in search (title + description embedded), appear in trail, link via entity extraction
+- [ ] **Session linkage** — work items link to sessions that execute them via `SPAWNED_BY` edges. Results flow back into the work item.
+
+**Frontend**
+
+- [ ] **Work items page** — hierarchical tree view with expand/collapse, status badges, priority indicators
+- [ ] **Status visualization** — open (gray) → ready (blue) → in_progress (amber, pulse) → done (green) / blocked (red) / cancelled (muted)
+- [ ] **Inline creation** — new items appear in-tree, not in a modal
+- [ ] **Basic dispatch** — "Run" action on ready items with agent selection (foundation for autonomy gradient)
+
+### v0.48.0 — "Chat UI"
+
+assistant-ui integration. Streaming. Conversation persistence. Work items as inline cards.
+
+The chat becomes the front door for Cairn — create work, dispatch agents, review results, all from a conversation. Mobile-first: if it works one-thumbed at the pharmacy, it works everywhere.
+
+**Backend**
+
+- [ ] **Conversation persistence** — `conversations` table (id, title, project, created_at, updated_at, metadata JSONB), `conversation_messages` table (id, conversation_id, role, content, tool_calls JSONB, token_count, created_at)
+- [ ] **Streaming responses** — SSE endpoint (`GET /api/chat/stream`) with chunked token delivery. Existing `/chat` POST preserved for non-streaming clients.
+- [ ] **Conversation REST API** — create, list, get, update (rename/archive), delete conversations. Append message. Resume from message ID.
+- [ ] **Conversation metadata** — auto-generated titles (first message summary), project context, cumulative token usage, last message preview
+- [ ] **Migration** — `conversations` + `conversation_messages` tables
+
+**Frontend**
+
+- [ ] **assistant-ui integration** — replace bare-bones chat with assistant-ui primitives (Thread, Message, Composer). Same shadcn/ui + Radix design system as cairn-ui.
+- [ ] **Conversation sidebar** — history list with search, archive, delete. Resume any conversation.
+- [ ] **Streaming rendering** — token-by-token display with proper loading states
+- [ ] **Tool call visualization** — render Cairn tool results as rich cards (memory cards, search results, status panels), not JSON blobs. assistant-ui generative UI.
+- [ ] **Work item cards** — inline rendering of work items created/referenced during chat. Status, hierarchy, "Go" button for dispatch.
+- [ ] **Markdown rendering** — full markdown in assistant responses with syntax highlighting for code blocks
+- [ ] **Mobile-responsive** — chat-first layout that works on small screens, touch-friendly interaction targets
+
 ### Ongoing
 
 **Benchmark re-evaluation.** LoCoMo 81.7% was measured at v0.28. Re-run against current system. The graph neighbor signal, entity canonicalization, and contradiction scoping should affect scores. Publish updated numbers.
@@ -13,8 +67,6 @@ Current: **v0.46.x** — Single-pass boot, graph-augmented search, graph deepeni
 **Knowledge graph hardening.** Entity resolution precision, canonicalization quality, threshold tuning, temporal lifecycle management, graph search weight tuning. Measure, adjust, measure again.
 
 **Test infrastructure.** Integration tests with real Postgres + Neo4j containers. API contract tests for REST endpoints. UI smoke tests (Playwright). CI should run integration suite on PRs, not just lint and unit tests.
-
-**UI interactive editing.** Edit memories inline, update markdown content, manage task status from the browser.
 
 **Graph entity management UI.** Visualize entity nodes, merge duplicates, correct types, browse relationships from the dashboard.
 

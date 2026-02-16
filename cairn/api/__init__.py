@@ -73,6 +73,7 @@ def create_api(svc: Services) -> FastAPI:
     from cairn.api.terminal import register_routes as reg_terminal
     from cairn.api.workspace import register_routes as reg_workspace
     from cairn.api.export import register_routes as reg_export
+    from cairn.api.work_items import register_routes as reg_work_items
 
     reg_core(router, svc)
     reg_search(router, svc)
@@ -88,6 +89,7 @@ def create_api(svc: Services) -> FastAPI:
     reg_terminal(router, svc, app=app)
     reg_workspace(router, svc)
     reg_export(router, svc)
+    reg_work_items(router, svc)
 
     app.include_router(router)
     return app

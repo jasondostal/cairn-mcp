@@ -152,6 +152,36 @@ CHAT_TOOLS = [
             },
         },
     },
+    {
+        "name": "list_work_items",
+        "description": "List work items for a project. Supports filtering by status, type, and assignee.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project name"},
+                "status": {"type": "string", "description": "Filter: open, ready, in_progress, blocked, done, cancelled"},
+                "item_type": {"type": "string", "description": "Filter: epic, task, subtask"},
+                "assignee": {"type": "string", "description": "Filter by assignee"},
+                "limit": {"type": "integer", "description": "Max results (default 20)"},
+            },
+            "required": ["project"],
+        },
+    },
+    {
+        "name": "create_work_item",
+        "description": "Create a new work item (epic, task, or subtask).",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project name"},
+                "title": {"type": "string", "description": "Work item title"},
+                "description": {"type": "string", "description": "Detailed description"},
+                "item_type": {"type": "string", "description": "Type: epic, task, subtask (default task)"},
+                "priority": {"type": "integer", "description": "Priority (higher = more urgent, default 0)"},
+            },
+            "required": ["project", "title"],
+        },
+    },
 ]
 
 
@@ -291,4 +321,47 @@ class ChatToolExecutor:
                 }
                 for m in result["items"]
             ],
+        }
+
+    def _tool_list_work_items(
+        self, project: str, status: str | None = None,
+        item_type: str | None = None, assignee: str | None = None,
+        limit: int = 20,
+    ) -> dict:
+        result = self.svc.work_item_manager.list_items(
+            project=project, status=status, item_type=item_type,
+            assignee=assignee, limit=min(limit, 50),
+        )
+        return {
+            "count": result["total"],
+            "items": [
+                {
+                    "id": i["id"],
+                    "short_id": i["short_id"],
+                    "title": i["title"],
+                    "item_type": i["item_type"],
+                    "priority": i["priority"],
+                    "status": i["status"],
+                    "assignee": i.get("assignee"),
+                    "children_count": i.get("children_count", 0),
+                    "created_at": i.get("created_at"),
+                }
+                for i in result["items"]
+            ],
+        }
+
+    def _tool_create_work_item(
+        self, project: str, title: str, description: str | None = None,
+        item_type: str = "task", priority: int = 0,
+    ) -> dict:
+        result = self.svc.work_item_manager.create(
+            project=project, title=title, description=description,
+            item_type=item_type, priority=priority,
+        )
+        return {
+            "created": True,
+            "id": result["id"],
+            "short_id": result["short_id"],
+            "project": project,
+            "title": title,
         }

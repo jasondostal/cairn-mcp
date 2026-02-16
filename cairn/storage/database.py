@@ -236,12 +236,29 @@ class Database:
 
         self.execute("DELETE FROM clustering_runs")
 
-        # Recreate HNSW index
+        # Reconcile work_items.embedding if the table exists
+        wi_exists = self.execute_one("""
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'work_items' AND column_name = 'embedding'
+        """)
+        if wi_exists:
+            self.execute("DROP INDEX IF EXISTS idx_work_items_embedding")
+            self.execute("UPDATE work_items SET embedding = NULL")
+            self.execute(f"ALTER TABLE work_items ALTER COLUMN embedding TYPE vector({dimensions})")
+
+        # Recreate HNSW indexes
         self.execute(f"""
             CREATE INDEX idx_memories_embedding
             ON memories USING hnsw (embedding vector_cosine_ops)
             WITH (m = 16, ef_construction = 64)
         """)
+
+        if wi_exists:
+            self.execute(f"""
+                CREATE INDEX idx_work_items_embedding
+                ON work_items USING hnsw (embedding vector_cosine_ops)
+                WITH (m = 16, ef_construction = 64)
+            """)
 
         self.commit()
         logger.info(
