@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS work_items (
     id SERIAL PRIMARY KEY,
     project_id INTEGER NOT NULL REFERENCES projects(id),
-    short_id VARCHAR(64) UNIQUE NOT NULL,
+    short_id VARCHAR(64) UNIQUE,
     title VARCHAR(500) NOT NULL,
     description TEXT,
     acceptance_criteria TEXT,

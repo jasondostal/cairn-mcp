@@ -60,12 +60,16 @@ class WorkItemManager:
         if not parent:
             return f"{SHORT_ID_PREFIX}{pg_id:04x}"
 
-        # Count existing children to determine next ordinal
-        count_row = self.db.execute_one(
-            "SELECT COUNT(*) AS cnt FROM work_items WHERE parent_id = %s",
+        # Find max existing child ordinal (survives deletions without collision)
+        max_row = self.db.execute_one(
+            """SELECT MAX(
+                CAST(SPLIT_PART(short_id, '.', array_length(string_to_array(short_id, '.'), 1)) AS INTEGER)
+            ) AS max_ord
+            FROM work_items
+            WHERE parent_id = %s AND short_id IS NOT NULL""",
             (parent_id,),
         )
-        ordinal = (count_row["cnt"] if count_row else 0)  # already includes this item
+        ordinal = (max_row["max_ord"] + 1) if max_row and max_row["max_ord"] is not None else 1
         return f"{parent['short_id']}.{ordinal}"
 
     def _embed_content(self, title: str, description: str | None) -> list[float] | None:
@@ -201,6 +205,9 @@ class WorkItemManager:
 
         # Status transition validation
         new_status = fields.get("status")
+        if new_status is not None:
+            if new_status not in WorkItemStatus.ALL:
+                raise ValueError(f"Invalid status: {new_status}. Valid: {WorkItemStatus.ALL}")
         if new_status:
             current = item["status"]
             if current in WorkItemStatus.TERMINAL:
@@ -528,8 +535,9 @@ class WorkItemManager:
 
         if parent_id is not None:
             if include_children:
-                # Recursive CTE for full subtree
-                conditions.append("""wi.id IN (
+                # Separate query for recursive subtree (CTE can't nest in IN(...))
+                subtree_rows = self.db.execute(
+                    """
                     WITH RECURSIVE subtree AS (
                         SELECT id FROM work_items WHERE id = %s
                         UNION ALL
@@ -537,13 +545,18 @@ class WorkItemManager:
                         JOIN subtree s ON c.parent_id = s.id
                     )
                     SELECT id FROM subtree
-                )""")
+                    """,
+                    (parent_id,),
+                )
+                subtree_ids = [r["id"] for r in subtree_rows]
+                if not subtree_ids:
+                    return {"total": 0, "limit": limit, "offset": offset, "items": []}
+                placeholders = ", ".join(["%s"] * len(subtree_ids))
+                conditions.append(f"wi.id IN ({placeholders})")
+                params.extend(subtree_ids)
             else:
                 conditions.append("wi.parent_id = %s")
-            params.append(parent_id)
-        elif not include_children and not parent_id and parent_id is not None:
-            pass  # explicit parent_id=None already handled
-        # If no parent filter and not include_children, show all items
+                params.append(parent_id)
 
         where = " AND ".join(conditions)
 
