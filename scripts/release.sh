@@ -30,6 +30,7 @@ fi
 # Verify version was bumped in source files
 INIT_VERSION=$(grep '__version__' cairn/__init__.py | sed 's/.*"\(.*\)".*/\1/')
 PYPROJECT_VERSION=$(grep '^version' pyproject.toml | sed 's/.*"\(.*\)".*/\1/')
+UI_VERSION=$(grep '"version"' cairn-ui/package.json | sed 's/.*"\([0-9][^"]*\)".*/\1/')
 
 if [ "$INIT_VERSION" != "$VERSION" ]; then
   echo "ERROR: cairn/__init__.py has version '$INIT_VERSION', expected '$VERSION'"
@@ -42,6 +43,11 @@ if [ "$PYPROJECT_VERSION" != "$VERSION" ]; then
   exit 1
 fi
 
+if [ "$UI_VERSION" != "$VERSION" ]; then
+  echo "ERROR: cairn-ui/package.json has version '$UI_VERSION', expected '$VERSION'"
+  exit 1
+fi
+
 # Verify CHANGELOG has an entry for this version
 if ! grep -q "\[$VERSION\]" CHANGELOG.md; then
   echo "ERROR: No CHANGELOG.md entry found for [$VERSION]"
@@ -49,9 +55,10 @@ if ! grep -q "\[$VERSION\]" CHANGELOG.md; then
 fi
 
 echo "=== Releasing v$VERSION ==="
-echo "  cairn/__init__.py: $INIT_VERSION"
-echo "  pyproject.toml:    $PYPROJECT_VERSION"
-echo "  CHANGELOG.md:      found"
+echo "  cairn/__init__.py:      $INIT_VERSION"
+echo "  pyproject.toml:         $PYPROJECT_VERSION"
+echo "  cairn-ui/package.json:  $UI_VERSION"
+echo "  CHANGELOG.md:           found"
 echo ""
 
 # Tag and push
