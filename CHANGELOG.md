@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.47.1] - 2026-02-16
+
+### Added
+- **Work Items UI** — full `/work-items` page with tree-style hierarchical list, status/type/
+  assignee/project filtering, ready-only dispatch toggle, detail sheet with hierarchy navigation
+  and dependency visualization, and create dialog.
+- **Work Items in nav + command palette** — Kanban icon, keyboard-accessible via Cmd+K.
+- **`delWithBody` API helper** — supports DELETE requests with JSON body (used by unblock endpoint).
+- **Work Item API client** — 11 typed methods in `api.ts` covering list, get, create, update,
+  claim, complete, add child, block/unblock, and link memories.
+
+### Fixed
+- **Work items embedding dimension mismatch** — added `_reconcile_work_items_if_needed()` to
+  independently check and fix the `work_items.embedding` column when migration 022 hardcoded
+  384 dimensions but the configured model uses 1024. Runs on startup even when the memories
+  table already matches.
+
 ## [0.47.0] - 2026-02-15 — "Work Management"
 
 ### Added

@@ -18,6 +18,7 @@ import {
   Boxes,
   Terminal,
   Settings,
+  Kanban,
 } from "lucide-react";
 
 export interface NavItem {
@@ -40,6 +41,7 @@ export const navItems: NavItem[] = [
   { href: "/clusters", label: "Clusters", icon: Network },
   { href: "/graph", label: "Graph", icon: Share2 },
   { href: "/tasks", label: "Tasks", icon: ListTodo },
+  { href: "/work-items", label: "Work Items", icon: Kanban },
   { href: "/thinking", label: "Thinking", icon: Brain },
   { href: "/rules", label: "Rules", icon: Shield },
   { href: "/workspace", label: "Workspace", icon: Boxes },

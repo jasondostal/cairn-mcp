@@ -220,6 +220,9 @@ class Database:
 
         current_dim = row["atttypmod"]
         if current_dim == dimensions:
+            # Memories match, but other tables may have been created with stale dimensions.
+            # Check work_items independently (added after 022_work_items hardcoded 384).
+            self._reconcile_work_items_if_needed(dimensions)
             logger.info("Vector dimensions match configured value (%d) — no reconciliation needed", dimensions)
             self.rollback()
             return
@@ -266,3 +269,33 @@ class Database:
             "Existing embeddings cleared — re-embed required.",
             current_dim, dimensions,
         )
+
+    def _reconcile_work_items_if_needed(self, dimensions: int) -> None:
+        """Independently check and fix work_items embedding dimensions.
+
+        Runs even when the memories table already matches, catching tables
+        created by migrations that hardcoded a stale dimension.
+        """
+        wi_row = self.execute_one("""
+            SELECT atttypmod FROM pg_attribute
+            WHERE attrelid = 'work_items'::regclass
+              AND attname = 'embedding'
+        """)
+        if wi_row is None:
+            return  # table or column doesn't exist yet
+
+        wi_dim = wi_row["atttypmod"]
+        if wi_dim == dimensions:
+            return  # already correct
+
+        logger.info("Reconciling work_items embedding: %d → %d", wi_dim, dimensions)
+        self.execute("DROP INDEX IF EXISTS idx_work_items_embedding")
+        self.execute("UPDATE work_items SET embedding = NULL")
+        self.execute(f"ALTER TABLE work_items ALTER COLUMN embedding TYPE vector({dimensions})")
+        self.execute(f"""
+            CREATE INDEX idx_work_items_embedding
+            ON work_items USING hnsw (embedding vector_cosine_ops)
+            WITH (m = 16, ef_construction = 64)
+        """)
+        self.commit()
+        logger.info("work_items embedding reconciled to %d dimensions", dimensions)
