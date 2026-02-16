@@ -216,6 +216,11 @@ EDITABLE_KEYS: set[str] = {
     # Reranker
     "reranker.backend", "reranker.model", "reranker.candidates",
     "reranker.bedrock_model", "reranker.bedrock_region",
+    # Router
+    "router.enabled",
+    "router.capable.backend", "router.capable.model", "router.capable.daily_budget",
+    "router.fast.backend", "router.fast.model", "router.fast.daily_budget",
+    "router.chat.backend", "router.chat.model", "router.chat.daily_budget",
     # Capabilities
     "capabilities.query_expansion", "capabilities.relationship_extract",
     "capabilities.rule_conflict_check", "capabilities.session_synthesis",
@@ -233,6 +238,8 @@ EDITABLE_KEYS: set[str] = {
     "auth.enabled", "auth.api_key", "auth.header_name",
     # Terminal
     "terminal.backend", "terminal.max_sessions", "terminal.connect_timeout",
+    # Neo4j
+    "neo4j.uri", "neo4j.user", "neo4j.password", "neo4j.database",
     # Workspace (OpenCode)
     "workspace.url", "workspace.password", "workspace.default_agent",
     # Budget
@@ -251,6 +258,7 @@ _SECTION_CLASSES = {
     "analytics": AnalyticsConfig,
     "auth": AuthConfig,
     "terminal": TerminalConfig,
+    "neo4j": Neo4jConfig,
     "workspace": WorkspaceConfig,
     "budget": BudgetConfig,
 }
@@ -316,19 +324,26 @@ def apply_overrides(config: Config, overrides: dict[str, str]) -> Config:
     """Rebuild a frozen Config by applying DB overrides.
 
     Only keys in EDITABLE_KEYS are applied; others are silently ignored.
+    Supports up to 2-level nesting (e.g. router.capable.backend).
     """
     if not overrides:
         return config
 
     # Group overrides by section
     section_overrides: dict[str, dict[str, str]] = {}
+    nested_overrides: dict[str, dict[str, dict[str, str]]] = {}
     top_overrides: dict[str, str] = {}
 
     for key, value in overrides.items():
         if key not in EDITABLE_KEYS:
             continue
-        if "." in key:
-            section, field_name = key.split(".", 1)
+        parts = key.split(".")
+        if len(parts) == 3:
+            # 2-level nested: router.capable.backend
+            section, sub, field_name = parts
+            nested_overrides.setdefault(section, {}).setdefault(sub, {})[field_name] = value
+        elif len(parts) == 2:
+            section, field_name = parts
             section_overrides.setdefault(section, {})[field_name] = value
         else:
             top_overrides[key] = value
@@ -346,6 +361,28 @@ def apply_overrides(config: Config, overrides: dict[str, str]) -> Config:
             current = getattr(sub_config, fname)
             target_type = type(current) if current is not None else str
             sub_replacements[fname] = _coerce(fvalue, target_type)
+        if sub_replacements:
+            replacements[section] = replace(sub_config, **sub_replacements)
+
+    # Rebuild nested sub-configs (e.g. router.capable.backend)
+    for section, sub_dict in nested_overrides.items():
+        sub_config = replacements.get(section, getattr(config, section))
+        sub_replacements = {}
+        for sub_name, sub_fields in sub_dict.items():
+            if not hasattr(sub_config, sub_name):
+                continue
+            tier = getattr(sub_config, sub_name)
+            if not hasattr(tier, "__dataclass_fields__"):
+                continue
+            tier_replacements = {}
+            for fname, fvalue in sub_fields.items():
+                if not hasattr(tier, fname):
+                    continue
+                current = getattr(tier, fname)
+                target_type = type(current) if current is not None else str
+                tier_replacements[fname] = _coerce(fvalue, target_type)
+            if tier_replacements:
+                sub_replacements[sub_name] = replace(tier, **tier_replacements)
         if sub_replacements:
             replacements[section] = replace(sub_config, **sub_replacements)
 
@@ -368,7 +405,13 @@ def config_to_flat(config: Config) -> dict[str, Any]:
         val = getattr(config, f.name)
         if hasattr(val, "__dataclass_fields__"):
             for sf in fields(val):
-                result[f"{f.name}.{sf.name}"] = getattr(val, sf.name)
+                sv = getattr(val, sf.name)
+                if hasattr(sv, "__dataclass_fields__"):
+                    # 2-level nesting (e.g. router.capable.backend)
+                    for ssf in fields(sv):
+                        result[f"{f.name}.{sf.name}.{ssf.name}"] = getattr(sv, ssf.name)
+                else:
+                    result[f"{f.name}.{sf.name}"] = sv
         else:
             # Skip list fields (cors_origins) — not useful in flat form
             if isinstance(val, list):
@@ -398,6 +441,19 @@ _ENV_MAP: dict[str, str] = {
     "llm.openai_model": "CAIRN_OPENAI_MODEL",
     "llm.openai_api_key": "CAIRN_OPENAI_API_KEY",
     "router.enabled": "CAIRN_ROUTER_ENABLED",
+    "router.capable.backend": "CAIRN_ROUTER_CAPABLE_BACKEND",
+    "router.capable.model": "CAIRN_ROUTER_CAPABLE_MODEL",
+    "router.capable.daily_budget": "CAIRN_ROUTER_CAPABLE_BUDGET",
+    "router.fast.backend": "CAIRN_ROUTER_FAST_BACKEND",
+    "router.fast.model": "CAIRN_ROUTER_FAST_MODEL",
+    "router.fast.daily_budget": "CAIRN_ROUTER_FAST_BUDGET",
+    "router.chat.backend": "CAIRN_ROUTER_CHAT_BACKEND",
+    "router.chat.model": "CAIRN_ROUTER_CHAT_MODEL",
+    "router.chat.daily_budget": "CAIRN_ROUTER_CHAT_BUDGET",
+    "neo4j.uri": "CAIRN_NEO4J_URI",
+    "neo4j.user": "CAIRN_NEO4J_USER",
+    "neo4j.password": "CAIRN_NEO4J_PASSWORD",
+    "neo4j.database": "CAIRN_NEO4J_DATABASE",
     "reranker.backend": "CAIRN_RERANKER_BACKEND",
     "reranker.model": "CAIRN_RERANKER_MODEL",
     "reranker.candidates": "CAIRN_RERANK_CANDIDATES",
