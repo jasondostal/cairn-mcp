@@ -52,6 +52,19 @@ async function del<T>(path: string): Promise<T> {
   return res.json();
 }
 
+async function delWithBody<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `${res.status} ${res.statusText}`);
+  }
+  return res.json();
+}
+
 // --- Types ---
 
 export interface ModelInfo {
@@ -382,6 +395,58 @@ export interface Message {
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+}
+
+// --- Work Item types ---
+
+export type WorkItemStatus = "open" | "ready" | "in_progress" | "blocked" | "done" | "cancelled";
+export type WorkItemType = "epic" | "task" | "subtask";
+
+export interface WorkItem {
+  id: number;
+  short_id: string;
+  title: string;
+  item_type: WorkItemType;
+  priority: number;
+  status: WorkItemStatus;
+  assignee: string | null;
+  parent_id: number | null;
+  project: string;
+  children_count: number;
+  session_name: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
+export interface WorkItemDetail {
+  id: number;
+  short_id: string;
+  project: string;
+  title: string;
+  description: string | null;
+  acceptance_criteria: string | null;
+  item_type: WorkItemType;
+  priority: number;
+  status: WorkItemStatus;
+  assignee: string | null;
+  parent: { id: number; short_id: string; title: string } | null;
+  children_count: number;
+  blockers: Array<{ id: number; short_id: string; title: string; status: string }>;
+  blocking: Array<{ id: number; short_id: string; title: string; status: string }>;
+  linked_memories: Array<{ id: number; summary: string; memory_type: string }>;
+  metadata: Record<string, unknown>;
+  session_name: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+  cancelled_at: string | null;
+}
+
+export interface ReadyQueue {
+  project: string;
+  items: Array<{ id: number; short_id: string; title: string; priority: number; item_type: string }>;
+  source?: string;
 }
 
 export interface IngestRequest {
@@ -754,4 +819,46 @@ export const api = {
 
   resetSetting: (key: string) =>
     del<SettingsResponse>(`/settings/${key}`),
+
+  // --- Work Items ---
+
+  workItems: (opts?: { project?: string; status?: string; item_type?: string; assignee?: string; include_children?: string; limit?: string; offset?: string }) =>
+    get<Paginated<WorkItem>>("/work-items", opts),
+
+  workItem: (id: number) => get<WorkItemDetail>(`/work-items/${id}`),
+
+  workItemReady: (project: string, limit?: number) =>
+    get<ReadyQueue>("/work-items/ready", { project, ...(limit ? { limit: String(limit) } : {}) }),
+
+  workItemCreate: (body: {
+    project: string; title: string; description?: string; item_type?: string;
+    priority?: number; parent_id?: number; session_name?: string;
+    metadata?: Record<string, unknown>; acceptance_criteria?: string;
+  }) => post<WorkItemDetail>("/work-items", body),
+
+  workItemUpdate: (id: number, body: {
+    title?: string; description?: string; status?: string; priority?: number;
+    assignee?: string; item_type?: string; session_name?: string;
+    metadata?: Record<string, unknown>; acceptance_criteria?: string;
+  }) => patch<WorkItemDetail>(`/work-items/${id}`, body),
+
+  workItemClaim: (id: number, assignee: string) =>
+    post<WorkItemDetail>(`/work-items/${id}/claim`, { assignee }),
+
+  workItemComplete: (id: number) =>
+    post<WorkItemDetail>(`/work-items/${id}/complete`, {}),
+
+  workItemAddChild: (parentId: number, body: {
+    title: string; description?: string; priority?: number;
+    session_name?: string; metadata?: Record<string, unknown>; acceptance_criteria?: string;
+  }) => post<WorkItemDetail>(`/work-items/${parentId}/children`, body),
+
+  workItemBlock: (blockerId: number, blockedId: number) =>
+    post<{ action: string }>("/work-items/block", { blocker_id: blockerId, blocked_id: blockedId }),
+
+  workItemUnblock: (blockerId: number, blockedId: number) =>
+    delWithBody<{ action: string }>("/work-items/block", { blocker_id: blockerId, blocked_id: blockedId }),
+
+  workItemLinkMemories: (id: number, memoryIds: number[]) =>
+    post<{ action: string }>(`/work-items/${id}/link-memories`, { memory_ids: memoryIds }),
 };
