@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.43.0] - 2026-02-15 — "Operator Controls"
+
+### Added
+- **Model Router settings card** — full-width card with enabled toggle and 3-tier config
+  (capable/fast/chat), each with backend select, model, and daily budget fields.
+- **Neo4j settings card** — URI, user, password (secret-redacted), and database fields
+  editable from the settings UI.
+- **Token Budgets settings card** — 6 endpoint token budgets (rules, search, recall,
+  cairn_stack, insights, workspace) in a 2-column grid with tooltip descriptions.
+- **Active Profile badge** — System Overview card shows the current `CAIRN_PROFILE` value
+  when set.
+- **Backend: router/neo4j/budget EDITABLE_KEYS** — 10 router keys (including 2-level nested
+  tier configs), 4 neo4j keys, 6 budget keys added to the runtime-editable settings whitelist.
+- **2-level nested config serialization** — `config_to_flat()` and `apply_overrides()` now
+  handle nested dataclass fields (e.g. `router.capable.backend`) for the router tier configs.
+- **Command palette completeness** — 9 missing pages added (chat, messages, sessions, cairns,
+  docs, graph, workspace, terminal, analytics) to match the sidebar nav.
+- **Sessions error handling** — error state in session list, error banner with retry in
+  session detail view.
+- **PageLayout adoption** — sessions, capture, and projects pages now use the shared
+  `PageLayout` component for consistent headers and scrolling.
+- **Projects empty state** — shows FolderOpen icon and guidance text when no projects exist.
+
+## [0.42.0] - 2026-02-15 — "Settings Pane Hardening"
+
+### Added
+- **Shadcn Tooltip component** — Radix-based tooltip primitive (`tooltip.tsx`), wrapped in
+  `TooltipProvider` at layout root with 300ms delay.
+- **Experimental badge variant** — amber-themed CVA variant on the Badge component for
+  unproven/hypothesis features.
+- **Capability metadata** — all 14 LLM capabilities now have label + description metadata,
+  including the previously missing `cairn_narratives`.
+- **Stable/Experimental capability split** — LLM Capabilities card separates stable and
+  experimental toggles using the API's `experimental` array, with amber border divider
+  and experimental badge.
+- **Tooltip descriptions** — `CircleHelp` icons with hover tooltips on all capability toggles
+  and key settings (enrichment, reranker candidates, chunk size/overlap, analytics costs).
+- **Dirty field indicators** — per-row background tint (`bg-primary/5`) and dot indicator
+  when a settings field has unsaved changes.
+- **SettingsResponse type update** — `experimental`, `profiles`, and `active_profile` fields
+  wired from the API response into the frontend TypeScript interface.
+
+### Changed
+- **Settings card layout** — reordered cards into logical groups (overview/embedding,
+  LLM/reranker, auth/terminal, analytics/ingestion, capabilities full-width, database/types).
+  Capabilities grid changed from 3-col to 2-col for readability.
+
 ## [0.41.0] - 2026-02-15 — "Session Intelligence"
 
 ### Changed

@@ -13,8 +13,11 @@ import {
   Loader2,
   FileText,
   RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/error-state";
+import { PageLayout } from "@/components/page-layout";
 
 function timeAgo(dateStr: string): string {
   const seconds = Math.floor(
@@ -54,23 +57,20 @@ function SessionList({
   sessions,
   onSelect,
   loading,
+  error,
   onRefresh,
 }: {
   sessions: SessionInfo[];
   onSelect: (s: SessionInfo) => void;
   loading: boolean;
+  error: string | null;
   onRefresh: () => void;
 }) {
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-lg font-semibold">Sessions</h1>
-        <Button variant="ghost" size="icon" onClick={onRefresh} disabled={loading}>
-          <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-        </Button>
-      </div>
+    <>
+      {error && <ErrorState message="Failed to load sessions" detail={error} />}
 
-      {sessions.length === 0 && !loading && (
+      {!error && sessions.length === 0 && !loading && (
         <div className="text-center py-12 text-muted-foreground">
           <Radio className="mx-auto mb-3 h-10 w-10 opacity-30" />
           <p className="text-sm">No sessions yet.</p>
@@ -118,7 +118,7 @@ function SessionList({
           </button>
         ))}
       </div>
-    </div>
+    </>
   );
 }
 
@@ -134,6 +134,7 @@ function SessionDetail({
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [digests, setDigests] = useState<SessionDigest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(session.is_active);
 
   const fetchEvents = useCallback(async () => {
@@ -141,8 +142,9 @@ function SessionDetail({
       const result = await api.sessionEvents(session.session_name);
       setEvents(result.events);
       setDigests(result.digests);
-    } catch {
-      // ignore
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load events");
     } finally {
       setLoading(false);
     }
@@ -168,9 +170,9 @@ function SessionDetail({
         </Button>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h1 className="text-lg font-semibold truncate font-mono">
+            <h2 className="text-lg font-semibold truncate font-mono">
               {session.session_name}
-            </h1>
+            </h2>
             {session.is_active && (
               <span className="text-[10px] font-medium uppercase tracking-wider text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded">
                 live
@@ -201,6 +203,17 @@ function SessionDetail({
         )}
       </div>
 
+      {/* Error banner */}
+      {error && !loading && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive mb-4">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>{error}</span>
+          <Button variant="ghost" size="sm" onClick={fetchEvents} className="ml-auto text-xs">
+            Retry
+          </Button>
+        </div>
+      )}
+
       {/* Digests */}
       {digests.length > 0 && (
         <div className="mb-4 space-y-2">
@@ -223,7 +236,7 @@ function SessionDetail({
         <div className="flex justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
-      ) : events.length === 0 ? (
+      ) : events.length === 0 && !error ? (
         <div className="text-center py-12 text-muted-foreground text-sm">
           No events yet.
         </div>
@@ -284,14 +297,16 @@ export default function SessionsPage() {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [selected, setSelected] = useState<SessionInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchSessions = useCallback(async () => {
     setLoading(true);
     try {
       const result = await api.sessions({ limit: "30" });
       setSessions(result.items);
-    } catch {
-      // ignore
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load sessions");
     } finally {
       setLoading(false);
     }
@@ -307,21 +322,31 @@ export default function SessionsPage() {
     return () => clearInterval(interval);
   }, [fetchSessions]);
 
-  if (selected) {
-    return (
-      <SessionDetail
-        session={selected}
-        onBack={() => setSelected(null)}
-      />
-    );
-  }
-
   return (
-    <SessionList
-      sessions={sessions}
-      onSelect={setSelected}
-      loading={loading}
-      onRefresh={fetchSessions}
-    />
+    <PageLayout
+      title="Sessions"
+      titleExtra={
+        !selected && (
+          <Button variant="ghost" size="icon" onClick={fetchSessions} disabled={loading}>
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+          </Button>
+        )
+      }
+    >
+      {selected ? (
+        <SessionDetail
+          session={selected}
+          onBack={() => setSelected(null)}
+        />
+      ) : (
+        <SessionList
+          sessions={sessions}
+          onSelect={setSelected}
+          loading={loading}
+          error={error}
+          onRefresh={fetchSessions}
+        />
+      )}
+    </PageLayout>
   );
 }

@@ -119,6 +119,9 @@ export interface SettingsResponse {
   sources: Record<string, "default" | "env" | "db">;
   editable: string[];
   pending_restart: boolean;
+  experimental: string[];
+  profiles: string[];
+  active_profile: string | null;
 }
 
 export interface Project {

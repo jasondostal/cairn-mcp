@@ -1,12 +1,12 @@
 # Roadmap
 
-Current: **v0.41.x** — Session intelligence, multi-agent ready pipeline.
+Current: **v0.43.x** — Operator controls, settings hardened.
 
 ---
 
 ## Next Up
 
-### v0.42.0 — Graph Deepening
+### v0.44.0 — Graph Deepening
 
 Implement the "Everything is a Node" decision from v0.37.0 beyond memories and entities.
 
@@ -15,7 +15,7 @@ Implement the "Everything is a Node" decision from v0.37.0 beyond memories and e
 - [ ] Cross-project entity bridges — shared entities surface inter-project connections
 - [ ] One query model for everything knowledge-related
 
-### v0.43.0 — Graph-Augmented Search
+### v0.45.0 — Graph-Augmented Search
 
 Move search from signal fusion toward retrieval strategy selection based on query shape. SearchV2 is already the sole entry point (v0.40.0); this release adds meaningful strategy dispatch.
 
@@ -23,7 +23,7 @@ Move search from signal fusion toward retrieval strategy selection based on quer
 - [ ] Re-enable and validate graph search handlers (entity_lookup, aspect_query, relationship, temporal)
 - [ ] Vector similarity remains primary fallback for queries with no entity anchors
 
-### v0.44.0 — Single-Pass Boot
+### v0.46.0 — Single-Pass Boot
 
 Replace the multi-call boot sequence with a unified orientation tool.
 
@@ -51,6 +51,33 @@ Replace the multi-call boot sequence with a unified orientation tool.
 ---
 
 ## Shipped
+
+### v0.43.0 — "Operator Controls" ✓
+
+Runtime-editable router, neo4j, and budget config. UI consistency pass.
+
+- [x] **Model Router settings** — full-width card with enabled toggle + 3-tier config (capable/fast/chat), each with backend select, model, and daily budget
+- [x] **Neo4j settings** — URI, user, password (secret-redacted), database fields editable from UI
+- [x] **Token Budget settings** — 6 endpoint budgets (rules, search, recall, cairn_stack, insights, workspace) in 2-col grid
+- [x] **Active Profile badge** — shows current CAIRN_PROFILE in System Overview when set
+- [x] **Backend: router/neo4j/budget EDITABLE_KEYS** — 2-level nested config serialization for router tiers, neo4j added to section classes and env map
+- [x] **Command palette completeness** — added 9 missing pages (chat, messages, sessions, cairns, docs, graph, workspace, terminal, analytics) to match sidebar nav
+- [x] **Sessions error handling** — error state in list, error banner with retry in detail view, PageLayout wrapper
+- [x] **Capture page** — adopted PageLayout, removed manual h1
+- [x] **Projects page** — adopted PageLayout, added empty state with icon
+
+### v0.42.0 — "Settings Pane Hardening" ✓
+
+Configuration surface legibility overhaul. Stable vs experimental distinction, tooltips, dirty tracking.
+
+- [x] **Shadcn Tooltip component** — Radix-based, wrapped in TooltipProvider at layout root
+- [x] **Experimental badge variant** — amber-themed CVA variant for unproven capabilities
+- [x] **Capability metadata** — all 14 capabilities (including missing `cairn_narratives`) with label + description
+- [x] **Stable/Experimental split** — capabilities card split into two sections with amber border divider, using API `experimental` array for classification
+- [x] **Tooltip descriptions** — `(i)` icons on all capabilities and key settings (enrichment, reranker candidates, chunk size/overlap, analytics costs)
+- [x] **Dirty field indicators** — per-row `bg-primary/5` tint and dot when field has unsaved changes
+- [x] **Settings layout overhaul** — card reordering (overview → embedding → LLM → reranker → auth → terminal → analytics → ingestion → capabilities → database → types), 2-col grid, full-width capabilities card
+- [x] **SettingsResponse type fix** — `experimental`, `profiles`, `active_profile` fields wired from API
 
 ### v0.41.0 — "Session Intelligence" ✓
 

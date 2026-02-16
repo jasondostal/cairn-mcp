@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageLayout } from "@/components/page-layout";
 import { cn } from "@/lib/utils";
 import { AtSign, Check, Hash, Link, Loader2, X, Globe } from "lucide-react";
 
@@ -580,12 +581,13 @@ function CaptureExtras() {
 
 export default function CapturePage() {
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <h1 className="text-2xl font-semibold">Capture</h1>
-      <Suspense>
-        <CaptureForm />
-      </Suspense>
-      <CaptureExtras />
-    </div>
+    <PageLayout title="Capture">
+      <div className="mx-auto max-w-2xl space-y-6">
+        <Suspense>
+          <CaptureForm />
+        </Suspense>
+        <CaptureExtras />
+      </div>
+    </PageLayout>
   );
 }
