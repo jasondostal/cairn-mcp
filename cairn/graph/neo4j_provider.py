@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 
 from cairn.graph.config import Neo4jConfig
-from cairn.graph.interface import Entity, GraphProvider, Statement
+from cairn.graph.interface import Entity, GraphProvider, Statement, ThinkingSequenceNode, ThoughtNode, TaskNode
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,17 @@ class Neo4jGraphProvider(GraphProvider):
             "CREATE INDEX statement_aspect IF NOT EXISTS FOR (s:Statement) ON (s.aspect)",
             "CREATE INDEX statement_project IF NOT EXISTS FOR (s:Statement) ON (s.project_id)",
             "CREATE INDEX statement_episode IF NOT EXISTS FOR (s:Statement) ON (s.episode_id)",
+            # ThinkingSequence constraints + indexes (v0.44.0)
+            "CREATE CONSTRAINT thinking_seq_uuid IF NOT EXISTS FOR (ts:ThinkingSequence) REQUIRE ts.uuid IS UNIQUE",
+            "CREATE INDEX thinking_seq_project IF NOT EXISTS FOR (ts:ThinkingSequence) ON (ts.project_id)",
+            "CREATE INDEX thinking_seq_pg_id IF NOT EXISTS FOR (ts:ThinkingSequence) ON (ts.pg_id)",
+            # Thought constraints + indexes (v0.44.0)
+            "CREATE CONSTRAINT thought_uuid IF NOT EXISTS FOR (t:Thought) REQUIRE t.uuid IS UNIQUE",
+            "CREATE INDEX thought_pg_id IF NOT EXISTS FOR (t:Thought) ON (t.pg_id)",
+            # Task constraints + indexes (v0.44.0)
+            "CREATE CONSTRAINT task_uuid IF NOT EXISTS FOR (tk:Task) REQUIRE tk.uuid IS UNIQUE",
+            "CREATE INDEX task_project IF NOT EXISTS FOR (tk:Task) ON (tk.project_id)",
+            "CREATE INDEX task_pg_id IF NOT EXISTS FOR (tk:Task) ON (tk.pg_id)",
         ]
 
         # Vector indexes need separate handling — they use different syntax
@@ -67,6 +78,10 @@ class Neo4jGraphProvider(GraphProvider):
                OPTIONS {indexConfig: {`vector.dimensions`: 1024, `vector.similarity_function`: 'cosine'}}""",
             """CREATE VECTOR INDEX statement_fact_vec IF NOT EXISTS
                FOR (s:Statement) ON (s.fact_embedding)
+               OPTIONS {indexConfig: {`vector.dimensions`: 1024, `vector.similarity_function`: 'cosine'}}""",
+            # Thought content vector index (v0.44.0)
+            """CREATE VECTOR INDEX thought_content_vec IF NOT EXISTS
+               FOR (t:Thought) ON (t.content_embedding)
                OPTIONS {indexConfig: {`vector.dimensions`: 1024, `vector.similarity_function`: 'cosine'}}""",
         ]
 
@@ -702,3 +717,181 @@ class Neo4jGraphProvider(GraphProvider):
                 limit=limit,
             )
             return {r["memory_id"]: r["shared_entities"] for r in result}
+
+    # -- Thinking sequence + task graph nodes (v0.44.0) --
+
+    def create_thinking_sequence(
+        self,
+        pg_id: int,
+        project_id: int,
+        goal: str,
+        status: str = "active",
+    ) -> str:
+        seq_uuid = str(uuid.uuid4())
+        with self._session() as session:
+            session.run(
+                """
+                CREATE (ts:ThinkingSequence {
+                    uuid: $uuid,
+                    pg_id: $pg_id,
+                    project_id: $project_id,
+                    goal: $goal,
+                    status: $status,
+                    created_at: $now
+                })
+                """,
+                uuid=seq_uuid,
+                pg_id=pg_id,
+                project_id=project_id,
+                goal=goal,
+                status=status,
+                now=datetime.now(timezone.utc).isoformat(),
+            )
+        return seq_uuid
+
+    def create_thought(
+        self,
+        pg_id: int,
+        sequence_uuid: str,
+        thought_type: str,
+        content: str,
+        content_embedding: list[float] | None = None,
+    ) -> str:
+        thought_uuid = str(uuid.uuid4())
+        with self._session() as session:
+            session.run(
+                """
+                CREATE (t:Thought {
+                    uuid: $uuid,
+                    pg_id: $pg_id,
+                    thought_type: $thought_type,
+                    content: $content,
+                    content_embedding: $embedding,
+                    created_at: $now
+                })
+                """,
+                uuid=thought_uuid,
+                pg_id=pg_id,
+                thought_type=thought_type,
+                content=content,
+                embedding=content_embedding,
+                now=datetime.now(timezone.utc).isoformat(),
+            )
+            # CONTAINS edge: sequence -> thought
+            session.run(
+                """
+                MATCH (ts:ThinkingSequence {uuid: $seq_uuid})
+                MATCH (t:Thought {uuid: $thought_uuid})
+                MERGE (ts)-[:CONTAINS]->(t)
+                """,
+                seq_uuid=sequence_uuid,
+                thought_uuid=thought_uuid,
+            )
+        return thought_uuid
+
+    def complete_thinking_sequence(self, sequence_uuid: str) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (ts:ThinkingSequence {uuid: $uuid})
+                SET ts.status = 'completed', ts.completed_at = $now
+                """,
+                uuid=sequence_uuid,
+                now=datetime.now(timezone.utc).isoformat(),
+            )
+
+    def create_task(
+        self,
+        pg_id: int,
+        project_id: int,
+        description: str,
+        status: str = "pending",
+    ) -> str:
+        task_uuid = str(uuid.uuid4())
+        with self._session() as session:
+            session.run(
+                """
+                CREATE (tk:Task {
+                    uuid: $uuid,
+                    pg_id: $pg_id,
+                    project_id: $project_id,
+                    description: $description,
+                    status: $status,
+                    created_at: $now
+                })
+                """,
+                uuid=task_uuid,
+                pg_id=pg_id,
+                project_id=project_id,
+                description=description,
+                status=status,
+                now=datetime.now(timezone.utc).isoformat(),
+            )
+        return task_uuid
+
+    def complete_task(self, task_uuid: str) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (tk:Task {uuid: $uuid})
+                SET tk.status = 'completed', tk.completed_at = $now
+                """,
+                uuid=task_uuid,
+                now=datetime.now(timezone.utc).isoformat(),
+            )
+
+    def link_task_to_memory(self, task_uuid: str, episode_id: int) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (tk:Task {uuid: $task_uuid})
+                MATCH (s:Statement {episode_id: $episode_id})
+                WHERE s.invalid_at IS NULL
+                MERGE (tk)-[:LINKED_TO]->(s)
+                """,
+                task_uuid=task_uuid,
+                episode_id=episode_id,
+            )
+
+    def link_thought_to_entities(
+        self,
+        thought_uuid: str,
+        entity_uuids: list[str],
+    ) -> None:
+        with self._session() as session:
+            for entity_uuid in entity_uuids:
+                session.run(
+                    """
+                    MATCH (t:Thought {uuid: $thought_uuid})
+                    MATCH (e:Entity {uuid: $entity_uuid})
+                    MERGE (t)-[:MENTIONS]->(e)
+                    """,
+                    thought_uuid=thought_uuid,
+                    entity_uuid=entity_uuid,
+                )
+
+    def recent_thinking_activity(
+        self,
+        project_id: int | None,
+        since: str,
+        limit: int = 10,
+    ) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (ts:ThinkingSequence)
+                WHERE ($pid IS NULL OR ts.project_id = $pid)
+                  AND ts.created_at > $since
+                OPTIONAL MATCH (ts)-[:CONTAINS]->(t:Thought)
+                RETURN ts.uuid AS uuid, ts.pg_id AS pg_id, ts.goal AS goal,
+                       ts.status AS status, ts.created_at AS created_at,
+                       ts.project_id AS project_id,
+                       count(t) AS thought_count
+                ORDER BY ts.created_at DESC
+                LIMIT $limit
+                """,
+                pid=project_id,
+                since=since,
+                limit=limit,
+            )
+            return [dict(r) for r in result]

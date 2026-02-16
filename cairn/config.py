@@ -110,10 +110,13 @@ class LLMCapabilities:
     spreading_activation: bool = False  # EXPERIMENTAL: graph-based spreading activation retrieval
     mca_gate: bool = False              # EXPERIMENTAL: keyword coverage pre-filter (MCA)
     cairn_narratives: bool = False      # EXPERIMENTAL: LLM narrative generation on cairn set
+    thought_extraction: str = "off"     # EXPERIMENTAL: extract entities from thinking sequences
+                                        #   "off" = no extraction, "on_conclude" = extract on conclude,
+                                        #   "on_every_thought" = extract on each add_thought()
 
     def active_list(self) -> list[str]:
         """Return names of enabled capabilities."""
-        return [
+        active = [
             name for name in (
                 "relationship_extract", "rule_conflict_check",
                 "session_synthesis", "consolidation",
@@ -123,12 +126,16 @@ class LLMCapabilities:
             )
             if getattr(self, name)
         ]
+        if self.thought_extraction != "off":
+            active.append(f"thought_extraction:{self.thought_extraction}")
+        return active
 
 
 # Capabilities marked as experimental — may change behavior between releases.
 EXPERIMENTAL_CAPABILITIES: frozenset[str] = frozenset({
     "query_expansion", "confidence_gating", "type_routing",
     "spreading_activation", "mca_gate", "cairn_narratives",
+    "thought_extraction",
 })
 
 
@@ -155,6 +162,7 @@ class BudgetConfig:
     cairn_stack: int = 3000     # Token budget for cairns(action='stack') responses
     insights: int = 4000        # Token budget for insights() responses
     workspace: int = 6000       # Token budget for workspace build_context()
+    orient: int = 6000          # Token budget for orient() single-pass boot
 
 
 @dataclass(frozen=True)
@@ -230,6 +238,7 @@ EDITABLE_KEYS: set[str] = {
     "capabilities.mca_gate", "capabilities.knowledge_extraction",
     "capabilities.search_v2",
     "capabilities.cairn_narratives",
+    "capabilities.thought_extraction",
     # Analytics
     "analytics.enabled", "analytics.retention_days",
     "analytics.cost_embedding_per_1k", "analytics.cost_llm_input_per_1k",
@@ -245,6 +254,7 @@ EDITABLE_KEYS: set[str] = {
     # Budget
     "budget.rules", "budget.search", "budget.recall",
     "budget.cairn_stack", "budget.insights", "budget.workspace",
+    "budget.orient",
     # Top-level
     "enrichment_enabled",
     "ingest_chunk_size", "ingest_chunk_overlap",
@@ -471,6 +481,7 @@ _ENV_MAP: dict[str, str] = {
     "capabilities.knowledge_extraction": "CAIRN_KNOWLEDGE_EXTRACTION",
     "capabilities.search_v2": "CAIRN_SEARCH_V2",
     "capabilities.cairn_narratives": "CAIRN_CAIRN_NARRATIVES",
+    "capabilities.thought_extraction": "CAIRN_THOUGHT_EXTRACTION",
     "terminal.backend": "CAIRN_TERMINAL_BACKEND",
     "terminal.max_sessions": "CAIRN_TERMINAL_MAX_SESSIONS",
     "terminal.connect_timeout": "CAIRN_TERMINAL_CONNECT_TIMEOUT",
@@ -491,6 +502,7 @@ _ENV_MAP: dict[str, str] = {
     "budget.cairn_stack": "CAIRN_BUDGET_CAIRN_STACK",
     "budget.insights": "CAIRN_BUDGET_INSIGHTS",
     "budget.workspace": "CAIRN_BUDGET_WORKSPACE",
+    "budget.orient": "CAIRN_BUDGET_ORIENT",
     "enrichment_enabled": "CAIRN_ENRICHMENT_ENABLED",
     "profile": "CAIRN_PROFILE",
     "transport": "CAIRN_TRANSPORT",
@@ -572,6 +584,7 @@ def load_config() -> Config:
             knowledge_extraction=os.getenv("CAIRN_KNOWLEDGE_EXTRACTION", "false").lower() in ("true", "1", "yes"),
             search_v2=os.getenv("CAIRN_SEARCH_V2", "false").lower() in ("true", "1", "yes"),
             cairn_narratives=os.getenv("CAIRN_CAIRN_NARRATIVES", "false").lower() in ("true", "1", "yes"),
+            thought_extraction=os.getenv("CAIRN_THOUGHT_EXTRACTION", "off").lower().strip(),
         ),
         terminal=TerminalConfig(
             backend=os.getenv("CAIRN_TERMINAL_BACKEND", "disabled"),
@@ -634,6 +647,7 @@ def load_config() -> Config:
             cairn_stack=int(os.getenv("CAIRN_BUDGET_CAIRN_STACK", "3000")),
             insights=int(os.getenv("CAIRN_BUDGET_INSIGHTS", "4000")),
             workspace=int(os.getenv("CAIRN_BUDGET_WORKSPACE", "6000")),
+        orient=int(os.getenv("CAIRN_BUDGET_ORIENT", "6000")),
         ),
         enrichment_enabled=os.getenv("CAIRN_ENRICHMENT_ENABLED", "true").lower() in ("true", "1", "yes"),
         profile=profile_name,

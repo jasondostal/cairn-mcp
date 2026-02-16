@@ -154,6 +154,16 @@ BUDGET_RECALL = 8000
 BUDGET_CAIRN_STACK = 3000
 BUDGET_INSIGHTS = 4000
 BUDGET_WORKSPACE = 6000
+BUDGET_ORIENT = 6000
+
+# Orient() section allocation (percentage of total orient budget)
+ORIENT_ALLOC_RULES = 0.30
+ORIENT_ALLOC_LEARNINGS = 0.25
+ORIENT_ALLOC_TRAIL = 0.25
+ORIENT_ALLOC_TASKS = 0.20
+
+# Handler dispatch confidence threshold (SearchV2)
+HANDLER_CONFIDENCE_THRESHOLD = 0.6
 
 # Per-item content truncation limits (tokens)
 BUDGET_RULES_PER_ITEM = 300

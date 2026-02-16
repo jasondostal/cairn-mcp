@@ -12,6 +12,8 @@ from cairn.core.constants import (
     BUDGET_RECALL_PER_ITEM, BUDGET_RULES_PER_ITEM, BUDGET_SEARCH_PER_ITEM,
     MAX_CONTENT_SIZE, MAX_LIMIT, MAX_NAME_LENGTH,
     MAX_RECALL_IDS, VALID_MEMORY_TYPES, VALID_SEARCH_MODES,
+    ORIENT_ALLOC_RULES, ORIENT_ALLOC_LEARNINGS,
+    ORIENT_ALLOC_TRAIL, ORIENT_ALLOC_TASKS,
     MemoryAction,
 )
 from cairn.core.services import create_services
@@ -163,9 +165,8 @@ mcp_kwargs = dict(
         "That's all it takes.\n"
         "\n"
         "SESSION STARTUP SEQUENCE:\n"
-        "1. rules() — load behavioral guardrails (global + active project)\n"
-        "2. trail() — walk recent activity across all projects (graph-aware orientation)\n"
-        "3. search(query='learning', memory_type='learning', limit=5) — surface recent learnings\n"
+        "Preferred: orient(project) — single call returning rules, trail, learnings, and tasks.\n"
+        "Granular fallback: rules() + trail() + search(query='learning') + tasks() individually.\n"
         "Then summarize the landscape and ask what we're working on.\n"
         "\n"
         "ONGOING USE — Memory is not just for boot:\n"
@@ -882,6 +883,138 @@ def consolidate(
 
 
 # ============================================================
+# Trail helper (shared by trail() and orient())
+# ============================================================
+
+def _fetch_trail_data(
+    project: str | None = None,
+    since: str | None = None,
+    limit: int = 20,
+) -> dict:
+    """Fetch recent activity trail data. Used by both trail() and orient().
+
+    Returns structured dict with source, since, and sessions.
+    Tries graph-based trail first, falls back to memory query.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    if not since:
+        since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+
+    project_id = None
+    if project:
+        from cairn.core.utils import get_project
+        project_id = get_project(db, project)
+
+    # Try graph-based trail first
+    if graph_provider:
+        try:
+            activity = graph_provider.recent_activity(
+                project_id=project_id, since=since, limit=limit,
+            )
+            if activity:
+                episode_ids = list({a["episode_id"] for a in activity if a.get("episode_id")})
+                session_map = {}
+                if episode_ids:
+                    placeholders = ",".join(["%s"] * len(episode_ids))
+                    rows = db.execute(
+                        f"SELECT id, session_name FROM memories WHERE id IN ({placeholders})",
+                        tuple(episode_ids),
+                    )
+                    session_map = {r["id"]: r["session_name"] for r in rows}
+
+                sessions: dict[str, dict] = {}
+                for a in activity:
+                    session_name = session_map.get(a.get("episode_id"), "unknown")
+                    if session_name not in sessions:
+                        sessions[session_name] = {
+                            "session_name": session_name,
+                            "entities_touched": set(),
+                            "key_facts": [],
+                            "time_range": {"earliest": a.get("created_at"), "latest": a.get("created_at")},
+                        }
+                    s = sessions[session_name]
+                    if a.get("subject_name"):
+                        s["entities_touched"].add(a["subject_name"])
+                    if a.get("object_name"):
+                        s["entities_touched"].add(a["object_name"])
+                    if len(s["key_facts"]) < 5:
+                        s["key_facts"].append(a.get("fact", ""))
+                    ts = a.get("created_at")
+                    if ts:
+                        if not s["time_range"]["earliest"] or ts < s["time_range"]["earliest"]:
+                            s["time_range"]["earliest"] = ts
+                        if not s["time_range"]["latest"] or ts > s["time_range"]["latest"]:
+                            s["time_range"]["latest"] = ts
+
+                session_list = []
+                for s in sessions.values():
+                    s["entities_touched"] = sorted(s["entities_touched"])
+                    session_list.append(s)
+
+                result = {
+                    "source": "graph",
+                    "since": since,
+                    "sessions": session_list[:10],
+                }
+
+                # Include thinking activity if available
+                try:
+                    thinking_activity = graph_provider.recent_thinking_activity(
+                        project_id=project_id, since=since, limit=10,
+                    )
+                    if thinking_activity:
+                        result["thinking"] = [
+                            {
+                                "type": "thinking",
+                                "goal": t.get("goal", ""),
+                                "status": t.get("status", ""),
+                                "thought_count": t.get("thought_count", 0),
+                                "created_at": t.get("created_at", ""),
+                            }
+                            for t in thinking_activity
+                        ]
+                except Exception:
+                    logger.debug("Thinking trail failed", exc_info=True)
+
+                return result
+        except Exception:
+            logger.debug("Graph trail failed, falling back to memory query", exc_info=True)
+
+    # Fallback: simple memory query
+    rows = db.execute(
+        """
+        SELECT m.session_name, m.memory_type, m.summary,
+               m.created_at, p.name AS project
+        FROM memories m
+        LEFT JOIN projects p ON m.project_id = p.id
+        WHERE m.is_active = true AND m.created_at > %s
+        """
+        + (" AND m.project_id = %s" if project_id else "")
+        + " ORDER BY m.created_at DESC LIMIT %s",
+        (since,) + ((project_id,) if project_id else ()) + (limit,),
+    )
+
+    sessions_fallback: dict[str, list] = {}
+    for r in rows:
+        sn = r["session_name"] or "no-session"
+        sessions_fallback.setdefault(sn, []).append({
+            "type": r["memory_type"],
+            "summary": r["summary"] or "",
+            "project": r["project"],
+        })
+
+    return {
+        "source": "memory",
+        "since": since,
+        "sessions": [
+            {"session_name": sn, "memories": mems[:5]}
+            for sn, mems in list(sessions_fallback.items())[:10]
+        ],
+    }
+
+
+# ============================================================
 # Tool 13: trail
 # ============================================================
 
@@ -904,129 +1037,157 @@ def trail(
         since: ISO date string (default: 7 days ago). How far back to look.
         limit: Maximum activity items to return (default 20).
     """
-    from datetime import datetime, timedelta, timezone
-
     try:
-        # Default: 7 days ago
-        if not since:
-            since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        result = _fetch_trail_data(project=project, since=since, limit=limit)
 
-        # Resolve project_id if specified
-        project_id = None
-        if project:
-            from cairn.core.utils import get_project
-            project_id = get_project(db, project)
+        # Apply budget
+        budget = config.budget.cairn_stack
+        if budget > 0 and result.get("source") == "graph":
+            from cairn.core.budget import estimate_tokens
+            if estimate_tokens(str(result)) > budget:
+                for s in result.get("sessions", []):
+                    s["key_facts"] = s.get("key_facts", [])[:3]
+                result["sessions"] = result.get("sessions", [])[:5]
 
-        # Try graph-based trail first
-        if graph_provider:
-            try:
-                activity = graph_provider.recent_activity(
-                    project_id=project_id, since=since, limit=limit,
-                )
-                if activity:
-                    # Group by session (episode_id → session_name lookup)
-                    episode_ids = list({a["episode_id"] for a in activity if a.get("episode_id")})
-                    session_map = {}
-                    if episode_ids:
-                        placeholders = ",".join(["%s"] * len(episode_ids))
-                        rows = db.execute(
-                            f"SELECT id, session_name FROM memories WHERE id IN ({placeholders})",
-                            tuple(episode_ids),
-                        )
-                        session_map = {r["id"]: r["session_name"] for r in rows}
-
-                    # Build structured response
-                    sessions: dict[str, dict] = {}
-                    for a in activity:
-                        session_name = session_map.get(a.get("episode_id"), "unknown")
-                        if session_name not in sessions:
-                            sessions[session_name] = {
-                                "session_name": session_name,
-                                "entities_touched": set(),
-                                "key_facts": [],
-                                "time_range": {"earliest": a.get("created_at"), "latest": a.get("created_at")},
-                            }
-                        s = sessions[session_name]
-                        if a.get("subject_name"):
-                            s["entities_touched"].add(a["subject_name"])
-                        if a.get("object_name"):
-                            s["entities_touched"].add(a["object_name"])
-                        if len(s["key_facts"]) < 5:
-                            s["key_facts"].append(a.get("fact", ""))
-                        # Update time range
-                        ts = a.get("created_at")
-                        if ts:
-                            if not s["time_range"]["earliest"] or ts < s["time_range"]["earliest"]:
-                                s["time_range"]["earliest"] = ts
-                            if not s["time_range"]["latest"] or ts > s["time_range"]["latest"]:
-                                s["time_range"]["latest"] = ts
-
-                    # Convert sets to lists for JSON serialization
-                    session_list = []
-                    for s in sessions.values():
-                        s["entities_touched"] = sorted(s["entities_touched"])
-                        session_list.append(s)
-
-                    result = {
-                        "source": "graph",
-                        "since": since,
-                        "sessions": session_list[:10],
-                    }
-
-                    # Apply budget
-                    budget = config.budget.cairn_stack
-                    if budget > 0:
-                        result_str = str(result)
-                        from cairn.core.budget import estimate_tokens
-                        if estimate_tokens(result_str) > budget:
-                            # Trim facts and sessions to fit budget
-                            for s in result["sessions"]:
-                                s["key_facts"] = s["key_facts"][:3]
-                            result["sessions"] = result["sessions"][:5]
-
-                    return result
-            except Exception:
-                logger.debug("Graph trail failed, falling back to memory query", exc_info=True)
-
-        # Fallback: simple memory query
-        rows = db.execute(
-            """
-            SELECT m.session_name, m.memory_type, m.summary,
-                   m.created_at, p.name AS project
-            FROM memories m
-            LEFT JOIN projects p ON m.project_id = p.id
-            WHERE m.is_active = true AND m.created_at > %s
-            """
-            + (" AND m.project_id = %s" if project_id else "")
-            + " ORDER BY m.created_at DESC LIMIT %s",
-            (since,) + ((project_id,) if project_id else ()) + (limit,),
-        )
-
-        sessions: dict[str, list] = {}
-        for r in rows:
-            sn = r["session_name"] or "no-session"
-            sessions.setdefault(sn, []).append({
-                "type": r["memory_type"],
-                "summary": r["summary"] or "",
-                "project": r["project"],
-            })
-
-        return {
-            "source": "memory",
-            "since": since,
-            "sessions": [
-                {"session_name": sn, "memories": mems[:5]}
-                for sn, mems in list(sessions.items())[:10]
-            ],
-        }
-
+        return result
     except Exception as e:
         logger.exception("trail failed")
         return {"error": f"Internal error: {e}"}
 
 
 # ============================================================
-# Tool 14: drift_check
+# Tool 14: orient
+# ============================================================
+
+@mcp.tool()
+def orient(project: str | None = None) -> dict:
+    """Single-pass session boot. Returns rules, trail, learnings, and tasks.
+
+    Replaces the 4-call boot sequence (rules + trail + search + tasks) with one
+    call. Each section gets a token budget allocation with surplus flowing to
+    the next section.
+
+    Use this at session start instead of calling rules(), trail(), search(),
+    and tasks() separately. Individual tools remain available for granular use
+    mid-session.
+
+    Args:
+        project: Project name for scoped rules and tasks. Omit for global-only boot.
+    """
+    from cairn.core.budget import apply_list_budget, estimate_tokens_for_dict
+
+    try:
+        total_budget = config.budget.orient
+        budget_rules = int(total_budget * ORIENT_ALLOC_RULES)
+        budget_learnings = int(total_budget * ORIENT_ALLOC_LEARNINGS)
+        budget_trail = int(total_budget * ORIENT_ALLOC_TRAIL)
+        budget_tasks = int(total_budget * ORIENT_ALLOC_TASKS)
+
+        tokens_used = 0
+
+        # --- Section 1: Rules (30%) ---
+        rules_data = []
+        try:
+            result = memory_store.get_rules(project)
+            rules_items = result.get("items", [])
+            if rules_items:
+                rules_data, rules_meta = apply_list_budget(
+                    rules_items, budget_rules, "content",
+                    per_item_max=BUDGET_RULES_PER_ITEM,
+                    overflow_message="...{omitted} more rules omitted.",
+                )
+                if rules_meta["omitted"] > 0:
+                    rules_data.append({"_overflow": rules_meta["overflow_message"]})
+                rules_tokens = estimate_tokens_for_dict(rules_data)
+                tokens_used += rules_tokens
+                surplus = max(0, budget_rules - rules_tokens)
+            else:
+                surplus = budget_rules
+            budget_learnings += surplus
+        except Exception:
+            logger.debug("orient: rules section failed", exc_info=True)
+            budget_learnings += budget_rules
+
+        # --- Section 2: Learnings (25% + surplus) ---
+        learnings_data = []
+        try:
+            learnings_results = search_engine.search(
+                query="learning",
+                project=project,
+                memory_type="learning",
+                search_mode="semantic",
+                limit=5,
+                include_full=True,
+            )
+            if learnings_results:
+                learnings_data, learnings_meta = apply_list_budget(
+                    learnings_results, budget_learnings, "content",
+                    per_item_max=BUDGET_SEARCH_PER_ITEM,
+                    overflow_message="...{omitted} more learnings omitted.",
+                )
+                if learnings_meta["omitted"] > 0:
+                    learnings_data.append({"_overflow": learnings_meta["overflow_message"]})
+                learnings_tokens = estimate_tokens_for_dict(learnings_data)
+                tokens_used += learnings_tokens
+                surplus = max(0, budget_learnings - learnings_tokens)
+            else:
+                surplus = budget_learnings
+            budget_trail += surplus
+        except Exception:
+            logger.debug("orient: learnings section failed", exc_info=True)
+            budget_trail += budget_learnings
+
+        # --- Section 3: Trail (25% + surplus) ---
+        trail_data = {}
+        try:
+            trail_data = _fetch_trail_data(project=project, limit=20)
+            trail_tokens = estimate_tokens_for_dict(trail_data)
+            # Trim if over budget
+            if budget_trail > 0 and trail_tokens > budget_trail:
+                for s in trail_data.get("sessions", []):
+                    if "key_facts" in s:
+                        s["key_facts"] = s["key_facts"][:3]
+                trail_data["sessions"] = trail_data.get("sessions", [])[:5]
+                trail_tokens = estimate_tokens_for_dict(trail_data)
+            tokens_used += trail_tokens
+            surplus = max(0, budget_trail - trail_tokens)
+            budget_tasks += surplus
+        except Exception:
+            logger.debug("orient: trail section failed", exc_info=True)
+            budget_tasks += budget_trail
+
+        # --- Section 4: Tasks (20% + surplus) ---
+        tasks_data = []
+        try:
+            if project:
+                tasks_result = task_manager.list_tasks(project, include_completed=False)
+                tasks_data = tasks_result.get("items", [])
+            if tasks_data:
+                tasks_data, tasks_meta = apply_list_budget(
+                    tasks_data, budget_tasks, "description",
+                    overflow_message="...{omitted} more tasks omitted.",
+                )
+                if tasks_meta["omitted"] > 0:
+                    tasks_data.append({"_overflow": tasks_meta["overflow_message"]})
+                tokens_used += estimate_tokens_for_dict(tasks_data)
+        except Exception:
+            logger.debug("orient: tasks section failed", exc_info=True)
+
+        return {
+            "project": project,
+            "rules": rules_data,
+            "trail": trail_data,
+            "learnings": learnings_data,
+            "tasks": tasks_data,
+            "_budget": {"total": total_budget, "used": tokens_used},
+        }
+    except Exception as e:
+        logger.exception("orient failed")
+        return {"error": f"Internal error: {e}"}
+
+
+# ============================================================
+# Tool 15: drift_check
 # ============================================================
 
 @mcp.tool()
@@ -1058,7 +1219,7 @@ def drift_check(
 
 
 # ============================================================
-# Tool 15: messages
+# Tool 16: messages
 # ============================================================
 
 @mcp.tool()
