@@ -59,6 +59,20 @@ class TaskNode:
     status: str
 
 
+@dataclass
+class WorkItemNode:
+    """A work item node in the knowledge graph."""
+    uuid: str
+    pg_id: int
+    project_id: int
+    title: str
+    description: str | None
+    item_type: str
+    priority: int
+    status: str
+    short_id: str
+
+
 class GraphProvider(ABC):
     """Abstract base for knowledge graph backends."""
 
@@ -341,3 +355,56 @@ class GraphProvider(ABC):
         limit: int = 10,
     ) -> list[dict]:
         """Recent thinking sequences with their goals and thought counts."""
+
+    # -- Work item graph nodes (v0.47.0) --
+
+    @abstractmethod
+    def create_work_item(
+        self,
+        pg_id: int,
+        project_id: int,
+        title: str,
+        description: str | None,
+        item_type: str,
+        priority: int,
+        status: str,
+        short_id: str,
+        content_embedding: list[float] | None = None,
+    ) -> str:
+        """Create a WorkItem node. Returns UUID."""
+
+    @abstractmethod
+    def update_work_item_status(self, work_item_uuid: str, status: str) -> None:
+        """Update a WorkItem node's status."""
+
+    @abstractmethod
+    def complete_work_item(self, work_item_uuid: str) -> None:
+        """Mark a WorkItem as done with completed_at timestamp."""
+
+    @abstractmethod
+    def add_work_item_parent_edge(self, child_uuid: str, parent_uuid: str) -> None:
+        """Create PARENT_OF edge: (parent)-[:PARENT_OF]->(child)."""
+
+    @abstractmethod
+    def add_work_item_blocks_edge(self, blocker_uuid: str, blocked_uuid: str) -> None:
+        """Create BLOCKS edge: (blocker)-[:BLOCKS]->(blocked)."""
+
+    @abstractmethod
+    def remove_work_item_blocks_edge(self, blocker_uuid: str, blocked_uuid: str) -> None:
+        """Remove BLOCKS edge between two work items."""
+
+    @abstractmethod
+    def assign_work_item(self, work_item_uuid: str, assignee: str) -> None:
+        """Set assignee on a WorkItem node."""
+
+    @abstractmethod
+    def link_work_item_to_memory(self, work_item_uuid: str, episode_id: int) -> None:
+        """Create LINKED_TO edge between WorkItem and Statement(s) for a memory."""
+
+    @abstractmethod
+    def link_work_item_to_entity(self, work_item_uuid: str, entity_uuid: str) -> None:
+        """Create MENTIONS edge between WorkItem and Entity."""
+
+    @abstractmethod
+    def work_item_ready_queue(self, project_id: int, limit: int = 10) -> list[dict]:
+        """Return unblocked, unassigned work items ordered by priority."""

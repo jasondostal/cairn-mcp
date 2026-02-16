@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.47.0] - 2026-02-15 — "Work Management"
+
+### Added
+- **Graph-native work items** — hierarchical work tracking with epics, tasks, and subtasks
+  that participate in the Neo4j knowledge graph via dual-write sync.
+- **`work_items()` MCP tool** — 11 actions: create, update, claim, complete, add_child,
+  block, unblock, list, ready, get, link_memories. Behavioral docstring with triggers.
+- **`WorkItemManager`** (`cairn/core/work_items.py`) — full lifecycle management with
+  status transitions (open→ready→in_progress→done), atomic claim, auto-unblock on complete,
+  hierarchical short IDs (wi-002a, wi-002a.1), embedding, and graph sync.
+- **`WorkItemStatus`** — OPEN, READY, IN_PROGRESS, BLOCKED, DONE, CANCELLED with validated
+  transition map, ACTIVE/TERMINAL sets.
+- **`WorkItemType`** — EPIC, TASK, SUBTASK with auto-inferred child types.
+- **Migration 022** — `work_items`, `work_item_memory_links`, `work_item_blocks` tables
+  with HNSW vector index, GIN fulltext, composite indexes, and graph repair partial index.
+- **Neo4j WorkItem nodes** — 10 new graph methods: create, update status, complete,
+  parent/blocks edges, assign, link to memory/entity, ready queue (Cypher).
+- **REST API** — 11 endpoints under `/work-items`: list, ready queue, get, create, update,
+  claim, complete, add child, block/unblock, link memories.
+- **Orient integration** — tasks section tries work items (ready queue + active) first,
+  seamless fallback to flat tasks when no work items exist.
+- **Chat tools** — `list_work_items` and `create_work_item` for browser chat access.
+- **Vector reconciliation** — `work_items.embedding` resizes alongside memories/clusters
+  on startup when embedding dimensions change.
+
 ## [0.46.0] - 2026-02-15 — "Single-Pass Boot"
 
 ### Added

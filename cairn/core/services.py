@@ -30,6 +30,7 @@ from cairn.core.search_v2 import SearchV2
 from cairn.core.synthesis import SessionSynthesizer
 from cairn.core.tasks import TaskManager
 from cairn.core.thinking import ThinkingEngine
+from cairn.core.work_items import WorkItemManager
 from cairn.core.stats import init_embedding_stats, init_llm_stats, init_digest_stats
 from cairn.embedding import get_embedding_engine
 from cairn.embedding.interface import EmbeddingInterface
@@ -71,6 +72,7 @@ class Services:
     terminal_host_manager: TerminalHostManager | None
     opencode: OpenCodeClient | None
     workspace_manager: WorkspaceManager
+    work_item_manager: WorkItemManager
     analytics_tracker: UsageTracker | None
     rollup_worker: RollupWorker | None
     analytics_engine: AnalyticsQueryEngine | None
@@ -238,6 +240,10 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         cluster_engine=ClusterEngine(db, embedding, llm=llm_fast),
         project_manager=project_manager,
         task_manager=TaskManager(db, graph=graph_provider),
+        work_item_manager=WorkItemManager(
+            db, embedding, graph=graph_provider,
+            knowledge_extractor=knowledge_extractor,
+        ),
         thinking_engine=ThinkingEngine(
             db,
             graph=graph_provider,

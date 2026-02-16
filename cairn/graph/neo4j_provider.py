@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 
 from cairn.graph.config import Neo4jConfig
-from cairn.graph.interface import Entity, GraphProvider, Statement, ThinkingSequenceNode, ThoughtNode, TaskNode
+from cairn.graph.interface import Entity, GraphProvider, Statement, ThinkingSequenceNode, ThoughtNode, TaskNode, WorkItemNode
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +69,12 @@ class Neo4jGraphProvider(GraphProvider):
             "CREATE CONSTRAINT task_uuid IF NOT EXISTS FOR (tk:Task) REQUIRE tk.uuid IS UNIQUE",
             "CREATE INDEX task_project IF NOT EXISTS FOR (tk:Task) ON (tk.project_id)",
             "CREATE INDEX task_pg_id IF NOT EXISTS FOR (tk:Task) ON (tk.pg_id)",
+            # WorkItem constraints + indexes (v0.47.0)
+            "CREATE CONSTRAINT work_item_uuid IF NOT EXISTS FOR (wi:WorkItem) REQUIRE wi.uuid IS UNIQUE",
+            "CREATE INDEX work_item_project IF NOT EXISTS FOR (wi:WorkItem) ON (wi.project_id)",
+            "CREATE INDEX work_item_pg_id IF NOT EXISTS FOR (wi:WorkItem) ON (wi.pg_id)",
+            "CREATE INDEX work_item_status IF NOT EXISTS FOR (wi:WorkItem) ON (wi.status)",
+            "CREATE INDEX work_item_short_id IF NOT EXISTS FOR (wi:WorkItem) ON (wi.short_id)",
         ]
 
         # Vector indexes need separate handling — they use different syntax
@@ -83,12 +89,18 @@ class Neo4jGraphProvider(GraphProvider):
             """CREATE VECTOR INDEX thought_content_vec IF NOT EXISTS
                FOR (t:Thought) ON (t.content_embedding)
                OPTIONS {indexConfig: {`vector.dimensions`: 1024, `vector.similarity_function`: 'cosine'}}""",
+            # WorkItem content vector index (v0.47.0)
+            """CREATE VECTOR INDEX work_item_content_vec IF NOT EXISTS
+               FOR (wi:WorkItem) ON (wi.content_embedding)
+               OPTIONS {indexConfig: {`vector.dimensions`: 1024, `vector.similarity_function`: 'cosine'}}""",
         ]
 
         # Fulltext indexes
         fulltext_statements = [
             "CREATE FULLTEXT INDEX entity_name_ft IF NOT EXISTS FOR (e:Entity) ON EACH [e.name]",
             "CREATE FULLTEXT INDEX statement_fact_ft IF NOT EXISTS FOR (s:Statement) ON EACH [s.fact]",
+            # WorkItem title fulltext (v0.47.0)
+            "CREATE FULLTEXT INDEX work_item_title_ft IF NOT EXISTS FOR (wi:WorkItem) ON EACH [wi.title]",
         ]
 
         with self._session() as session:
@@ -892,6 +904,168 @@ class Neo4jGraphProvider(GraphProvider):
                 """,
                 pid=project_id,
                 since=since,
+                limit=limit,
+            )
+            return [dict(r) for r in result]
+
+    # -- Work item graph nodes (v0.47.0) --
+
+    def create_work_item(
+        self,
+        pg_id: int,
+        project_id: int,
+        title: str,
+        description: str | None,
+        item_type: str,
+        priority: int,
+        status: str,
+        short_id: str,
+        content_embedding: list[float] | None = None,
+    ) -> str:
+        wi_uuid = str(uuid.uuid4())
+        with self._session() as session:
+            session.run(
+                """
+                CREATE (wi:WorkItem {
+                    uuid: $uuid,
+                    pg_id: $pg_id,
+                    project_id: $project_id,
+                    title: $title,
+                    description: $description,
+                    item_type: $item_type,
+                    priority: $priority,
+                    status: $status,
+                    short_id: $short_id,
+                    content_embedding: $embedding,
+                    created_at: $now
+                })
+                """,
+                uuid=wi_uuid,
+                pg_id=pg_id,
+                project_id=project_id,
+                title=title,
+                description=description or "",
+                item_type=item_type,
+                priority=priority,
+                status=status,
+                short_id=short_id,
+                embedding=content_embedding,
+                now=datetime.now(timezone.utc).isoformat(),
+            )
+        return wi_uuid
+
+    def update_work_item_status(self, work_item_uuid: str, status: str) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (wi:WorkItem {uuid: $uuid})
+                SET wi.status = $status, wi.updated_at = $now
+                """,
+                uuid=work_item_uuid,
+                status=status,
+                now=datetime.now(timezone.utc).isoformat(),
+            )
+
+    def complete_work_item(self, work_item_uuid: str) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (wi:WorkItem {uuid: $uuid})
+                SET wi.status = 'done', wi.completed_at = $now, wi.updated_at = $now
+                """,
+                uuid=work_item_uuid,
+                now=datetime.now(timezone.utc).isoformat(),
+            )
+
+    def add_work_item_parent_edge(self, child_uuid: str, parent_uuid: str) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (parent:WorkItem {uuid: $parent_uuid})
+                MATCH (child:WorkItem {uuid: $child_uuid})
+                MERGE (parent)-[:PARENT_OF]->(child)
+                """,
+                parent_uuid=parent_uuid,
+                child_uuid=child_uuid,
+            )
+
+    def add_work_item_blocks_edge(self, blocker_uuid: str, blocked_uuid: str) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (blocker:WorkItem {uuid: $blocker_uuid})
+                MATCH (blocked:WorkItem {uuid: $blocked_uuid})
+                MERGE (blocker)-[:BLOCKS]->(blocked)
+                """,
+                blocker_uuid=blocker_uuid,
+                blocked_uuid=blocked_uuid,
+            )
+
+    def remove_work_item_blocks_edge(self, blocker_uuid: str, blocked_uuid: str) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (blocker:WorkItem {uuid: $blocker_uuid})-[r:BLOCKS]->(blocked:WorkItem {uuid: $blocked_uuid})
+                DELETE r
+                """,
+                blocker_uuid=blocker_uuid,
+                blocked_uuid=blocked_uuid,
+            )
+
+    def assign_work_item(self, work_item_uuid: str, assignee: str) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (wi:WorkItem {uuid: $uuid})
+                SET wi.assignee = $assignee, wi.updated_at = $now
+                """,
+                uuid=work_item_uuid,
+                assignee=assignee,
+                now=datetime.now(timezone.utc).isoformat(),
+            )
+
+    def link_work_item_to_memory(self, work_item_uuid: str, episode_id: int) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (wi:WorkItem {uuid: $wi_uuid})
+                MATCH (s:Statement {episode_id: $episode_id})
+                WHERE s.invalid_at IS NULL
+                MERGE (wi)-[:LINKED_TO]->(s)
+                """,
+                wi_uuid=work_item_uuid,
+                episode_id=episode_id,
+            )
+
+    def link_work_item_to_entity(self, work_item_uuid: str, entity_uuid: str) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (wi:WorkItem {uuid: $wi_uuid})
+                MATCH (e:Entity {uuid: $entity_uuid})
+                MERGE (wi)-[:MENTIONS]->(e)
+                """,
+                wi_uuid=work_item_uuid,
+                entity_uuid=entity_uuid,
+            )
+
+    def work_item_ready_queue(self, project_id: int, limit: int = 10) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (wi:WorkItem {project_id: $pid})
+                WHERE wi.status IN ['open', 'ready']
+                  AND wi.assignee IS NULL
+                  AND NOT EXISTS {
+                    (blocker:WorkItem)-[:BLOCKS]->(wi)
+                    WHERE NOT blocker.status IN ['done', 'cancelled']
+                  }
+                RETURN wi.pg_id AS id, wi.title AS title, wi.priority AS priority,
+                       wi.short_id AS short_id, wi.item_type AS item_type
+                ORDER BY wi.priority DESC, wi.created_at ASC
+                LIMIT $limit
+                """,
+                pid=project_id,
                 limit=limit,
             )
             return [dict(r) for r in result]
