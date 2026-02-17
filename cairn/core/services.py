@@ -11,8 +11,8 @@ from cairn.core.analytics import AnalyticsQueryEngine, RollupWorker, UsageTracke
 # CairnManager removed in v0.37.0 — trail() + temporal graph queries replace cairns
 from cairn.core.clustering import ClusterEngine
 from cairn.core.conversations import ConversationManager
-from cairn.core.digest import DigestWorker
 from cairn.core.consolidation import ConsolidationEngine
+from cairn.core.event_bus import EventBus
 from cairn.core.drift import DriftDetector
 from cairn.core.enrichment import Enricher
 from cairn.core.extraction import KnowledgeExtractor
@@ -32,7 +32,7 @@ from cairn.core.synthesis import SessionSynthesizer
 from cairn.core.tasks import TaskManager
 from cairn.core.thinking import ThinkingEngine
 from cairn.core.work_items import WorkItemManager
-from cairn.core.stats import init_embedding_stats, init_llm_stats, init_digest_stats
+from cairn.core.stats import init_embedding_stats, init_llm_stats
 from cairn.embedding import get_embedding_engine
 from cairn.embedding.interface import EmbeddingInterface
 from cairn.graph import get_graph_provider
@@ -66,7 +66,7 @@ class Services:
     session_synthesizer: SessionSynthesizer
     consolidation_engine: ConsolidationEngine
     cairn_manager: object  # deprecated — kept as None for backward compat
-    digest_worker: DigestWorker
+    event_bus: EventBus
     drift_detector: DriftDetector
     message_manager: MessageManager
     ingest_pipeline: IngestPipeline
@@ -162,9 +162,6 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         elif not llm:
             logger.warning("Knowledge extraction requested but LLM not available")
 
-    # Initialize digest stats
-    init_digest_stats()
-
     # Reranker (optional, lazy-loaded on first query)
     reranker = None
     if capabilities.reranking:
@@ -256,7 +253,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         session_synthesizer=SessionSynthesizer(db, llm=llm_fast, capabilities=capabilities),
         consolidation_engine=ConsolidationEngine(db, embedding, llm=llm_fast, capabilities=capabilities),
         cairn_manager=None,  # removed in v0.37.0
-        digest_worker=DigestWorker(db, llm=llm_fast, capabilities=capabilities),
+        event_bus=EventBus(db, project_manager),
         drift_detector=DriftDetector(db),
         message_manager=(_msg_mgr := MessageManager(db)),
         ingest_pipeline=IngestPipeline(db, project_manager, memory_store, llm_fast, config),

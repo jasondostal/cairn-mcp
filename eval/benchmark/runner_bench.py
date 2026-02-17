@@ -168,7 +168,6 @@ def _create_services(eval_dsn: str, model_spec: dict, skip_enricher: bool = Fals
         session_synthesis=False,
         consolidation=False,
         confidence_gating=False,
-        event_digest=False,
         reranking=_os.getenv("CAIRN_RERANKING", "false").lower() in ("true", "1", "yes"),
         type_routing=_os.getenv("CAIRN_TYPE_ROUTING", "false").lower() in ("true", "1", "yes"),
         spreading_activation=_os.getenv("CAIRN_SPREADING_ACTIVATION", "false").lower() in ("true", "1", "yes"),

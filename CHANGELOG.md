@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.50.0] - 2026-02-17 — "Event Bus"
+
+### Added
+- **Event bus architecture** — replaced the `DigestWorker` pipeline with a lightweight `EventBus`.
+  Individual events are INSERTed into the `events` table, triggering Postgres `NOTIFY` for
+  real-time SSE streaming. No LLM in the hot path — zero cost per event, sub-millisecond latency.
+- **`EventBus` class** (`cairn/core/event_bus.py`) — central publish point with `publish()`,
+  `query()`, `open_session()`, `close_session()`, and `list_sessions()`. Lifecycle side-effects:
+  `session_start` events auto-create session records (upsert), `session_end` events auto-close.
+- **`events` API routes** (`cairn/api/events.py`) — `POST /api/events` (publish), `GET /api/events`
+  (query with filters), `GET /api/events/stream` (SSE via Postgres LISTEN/NOTIFY).
+- **Migration 025** — `sessions` table (replaces `session_events` for lifecycle) and `events` table
+  (individual rows replacing JSONB batch approach). Postgres trigger function `notify_event()` fires
+  on every INSERT for real-time streaming.
+- **Session auto-management** — server auto-creates session records on `session_start` events and
+  auto-closes sessions on `session_end` events. No separate API calls needed from hooks.
+- **`CAIRN_EVENT_ARCHIVE_DIR`** — optional file-based event archive directory for durable event
+  storage outside the database.
+- **Work item session events** — session events section added to work item detail sheet in the UI,
+  showing events linked to work items.
+
+### Changed
+- **Hook scripts rewritten** — all three core scripts (`session-start.sh`, `log-event.sh`,
+  `session-end.sh`) now POST individual events directly to `POST /api/events`. No JSONL files,
+  no batch thresholds, no offset tracking. Fire-and-forget with background curl.
+- **Windsurf adapter updated** — translates Windsurf field names and forwards to event bus.
+- **Setup scripts** (`setup.sh`, `setup-hooks.sh`) — updated for event bus architecture and
+  `CAIRN_URL` propagation to all hook commands.
+- **Sessions page** — refactored to use event bus queries instead of digest-based session events.
+- **Sessions API** — simplified to delegate to `EventBus` methods. Session close no longer
+  triggers LLM digestion.
+- **Hooks README** — fully rewritten to document event bus architecture, updated diagrams and
+  verification steps.
+
+### Removed
+- **`DigestWorker`** (`cairn/core/digest.py`) — legacy batch digest pipeline with LLM summarization
+  removed entirely (~244 lines).
+- **`DigestStats`** — digest tracking statistics removed from `cairn/core/stats.py`.
+- **Digest prompts** — `DIGEST_SYSTEM_PROMPT` and `DIGEST_USER_PROMPT` removed from
+  `cairn/llm/prompts.py` (~120 lines).
+- **`CAIRN_LLM_EVENT_DIGEST`** — configuration option for digest pipeline removed.
+- **Digest-related tests** — `tests/test_digest.py` and `tests/test_digest_stats.py` removed
+  (~386 lines).
+- **Ingest digest wiring** — digest worker references removed from ingest pipeline and services.
+- **Net reduction:** ~1,400 lines of digest infrastructure removed across 10 files.
+
 ## [0.49.0] - 2026-02-17 — "Chat UI"
 
 ### Added

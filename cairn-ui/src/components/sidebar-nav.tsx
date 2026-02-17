@@ -93,7 +93,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
                 <Icon className="h-4 w-4" />
                 {label}
                 {href === "/work-items" && attentionCount > 0 && (
-                  <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-600 px-1.5 text-[11px] font-medium leading-none text-white">
+                  <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[oklch(0.627_0.265_304)] px-1.5 text-[11px] font-medium leading-none text-white">
                     {attentionCount}
                   </span>
                 )}

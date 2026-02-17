@@ -23,14 +23,13 @@ INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.sessionId // .session_id // "unknown"')
 CWD=$(echo "$INPUT" | jq -r '.workspaceFolder // .cwd // ""')
 
-CAIRN_EVENT_DIR="${CAIRN_EVENT_DIR:-${HOME}/.cairn/events}"
-EVENT_LOG="${CAIRN_EVENT_DIR}/cairn-events-${SESSION_ID}.jsonl"
-
-# Auto-init session on first tool use (no event log exists yet)
-if [ ! -f "$EVENT_LOG" ]; then
+# Auto-init session on first tool use (marker file tracks init state)
+SESSION_MARKER="/tmp/cairn-session-${SESSION_ID}"
+if [ ! -f "$SESSION_MARKER" ]; then
     START_INPUT=$(jq -nc --arg session_id "$SESSION_ID" --arg cwd "$CWD" \
         '{session_id: $session_id, cwd: $cwd}')
     echo "$START_INPUT" | "$CORE_DIR/session-start.sh" >/dev/null 2>&1 || true
+    touch "$SESSION_MARKER"
 fi
 
 # Translate and forward to log-event.sh

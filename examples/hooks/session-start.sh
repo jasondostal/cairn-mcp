@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Cairn Hook: SessionStart
-# Initializes the session event log and outputs boot context.
+# Opens a session and publishes a session_start event via the event bus.
 #
 # What it does:
-#   1. Creates a fresh event log file for this session
-#   2. Outputs session_name and project for Claude to use when storing memories
+#   1. POSTs session_start event to /api/events
+#   2. Exports CAIRN_SESSION_NAME for other hooks to use
+#   3. Outputs session_name and project for Claude to use when storing memories
 #
 # Configuration (env vars):
 #   CAIRN_URL      — Cairn API base URL (default: http://localhost:8000)
@@ -30,28 +31,26 @@ fi
 SHORT_ID="${SESSION_ID: -8}"
 SESSION_NAME="$(date -u +%Y-%m-%d)-${SHORT_ID}"
 
-# Session event log — one JSONL file per session
-CAIRN_EVENT_DIR="${CAIRN_EVENT_DIR:-${HOME}/.cairn/events}"
-mkdir -p "$CAIRN_EVENT_DIR"
-EVENT_LOG="${CAIRN_EVENT_DIR}/cairn-events-${SESSION_ID}.jsonl"
-OFFSET_FILE="${EVENT_LOG}.offset"
-echo "" > "$EVENT_LOG"
-echo "0" > "$OFFSET_FILE"
-
 # Agent metadata — interactive sessions from Claude Code
 AGENT_TYPE="${CAIRN_AGENT_TYPE:-interactive}"
 PARENT_SESSION="${CAIRN_PARENT_SESSION:-}"
 
-# Log the session start event (includes session_name so session-end.sh can read it back)
-jq -nc --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-       --arg type "session_start" \
-       --arg session "$SESSION_ID" \
-       --arg project "$CAIRN_PROJECT" \
-       --arg session_name "$SESSION_NAME" \
-       --arg agent_id "$SESSION_ID" \
-       --arg agent_type "$AGENT_TYPE" \
-       --arg parent_session "$PARENT_SESSION" \
-       '{ts: $ts, type: $type, session: $session, project: $project, session_name: $session_name, agent_id: $agent_id, agent_type: $agent_type, parent_session: $parent_session}' >> "$EVENT_LOG"
+# Export for other hooks (log-event.sh, session-end.sh)
+export CAIRN_SESSION_NAME="$SESSION_NAME"
+
+# Publish session_start event (fire-and-forget, backgrounded)
+curl -sf -X POST "${CAIRN_URL}/api/events" \
+    -H "Content-Type: application/json" \
+    "${AUTH_HEADER[@]}" \
+    -d "$(jq -nc \
+        --arg session_name "$SESSION_NAME" \
+        --arg event_type "session_start" \
+        --arg project "$CAIRN_PROJECT" \
+        --arg agent_id "$SESSION_ID" \
+        --arg agent_type "$AGENT_TYPE" \
+        --arg parent_session "$PARENT_SESSION" \
+        '{session_name: $session_name, event_type: $event_type, project: $project, agent_id: $agent_id, payload: {agent_type: $agent_type, parent_session: $parent_session}}')" \
+    >/dev/null 2>&1 &
 
 # Output session context — Claude Code adds stdout from SessionStart hooks to context
 echo "Session name for this session: ${SESSION_NAME}"

@@ -62,10 +62,6 @@ def get_status(db: Database, config: Config) -> dict:
         ),
     }
 
-    # Digest pipeline observability
-    if stats.digest_stats:
-        result["digest"] = stats.digest_stats.to_dict()
-
     # Analytics summary
     try:
         analytics_row = db.execute_one(

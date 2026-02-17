@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { api, SessionInfo, SessionEvent, SessionDigest } from "@/lib/api";
+import { api, SessionInfo, SessionEvent } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   Radio,
@@ -109,11 +109,8 @@ function SessionList({
             </div>
             <div className="flex items-center gap-4 mt-1.5 text-xs text-muted-foreground">
               <span>{s.project}</span>
-              <span>{s.total_events} events</span>
-              {s.digested_count > 0 && (
-                <span>{s.digested_count}/{s.batch_count} digested</span>
-              )}
-              {s.last_event && <span>{timeAgo(s.last_event)}</span>}
+              <span>{s.event_count} events</span>
+              {s.started_at && <span>{timeAgo(s.started_at)}</span>}
             </div>
           </button>
         ))}
@@ -132,7 +129,6 @@ function SessionDetail({
   onBack: () => void;
 }) {
   const [events, setEvents] = useState<SessionEvent[]>([]);
-  const [digests, setDigests] = useState<SessionDigest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(session.is_active);
@@ -140,8 +136,7 @@ function SessionDetail({
   const fetchEvents = useCallback(async () => {
     try {
       const result = await api.sessionEvents(session.session_name);
-      setEvents(result.events);
-      setDigests(result.digests);
+      setEvents(result.items);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load events");
@@ -160,7 +155,7 @@ function SessionDetail({
     return () => clearInterval(interval);
   }, [autoRefresh, fetchEvents]);
 
-  const toolEvents = events.filter((e) => e.type === "tool_use");
+  const toolEvents = events.filter((e) => e.event_type === "tool_use");
 
   return (
     <div>
@@ -214,23 +209,6 @@ function SessionDetail({
         </div>
       )}
 
-      {/* Digests */}
-      {digests.length > 0 && (
-        <div className="mb-4 space-y-2">
-          {digests.map((d) => (
-            <div
-              key={d.batch}
-              className="rounded-lg border bg-muted/30 px-3 py-2 text-sm"
-            >
-              <div className="text-xs text-muted-foreground mb-1">
-                Batch {d.batch} digest
-              </div>
-              <div className="whitespace-pre-wrap">{d.digest}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Event Stream */}
       {loading ? (
         <div className="flex justify-center py-12">
@@ -242,49 +220,56 @@ function SessionDetail({
         </div>
       ) : (
         <div className="space-y-0.5">
-          {events.map((evt, i) => (
-            <div
-              key={i}
-              className={cn(
-                "flex items-start gap-2 rounded px-2 py-1.5 text-xs",
-                "hover:bg-muted/50 transition-colors",
-                evt.type === "session_start" && "bg-blue-500/5",
-                evt.type === "session_end" && "bg-orange-500/5"
-              )}
-            >
-              <div className="mt-0.5 text-muted-foreground shrink-0">
-                {eventIcon(evt.type)}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">
-                    {evt.tool_name || evt.type}
-                  </span>
-                  {evt.type === "session_end" && evt.reason && (
-                    <span className="text-muted-foreground">({evt.reason})</span>
-                  )}
-                  <span className="text-muted-foreground ml-auto shrink-0">
-                    {evt.ts ? new Date(evt.ts).toLocaleTimeString() : ""}
-                  </span>
+          {events.map((evt) => {
+            const payload = evt.payload || {};
+            const toolInput = (payload.tool_input ?? payload.input) as Record<string, unknown> | undefined;
+            const toolResponse = (payload.tool_response ?? payload.response) as string | undefined;
+            const reason = payload.reason as string | undefined;
+
+            return (
+              <div
+                key={evt.id}
+                className={cn(
+                  "flex items-start gap-2 rounded px-2 py-1.5 text-xs",
+                  "hover:bg-muted/50 transition-colors",
+                  evt.event_type === "session_start" && "bg-blue-500/5",
+                  evt.event_type === "session_end" && "bg-orange-500/5"
+                )}
+              >
+                <div className="mt-0.5 text-muted-foreground shrink-0">
+                  {eventIcon(evt.event_type)}
                 </div>
-                {evt.tool_input && (
-                  <div className="text-muted-foreground truncate mt-0.5 font-mono text-[11px]">
-                    {toolInputPreview(evt.tool_input)}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">
+                      {evt.tool_name || evt.event_type}
+                    </span>
+                    {evt.event_type === "session_end" && reason && (
+                      <span className="text-muted-foreground">({reason})</span>
+                    )}
+                    <span className="text-muted-foreground ml-auto shrink-0">
+                      {evt.created_at ? new Date(evt.created_at).toLocaleTimeString() : ""}
+                    </span>
                   </div>
-                )}
-                {evt.tool_response && (
-                  <details className="mt-0.5 group">
-                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
-                      response ({evt.tool_response.length} chars)
-                    </summary>
-                    <pre className="mt-1 text-[10px] bg-background/50 rounded p-1.5 overflow-x-auto whitespace-pre-wrap break-all text-muted-foreground max-h-32 overflow-y-auto">
-                      {evt.tool_response}
-                    </pre>
-                  </details>
-                )}
+                  {toolInput && (
+                    <div className="text-muted-foreground truncate mt-0.5 font-mono text-[11px]">
+                      {toolInputPreview(toolInput)}
+                    </div>
+                  )}
+                  {toolResponse && (
+                    <details className="mt-0.5 group">
+                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
+                        response ({toolResponse.length} chars)
+                      </summary>
+                      <pre className="mt-1 text-[10px] bg-background/50 rounded p-1.5 overflow-x-auto whitespace-pre-wrap break-all text-muted-foreground max-h-32 overflow-y-auto">
+                        {toolResponse}
+                      </pre>
+                    </details>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

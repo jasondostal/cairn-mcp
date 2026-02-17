@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, type WorkItemDetail, type WorkItemActivity, type WorkItemStatus } from "@/lib/api";
+import { api, type WorkItemDetail, type WorkItemActivity, type WorkItemStatus, type SessionEvent } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import {
   Sheet,
@@ -20,12 +20,17 @@ import { RiskTierBadge } from "./risk-tier-badge";
 import {
   CheckCircle,
   Clock,
+  FileText,
   GitBranch,
   Hand,
   Link2,
   Lock,
+  Play,
+  Radio,
   Shield,
+  Square,
   User,
+  Wrench,
   XCircle,
 } from "lucide-react";
 
@@ -49,6 +54,8 @@ export function WorkItemSheet({
   const [acting, setActing] = useState(false);
   const [activities, setActivities] = useState<WorkItemActivity[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(false);
+  const [sessionEvents, setSessionEvents] = useState<SessionEvent[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
   const [gateResponse, setGateResponse] = useState("");
 
   const fetchDetail = useCallback(() => {
@@ -69,11 +76,21 @@ export function WorkItemSheet({
       .finally(() => setActivitiesLoading(false));
   }, [itemId]);
 
+  const fetchSessionEvents = useCallback(() => {
+    if (!itemId) return;
+    setSessionsLoading(true);
+    api.events({ work_item_id: String(itemId), limit: "200", order: "asc" })
+      .then((r) => setSessionEvents(r.items))
+      .catch(() => setSessionEvents([]))
+      .finally(() => setSessionsLoading(false));
+  }, [itemId]);
+
   useEffect(() => {
     if (!itemId || !open) return;
     fetchDetail();
     fetchActivities();
-  }, [itemId, open, fetchDetail, fetchActivities]);
+    fetchSessionEvents();
+  }, [itemId, open, fetchDetail, fetchActivities, fetchSessionEvents]);
 
   async function handleComplete() {
     if (!detail) return;
@@ -474,6 +491,14 @@ export function WorkItemSheet({
                 </div>
               </details>
 
+              {/* Session Events */}
+              {sessionEvents.length > 0 && (
+                <>
+                  <Separator />
+                  <SessionEventsSection events={sessionEvents} loading={sessionsLoading} />
+                </>
+              )}
+
               {/* Metadata */}
               {detail.metadata && Object.keys(detail.metadata).length > 0 && (
                 <>
@@ -531,5 +556,132 @@ function ActivityIcon({ type }: { type: string }) {
   const icon = activityIcons[type] ?? "·";
   return (
     <span className="font-mono text-muted-foreground/60 shrink-0 w-3 text-center">{icon}</span>
+  );
+}
+
+// -- Session Events Section --
+
+interface GroupedSession {
+  session_name: string;
+  events: SessionEvent[];
+  first_at: string;
+  last_at: string;
+}
+
+function groupBySession(events: SessionEvent[]): GroupedSession[] {
+  const map = new Map<string, SessionEvent[]>();
+  for (const evt of events) {
+    const key = evt.session_name;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(evt);
+  }
+  return Array.from(map.entries()).map(([session_name, evts]) => ({
+    session_name,
+    events: evts,
+    first_at: evts[0].created_at,
+    last_at: evts[evts.length - 1].created_at,
+  }));
+}
+
+function eventIcon(type: string) {
+  if (type === "tool_use") return <Wrench className="h-3 w-3" />;
+  if (type === "session_start") return <Play className="h-3 w-3" />;
+  if (type === "session_end") return <Square className="h-3 w-3" />;
+  return <FileText className="h-3 w-3" />;
+}
+
+function toolInputPreview(input: Record<string, unknown>): string {
+  if (input.command) return String(input.command).slice(0, 80);
+  if (input.file_path) return String(input.file_path);
+  if (input.pattern) return `/${input.pattern}/`;
+  if (input.query) return `"${String(input.query).slice(0, 60)}"`;
+  if (input.content) return String(input.content).slice(0, 60) + "...";
+  const keys = Object.keys(input);
+  if (keys.length === 0) return "";
+  return keys.slice(0, 3).join(", ");
+}
+
+function timeAgo(dateStr: string): string {
+  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function SessionEventsSection({ events, loading }: { events: SessionEvent[]; loading: boolean }) {
+  const groups = groupBySession(events);
+
+  return (
+    <details open={events.length <= 20}>
+      <summary className="cursor-pointer text-xs font-medium text-muted-foreground uppercase tracking-wider hover:text-foreground flex items-center gap-1">
+        <Radio className="h-3 w-3" />
+        Sessions ({groups.length} session{groups.length !== 1 ? "s" : ""}, {events.length} event{events.length !== 1 ? "s" : ""})
+      </summary>
+      {loading && <p className="mt-2 text-xs text-muted-foreground">Loading...</p>}
+      <div className="mt-2 space-y-2">
+        {groups.map((group) => (
+          <details key={group.session_name}>
+            <summary className="cursor-pointer text-xs hover:text-foreground flex items-center gap-2 py-0.5">
+              <span className="font-mono text-muted-foreground truncate">
+                {group.session_name}
+              </span>
+              <span className="text-muted-foreground/60 shrink-0">
+                {group.events.length} event{group.events.length !== 1 ? "s" : ""}
+              </span>
+              <span className="text-muted-foreground/60 shrink-0">
+                {timeAgo(group.last_at)}
+              </span>
+            </summary>
+            <div className="mt-1 ml-2 space-y-0.5 max-h-48 overflow-y-auto">
+              {group.events.map((evt) => {
+                const payload = evt.payload || {};
+                const toolInput = (payload.tool_input ?? payload.input) as Record<string, unknown> | undefined;
+                const toolResponse = (payload.tool_response ?? payload.response) as string | undefined;
+
+                return (
+                  <div
+                    key={evt.id}
+                    className="flex items-start gap-1.5 text-xs py-0.5"
+                  >
+                    <div className="mt-0.5 text-muted-foreground/60 shrink-0">
+                      {eventIcon(evt.event_type)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-muted-foreground">
+                          {evt.tool_name || evt.event_type}
+                        </span>
+                        <span className="text-muted-foreground/40 ml-auto shrink-0 font-mono">
+                          {new Date(evt.created_at).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      {toolInput && (
+                        <div className="text-muted-foreground/60 truncate font-mono text-[11px]">
+                          {toolInputPreview(toolInput)}
+                        </div>
+                      )}
+                      {toolResponse && (
+                        <details className="mt-0.5">
+                          <summary className="cursor-pointer text-muted-foreground/60 hover:text-muted-foreground text-[11px]">
+                            response ({toolResponse.length} chars)
+                          </summary>
+                          <pre className="mt-0.5 text-[10px] bg-muted/30 rounded p-1 overflow-x-auto whitespace-pre-wrap break-all text-muted-foreground/60 max-h-24 overflow-y-auto">
+                            {toolResponse}
+                          </pre>
+                        </details>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </details>
+        ))}
+      </div>
+    </details>
   );
 }

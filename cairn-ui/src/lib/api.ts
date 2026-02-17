@@ -320,41 +320,28 @@ export interface ExportResult {
 }
 
 export interface SessionInfo {
+  id: number;
   session_name: string;
+  agent_id: string | null;
+  agent_type: string | null;
+  parent_session: string | null;
   project: string;
-  batch_count: number;
-  total_events: number;
-  digested_count: number;
-  first_event: string | null;
-  last_event: string | null;
+  event_count: number;
+  started_at: string;
+  closed_at: string | null;
   is_active: boolean;
 }
 
 export interface SessionEvent {
-  ts: string;
-  type: string;
-  tool_name?: string;
-  tool_input?: Record<string, unknown>;
-  tool_response?: string;
-  session_name?: string;
-  project?: string;
-  reason?: string;
-  [key: string]: unknown;
-}
-
-export interface SessionDigest {
-  batch: number;
-  digest: string;
-  digested_at: string | null;
-}
-
-export interface SessionEventsResult {
+  id: number;
   session_name: string;
+  agent_id: string | null;
+  work_item_id: number | null;
+  event_type: string;
+  tool_name: string | null;
+  payload: Record<string, unknown>;
   project: string | null;
-  batch_count: number;
-  total_events: number;
-  events: SessionEvent[];
-  digests: SessionDigest[];
+  created_at: string;
 }
 
 export interface Cairn {
@@ -750,8 +737,11 @@ export const api = {
   sessions: (opts?: { project?: string; limit?: string }) =>
     get<{ count: number; items: SessionInfo[] }>("/sessions", opts),
 
-  sessionEvents: (sessionName: string, opts?: { project?: string }) =>
-    get<SessionEventsResult>(`/sessions/${encodeURIComponent(sessionName)}/events`, opts),
+  sessionEvents: (sessionName: string, opts?: { project?: string; order?: string }) =>
+    get<{ count: number; items: SessionEvent[] }>(`/sessions/${encodeURIComponent(sessionName)}/events`, { order: "asc", ...opts }),
+
+  events: (opts?: { session_name?: string; work_item_id?: string; event_type?: string; project?: string; limit?: string; offset?: string; order?: string }) =>
+    get<{ count: number; items: SessionEvent[] }>("/events", { order: "asc", ...opts }),
 
   graph: (opts?: { project?: string; relation_type?: string; min_importance?: string }) =>
     get<GraphResult>("/graph", opts),
