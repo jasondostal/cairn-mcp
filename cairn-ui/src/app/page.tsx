@@ -12,14 +12,15 @@ import {
   type HeatmapResult,
 } from "@/lib/api";
 import { useFetch } from "@/lib/use-fetch";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageLayout } from "@/components/page-layout";
 import { ErrorState } from "@/components/error-state";
 import { SkeletonList } from "@/components/skeleton-list";
 
+import { OperationalStrip } from "@/components/dashboard/operational-strip";
 import { SparklineKpiStrip } from "@/components/dashboard/sparkline-kpi-strip";
 import { MemoryTypeGrowthChart } from "@/components/dashboard/memory-type-growth-chart";
+import { MemoryTypeBar } from "@/components/dashboard/memory-type-bar";
 import { HealthStrip } from "@/components/dashboard/health-strip";
 import { TokenAreaChart } from "@/components/analytics/token-area-chart";
 import { OperationsBarChart } from "@/components/analytics/operations-bar-chart";
@@ -33,15 +34,6 @@ const DAY_PRESETS = [
   { label: "30d", value: 30 },
   { label: "90d", value: 90 },
 ] as const;
-
-function TypeBadge({ type, count }: { type: string; count: number }) {
-  return (
-    <Badge variant="secondary" className="gap-1 font-mono text-xs">
-      {type}
-      <span className="text-muted-foreground">{count}</span>
-    </Badge>
-  );
-}
 
 export default function Dashboard() {
   const [days, setDays] = useState(7);
@@ -117,6 +109,9 @@ export default function Dashboard() {
       }
     >
       <div className="space-y-4">
+        {/* Operational status strip */}
+        <OperationalStrip />
+
         {/* KPI Strip with sparklines */}
         {sparklines && <SparklineKpiStrip data={sparklines} />}
 
@@ -156,19 +151,8 @@ export default function Dashboard() {
           {projectsData && <ProjectBreakdown items={projectsData.items} />}
         </div>
 
-        {/* Memory Types badges */}
-        <div>
-          <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-            Memory Types
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(status.types)
-              .sort(([, a], [, b]) => b - a)
-              .map(([type, count]) => (
-                <TypeBadge key={type} type={type} count={count} />
-              ))}
-          </div>
-        </div>
+        {/* Memory type distribution bar */}
+        <MemoryTypeBar types={status.types} />
       </div>
     </PageLayout>
   );

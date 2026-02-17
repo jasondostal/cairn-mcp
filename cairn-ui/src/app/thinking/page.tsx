@@ -132,6 +132,7 @@ export default function ThinkingPage() {
           message={filters.showAllProjects
             ? "No thinking sequences yet."
             : `No thinking sequences for ${filters.projectFilter.join(", ")}.`}
+          detail="Thinking sequences are created via the MCP think tool for structured reasoning."
         />
       )}
 

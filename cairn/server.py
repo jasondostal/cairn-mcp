@@ -13,8 +13,8 @@ from cairn.core.constants import (
     MAX_CONTENT_SIZE, MAX_LIMIT, MAX_NAME_LENGTH,
     MAX_RECALL_IDS, VALID_MEMORY_TYPES, VALID_SEARCH_MODES,
     ORIENT_ALLOC_RULES, ORIENT_ALLOC_LEARNINGS,
-    ORIENT_ALLOC_TRAIL, ORIENT_ALLOC_TASKS,
-    MemoryAction,
+    ORIENT_ALLOC_TRAIL, ORIENT_ALLOC_WORK_ITEMS,
+    ActivityType, MemoryAction,
 )
 from cairn.core.services import create_services
 from cairn.core.status import get_status
@@ -168,8 +168,8 @@ mcp_kwargs = dict(
         "That's all it takes.\n"
         "\n"
         "SESSION STARTUP SEQUENCE:\n"
-        "Preferred: orient(project) — single call returning rules, trail, learnings, and tasks.\n"
-        "Granular fallback: rules() + trail() + search(query='learning') + tasks() individually.\n"
+        "Preferred: orient(project) — single call returning rules, trail, learnings, and work items.\n"
+        "Granular fallback: rules() + trail() + search(query='learning') + work_items(action='list') individually.\n"
         "Then summarize the landscape and ask what we're working on.\n"
         "\n"
         "ONGOING USE — Memory is not just for boot:\n"
@@ -678,28 +678,39 @@ def tasks(
     memory_ids: list[int] | None = None,
     include_completed: bool = False,
 ) -> dict | list[dict]:
-    """Manage tasks: create, complete, list, and link memories.
+    """Personal reminders and TODO items — human-only quick capture.
+
+    This is the HUMAN-ONLY quick-capture tool. Tasks here are personal reminders
+    ("buy milk", "review PR #42", "schedule dentist") that should NEVER appear
+    in the agent dispatch queue. Agents do not claim, execute, or heartbeat on
+    these items.
+
+    For structured, dispatchable work that agents and humans collaborate on,
+    use work_items() instead.
 
     WHEN TO USE:
     - User explicitly requests: "remind me to...", "TODO:", "create a task for..."
     - Checking what's pending: "what tasks do we have", "what's outstanding"
     - Completing work: "mark that done", "finished that task"
-    - Linking context: associate memories with a task for knowledge graph
+    - Promoting a reminder to real work: "make this a work item"
 
     DON'T proactively create tasks unless the user asks. Tasks are user-requested
-    follow-up items, not automatic tracking.
+    reminders, not automatic tracking.
 
     Actions:
-    - 'create': Create a new task.
+    - 'create': Create a new personal reminder/task.
     - 'complete': Mark a task as done.
-    - 'list': List tasks for a project. Check at session start for pending work.
+    - 'list': List tasks for a project.
     - 'link_memories': Associate memories with a task.
+    - 'promote': Promote a task to a work item. Creates a work item with the
+      task description, marks the task completed, transfers linked memories,
+      and logs a "promoted" activity on the new work item.
 
     Args:
-        action: One of 'create', 'complete', 'list', 'link_memories'.
+        action: One of 'create', 'complete', 'list', 'link_memories', 'promote'.
         project: Project name.
         description: Task description (required for create).
-        task_id: Task ID (required for complete, link_memories).
+        task_id: Task ID (required for complete, link_memories, promote).
         memory_ids: Memory IDs to link (required for link_memories).
         include_completed: Include completed tasks in list (default false).
     """
@@ -721,6 +732,55 @@ def tasks(
             if not task_id or not memory_ids:
                 return {"error": "task_id and memory_ids are required for link_memories"}
             return task_manager.link_memories(task_id, memory_ids)
+
+        if action == "promote":
+            if not task_id:
+                return {"error": "task_id is required for promote"}
+
+            # 1. Fetch and validate task
+            task_row = db.execute_one(
+                """SELECT t.id, t.description, t.status, p.name AS project
+                   FROM tasks t
+                   LEFT JOIN projects p ON t.project_id = p.id
+                   WHERE t.id = %s""",
+                (task_id,),
+            )
+            if not task_row:
+                return {"error": f"Task {task_id} not found"}
+            if task_row["status"] != "pending":
+                return {"error": f"Task {task_id} is already {task_row['status']}"}
+
+            task_project = task_row["project"] or project
+
+            # 2. Create work item from task description
+            wi = work_item_manager.create(
+                project=task_project,
+                title=task_row["description"],
+                item_type="task",
+            )
+
+            # 3. Mark task completed
+            task_manager.complete(task_id)
+
+            # 4. Transfer linked memories
+            linked = db.execute(
+                "SELECT memory_id FROM task_memory_links WHERE task_id = %s",
+                (task_id,),
+            )
+            linked_ids = [r["memory_id"] for r in linked]
+            if linked_ids:
+                work_item_manager.link_memories(wi["id"], linked_ids)
+
+            # 5. Log promoted activity
+            work_item_manager._log_activity(
+                wi["id"],
+                actor="system",
+                activity_type=ActivityType.PROMOTED,
+                content=f"Promoted from task #{task_id}",
+                metadata={"source_task_id": task_id},
+            )
+
+            return {"action": "promoted", "task_id": task_id, "work_item": wi}
 
         return {"error": f"Unknown action: {action}"}
     except Exception as e:
@@ -753,8 +813,20 @@ def work_items(
     include_children: bool = False,
     limit: int = 20,
     offset: int = 0,
+    gate_type: str | None = None,
+    gate_data: dict | None = None,
+    gate_response: dict | None = None,
+    risk_tier: int | None = None,
+    constraints: dict | None = None,
+    actor: str | None = None,
+    note: str | None = None,
 ) -> dict | list[dict]:
-    """Manage hierarchical work items: epics, tasks, and subtasks.
+    """THE primary work-tracking system. Agents and humans both operate here.
+
+    Work items are the dispatchable unit of work in Cairn. Unlike tasks() (which
+    are personal reminders), work items support agent dispatch, gates, heartbeats,
+    risk tiers, and a full activity feed. Use tasks() only for personal reminders;
+    use work_items() for everything else.
 
     TRIGGER — Use when the user wants to track, plan, or dispatch work:
     - "create a task", "add a work item", "plan this epic"
@@ -763,16 +835,31 @@ def work_items(
     - "block", "depends on", "unblock"
     - "mark done", "complete", "finish"
     - "what's the status of", "show me work items"
+    - "set a gate", "needs human input", "wait for approval"
+    - "resolve gate", "answer the question", "approve"
+    - "heartbeat", "still working", "I'm stuck"
+    - "what happened", "activity log", "show history"
+    - "brief me", "context for this item", "what do I need to know"
+    - "what needs my input", "gated items", "pending gates"
 
     WHEN TO USE: For structured work tracking with hierarchy and dependencies.
-    Use flat tasks() for simple reminders; use work_items() for real work management.
+    Use flat tasks() for personal reminders only; use work_items() for real work management.
 
     STATUS FLOW: open → ready → in_progress → done
-                 Any active state → blocked (when dependency added)
-                 blocked → open (when all blockers resolve)
+                 Any active state → blocked (when dependency added or gate set)
+                 blocked → open (when all blockers resolve and gate resolved)
                  Any active state → cancelled
 
     HIERARCHY: epic → task → subtask (auto-inferred via add_child)
+
+    GATES: Human-in-the-loop checkpoints. Set a gate to block on human input.
+    Resolve it with a response to unblock. Gate data includes question/options/context.
+
+    RISK TIERS: 0=patrol (just do it), 1=caution (review recommended),
+    2=action (requires review), 3=critical (human must confirm — auto-gates).
+
+    CONSTRAINTS: Rules/boundaries that cascade from parent to children.
+    Children inherit parent constraints; child-specific constraints override.
 
     Actions:
     - 'create': Create a new work item. Requires project, title.
@@ -786,6 +873,12 @@ def work_items(
     - 'ready': Dispatch queue — unblocked, unassigned items. Requires project.
     - 'get': Full detail for one item. Requires work_item_id.
     - 'link_memories': Link memories to item. Requires work_item_id, memory_ids.
+    - 'set_gate': Block on gate. Requires work_item_id, gate_type. Optional gate_data, actor.
+    - 'resolve_gate': Resolve a gate. Requires work_item_id. Optional gate_response, actor.
+    - 'heartbeat': Agent heartbeat. Requires work_item_id, assignee. Optional state ('working'|'stuck'|'done'), note.
+    - 'activity': Activity log. Requires work_item_id. Optional limit.
+    - 'briefing': Agent briefing context. Requires work_item_id.
+    - 'gated': Items awaiting gate resolution. Optional project, gate_type.
 
     Args:
         action: One of the actions listed above.
@@ -798,7 +891,7 @@ def work_items(
         work_item_id: Work item ID or short_id (for update, claim, complete, get, add_child, link_memories).
         blocker_id: Blocker work item ID/short_id (for block, unblock).
         blocked_id: Blocked work item ID/short_id (for block, unblock).
-        assignee: Agent or person name (for claim).
+        assignee: Agent or person name (for claim, heartbeat).
         status: Filter by status (for list) or new status (for update).
         session_name: Associate with a session.
         metadata: Additional JSON metadata.
@@ -807,6 +900,13 @@ def work_items(
         include_children: Include subtree in list results.
         limit: Max results for list/ready (default 20).
         offset: Pagination offset for list.
+        gate_type: 'human' or 'timer' (for set_gate).
+        gate_data: Gate context — question, options, timer_until (for set_gate).
+        gate_response: Human's answer when resolving a gate (for resolve_gate).
+        risk_tier: 0-3 risk level (for create, add_child, update).
+        constraints: Rules/boundaries dict (for create, add_child, update). Cascades to children.
+        actor: Who performed the action — agent name, 'human', session ID.
+        note: Free-text note (for heartbeat).
     """
     try:
         if action == "create":
@@ -817,6 +917,7 @@ def work_items(
                 item_type=item_type or "task", priority=priority or 0,
                 parent_id=parent_id, session_name=session_name,
                 metadata=metadata, acceptance_criteria=acceptance_criteria,
+                constraints=constraints, risk_tier=risk_tier,
             )
 
         if action == "update":
@@ -841,6 +942,10 @@ def work_items(
                 fields["session_name"] = session_name
             if metadata is not None:
                 fields["metadata"] = metadata
+            if risk_tier is not None:
+                fields["risk_tier"] = risk_tier
+            if constraints is not None:
+                fields["constraints"] = constraints
             return work_item_manager.update(work_item_id, **fields)
 
         if action == "claim":
@@ -860,6 +965,7 @@ def work_items(
                 parent_id=work_item_id, title=title, description=description,
                 priority=priority or 0, session_name=session_name,
                 metadata=metadata, acceptance_criteria=acceptance_criteria,
+                constraints=constraints, risk_tier=risk_tier,
             )
 
         if action == "block":
@@ -894,6 +1000,44 @@ def work_items(
             if not work_item_id or not memory_ids:
                 return {"error": "work_item_id and memory_ids are required for link_memories"}
             return work_item_manager.link_memories(work_item_id, memory_ids)
+
+        if action == "set_gate":
+            if not work_item_id or not gate_type:
+                return {"error": "work_item_id and gate_type are required for set_gate"}
+            return work_item_manager.set_gate(
+                work_item_id, gate_type, gate_data=gate_data, actor=actor,
+            )
+
+        if action == "resolve_gate":
+            if not work_item_id:
+                return {"error": "work_item_id is required for resolve_gate"}
+            return work_item_manager.resolve_gate(
+                work_item_id, response=gate_response, actor=actor,
+            )
+
+        if action == "heartbeat":
+            if not work_item_id or not assignee:
+                return {"error": "work_item_id and assignee are required for heartbeat"}
+            return work_item_manager.heartbeat(
+                work_item_id, assignee, state=status or "working", note=note,
+            )
+
+        if action == "activity":
+            if not work_item_id:
+                return {"error": "work_item_id is required for activity"}
+            return work_item_manager.get_activity(
+                work_item_id, limit=min(limit, MAX_LIMIT), offset=offset,
+            )
+
+        if action == "briefing":
+            if not work_item_id:
+                return {"error": "work_item_id is required for briefing"}
+            return work_item_manager.generate_briefing(work_item_id)
+
+        if action == "gated":
+            return work_item_manager.gated_items(
+                project=project, gate_type=gate_type, limit=min(limit, MAX_LIMIT),
+            )
 
         return {"error": f"Unknown action: {action}"}
     except ValueError as e:
@@ -1239,18 +1383,18 @@ def trail(
 
 @mcp.tool()
 def orient(project: str | None = None) -> dict:
-    """Single-pass session boot. Returns rules, trail, learnings, and tasks.
+    """Single-pass session boot. Returns rules, trail, learnings, and work items.
 
-    Replaces the 4-call boot sequence (rules + trail + search + tasks) with one
-    call. Each section gets a token budget allocation with surplus flowing to
+    Replaces the 4-call boot sequence (rules + trail + search + work_items) with
+    one call. Each section gets a token budget allocation with surplus flowing to
     the next section.
 
     Use this at session start instead of calling rules(), trail(), search(),
-    and tasks() separately. Individual tools remain available for granular use
-    mid-session.
+    and work_items() separately. Individual tools remain available for granular
+    use mid-session.
 
     Args:
-        project: Project name for scoped rules and tasks. Omit for global-only boot.
+        project: Project name for scoped rules and work items. Omit for global-only boot.
     """
     from cairn.core.budget import apply_list_budget, estimate_tokens_for_dict
 
@@ -1259,7 +1403,7 @@ def orient(project: str | None = None) -> dict:
         budget_rules = int(total_budget * ORIENT_ALLOC_RULES)
         budget_learnings = int(total_budget * ORIENT_ALLOC_LEARNINGS)
         budget_trail = int(total_budget * ORIENT_ALLOC_TRAIL)
-        budget_tasks = int(total_budget * ORIENT_ALLOC_TASKS)
+        budget_work_items = int(total_budget * ORIENT_ALLOC_WORK_ITEMS)
 
         tokens_used = 0
 
@@ -1329,14 +1473,14 @@ def orient(project: str | None = None) -> dict:
                 trail_tokens = estimate_tokens_for_dict(trail_data)
             tokens_used += trail_tokens
             surplus = max(0, budget_trail - trail_tokens)
-            budget_tasks += surplus
+            budget_work_items += surplus
         except Exception:
             logger.debug("orient: trail section failed", exc_info=True)
-            budget_tasks += budget_trail
+            budget_work_items += budget_trail
 
-        # --- Section 4: Tasks (20% + surplus) ---
+        # --- Section 4: Work Items (20% + surplus) ---
         # Try work items first; fall back to flat tasks if none exist
-        tasks_data = []
+        work_items_data = []
         try:
             if project:
                 # Work items: ready queue + active (in_progress) items
@@ -1362,29 +1506,29 @@ def orient(project: str | None = None) -> dict:
                         "status": "in_progress",
                     })
                 if wi_items:
-                    tasks_data = wi_items
+                    work_items_data = wi_items
                 else:
                     # Fall back to flat tasks
                     tasks_result = task_manager.list_tasks(project, include_completed=False)
-                    tasks_data = tasks_result.get("items", [])
-            if tasks_data:
-                content_key = "title" if tasks_data and "title" in tasks_data[0] else "description"
-                tasks_data, tasks_meta = apply_list_budget(
-                    tasks_data, budget_tasks, content_key,
-                    overflow_message="...{omitted} more tasks omitted.",
+                    work_items_data = tasks_result.get("items", [])
+            if work_items_data:
+                content_key = "title" if work_items_data and "title" in work_items_data[0] else "description"
+                work_items_data, wi_meta = apply_list_budget(
+                    work_items_data, budget_work_items, content_key,
+                    overflow_message="...{omitted} more work items omitted.",
                 )
-                if tasks_meta["omitted"] > 0:
-                    tasks_data.append({"_overflow": tasks_meta["overflow_message"]})
-                tokens_used += estimate_tokens_for_dict(tasks_data)
+                if wi_meta["omitted"] > 0:
+                    work_items_data.append({"_overflow": wi_meta["overflow_message"]})
+                tokens_used += estimate_tokens_for_dict(work_items_data)
         except Exception:
-            logger.debug("orient: tasks section failed", exc_info=True)
+            logger.debug("orient: work items section failed", exc_info=True)
 
         return {
             "project": project,
             "rules": rules_data,
             "trail": trail_data,
             "learnings": learnings_data,
-            "tasks": tasks_data,
+            "work_items": work_items_data,
             "_budget": {"total": total_budget, "used": tokens_used},
         }
     except Exception as e:
@@ -1439,12 +1583,15 @@ def messages(
     include_archived: bool = False,
     limit: int = 20,
 ) -> dict | list[dict]:
-    """Send and receive messages between agents and the user.
+    """SOFT-DEPRECATED: Prefer work item activity feed for agent communication.
 
-    WHEN TO USE:
-    - Leaving a note for the user: task completed, issue found, question to answer later
-    - Checking if anyone left you a message
-    - Async communication between sessions
+    The activity log on work_items() is now the primary channel for agent ↔ human
+    communication (use heartbeat, note, gate actions). This tool remains functional
+    for backward compatibility and for messages not tied to a specific work item.
+
+    WHEN TO USE (legacy):
+    - Leaving a note for the user that isn't tied to a work item
+    - Checking if anyone left you a message (historical)
 
     Actions:
     - 'send': Send a message. Requires content and project.

@@ -12,6 +12,10 @@ from typing import TYPE_CHECKING
 from cairn.core.analytics import track_operation
 from cairn.core.constants import (
     SHORT_ID_PREFIX,
+    ActivityType,
+    AgentState,
+    GateType,
+    RiskTier,
     WorkItemStatus,
     WorkItemType,
 )
@@ -88,6 +92,8 @@ class WorkItemManager:
         item_type: str, priority: int, status: str, short_id: str,
         content_embedding: list[float] | None = None,
         parent_id: int | None = None,
+        risk_tier: int = 0,
+        gate_type: str | None = None,
     ) -> None:
         """Dual-write: create WorkItem node in graph, update PG sync columns."""
         if not self.graph:
@@ -98,6 +104,7 @@ class WorkItemManager:
                 description=description, item_type=item_type,
                 priority=priority, status=status, short_id=short_id,
                 content_embedding=content_embedding,
+                risk_tier=risk_tier, gate_type=gate_type,
             )
             self.db.execute(
                 "UPDATE work_items SET graph_uuid = %s, graph_synced = true WHERE id = %s",
@@ -128,6 +135,40 @@ class WorkItemManager:
             "SELECT * FROM work_items WHERE short_id = %s", (id_or_short_id,),
         )
 
+    def _log_activity(
+        self,
+        work_item_id: int,
+        actor: str | None,
+        activity_type: str,
+        content: str | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        """Record an activity entry for a work item."""
+        self.db.execute(
+            """INSERT INTO work_item_activity (work_item_id, actor, activity_type, content, metadata)
+               VALUES (%s, %s, %s, %s, %s::jsonb)""",
+            (work_item_id, actor, activity_type, content, _json_dumps(metadata)),
+        )
+
+    def _collect_constraints(self, item: dict) -> dict:
+        """Walk up the parent chain collecting merged constraints."""
+        merged = dict(item.get("constraints") or {})
+        parent_id = item.get("parent_id")
+        seen = {item["id"]}
+        while parent_id and parent_id not in seen:
+            seen.add(parent_id)
+            parent = self.db.execute_one(
+                "SELECT id, parent_id, constraints FROM work_items WHERE id = %s",
+                (parent_id,),
+            )
+            if not parent:
+                break
+            parent_constraints = parent.get("constraints") or {}
+            # Parent constraints are defaults; child overrides take precedence
+            merged = {**parent_constraints, **merged}
+            parent_id = parent.get("parent_id")
+        return merged
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -144,10 +185,15 @@ class WorkItemManager:
         session_name: str | None = None,
         metadata: dict | None = None,
         acceptance_criteria: str | None = None,
+        constraints: dict | None = None,
+        risk_tier: int | None = None,
     ) -> dict:
         """Create a new work item."""
         if item_type not in WorkItemType.ALL:
             item_type = WorkItemType.TASK
+
+        if risk_tier is not None and risk_tier not in RiskTier.ALL:
+            risk_tier = RiskTier.PATROL
 
         project_id = get_or_create_project(self.db, project)
         content_embedding = self._embed_content(title, description)
@@ -156,14 +202,16 @@ class WorkItemManager:
             """
             INSERT INTO work_items
                 (project_id, title, description, acceptance_criteria, item_type,
-                 priority, parent_id, session_name, embedding, metadata)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+                 priority, parent_id, session_name, embedding, metadata,
+                 constraints, risk_tier)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s)
             RETURNING id, created_at
             """,
             (
                 project_id, title, description, acceptance_criteria, item_type,
                 priority, parent_id, session_name,
                 content_embedding, _json_dumps(metadata),
+                _json_dumps(constraints), risk_tier or 0,
             ),
         )
 
@@ -173,7 +221,22 @@ class WorkItemManager:
             "UPDATE work_items SET short_id = %s WHERE id = %s",
             (short_id, row["id"]),
         )
+
+        # Log creation activity
+        self._log_activity(
+            row["id"], None, ActivityType.CREATED,
+            f"Created {item_type}: {title}",
+            {"item_type": item_type, "priority": priority, "risk_tier": risk_tier or 0},
+        )
+
         self.db.commit()
+
+        # Risk tier CRITICAL auto-gates with human gate
+        if risk_tier == RiskTier.CRITICAL:
+            self.set_gate(
+                row["id"], GateType.HUMAN,
+                gate_data={"question": "This is a CRITICAL risk item. Confirm before proceeding.", "auto_set": True},
+            )
 
         # Dual-write to graph
         self._graph_sync_work_item(
@@ -181,6 +244,7 @@ class WorkItemManager:
             description=description, item_type=item_type, priority=priority,
             status=WorkItemStatus.OPEN, short_id=short_id,
             content_embedding=content_embedding, parent_id=parent_id,
+            risk_tier=risk_tier or 0,
         )
 
         logger.info("Created work item %s (#%d) for project %s", short_id, row["id"], project)
@@ -193,6 +257,7 @@ class WorkItemManager:
             "priority": priority,
             "status": WorkItemStatus.OPEN,
             "parent_id": parent_id,
+            "risk_tier": risk_tier or 0,
             "created_at": row["created_at"].isoformat(),
         }
 
@@ -220,7 +285,8 @@ class WorkItemManager:
 
         # Build dynamic SET clause
         allowed = {"title", "description", "acceptance_criteria", "priority",
-                    "status", "assignee", "session_name", "metadata", "item_type"}
+                    "status", "assignee", "session_name", "metadata", "item_type",
+                    "risk_tier", "constraints"}
         sets = ["updated_at = NOW()"]
         params = []
 
@@ -229,6 +295,9 @@ class WorkItemManager:
                 continue
             if key == "metadata":
                 sets.append("metadata = metadata || %s::jsonb")
+                params.append(_json_dumps(val))
+            elif key == "constraints":
+                sets.append("constraints = constraints || %s::jsonb")
                 params.append(_json_dumps(val))
             else:
                 sets.append(f"{key} = %s")
@@ -260,6 +329,14 @@ class WorkItemManager:
                     (emb, item["id"]),
                 )
 
+        # Log status change activity
+        if new_status:
+            self._log_activity(
+                item["id"], None, ActivityType.STATUS_CHANGE,
+                f"Status: {item['status']} -> {new_status}",
+                {"old_status": item["status"], "new_status": new_status},
+            )
+
         self.db.commit()
 
         # Graph status sync
@@ -271,6 +348,13 @@ class WorkItemManager:
                     self.graph.update_work_item_status(item["graph_uuid"], new_status)
             except Exception:
                 logger.warning("Graph status sync failed for work_item #%d", item["id"], exc_info=True)
+
+        # Graph risk_tier sync
+        if "risk_tier" in fields and self.graph and item.get("graph_uuid"):
+            try:
+                self.graph.update_work_item_risk_tier(item["graph_uuid"], fields["risk_tier"])
+            except Exception:
+                logger.debug("Graph risk_tier sync failed for work_item #%d", item["id"])
 
         return {"id": item["id"], "short_id": item["short_id"], "action": "updated"}
 
@@ -295,6 +379,12 @@ class WorkItemManager:
                 f"Cannot claim work item {item['short_id']} — "
                 f"status is '{item['status']}' (must be open or ready)"
             )
+
+        self._log_activity(
+            item["id"], assignee, ActivityType.CLAIM,
+            f"Claimed by {assignee}",
+            {"assignee": assignee, "old_status": item["status"]},
+        )
         self.db.commit()
 
         # Graph sync
@@ -330,6 +420,12 @@ class WorkItemManager:
             WHERE id = %s
             """,
             (item["id"],),
+        )
+
+        self._log_activity(
+            item["id"], None, ActivityType.STATUS_CHANGE,
+            f"Completed (was {item['status']})",
+            {"old_status": item["status"], "new_status": "done"},
         )
 
         # Auto-unblock: items that were blocked only by this item
@@ -382,7 +478,11 @@ class WorkItemManager:
         priority: int = 0,
         **kwargs,
     ) -> dict:
-        """Add a child work item. Auto-infers item_type from parent."""
+        """Add a child work item. Auto-infers item_type from parent.
+
+        Inherits parent constraints (merged with any child overrides) and
+        risk_tier (if child doesn't specify one).
+        """
         parent = self._resolve_id(parent_id)
         if not parent:
             raise ValueError(f"Parent work item {parent_id} not found")
@@ -395,6 +495,14 @@ class WorkItemManager:
 
         child_type = WorkItemType.CHILD_TYPE.get(parent["item_type"], WorkItemType.SUBTASK)
 
+        # Cascade constraints: parent + child overrides
+        parent_constraints = parent.get("constraints") or {}
+        child_constraints = {**parent_constraints, **(kwargs.pop("constraints", None) or {})}
+
+        # Inherit risk_tier if child doesn't specify one
+        if "risk_tier" not in kwargs or kwargs.get("risk_tier") is None:
+            kwargs["risk_tier"] = parent.get("risk_tier") or 0
+
         return self.create(
             project=project_name,
             title=title,
@@ -402,6 +510,7 @@ class WorkItemManager:
             item_type=child_type,
             priority=priority,
             parent_id=parent["id"],
+            constraints=child_constraints,
             **kwargs,
         )
 
@@ -569,6 +678,7 @@ class WorkItemManager:
         query = f"""
             SELECT wi.id, wi.short_id, wi.title, wi.item_type, wi.priority,
                    wi.status, wi.assignee, wi.parent_id, wi.session_name,
+                   wi.risk_tier, wi.gate_type, wi.agent_state,
                    wi.created_at, wi.updated_at, wi.completed_at, wi.cancelled_at,
                    p.name AS project,
                    (SELECT COUNT(*) FROM work_items c WHERE c.parent_id = wi.id) AS children_count
@@ -594,6 +704,9 @@ class WorkItemManager:
                 "project": r["project"],
                 "children_count": r["children_count"],
                 "session_name": r["session_name"],
+                "risk_tier": r["risk_tier"] or 0,
+                "gate_type": r["gate_type"],
+                "agent_state": r["agent_state"],
                 "created_at": r["created_at"].isoformat() if r["created_at"] else None,
                 "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
                 "completed_at": r["completed_at"].isoformat() if r["completed_at"] else None,
@@ -724,6 +837,14 @@ class WorkItemManager:
             "blocking": [dict(b) for b in blocking],
             "linked_memories": [dict(m) for m in linked],
             "metadata": item["metadata"],
+            "risk_tier": item.get("risk_tier") or 0,
+            "gate_type": item.get("gate_type"),
+            "gate_data": item.get("gate_data") or {},
+            "gate_resolved_at": item["gate_resolved_at"].isoformat() if item.get("gate_resolved_at") else None,
+            "gate_response": item.get("gate_response"),
+            "constraints": item.get("constraints") or {},
+            "agent_state": item.get("agent_state"),
+            "last_heartbeat": item["last_heartbeat"].isoformat() if item.get("last_heartbeat") else None,
             "session_name": item["session_name"],
             "created_at": item["created_at"].isoformat() if item["created_at"] else None,
             "updated_at": item["updated_at"].isoformat() if item["updated_at"] else None,
@@ -760,6 +881,325 @@ class WorkItemManager:
             "work_item_id": item["id"],
             "short_id": item["short_id"],
             "linked": memory_ids,
+        }
+
+
+    # ------------------------------------------------------------------
+    # Gate primitives (v0.48.0)
+    # ------------------------------------------------------------------
+
+    @track_operation("work_items.set_gate")
+    def set_gate(
+        self,
+        work_item_id: int | str,
+        gate_type: str,
+        gate_data: dict | None = None,
+        actor: str | None = None,
+    ) -> dict:
+        """Block a work item on a gate (human input, timer, etc.)."""
+        if gate_type not in GateType.ALL:
+            raise ValueError(f"Invalid gate_type: {gate_type}. Valid: {GateType.ALL}")
+
+        item = self._resolve_id(work_item_id)
+        if not item:
+            raise ValueError(f"Work item {work_item_id} not found")
+
+        self.db.execute(
+            """UPDATE work_items
+               SET gate_type = %s, gate_data = %s::jsonb,
+                   gate_resolved_at = NULL, gate_response = NULL,
+                   status = 'blocked', updated_at = NOW()
+               WHERE id = %s""",
+            (gate_type, _json_dumps(gate_data), item["id"]),
+        )
+
+        self._log_activity(
+            item["id"], actor, ActivityType.GATE_SET,
+            f"Gate set: {gate_type}",
+            {"gate_type": gate_type, "gate_data": gate_data or {}},
+        )
+        self.db.commit()
+
+        # Graph sync
+        if self.graph and item.get("graph_uuid"):
+            try:
+                self.graph.update_work_item_gate(item["graph_uuid"], gate_type)
+                self.graph.update_work_item_status(item["graph_uuid"], WorkItemStatus.BLOCKED)
+            except Exception:
+                logger.debug("Graph gate sync failed for work_item #%d", item["id"])
+
+        return {
+            "id": item["id"],
+            "short_id": item["short_id"],
+            "gate_type": gate_type,
+            "status": WorkItemStatus.BLOCKED,
+            "action": "gate_set",
+        }
+
+    @track_operation("work_items.resolve_gate")
+    def resolve_gate(
+        self,
+        work_item_id: int | str,
+        response: dict | None = None,
+        actor: str | None = None,
+    ) -> dict:
+        """Resolve a gate, unblocking the work item."""
+        item = self._resolve_id(work_item_id)
+        if not item:
+            raise ValueError(f"Work item {work_item_id} not found")
+
+        if not item.get("gate_type"):
+            raise ValueError(f"Work item {item['short_id']} has no active gate")
+        if item.get("gate_resolved_at"):
+            raise ValueError(f"Gate on {item['short_id']} is already resolved")
+
+        self.db.execute(
+            """UPDATE work_items
+               SET gate_resolved_at = NOW(), gate_response = %s::jsonb,
+                   updated_at = NOW()
+               WHERE id = %s""",
+            (_json_dumps(response), item["id"]),
+        )
+
+        # Check if there are other active blockers
+        remaining = self.db.execute_one(
+            """SELECT COUNT(*) AS cnt FROM work_item_blocks wb
+               JOIN work_items wi ON wi.id = wb.blocker_id
+               WHERE wb.blocked_id = %s AND wi.status NOT IN ('done', 'cancelled')""",
+            (item["id"],),
+        )
+        has_other_blockers = remaining and remaining["cnt"] > 0
+
+        new_status = WorkItemStatus.BLOCKED if has_other_blockers else WorkItemStatus.OPEN
+        self.db.execute(
+            "UPDATE work_items SET status = %s WHERE id = %s",
+            (new_status, item["id"]),
+        )
+
+        self._log_activity(
+            item["id"], actor, ActivityType.GATE_RESOLVED,
+            f"Gate resolved: {item['gate_type']}",
+            {"gate_type": item["gate_type"], "response": response or {}, "new_status": new_status},
+        )
+        self.db.commit()
+
+        # Graph sync
+        if self.graph and item.get("graph_uuid"):
+            try:
+                self.graph.resolve_work_item_gate(item["graph_uuid"])
+                self.graph.update_work_item_status(item["graph_uuid"], new_status)
+            except Exception:
+                logger.debug("Graph gate resolve sync failed for work_item #%d", item["id"])
+
+        return {
+            "id": item["id"],
+            "short_id": item["short_id"],
+            "gate_type": item["gate_type"],
+            "status": new_status,
+            "action": "gate_resolved",
+        }
+
+    # ------------------------------------------------------------------
+    # Agent heartbeat (v0.48.0)
+    # ------------------------------------------------------------------
+
+    @track_operation("work_items.heartbeat")
+    def heartbeat(
+        self,
+        work_item_id: int | str,
+        agent_name: str,
+        state: str = "working",
+        note: str | None = None,
+    ) -> dict:
+        """Agent reports it's still working. Updates heartbeat timestamp and agent state."""
+        if state not in AgentState.ALL:
+            state = AgentState.WORKING
+
+        item = self._resolve_id(work_item_id)
+        if not item:
+            raise ValueError(f"Work item {work_item_id} not found")
+
+        self.db.execute(
+            """UPDATE work_items
+               SET last_heartbeat = NOW(), agent_state = %s, updated_at = NOW()
+               WHERE id = %s""",
+            (state, item["id"]),
+        )
+
+        # Only log if there's a note (avoid activity spam)
+        if note:
+            self._log_activity(
+                item["id"], agent_name, ActivityType.HEARTBEAT,
+                note, {"agent_state": state},
+            )
+
+        self.db.commit()
+        return {
+            "id": item["id"],
+            "short_id": item["short_id"],
+            "agent_state": state,
+            "action": "heartbeat",
+        }
+
+    # ------------------------------------------------------------------
+    # Activity feed (v0.48.0)
+    # ------------------------------------------------------------------
+
+    @track_operation("work_items.activity")
+    def get_activity(
+        self,
+        work_item_id: int | str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict:
+        """Get activity log for a work item."""
+        item = self._resolve_id(work_item_id)
+        if not item:
+            raise ValueError(f"Work item {work_item_id} not found")
+
+        count_row = self.db.execute_one(
+            "SELECT COUNT(*) AS total FROM work_item_activity WHERE work_item_id = %s",
+            (item["id"],),
+        )
+
+        rows = self.db.execute(
+            """SELECT id, actor, activity_type, content, metadata, created_at
+               FROM work_item_activity
+               WHERE work_item_id = %s
+               ORDER BY created_at DESC
+               LIMIT %s OFFSET %s""",
+            (item["id"], limit, offset),
+        )
+
+        return {
+            "work_item_id": item["id"],
+            "short_id": item["short_id"],
+            "total": count_row["total"] if count_row else 0,
+            "limit": limit,
+            "offset": offset,
+            "activities": [
+                {
+                    "id": r["id"],
+                    "actor": r["actor"],
+                    "activity_type": r["activity_type"],
+                    "content": r["content"],
+                    "metadata": r["metadata"] or {},
+                    "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                }
+                for r in rows
+            ],
+        }
+
+    # ------------------------------------------------------------------
+    # Agent briefing (v0.48.0)
+    # ------------------------------------------------------------------
+
+    @track_operation("work_items.briefing")
+    def generate_briefing(self, work_item_id: int | str) -> dict:
+        """Assemble agent briefing context for a work item."""
+        item_detail = self.get(work_item_id)
+
+        # Resolve full item row for constraint walking
+        item = self._resolve_id(work_item_id)
+        all_constraints = self._collect_constraints(item) if item else {}
+
+        # Build parent chain for orientation
+        parent_chain = []
+        pid = item.get("parent_id") if item else None
+        seen = set()
+        while pid and pid not in seen:
+            seen.add(pid)
+            p = self.db.execute_one(
+                "SELECT id, short_id, title, parent_id FROM work_items WHERE id = %s",
+                (pid,),
+            )
+            if not p:
+                break
+            parent_chain.append({"short_id": p["short_id"], "title": p["title"]})
+            pid = p.get("parent_id")
+        parent_chain.reverse()
+
+        return {
+            "work_item": {
+                "id": item_detail["id"],
+                "short_id": item_detail["short_id"],
+                "title": item_detail["title"],
+                "description": item_detail.get("description"),
+                "acceptance_criteria": item_detail.get("acceptance_criteria"),
+                "risk_tier": item_detail.get("risk_tier", 0),
+                "risk_label": RiskTier.LABELS.get(item_detail.get("risk_tier", 0), "patrol"),
+            },
+            "constraints": all_constraints,
+            "context": [
+                {"id": m["id"], "summary": m.get("summary"), "type": m.get("memory_type")}
+                for m in item_detail.get("linked_memories", [])
+            ],
+            "parent_chain": parent_chain,
+        }
+
+    # ------------------------------------------------------------------
+    # Gated items query (v0.48.0)
+    # ------------------------------------------------------------------
+
+    @track_operation("work_items.gated")
+    def gated_items(
+        self,
+        project: str | None = None,
+        gate_type: str | None = None,
+        limit: int = 20,
+    ) -> dict:
+        """Items waiting on gate resolution (the 'needs your input' queue)."""
+        conditions = ["wi.gate_type IS NOT NULL", "wi.gate_resolved_at IS NULL"]
+        params: list = []
+
+        if project:
+            project_id = get_project(self.db, project)
+            if project_id is None:
+                return {"total": 0, "items": []}
+            conditions.append("wi.project_id = %s")
+            params.append(project_id)
+
+        if gate_type:
+            conditions.append("wi.gate_type = %s")
+            params.append(gate_type)
+
+        where = " AND ".join(conditions)
+
+        count_row = self.db.execute_one(
+            f"SELECT COUNT(*) AS total FROM work_items wi WHERE {where}",
+            tuple(params),
+        )
+
+        params.append(limit)
+        rows = self.db.execute(
+            f"""SELECT wi.id, wi.short_id, wi.title, wi.item_type, wi.priority,
+                       wi.status, wi.gate_type, wi.gate_data, wi.risk_tier,
+                       p.name AS project
+                FROM work_items wi
+                LEFT JOIN projects p ON wi.project_id = p.id
+                WHERE {where}
+                ORDER BY wi.priority DESC, wi.created_at ASC
+                LIMIT %s""",
+            tuple(params),
+        )
+
+        return {
+            "total": count_row["total"] if count_row else 0,
+            "items": [
+                {
+                    "id": r["id"],
+                    "short_id": r["short_id"],
+                    "title": r["title"],
+                    "item_type": r["item_type"],
+                    "priority": r["priority"],
+                    "status": r["status"],
+                    "gate_type": r["gate_type"],
+                    "gate_data": r["gate_data"] or {},
+                    "risk_tier": r["risk_tier"] or 0,
+                    "project": r["project"],
+                }
+                for r in rows
+            ],
         }
 
 

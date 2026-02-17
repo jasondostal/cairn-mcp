@@ -10,15 +10,18 @@ Works with any API that speaks the /v1/chat/completions format:
   - Any OpenAI-compatible endpoint
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import time
 import urllib.request
 import urllib.error
+from collections.abc import Iterator
 
 from cairn.config import LLMConfig
 from cairn.core import stats
-from cairn.llm.interface import LLMInterface
+from cairn.llm.interface import LLMInterface, LLMResponse, StreamEvent
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +117,71 @@ class OpenAICompatibleLLM(LLMInterface):
             success=False, error_message=str(last_error),
         )
         raise last_error  # All retries exhausted
+
+    def generate_stream(
+        self, messages: list[dict], max_tokens: int = 1024,
+    ) -> Iterator[StreamEvent]:
+        """Stream text via OpenAI-compatible /v1/chat/completions with stream=true."""
+        payload = json.dumps({
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": 0.3,
+            "stream": True,
+        }).encode()
+
+        req = urllib.request.Request(
+            f"{self.base_url}/v1/chat/completions",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            },
+        )
+
+        t0 = time.monotonic()
+        full_text = ""
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                for raw_line in resp:
+                    line = raw_line.decode("utf-8", errors="replace").strip()
+                    if not line or not line.startswith("data: "):
+                        continue
+                    data = line[6:]  # strip "data: " prefix
+                    if data == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                    except json.JSONDecodeError:
+                        continue
+                    choices = chunk.get("choices", [])
+                    if not choices:
+                        continue
+                    delta = choices[0].get("delta", {})
+                    token = delta.get("content", "")
+                    if token:
+                        full_text += token
+                        yield StreamEvent(type="text_delta", text=token)
+
+            latency_ms = (time.monotonic() - t0) * 1000
+            tokens_out = len(full_text) // 4
+            tokens_in = sum(len(m.get("content", "")) for m in messages) // 4
+            if stats.llm_stats:
+                stats.llm_stats.record_call(tokens_est=tokens_in + tokens_out)
+            stats.emit_usage_event(
+                "llm.generate", self.model,
+                tokens_in=tokens_in, tokens_out=tokens_out, latency_ms=latency_ms,
+            )
+        except Exception as e:
+            logger.error("OpenAI-compat streaming error: %s", e)
+            if stats.llm_stats:
+                stats.llm_stats.record_error(str(e))
+            raise
+
+        yield StreamEvent(
+            type="response_complete",
+            response=LLMResponse(text=full_text, stop_reason="end_turn"),
+        )
 
     def get_model_name(self) -> str:
         return self.model

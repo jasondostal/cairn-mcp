@@ -2,7 +2,9 @@
 
 import type { WorkItem, WorkItemStatus } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { StatusDot, StatusText, PriorityDots } from "./status-dot";
+import { StatusDot, StatusText, PriorityLabel } from "./status-dot";
+import { RiskTierBadge } from "./risk-tier-badge";
+import { Hand } from "lucide-react";
 
 interface WorkItemRowProps {
   item: WorkItem;
@@ -27,6 +29,7 @@ export function WorkItemRow({
     : item.status;
   const isDone = item.status === "done";
   const isCancelled = item.status === "cancelled";
+  const hasGate = item.gate_type !== null && item.gate_type !== undefined;
 
   return (
     <div
@@ -68,7 +71,12 @@ export function WorkItemRow({
         {item.title}
       </span>
 
-      <PriorityDots priority={item.priority} />
+      {hasGate && (
+        <Hand className="h-3 w-3 text-[oklch(0.769_0.188_70)] shrink-0" />
+      )}
+
+      <PriorityLabel priority={item.priority} />
+      <RiskTierBadge tier={item.risk_tier} />
 
       <StatusText status={effectiveStatus} />
 

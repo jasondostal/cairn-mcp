@@ -71,6 +71,8 @@ class WorkItemNode:
     priority: int
     status: str
     short_id: str
+    risk_tier: int = 0
+    gate_type: str | None = None
 
 
 class GraphProvider(ABC):
@@ -370,6 +372,8 @@ class GraphProvider(ABC):
         status: str,
         short_id: str,
         content_embedding: list[float] | None = None,
+        risk_tier: int = 0,
+        gate_type: str | None = None,
     ) -> str:
         """Create a WorkItem node. Returns UUID."""
 
@@ -396,6 +400,18 @@ class GraphProvider(ABC):
     @abstractmethod
     def assign_work_item(self, work_item_uuid: str, assignee: str) -> None:
         """Set assignee on a WorkItem node."""
+
+    @abstractmethod
+    def update_work_item_gate(self, work_item_uuid: str, gate_type: str) -> None:
+        """Set gate_type on a WorkItem node (blocks it on a gate)."""
+
+    @abstractmethod
+    def resolve_work_item_gate(self, work_item_uuid: str) -> None:
+        """Clear gate_type on a WorkItem node (gate resolved)."""
+
+    @abstractmethod
+    def update_work_item_risk_tier(self, work_item_uuid: str, risk_tier: int) -> None:
+        """Update risk_tier on a WorkItem node."""
 
     @abstractmethod
     def link_work_item_to_memory(self, work_item_uuid: str, episode_id: int) -> None:

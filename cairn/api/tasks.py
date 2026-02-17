@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Query, Path
+from pydantic import BaseModel
 
 from cairn.api.utils import parse_multi
 from cairn.core.services import Services
+
+
+class TaskCreateBody(BaseModel):
+    project: str
+    description: str
 
 
 def register_routes(router: APIRouter, svc: Services, **kw):
@@ -22,6 +28,10 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             project=parse_multi(project), include_completed=include_completed,
             limit=limit, offset=offset,
         )
+
+    @router.post("/tasks")
+    def api_task_create(body: TaskCreateBody):
+        return task_manager.create(project=body.project, description=body.description)
 
     @router.post("/tasks/{task_id}/complete")
     def api_task_complete(task_id: int = Path(...)):

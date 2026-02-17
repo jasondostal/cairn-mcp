@@ -921,6 +921,8 @@ class Neo4jGraphProvider(GraphProvider):
         status: str,
         short_id: str,
         content_embedding: list[float] | None = None,
+        risk_tier: int = 0,
+        gate_type: str | None = None,
     ) -> str:
         wi_uuid = str(uuid.uuid4())
         with self._session() as session:
@@ -937,6 +939,8 @@ class Neo4jGraphProvider(GraphProvider):
                     status: $status,
                     short_id: $short_id,
                     content_embedding: $embedding,
+                    risk_tier: $risk_tier,
+                    gate_type: $gate_type,
                     created_at: $now
                 })
                 """,
@@ -950,6 +954,8 @@ class Neo4jGraphProvider(GraphProvider):
                 status=status,
                 short_id=short_id,
                 embedding=content_embedding,
+                risk_tier=risk_tier,
+                gate_type=gate_type,
                 now=datetime.now(timezone.utc).isoformat(),
             )
         return wi_uuid
@@ -1021,6 +1027,41 @@ class Neo4jGraphProvider(GraphProvider):
                 """,
                 uuid=work_item_uuid,
                 assignee=assignee,
+                now=datetime.now(timezone.utc).isoformat(),
+            )
+
+    def update_work_item_gate(self, work_item_uuid: str, gate_type: str) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (wi:WorkItem {uuid: $uuid})
+                SET wi.gate_type = $gate_type, wi.updated_at = $now
+                """,
+                uuid=work_item_uuid,
+                gate_type=gate_type,
+                now=datetime.now(timezone.utc).isoformat(),
+            )
+
+    def resolve_work_item_gate(self, work_item_uuid: str) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (wi:WorkItem {uuid: $uuid})
+                SET wi.gate_type = NULL, wi.updated_at = $now
+                """,
+                uuid=work_item_uuid,
+                now=datetime.now(timezone.utc).isoformat(),
+            )
+
+    def update_work_item_risk_tier(self, work_item_uuid: str, risk_tier: int) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (wi:WorkItem {uuid: $uuid})
+                SET wi.risk_tier = $risk_tier, wi.updated_at = $now
+                """,
+                uuid=work_item_uuid,
+                risk_tier=risk_tier,
                 now=datetime.now(timezone.utc).isoformat(),
             )
 

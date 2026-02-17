@@ -56,7 +56,7 @@ export default function AnalyticsPage() {
       {error && <ErrorState message="Failed to load operations" detail={error} />}
 
       {!loading && !error && (!opsData || opsData.items.length === 0) && (
-        <EmptyState message="No operations recorded yet." />
+        <EmptyState message="No operations recorded yet." detail="Operations are logged automatically as Cairn processes searches, embeddings, and LLM calls." />
       )}
 
       {!loading && !error && opsData && opsData.items.length > 0 && (

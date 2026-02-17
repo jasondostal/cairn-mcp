@@ -28,15 +28,15 @@ KEEPER_IDS = {
     75,   # Collaboration evolution Phase 0→5 (part 1)
     76,   # Collaboration evolution Phase 0→5 (part 2)
     99,   # Motes organic metaphor origin
-    116,  # The Third Voice — Kristin review insight
+    116,  # The Third Voice — external review insight
     131,  # Emotional arc documentation
     132,  # Vulnerability fear — "seen as stupid"
     134,  # Shower thoughts session
     135,  # Captain Crunch — hacker ethos moment
     177,  # What IS this relationship
-    255,  # ADHD-informed, GRIMOIRE portable
-    257,  # ADHD cognitive scaffolding realization
-    416,  # The Arc of Jason Dostal — full reflection
+    255,  # Neurodivergent-informed, GRIMOIRE portable
+    257,  # Cognitive scaffolding realization
+    416,  # Personal arc — full reflection
     671,  # The test that mattered — tears of relief
 
     # ── Category 3: Design Preferences ──
@@ -91,8 +91,8 @@ KEEPER_IDS = {
 
     # ── Category 6: Document/Primer memories ──
     107,  # FDX API specification reference
-    114,  # EVOLUTION.md tone feedback from Kristin
-    118,  # Kristin review session — close the loop
+    114,  # EVOLUTION.md tone feedback from reviewer
+    118,  # External review session — close the loop
     119,  # Capability brief session
     127,  # Evolution thesis — vulnerability as barrier
     136,  # EIS/EIP roadmap + manifesto
@@ -122,7 +122,7 @@ KEEPER_IDS = {
     242,  # Trust level update — full operational autonomy
     309,  # Datasette deployment experiment (BirdNET)
     471,  # Recallium → Cairn migration complete
-    529,  # Rule: Kristin reviews external content (may be caught by rules query too)
+    529,  # Rule: External review for published content
     565,  # Cairn deploy workflow
     669,  # MCP connection fix (v0.34.2)
     672,  # v0.35.0 release + knowledge extraction
