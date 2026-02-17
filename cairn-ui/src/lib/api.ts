@@ -606,16 +606,8 @@ export interface ModelPerformance {
 // --- Dashboard types ---
 
 export interface EntitySparklines {
-  totals: {
-    memories: number;
-    projects: number;
-    clusters: number;
-  };
-  sparklines: {
-    memories: SparklinePoint[];
-    projects: SparklinePoint[];
-    clusters: SparklinePoint[];
-  };
+  totals: Record<string, number>;
+  sparklines: Record<string, SparklinePoint[]>;
   days: number;
 }
 

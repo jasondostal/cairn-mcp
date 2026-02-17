@@ -815,7 +815,12 @@ class AnalyticsQueryEngine:
             SELECT
                 (SELECT COUNT(*) FROM memories WHERE is_active = true) as memories,
                 (SELECT COUNT(*) FROM projects) as projects,
-                (SELECT COUNT(*) FROM clusters) as clusters
+                (SELECT COUNT(*) FROM clusters) as clusters,
+                (SELECT COUNT(*) FROM work_items) as work_items,
+                (SELECT COUNT(*) FROM tasks) as tasks,
+                (SELECT COUNT(*) FROM thinking_sequences) as thinking,
+                (SELECT COUNT(*) FROM conversations) as conversations,
+                (SELECT COUNT(*) FROM messages) as messages
             """,
             (),
         )
@@ -825,11 +830,21 @@ class AnalyticsQueryEngine:
                 "memories": totals["memories"] if totals else 0,
                 "projects": totals["projects"] if totals else 0,
                 "clusters": totals["clusters"] if totals else 0,
+                "work_items": totals["work_items"] if totals else 0,
+                "tasks": totals["tasks"] if totals else 0,
+                "thinking": totals["thinking"] if totals else 0,
+                "conversations": totals["conversations"] if totals else 0,
+                "messages": totals["messages"] if totals else 0,
             },
             "sparklines": {
                 "memories": _daily_counts("memories", "created_at"),
                 "projects": _daily_counts("projects", "created_at"),
                 "clusters": _daily_counts("clusters", "created_at"),
+                "work_items": _daily_counts("work_items", "created_at"),
+                "tasks": _daily_counts("tasks", "created_at"),
+                "thinking": _daily_counts("thinking_sequences", "created_at"),
+                "conversations": _daily_counts("conversations", "created_at"),
+                "messages": _daily_counts("messages", "created_at"),
             },
             "days": days,
         }

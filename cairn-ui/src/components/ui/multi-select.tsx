@@ -21,8 +21,15 @@ import {
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 
+export interface MultiSelectOption {
+  value: string;
+  label: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  color?: string;
+}
+
 interface MultiSelectProps {
-  options: Array<{ value: string; label: string }>;
+  options: MultiSelectOption[];
   value: string[];
   onValueChange: (value: string[]) => void;
   placeholder?: string;
@@ -93,12 +100,20 @@ export function MultiSelect({
             <div className="flex items-center gap-1 overflow-hidden">
               {displayedBadges.map((v) => {
                 const opt = options.find((o) => o.value === v);
+                const Icon = opt?.icon;
+                const color = opt?.color;
                 return (
                   <Badge
                     key={v}
                     variant="secondary"
-                    className="text-xs px-1.5 py-0 h-5 shrink-0"
+                    className="text-xs px-1.5 py-0 h-5 shrink-0 gap-1"
+                    style={color ? {
+                      backgroundColor: `color-mix(in oklch, ${color} 15%, transparent)`,
+                      borderColor: `color-mix(in oklch, ${color} 30%, transparent)`,
+                      color,
+                    } : undefined}
                   >
+                    {Icon && <Icon className="h-3 w-3 shrink-0" />}
                     <span className="truncate max-w-[80px]">
                       {opt?.label ?? v}
                     </span>
@@ -133,7 +148,7 @@ export function MultiSelect({
           </div>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="p-0 w-[200px]" align="start">
+      <PopoverContent className="p-0 w-[240px]" align="start" side="bottom">
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList>
@@ -161,6 +176,7 @@ export function MultiSelect({
               )}
               {options.map((option) => {
                 const isSelected = selectedSet.has(option.value);
+                const Icon = option.icon;
                 return (
                   <CommandItem
                     key={option.value}
@@ -177,6 +193,14 @@ export function MultiSelect({
                     >
                       {isSelected && <Check className="h-3 w-3" />}
                     </div>
+                    {Icon && (
+                      <span
+                        className="mr-1.5 shrink-0 text-muted-foreground"
+                        style={option.color ? { color: option.color } : undefined}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                      </span>
+                    )}
                     {option.label}
                   </CommandItem>
                 );
@@ -184,11 +208,21 @@ export function MultiSelect({
             </CommandGroup>
           </CommandList>
           <CommandSeparator />
-          <div className="p-1">
+          <div className="flex items-center gap-1 p-1">
+            {value.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="flex-1 justify-center text-xs"
+                onClick={() => { onValueChange([]); }}
+              >
+                Clear
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
-              className="w-full justify-center text-xs"
+              className="flex-1 justify-center text-xs"
               onClick={() => setOpen(false)}
             >
               Close
