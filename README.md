@@ -283,7 +283,7 @@ Most agent memory systems require the agent to explicitly decide what's worth re
 
 | Tier | How it works | Agent effort | What's captured |
 |------|-------------|-------------|----------------|
-| **Tier 3: Hook-automated** | IDE lifecycle hooks (Claude Code, Cursor, Windsurf, Cline) silently log every tool call as a *mote* (lightweight event). Events are shipped in batches and digested into rolling summaries. | Zero | Everything — files read, edits made, commands run, searches performed |
+| **Tier 3: Hook-automated** | IDE lifecycle hooks (Claude Code, Cursor, Windsurf, Cline) silently log every tool call as an event. Each event is POSTed directly to the event bus — no batching, no LLM in the hot path. Available immediately via REST or real-time SSE. | Zero | Everything — files read, edits made, commands run, searches performed |
 | **Tier 2: Graph-enriched** | Every stored memory is embedded, enriched, and its entities/facts extracted into the Neo4j knowledge graph. The graph connects memories through shared entities automatically. | Zero (on store) | Entity relationships, facts, temporal evolution |
 | **Tier 1: Organic** | Agent stores memories via behavioral rules — decisions, learnings, dead ends. | Per-insight | Deliberate observations the agent deems important |
 
@@ -296,7 +296,7 @@ The tiers are additive and degrade gracefully. With all three active, a session 
 <details>
 <summary><strong>Session Capture & Hooks</strong></summary>
 
-Cairn can automatically capture your entire session — every tool call logged as a lightweight event (*mote*), digested into rolling summaries. Next session, `trail()` gives graph-aware orientation instead of a blank slate.
+Cairn can automatically capture your entire session — every tool call logged as an event via the event bus. No LLM in the hot path — events are raw INSERT + Postgres NOTIFY. Next session, `trail()` gives graph-aware orientation instead of a blank slate.
 
 **Quick setup:**
 
@@ -317,15 +317,16 @@ The setup script detects your installed IDEs, configures MCP connections, and op
 | Windsurf | auto* | yes | manual | manual |
 | Continue | — | — | — | — |
 
-\*Windsurf: session initializes on first tool use. No session-end hook — the agent calls `cairns(action="set")` directly.
+\*Windsurf: session initializes on first tool use. No session-end hook — sessions remain open until manually closed.
 
-**What happens (Pipeline v2):**
-1. **Session starts** — hook initializes an event log in `~/.cairn/events/`
-2. **Every tool call** — hook captures full `tool_input` and `tool_response` (capped at 2000 chars), appends to the log. Every 25 events, a batch is shipped to `POST /api/events/ingest` in the background.
-3. **Between batches** — DigestWorker on the server digests each batch into a 2-4 sentence LLM summary, stored as a `progress` memory that feeds the knowledge graph via the extraction pipeline.
-4. **Session ends** — hook ships any remaining events, then calls `POST /sessions/{name}/close` to digest any pending batches synchronously. Events are archived to `~/.cairn/events/archive/`.
+**What happens (Event bus):**
+1. **Session starts** — hook POSTs a `session_start` event to `/api/events`. Server auto-creates a session record.
+2. **Every tool call** — hook POSTs a `tool_use` event with `tool_name`, `tool_input`, and `tool_response` (capped at 2000 chars). Fire-and-forget, no local files.
+3. **Session ends** — hook POSTs a `session_end` event and calls `/api/sessions/{name}/close`. Server auto-closes the session.
 
-No hooks? No problem. Memories stored with a `session_name` are still grouped, searchable, and connected through the knowledge graph. `trail()` works from graph data and memory queries — hooks just add richer event-level detail.
+No LLM in the hot path — events are raw INSERT + Postgres NOTIFY. Zero cost per event, sub-millisecond latency. Real-time streaming available via `GET /api/events/stream` (SSE).
+
+No hooks? No problem. Memories stored with a `session_name` are still grouped, searchable, and connected through the knowledge graph. `trail()` works from graph data and memory queries — hooks just add event-level observability.
 
 </details>
 
@@ -355,7 +356,7 @@ No hooks? No problem. Memories stored with a `session_name` are still grouped, s
 </details>
 
 <details>
-<summary><strong>REST API</strong> — 81 endpoints</summary>
+<summary><strong>REST API</strong> — 91 endpoints</summary>
 
 REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Optional API key auth when `CAIRN_AUTH_ENABLED=true`.
 
@@ -383,11 +384,11 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Opt
 | `GET /api/thinking/:id` | Sequence detail with all thoughts |
 | `GET /api/rules?project=` | Behavioral rules |
 | `GET /api/timeline?project=&type=&days=` | Memory activity feed (multi-select filters) |
-| `GET /api/cairns?project=` | *Deprecated in v0.37.0* — returns deprecation notice |
-| `GET /api/cairns/:id` | *Deprecated in v0.37.0* — returns deprecation notice |
-| `POST /api/cairns` | *Deprecated in v0.37.0* — accepted silently for hook backward compat |
-| `GET /api/events?session_name=&project=` | Event batches with digest status |
-| `POST /api/events/ingest` | Ship event batch (202 Accepted, idempotent) |
+| `POST /api/events` | Publish a single event (session_start, tool_use, session_end, etc.) |
+| `GET /api/events?session_name=&project=` | Query events with filters |
+| `GET /api/events/stream?session_name=` | Real-time SSE stream via Postgres LISTEN/NOTIFY |
+| `GET /api/sessions?project=&active_only=` | List sessions with event counts |
+| `POST /api/sessions/{name}/close` | Close a session (set closed_at) |
 | `POST /api/ingest` | Smart ingestion — text, URL, or both. Classify, chunk, dedup, route. |
 | `POST /api/ingest/doc` | Create a single project document |
 | `POST /api/ingest/docs` | Batch create multiple documents (partial success) |
@@ -414,9 +415,7 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Opt
 | `DELETE /api/chat/conversations/{id}` | Delete a conversation |
 | `GET /api/chat/conversations/{id}/messages` | Get conversation messages |
 | `POST /api/chat/conversations/{id}/messages` | Add a message to a conversation |
-| `GET /api/sessions?project=` | Recent sessions with event counts and digest status |
-| `GET /api/sessions/{name}/events` | Event stream + digests for a session |
-| `POST /api/sessions/{name}/close` | Close session: digest pending batches, store as memories |
+| `GET /api/sessions/{name}/events` | Events for a session (delegates to event bus query) |
 | `GET /api/drift?project=` | Check for memories with stale file references |
 | `POST /api/drift` | Submit file hashes for drift comparison |
 | `GET /api/work-items` | List work items with filters (project, status, type, assignee) |
@@ -479,7 +478,7 @@ cairn-ui          |                                                             
                   |  core: memory, search, enrichment, clustering, ingest        |
                   |        extraction, router, reranker, search_v2              |
                   |        projects, tasks, thinking, trail                      |
-                  |        synthesis, consolidation, digest                      |
+                  |        synthesis, consolidation, event_bus                   |
                   |                                                               |
                   |  graph: Neo4j (entities, statements, triples, BFS)          |
                   |  embedding: local (MiniLM), Bedrock (Titan V2) (pluggable)   |
@@ -554,7 +553,6 @@ All via environment variables:
 | `CAIRN_LLM_SESSION_SYNTHESIS` | `true` | Enable session narrative synthesis |
 | `CAIRN_LLM_CONSOLIDATION` | `true` | Enable memory consolidation recommendations |
 | `CAIRN_LLM_CONFIDENCE_GATING` | `false` | Post-search quality assessment (advisory, high reasoning demand) |
-| `CAIRN_LLM_EVENT_DIGEST` | `true` | Digest event batches into rolling LLM summaries |
 | `CAIRN_TERMINAL_BACKEND` | `disabled` | Terminal mode: `native` (xterm.js + asyncssh), `ttyd` (iframe), or `disabled` |
 | `CAIRN_SSH_ENCRYPTION_KEY` | *(empty)* | Fernet key for encrypting SSH credentials (native mode). Generate: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 | `CAIRN_TERMINAL_MAX_SESSIONS` | `5` | Max concurrent terminal sessions |
@@ -577,7 +575,7 @@ All via environment variables:
 | `CAIRN_ROUTER_CAPABLE_BACKEND` | *(empty)* | Backend for capable tier (extraction). Falls back to `CAIRN_LLM_BACKEND` |
 | `CAIRN_ROUTER_CAPABLE_MODEL` | *(empty)* | Model for capable tier |
 | `CAIRN_ROUTER_CAPABLE_BUDGET` | `0` | Daily token budget for capable tier (0 = unlimited) |
-| `CAIRN_ROUTER_FAST_BACKEND` | *(empty)* | Backend for fast tier (enrichment, digest, clustering) |
+| `CAIRN_ROUTER_FAST_BACKEND` | *(empty)* | Backend for fast tier (enrichment, clustering) |
 | `CAIRN_ROUTER_FAST_MODEL` | *(empty)* | Model for fast tier |
 | `CAIRN_ROUTER_FAST_BUDGET` | `0` | Daily token budget for fast tier |
 | `CAIRN_ROUTER_CHAT_BACKEND` | *(empty)* | Backend for chat tier (user-facing) |
@@ -621,7 +619,7 @@ All bulk operations support `--dry-run` for preview.
 
 ### Database Schema
 
-24 migrations:
+25 migrations:
 
 | Migration | Tables / Changes |
 |-----------|--------|
@@ -630,7 +628,7 @@ All bulk operations support `--dry-run` for preview.
 | **003 Phase 4** | `project_documents`, `project_links`, `tasks`, `task_memory_links`, `thinking_sequences`, `thoughts` |
 | **004 Cairns** | `cairns` + `cairn_id` FK on `memories` |
 | **005 Indexes** | Partial indexes on `memories` for timeline and session queries |
-| **006 Events** | `session_events` — streaming event batches with LLM digests |
+| **006 Events** | `session_events` — legacy event batches (superseded by 025) |
 | **007 Doc Title** | `title` column on `project_documents` |
 | **008 Ingestion** | `ingestion_log` — content-hash dedup, source tracking, chunk counts |
 | **009 Drift** | `file_hashes` JSONB column on `memories` for code-aware drift detection |
@@ -649,6 +647,7 @@ All bulk operations support `--dry-run` for preview.
 | **022 Work Items** | `work_items`, `work_item_memory_links`, `work_item_blocks` with HNSW + GIN indexes |
 | **023 Work Orchestration** | `work_item_activity`, gate columns, risk_tier, agent_state, constraints JSONB |
 | **024 Conversations** | `conversations`, `chat_messages` for persistent chat with tool call storage |
+| **025 Event Bus** | `sessions`, `events` tables with Postgres NOTIFY trigger for real-time streaming |
 
 </details>
 

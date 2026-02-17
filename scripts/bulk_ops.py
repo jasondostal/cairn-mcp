@@ -131,8 +131,9 @@ def move_project(db: Database, source: str, target: str, dry_run: bool):
         "project_documents",
         "tasks",
         "thinking_sequences",
+        "sessions",
+        "events",
         "session_events",
-        "cairns",
     ]:
         db.execute(
             f"UPDATE {table} SET project_id = %s WHERE project_id = %s",

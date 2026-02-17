@@ -96,7 +96,6 @@ class LLMCapabilities:
     rule_conflict_check: bool = True
     session_synthesis: bool = True
     consolidation: bool = True
-    event_digest: bool = True           # digest event batches via LLM
     reranking: bool = False             # cross-encoder reranking (requires model download)
     knowledge_extraction: bool = False  # Neo4j graph extraction (requires Neo4j)
     search_v2: bool = False             # intent-routed search with token budgets
@@ -120,7 +119,7 @@ class LLMCapabilities:
             name for name in (
                 "relationship_extract", "rule_conflict_check",
                 "session_synthesis", "consolidation",
-                "event_digest", "reranking", "knowledge_extraction", "search_v2",
+                "reranking", "knowledge_extraction", "search_v2",
                 "query_expansion", "confidence_gating", "type_routing",
                 "spreading_activation", "mca_gate", "cairn_narratives",
             )
@@ -233,7 +232,7 @@ EDITABLE_KEYS: set[str] = {
     "capabilities.query_expansion", "capabilities.relationship_extract",
     "capabilities.rule_conflict_check", "capabilities.session_synthesis",
     "capabilities.consolidation", "capabilities.confidence_gating",
-    "capabilities.event_digest", "capabilities.reranking",
+    "capabilities.reranking",
     "capabilities.type_routing", "capabilities.spreading_activation",
     "capabilities.mca_gate", "capabilities.knowledge_extraction",
     "capabilities.search_v2",
@@ -287,7 +286,6 @@ PROFILE_PRESETS: dict[str, dict[str, str]] = {
         "CAIRN_LLM_RULE_CONFLICT_CHECK": "false",
         "CAIRN_LLM_SESSION_SYNTHESIS": "false",
         "CAIRN_LLM_CONSOLIDATION": "false",
-        "CAIRN_LLM_EVENT_DIGEST": "false",
     },
     # LLM-enriched: summaries, relationships, synthesis. Matches current defaults.
     "enriched": {
@@ -473,7 +471,6 @@ _ENV_MAP: dict[str, str] = {
     "capabilities.session_synthesis": "CAIRN_LLM_SESSION_SYNTHESIS",
     "capabilities.consolidation": "CAIRN_LLM_CONSOLIDATION",
     "capabilities.confidence_gating": "CAIRN_LLM_CONFIDENCE_GATING",
-    "capabilities.event_digest": "CAIRN_LLM_EVENT_DIGEST",
     "capabilities.reranking": "CAIRN_RERANKING",
     "capabilities.type_routing": "CAIRN_TYPE_ROUTING",
     "capabilities.spreading_activation": "CAIRN_SPREADING_ACTIVATION",
@@ -576,7 +573,6 @@ def load_config() -> Config:
             session_synthesis=os.getenv("CAIRN_LLM_SESSION_SYNTHESIS", "true").lower() in ("true", "1", "yes"),
             consolidation=os.getenv("CAIRN_LLM_CONSOLIDATION", "true").lower() in ("true", "1", "yes"),
             confidence_gating=os.getenv("CAIRN_LLM_CONFIDENCE_GATING", "false").lower() in ("true", "1", "yes"),
-            event_digest=os.getenv("CAIRN_LLM_EVENT_DIGEST", "true").lower() in ("true", "1", "yes"),
             reranking=os.getenv("CAIRN_RERANKING", "false").lower() in ("true", "1", "yes"),
             type_routing=os.getenv("CAIRN_TYPE_ROUTING", "false").lower() in ("true", "1", "yes"),
             spreading_activation=os.getenv("CAIRN_SPREADING_ACTIVATION", "false").lower() in ("true", "1", "yes"),

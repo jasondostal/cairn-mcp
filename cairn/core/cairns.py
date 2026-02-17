@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from cairn.core.analytics import track_operation
-from cairn.core.utils import get_or_create_project, get_project, extract_json
+from cairn.core.utils import get_or_create_project, get_project
 
 if TYPE_CHECKING:
     from cairn.config import LLMCapabilities
@@ -40,17 +40,17 @@ class CairnManager:
 
         Memories stored via MCP without session_name (NULL) are matched by
         project and creation timestamp falling within the session's event
-        window (from session_events). This avoids requiring agents to
-        remember to pass session_name on every store() call.
+        window. This avoids requiring agents to remember to pass
+        session_name on every store() call.
 
         Returns:
             Number of orphaned memories claimed.
         """
-        # Get the session's time bounds from shipped event batches
+        # Get the session's time bounds from events table
         bounds = self.db.execute_one(
             """
             SELECT MIN(created_at) AS first_event, MAX(created_at) AS last_event
-            FROM session_events
+            FROM events
             WHERE project_id = %s AND session_name = %s
             """,
             (project_id, session_name),
@@ -83,32 +83,12 @@ class CairnManager:
             )
         return claimed
 
-    def _fetch_digests(self, project_id: int, session_name: str) -> list[dict]:
-        """Query session_events for digested batches belonging to this session.
-
-        Returns:
-            List of dicts with batch_number, digest text. Only includes rows
-            where digest is not NULL. Ordered by batch_number ASC.
-        """
-        return self.db.execute(
-            """
-            SELECT batch_number, digest
-            FROM session_events
-            WHERE project_id = %s AND session_name = %s AND digest IS NOT NULL
-            ORDER BY batch_number ASC
-            """,
-            (project_id, session_name),
-        )
-
     @track_operation("cairns.set")
     def set(self, project: str, session_name: str, events: list | None = None) -> dict:
         """Set a cairn at the end of a session.
 
         Fetches all stones with matching session_name, synthesizes a title
         and narrative, creates the cairn record, and links the stones.
-
-        Pipeline v2: if digested event batches exist in session_events, uses them
-        for narrative synthesis instead of raw events.
 
         Args:
             project: Project name.
@@ -118,8 +98,6 @@ class CairnManager:
         Returns:
             Dict with cairn details: id, title, narrative, memory_count, set_at.
         """
-        from cairn.llm.prompts import build_cairn_narrative_messages, build_cairn_digest_narrative_messages
-
         project_id = get_or_create_project(self.db, project)
 
         # Check for existing cairn — upsert semantics allow both agent (MCP)
@@ -148,57 +126,14 @@ class CairnManager:
         )
 
         memory_count = len(stones)
+        has_content = memory_count > 0 or (events and len(events) > 0)
 
-        # Check for Pipeline v2 digests
-        digests = self._fetch_digests(project_id, session_name)
-
-        has_content = memory_count > 0 or (events and len(events) > 0) or len(digests) > 0
-
-        # Skip empty sessions — no stones, no events, no digests, nothing to mark
+        # Skip empty sessions — no stones, no events, nothing to mark
         if not has_content:
             return {"skipped": True, "reason": "empty session", "session_name": session_name, "project": project}
 
-        # Synthesize narrative via LLM (graceful degradation)
-        # v0.37.0: cairn_narratives flag gates LLM synthesis (default: off).
-        # When off, cairns are still created for backward compat but without
-        # the expensive LLM narrative call.
-        title = None
+        title = f"Session: {session_name}" if memory_count > 0 else f"Empty session: {session_name}"
         narrative = None
-        can_synthesize = (
-            self.llm is not None
-            and self.capabilities is not None
-            and self.capabilities.session_synthesis
-            and getattr(self.capabilities, "cairn_narratives", False)
-            and has_content
-        )
-
-        if can_synthesize:
-            try:
-                if digests:
-                    # Pipeline v2: use pre-digested event summaries
-                    messages = build_cairn_digest_narrative_messages(
-                        stones, project, session_name, digests=digests,
-                    )
-                else:
-                    # Pipeline v1 fallback: use raw events
-                    messages = build_cairn_narrative_messages(
-                        stones, project, session_name, events=events,
-                    )
-                raw = self.llm.generate(messages, max_tokens=1024)
-                if raw and raw.strip():
-                    parsed = extract_json(raw, json_type="object")
-                    if parsed:
-                        title = parsed.get("title")
-                        narrative = parsed.get("narrative")
-                    else:
-                        # LLM returned text but not JSON — use as narrative
-                        narrative = raw.strip()
-            except Exception:
-                logger.warning("Cairn narrative synthesis failed, setting without narrative", exc_info=True)
-
-        # Fallback title if LLM didn't produce one
-        if not title:
-            title = f"Session: {session_name}" if memory_count > 0 else f"Empty session: {session_name}"
 
         now = datetime.now(timezone.utc)
 
@@ -253,8 +188,6 @@ class CairnManager:
         2. Caller has events, existing already has them → return existing (true idempotent)
         3. Caller has no events → return existing info (agent calling after hook)
         """
-        from cairn.llm.prompts import build_cairn_narrative_messages, build_cairn_digest_narrative_messages
-
         cairn_id = existing["id"]
         has_existing_events = existing["has_events"]
 
@@ -272,70 +205,23 @@ class CairnManager:
         # Reconcile orphans before re-fetching stones
         self._claim_orphans(project_id, session_name)
 
-        # Re-fetch stones for narrative re-synthesis
+        # Re-fetch stones for memory count update
         stones = self.db.execute(
             """
-            SELECT m.id, m.content, m.summary, m.memory_type, m.importance,
-                   m.tags, m.auto_tags, m.created_at
+            SELECT m.id
             FROM memories m
             WHERE m.project_id = %s AND m.session_name = %s AND m.is_active = true
-            ORDER BY m.created_at ASC
             """,
             (project_id, session_name),
         )
 
         memory_count = len(stones)
 
-        # Check for Pipeline v2 digests
-        digests = self._fetch_digests(project_id, session_name)
-
-        # Re-synthesize narrative with stones + events/digests
-        title = None
-        narrative = None
-        can_synthesize = (
-            self.llm is not None
-            and self.capabilities is not None
-            and self.capabilities.session_synthesis
-            and getattr(self.capabilities, "cairn_narratives", False)
+        # Attach events and update memory count
+        self.db.execute(
+            "UPDATE cairns SET events = %s::jsonb, memory_count = %s WHERE id = %s",
+            (_json_or_none(events), memory_count, cairn_id),
         )
-
-        if can_synthesize:
-            try:
-                if digests:
-                    messages = build_cairn_digest_narrative_messages(
-                        stones, project, session_name, digests=digests,
-                    )
-                else:
-                    messages = build_cairn_narrative_messages(
-                        stones, project, session_name, events=events,
-                    )
-                raw = self.llm.generate(messages, max_tokens=1024)
-                if raw and raw.strip():
-                    parsed = extract_json(raw, json_type="object")
-                    if parsed:
-                        title = parsed.get("title")
-                        narrative = parsed.get("narrative")
-                    else:
-                        narrative = raw.strip()
-            except Exception:
-                logger.warning("Cairn narrative re-synthesis failed during merge", exc_info=True)
-
-        # Update the cairn row with events (and new narrative if synthesis succeeded)
-        if title and narrative:
-            self.db.execute(
-                """
-                UPDATE cairns SET events = %s::jsonb, title = %s, narrative = %s,
-                       memory_count = %s
-                WHERE id = %s
-                """,
-                (_json_or_none(events), title, narrative, memory_count, cairn_id),
-            )
-        else:
-            # At minimum, attach the events even if synthesis failed
-            self.db.execute(
-                "UPDATE cairns SET events = %s::jsonb, memory_count = %s WHERE id = %s",
-                (_json_or_none(events), memory_count, cairn_id),
-            )
 
         self._archive_events(session_name, events)
         self.db.commit()

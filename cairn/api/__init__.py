@@ -66,6 +66,7 @@ def create_api(svc: Services) -> FastAPI:
     from cairn.api.messages import register_routes as reg_messages
     from cairn.api.thinking import register_routes as reg_thinking
     from cairn.api.deprecated import register_routes as reg_deprecated
+    from cairn.api.events import register_routes as reg_events
     from cairn.api.ingest import register_routes as reg_ingest
     from cairn.api.sessions import register_routes as reg_sessions
     from cairn.api.analytics import register_routes as reg_analytics
@@ -83,6 +84,7 @@ def create_api(svc: Services) -> FastAPI:
     reg_messages(router, svc)
     reg_thinking(router, svc)
     reg_deprecated(router, svc)
+    reg_events(router, svc)
     reg_ingest(router, svc)
     reg_sessions(router, svc)
     reg_analytics(router, svc)

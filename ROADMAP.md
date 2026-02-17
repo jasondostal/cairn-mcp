@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.50.0** — TBD.
+Current: **v0.51.0** — TBD.
 
 ---
 
@@ -23,6 +23,20 @@ Current: **v0.50.0** — TBD.
 ---
 
 ## Shipped
+
+### v0.50.0 — "Event Bus" ✓
+
+Replaced the digest pipeline with a lightweight event bus. No LLM in the hot path.
+
+- [x] **`EventBus` class** — publish, query, session lifecycle management. Individual events INSERTed with Postgres NOTIFY trigger for real-time SSE streaming.
+- [x] **Migration 025** — `sessions` and `events` tables replacing JSONB batch approach. Postgres trigger function `notify_event()` for real-time streaming.
+- [x] **Hook rewrite** — all core scripts POST individual events to `/api/events`. No JSONL files, no batching, no offset tracking. Fire-and-forget.
+- [x] **Session auto-management** — server auto-creates sessions on `session_start` events, auto-closes on `session_end` events.
+- [x] **Legacy digest pipeline removed** — `DigestWorker`, `DigestStats`, digest prompts, config, and tests deleted (~1,400 lines removed).
+- [x] **Sessions page refactored** — uses event bus queries instead of digest-based session events.
+- [x] **Work item session events** — events linked to work items shown in detail sheet.
+- [x] **Hooks README rewritten** — full documentation of event bus architecture.
+- [x] **Setup scripts updated** — event bus architecture and `CAIRN_URL` propagation.
 
 ### v0.49.0 — "Chat UI" ✓
 

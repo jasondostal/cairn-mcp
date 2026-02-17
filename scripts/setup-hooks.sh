@@ -81,18 +81,7 @@ fi
 echo ""
 
 # ──────────────────────────────────────────────
-# Step 3: Create event directory
-# ──────────────────────────────────────────────
-
-EVENT_DIR="${CAIRN_EVENT_DIR:-$HOME/.cairn/events}"
-
-info "Creating event directory..."
-mkdir -p "$EVENT_DIR/archive"
-ok "Event directory: $EVENT_DIR"
-echo ""
-
-# ──────────────────────────────────────────────
-# Step 4: Find hook scripts
+# Step 3: Find hook scripts
 # ──────────────────────────────────────────────
 
 # Try to find the hooks relative to this script
@@ -113,7 +102,7 @@ ok "Hook scripts found at $HOOKS_DIR"
 echo ""
 
 # ──────────────────────────────────────────────
-# Step 5: Generate settings.json snippet
+# Step 4: Generate settings.json snippet
 # ──────────────────────────────────────────────
 
 info "Generating Claude Code settings snippet..."
@@ -140,7 +129,7 @@ SETTINGS=$(cat <<EOF
         "hooks": [
           {
             "type": "command",
-            "command": "$HOOKS_DIR/log-event.sh",
+            "command": "CAIRN_URL=$CAIRN_URL $HOOKS_DIR/log-event.sh",
             "timeout": 5
           }
         ]
@@ -169,46 +158,42 @@ echo "$SETTINGS" | jq .
 echo ""
 
 # ──────────────────────────────────────────────
-# Step 6: Optional pipeline test
+# Step 5: Optional pipeline test
 # ──────────────────────────────────────────────
 
-echo -n "Run a pipeline test? (creates a test cairn) [y/N]: "
+echo -n "Run a pipeline test? (publishes a test event) [y/N]: "
 read -r DO_TEST
 
 if [[ "$DO_TEST" =~ ^[Yy] ]]; then
     echo ""
-    info "Testing pipeline..."
+    info "Testing event bus pipeline..."
 
     TEST_SESSION="setup-test-$(date +%s)"
     TEST_PROJECT="cairn-setup-test"
 
-    RESULT=$(curl -sf -X POST "$CAIRN_URL/api/cairns" \
+    # Publish a session_start event (should also create a session record)
+    RESULT=$(curl -sf -X POST "$CAIRN_URL/api/events" \
         -H "Content-Type: application/json" \
-        -d "{\"project\": \"$TEST_PROJECT\", \"session_name\": \"$TEST_SESSION\", \"events\": [{\"ts\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\", \"type\": \"test\", \"detail\": \"setup script verification\"}]}" \
+        -d "{\"session_name\": \"$TEST_SESSION\", \"event_type\": \"session_start\", \"project\": \"$TEST_PROJECT\", \"payload\": {\"agent_type\": \"setup-test\"}}" \
         2>/dev/null || echo '{"error": "failed"}')
 
     if echo "$RESULT" | jq -e '.id' &>/dev/null; then
-        CAIRN_ID=$(echo "$RESULT" | jq -r '.id')
-        ok "Test cairn created (id=$CAIRN_ID)"
+        EVENT_ID=$(echo "$RESULT" | jq -r '.id')
+        ok "Event published (id=$EVENT_ID)"
 
-        # Verify we can read it back
-        VERIFY=$(curl -sf "$CAIRN_URL/api/cairns/$CAIRN_ID" 2>/dev/null || echo "")
+        # Verify event is queryable
+        VERIFY=$(curl -sf "$CAIRN_URL/api/events?session_name=$TEST_SESSION" 2>/dev/null || echo "")
         if [ -n "$VERIFY" ]; then
-            HAS_EVENTS=$(echo "$VERIFY" | jq -r '.events | length' 2>/dev/null || echo "0")
-            ok "Verified: cairn has $HAS_EVENTS event(s)"
+            EVENT_COUNT=$(echo "$VERIFY" | jq -r '.count // 0' 2>/dev/null)
+            ok "Verified: $EVENT_COUNT event(s) for session"
         fi
 
-        # Test the merge path — POST again with more events
-        MERGE_RESULT=$(curl -sf -X POST "$CAIRN_URL/api/cairns" \
-            -H "Content-Type: application/json" \
-            -d "{\"project\": \"$TEST_PROJECT\", \"session_name\": \"$TEST_SESSION\", \"events\": [{\"ts\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\", \"type\": \"test\", \"detail\": \"merge test\"}]}" \
-            2>/dev/null || echo '{"error": "failed"}')
-
-        MERGE_STATUS=$(echo "$MERGE_RESULT" | jq -r '.status // "created"' 2>/dev/null)
-        if [ "$MERGE_STATUS" = "already_exists" ]; then
-            ok "Merge test: correctly returned already_exists (events already present)"
+        # Verify session was auto-created
+        SESSIONS=$(curl -sf "$CAIRN_URL/api/sessions?project=$TEST_PROJECT" 2>/dev/null || echo "")
+        if echo "$SESSIONS" | jq -e '.items[0].session_name' &>/dev/null; then
+            ok "Session record created automatically"
         else
-            ok "Merge test returned: $MERGE_STATUS"
+            warn "Session record not found (may need migration 025)"
         fi
     else
         fail "Test failed: $(echo "$RESULT" | jq -r '.error // .detail // "unknown error"' 2>/dev/null)"
@@ -227,7 +212,7 @@ echo ""
 echo "Next steps:"
 echo "  1. Add the settings snippet above to your Claude Code config"
 echo "  2. Start a new Claude Code session"
-echo "  3. After the session, check: curl -s $CAIRN_URL/api/cairns?limit=1 | jq ."
+echo "  3. After the session, check: curl -s $CAIRN_URL/api/sessions | jq ."
 echo ""
 echo "Documentation: $HOOKS_DIR/README.md"
 echo ""

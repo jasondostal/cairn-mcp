@@ -47,7 +47,7 @@ task_manager = None
 thinking_engine = None
 session_synthesizer = None
 consolidation_engine = None
-digest_worker = None
+event_bus = None
 drift_detector = None
 message_manager = None
 work_item_manager = None
@@ -61,7 +61,7 @@ def _init_services(svc):
     global _svc, config, db, graph_provider, memory_store, search_engine
     global cluster_engine, project_manager, task_manager
     global thinking_engine, session_synthesizer, consolidation_engine
-    global digest_worker, drift_detector, message_manager
+    global event_bus, drift_detector, message_manager
     global work_item_manager
     global analytics_tracker, rollup_worker, workspace_manager
 
@@ -78,7 +78,7 @@ def _init_services(svc):
     thinking_engine = svc.thinking_engine
     session_synthesizer = svc.session_synthesizer
     consolidation_engine = svc.consolidation_engine
-    digest_worker = svc.digest_worker
+    event_bus = svc.event_bus
     drift_detector = svc.drift_detector
     message_manager = svc.message_manager
     analytics_tracker = svc.analytics_tracker
@@ -109,7 +109,6 @@ def _start_workers(svc, cfg, db_instance):
             logger.info("Neo4j graph connected and schema ensured")
         except Exception:
             logger.warning("Neo4j connection failed — graph features disabled", exc_info=True)
-    svc.digest_worker.start()
     if svc.analytics_tracker:
         svc.analytics_tracker.start()
     if svc.rollup_worker:
@@ -123,7 +122,6 @@ def _stop_workers(svc, db_instance):
         svc.rollup_worker.stop()
     if svc.analytics_tracker:
         svc.analytics_tracker.stop()
-    svc.digest_worker.stop()
     if svc.graph_provider:
         try:
             svc.graph_provider.close()

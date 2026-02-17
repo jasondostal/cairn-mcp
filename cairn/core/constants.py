@@ -216,10 +216,8 @@ VALID_LINK_TYPES = ["related", "parent", "child", "dependency", "fork", "templat
 # Event Pipeline
 # ============================================================
 
-EVENT_BATCH_SIZE = 25              # default events per batch shipped by hooks
-MAX_EVENT_BATCH_SIZE = 200         # max events accepted in a single ingest call
-DIGEST_POLL_INTERVAL = 5.0         # seconds between DigestWorker poll cycles
-DIGEST_MAX_EVENTS_PER_BATCH = 50   # max events sent to LLM for a single digest
+# Event Bus (v0.50.0)
+EVENT_STREAM_HEARTBEAT_INTERVAL = 15  # seconds between SSE heartbeats
 
 
 # ============================================================

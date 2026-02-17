@@ -139,20 +139,7 @@ fi
 chmod +x "$HOOKS_DIR/session-start.sh" "$HOOKS_DIR/log-event.sh" "$HOOKS_DIR/session-end.sh"
 
 # ──────────────────────────────────────────────
-# Step 5: Create event directory
-# ──────────────────────────────────────────────
-
-EVENT_DIR="${CAIRN_EVENT_DIR:-$HOME/.cairn/events}"
-
-if [ "$DRY_RUN" = false ]; then
-    mkdir -p "$EVENT_DIR/archive"
-    ok "Event directory: $EVENT_DIR"
-else
-    info "Would create: $EVENT_DIR/archive"
-fi
-
-# ──────────────────────────────────────────────
-# Step 6: Detect installed IDEs
+# Step 5: Detect installed IDEs
 # ──────────────────────────────────────────────
 
 header "Detecting installed IDEs..."
@@ -224,7 +211,7 @@ if [ ${#IDE_LIST[@]} -eq 0 ]; then
 fi
 
 # ──────────────────────────────────────────────
-# Step 7: Select IDEs to configure
+# Step 6: Select IDEs to configure
 # ──────────────────────────────────────────────
 
 header "Select IDEs to configure"
@@ -315,7 +302,7 @@ merge_mcp_config() {
 }
 
 # ──────────────────────────────────────────────
-# Step 8: Configure each selected IDE
+# Step 7: Configure each selected IDE
 # ──────────────────────────────────────────────
 
 for ide in "${SELECTED_IDES[@]}"; do
@@ -339,7 +326,7 @@ for ide in "${SELECTED_IDES[@]}"; do
                 SETTINGS_FILE="$HOME/.claude/settings.json"
                 HOOK_CONFIG=$(jq -nc \
                     --arg start_cmd "CAIRN_URL=$CAIRN_URL $HOOKS_DIR/session-start.sh" \
-                    --arg log_cmd "$HOOKS_DIR/log-event.sh" \
+                    --arg log_cmd "CAIRN_URL=$CAIRN_URL $HOOKS_DIR/log-event.sh" \
                     --arg end_cmd "CAIRN_URL=$CAIRN_URL $HOOKS_DIR/session-end.sh" \
                     '{
                         hooks: {
