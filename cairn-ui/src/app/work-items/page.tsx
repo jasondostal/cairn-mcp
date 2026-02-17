@@ -289,18 +289,18 @@ export default function WorkItemsPage() {
       {/* Needs Your Input — gated items */}
       {gatedItems.length > 0 && (
         <div className="mb-4">
-          <div className="flex items-center gap-2 mb-2 text-sm font-medium text-[oklch(0.769_0.188_70)]">
+          <div className="flex items-center gap-2 mb-2 text-sm font-medium text-[oklch(0.627_0.265_304)]">
             <Hand className="h-4 w-4" />
             Needs Your Input ({gatedItems.length})
           </div>
-          <div className="rounded-md border border-[oklch(0.769_0.188_70)]/20 divide-y divide-border">
+          <div className="rounded-md border border-[oklch(0.627_0.265_304)]/20 divide-y divide-border">
             {gatedItems.map((g) => (
               <div
                 key={g.id}
                 className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer"
                 onClick={() => openSheet(g.id)}
               >
-                <Hand className="h-3 w-3 text-[oklch(0.769_0.188_70)] shrink-0" />
+                <Hand className="h-3 w-3 text-[oklch(0.627_0.265_304)] shrink-0" />
                 <span className="font-mono text-xs text-muted-foreground shrink-0">{g.short_id}</span>
                 <span className="flex-1 truncate">{g.title}</span>
                 {typeof g.gate_data?.question === "string" && (

@@ -18,7 +18,7 @@ import { ErrorState } from "@/components/error-state";
 import { SkeletonList } from "@/components/skeleton-list";
 
 import { OperationalStrip } from "@/components/dashboard/operational-strip";
-import { SparklineKpiStrip } from "@/components/dashboard/sparkline-kpi-strip";
+import { EntityGrowthChart } from "@/components/dashboard/entity-growth-chart";
 import { MemoryTypeGrowthChart } from "@/components/dashboard/memory-type-growth-chart";
 import { MemoryTypeBar } from "@/components/dashboard/memory-type-bar";
 import { HealthStrip } from "@/components/dashboard/health-strip";
@@ -112,8 +112,8 @@ export default function Dashboard() {
         {/* Operational status strip */}
         <OperationalStrip />
 
-        {/* KPI Strip with sparklines */}
-        {sparklines && <SparklineKpiStrip data={sparklines} />}
+        {/* Entity growth — full width, selectable metrics */}
+        {sparklines && <EntityGrowthChart data={sparklines} />}
 
         {/* Memory Type Growth + Token Usage — 2 col */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

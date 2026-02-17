@@ -170,8 +170,8 @@ export function WorkItemSheet({
 
               {/* Gate — Needs Your Input (prominent if unresolved) */}
               {hasUnresolvedGate && (
-                <div className="rounded-md border border-[oklch(0.769_0.188_70)]/30 bg-[oklch(0.769_0.188_70)]/5 p-3 space-y-2">
-                  <div className="flex items-center gap-2 text-sm font-medium text-[oklch(0.769_0.188_70)]">
+                <div className="rounded-md border border-[oklch(0.627_0.265_304)]/30 bg-[oklch(0.627_0.265_304)]/5 p-3 space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-medium text-[oklch(0.627_0.265_304)]">
                     <Hand className="h-4 w-4" />
                     Needs Your Input
                   </div>
