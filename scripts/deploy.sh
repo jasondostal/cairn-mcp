@@ -17,9 +17,9 @@ if [ "$VERSION" != "latest" ]; then
   docker tag "$REGISTRY/cairn-mcp-ui:$VERSION" "$REGISTRY/cairn-mcp-ui:latest"
 fi
 
-# Restart services
+# Restart services (--no-deps: NEVER recreate cairn-db, it has its own password/data)
 echo "Restarting services..."
-docker compose up -d cairn cairn-ui
+docker compose up -d --no-deps cairn cairn-ui
 
 # Wait for health
 echo "Waiting for cairn to be healthy..."
