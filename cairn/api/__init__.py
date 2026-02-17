@@ -70,6 +70,7 @@ def create_api(svc: Services) -> FastAPI:
     from cairn.api.sessions import register_routes as reg_sessions
     from cairn.api.analytics import register_routes as reg_analytics
     from cairn.api.chat import register_routes as reg_chat
+    from cairn.api.conversations import register_routes as reg_conversations
     from cairn.api.terminal import register_routes as reg_terminal
     from cairn.api.workspace import register_routes as reg_workspace
     from cairn.api.export import register_routes as reg_export
@@ -86,6 +87,7 @@ def create_api(svc: Services) -> FastAPI:
     reg_sessions(router, svc)
     reg_analytics(router, svc)
     reg_chat(router, svc)
+    reg_conversations(router, svc)
     reg_terminal(router, svc, app=app)
     reg_workspace(router, svc)
     reg_export(router, svc)

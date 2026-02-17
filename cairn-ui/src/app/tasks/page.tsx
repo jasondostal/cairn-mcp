@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type Task } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { usePageFilters } from "@/lib/use-page-filters";
@@ -8,6 +8,7 @@ import { PageFilters, DenseToggle } from "@/components/page-filters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ErrorState } from "@/components/error-state";
 import { TaskSheet } from "@/components/task-sheet";
 import { PaginatedList } from "@/components/paginated-list";
@@ -121,8 +122,11 @@ export default function TasksPage() {
   const [showCompleted, setShowCompleted] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [quickDesc, setQuickDesc] = useState("");
+  const [quickCreating, setQuickCreating] = useState(false);
+  const quickInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  function reload() {
     setLoading(true);
     setError(null);
     api
@@ -132,7 +136,40 @@ export default function TasksPage() {
       .then((r) => setTasks(r.items))
       .catch((err) => setError(err?.message || "Failed to load tasks"))
       .finally(() => setLoading(false));
-  }, [filters.projectFilter, showCompleted, filters.showAllProjects]);
+  }
+
+  useEffect(() => { reload(); }, [filters.projectFilter, showCompleted, filters.showAllProjects]);
+
+  async function handleQuickCreate() {
+    const desc = quickDesc.trim();
+    if (!desc) return;
+    const project = filters.showAllProjects
+      ? filters.projectOptions[0]?.value
+      : filters.projectFilter[0];
+    if (!project) return;
+
+    setQuickCreating(true);
+    try {
+      await api.taskCreate({ project, description: desc });
+      setQuickDesc("");
+      reload();
+    } catch { /* silent */ }
+    finally { setQuickCreating(false); }
+  }
+
+  // Keyboard shortcut: N to focus quick create
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "n" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const target = e.target as HTMLElement;
+        if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+        e.preventDefault();
+        quickInputRef.current?.focus();
+      }
+    }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, []);
 
   function openTaskSheet(task: Task) {
     setSelectedTask(task);
@@ -158,6 +195,25 @@ export default function TasksPage() {
         />
       }
     >
+      {/* Quick capture — inline creation */}
+      <div className="mb-3">
+        <Input
+          ref={quickInputRef}
+          value={quickDesc}
+          onChange={(e) => setQuickDesc(e.target.value)}
+          placeholder="Quick create — type description, press Enter (N to focus)"
+          className="h-8 text-sm"
+          disabled={quickCreating}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && quickDesc.trim()) handleQuickCreate();
+            if (e.key === "Escape") {
+              setQuickDesc("");
+              (e.target as HTMLElement).blur();
+            }
+          }}
+        />
+      </div>
+
       {(loading || filters.projectsLoading) && <SkeletonList count={4} height="h-20" />}
 
       {error && <ErrorState message="Failed to load tasks" detail={error} />}
@@ -167,6 +223,7 @@ export default function TasksPage() {
           message={filters.showAllProjects
             ? "No tasks yet."
             : `No tasks for ${filters.projectFilter.join(", ")}.`}
+          detail="Press N to create a task, or use the + button above."
         />
       )}
 
@@ -178,16 +235,7 @@ export default function TasksPage() {
         task={selectedTask}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
-        onCompleted={() => {
-          setLoading(true);
-          api
-            .tasks(filters.showAllProjects ? undefined : filters.projectFilter.join(","), {
-              include_completed: showCompleted ? "true" : undefined,
-            })
-            .then((r) => setTasks(r.items))
-            .catch(() => {})
-            .finally(() => setLoading(false));
-        }}
+        onCompleted={reload}
       />
     </PageLayout>
   );

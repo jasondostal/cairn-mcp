@@ -19,15 +19,13 @@
 
 Your agent stores a decision at 2am. You capture a thought from your phone over coffee. A week later you vaguely describe what you remember and both come back. We benchmarked that claim. It holds up.
 
-*"Where did I put that singularity again? Let me just spawn a couple..."* — Drop a message in the inbox, hit spawn, and an autonomous agent picks it up with full project context. Rules, memories, trail markers — everything it needs to work like it's been on the team for months.
+*"Where did I put that singularity again? Let me just spawn a couple..."* — You're on your phone over coffee. You tell the chat about an idea. It creates a work item. An agent picks it up with full project context — rules, memories, trail markers — and works like it's been on the team for months. When it hits a decision only you can make, a gate fires. You review from your phone. The loop closes before your coffee gets cold.
 
-There's a private LLM that lives inside your memory. Ask it what you decided about the auth system three weeks ago — from your phone, at midnight. It searches everything you've ever stored, pulls the details, and answers like a colleague who was in every meeting. It runs on your hardware — or on frontier models through Bedrock, just as private. Nobody else sees it.
+There's a private LLM that lives inside your memory. Ask it what you decided about the auth system three weeks ago — from your phone, at midnight. It searches everything you've ever stored, pulls the details, and answers like a colleague who was in every meeting. Runs on your hardware — or on frontier models through Bedrock, just as private. Nobody else sees it.
 
-Cairn is a self-hosted memory system for AI agents and humans. Store something once — it gets embedded, enriched, linked to a knowledge graph, and connected to everything related. Hook into your IDE and every tool call gets captured automatically. At session end, everything crystallizes into a trail marker. Next session starts warm. Humans get the same pool — type a thought, slash-command it, grab a URL, share from your phone.
+Cairn is a self-hosted memory and orchestration layer for AI agents and humans. Store something once — it gets embedded, enriched, linked to a knowledge graph, and connected to everything related. Hook into your IDE and every tool call gets captured automatically. Create work items from chat, agents claim them from the dispatch queue, gates route decisions back when they need your judgment. The memory is the foundation. The loop is the point.
 
-There's a web dashboard — browse your documents, watch session replays, explore a knowledge graph, see analytics and patterns. What your agents actually did, not just what they told you.
-
-Four containers. One `docker compose up`. Done.
+There's a full web interface — an operational dashboard showing what's moving, what's blocked, and what needs you. Work items with gates and dispatch tracking. Chat with your memory from anywhere. Session replays, knowledge graph explorer, pattern clusters, analytics. What your agents actually did, not just what they told you.
 
 <p align="center">
   <img src="images/cairn-capture-screenshot.jpg" alt="Cairn capture page with slash commands" width="700">
@@ -35,17 +33,17 @@ Four containers. One `docker compose up`. Done.
 
 ## What you get
 
-- **Session continuity** — The knowledge graph tracks entities and facts across sessions. `trail()` walks recent activity at boot — what entities changed, what facts were added. Next session starts warm, not cold.
+- **The loop** — Chat creates work items. Agents claim them from the dispatch queue. Gates pause for human judgment. You review from your phone. The whole cycle — ideate, capture, dispatch, review — works from anywhere with a browser.
+- **Session continuity** — The knowledge graph tracks entities and facts across sessions. `orient()` loads rules, trail, learnings, and tasks in a single call. Next session starts warm, not cold.
+- **Chat with your memory** — SSE streaming, conversation persistence, and tool calling. Ask questions, create work items, check status — from your phone or desktop. Project-scoped with full history.
+- **Work management** — Hierarchical work items (epics, tasks, subtasks) with dependencies, atomic dispatch queue, gates for human-in-the-loop checkpoints, risk tiers, agent heartbeats, and activity logging.
 - **Quick capture** — Slash commands (`/decision`, `/learning`), URL extraction, browser bookmarklet, iOS Shortcut. Keyboard-first, Tana-inspired.
+- **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, importance score, and relationship links on store. Entities and facts extracted into the knowledge graph automatically.
 - **Smart ingestion** — Text, URLs, or both. Auto-classifies, chunks large documents, deduplicates, and routes. One endpoint, many doorways.
-- **Hybrid search** — Vector similarity + full-text + tag matching via Reciprocal Rank Fusion. Cross-encoder reranking, chain-of-thought answer generation.
-- **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, importance score, and relationship links on store.
 - **Pattern discovery** — HDBSCAN clustering finds themes across memories. LLM writes the labels. Clusters refresh lazily.
-- **Web terminal** — SSH into your hosts from the browser. Two backends: native (xterm.js + WebSocket + asyncssh proxy with encrypted credential storage) or ttyd (iframe embed). Host management UI. Feature-flagged, disabled by default.
-- **Agent workspace** — Dispatch autonomous coding agents from the dashboard. Cairn assembles project context (rules, memories, trail) and injects it into an [OpenCode](https://github.com/opencode-ai/opencode) session. Chat, view diffs, abort. Requires a separately running OpenCode worker. Optional, disabled by default.
-- **Messages** — inter-agent communication. Agents leave notes for each other and for you. Inbox UI with project filtering, priority, and batch operations.
-- **Web dashboard** — 24 pages. Chart-heavy home dashboard with KPI sparklines, operations/token/memory-growth charts, activity heatmap. Search with score breakdowns, knowledge graph, thinking trees, live session viewer, chat with tool calling, multi-select filters, Cmd+K, keyboard nav, dark mode.
-- **Four containers, done** — MCP at `/mcp`, REST at `/api`, same process. PostgreSQL + pgvector, Neo4j knowledge graph. Bring your own LLM — Ollama, Bedrock, Gemini, or anything OpenAI-compatible.
+- **Agent workspace** — Dispatch autonomous coding agents from the web UI or from work items. Cairn assembles project context (rules, memories, trail) and injects it into an [OpenCode](https://github.com/opencode-ai/opencode) session. Chat, view diffs, abort. Optional, disabled by default.
+- **Web terminal** — SSH into your hosts from the browser. Native (xterm.js + asyncssh) or ttyd (iframe). Feature-flagged, disabled by default.
+- **Bring your own LLM** — MCP at `/mcp`, REST at `/api`, same process. PostgreSQL + pgvector, Neo4j knowledge graph. Ollama, Bedrock, Gemini, or anything OpenAI-compatible. Four containers, `docker compose up`.
 
 <h3 align="center">81.7% on LoCoMo</h3>
 <p align="center"><em>The standard benchmark for conversational memory systems (<a href="https://arxiv.org/abs/2402.09753">Maharana et al., ACL 2024</a>)</em></p>
@@ -59,15 +57,15 @@ Four containers. One `docker compose up`. Done.
 | **LoCoMo score** | **81.7%** | 52.9% | 58.1% | 68.5% | 75.1% | 74.0% |
 | **Self-hosted / OSS** | ✅ | ❌ | ✅ | ⚠️ | ⚠️ | ✅ |
 | **Human capture** | ✅ | ⚠️ | ❌ | ❌ | ❌ | ❌ |
-| **Web dashboard** | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ |
+| **Web UI** | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ |
 | **MCP native** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **Knowledge graph** | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ |
 | **Session continuity** | ✅ (graph) | ⚠️ | ❌ | ❌ | ❌ | ❌ |
-| **Cross-encoder reranking** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| **Clustering / patterns** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Streaming chat** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Work management** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **Agent dispatch** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
-<sub>Feature claims verified via official docs, GitHub repos, and published papers (Feb 2026). Mem0/Zep "partial" OSS: core is open source, advanced features require cloud. OpenAI "chat only" capture: users can say "remember this" in conversation. OpenAI "limited" sessions: references past chats but no structured session markers. Zep dashboard is cloud-only. Letta dashboard is their ADE (Agent Development Environment).</sub>
+<sub>Feature claims verified via official docs, GitHub repos, and published papers (Feb 2026). Mem0/Zep "partial" OSS: core is open source, advanced features require cloud. OpenAI "chat only" capture: users can say "remember this" in conversation. OpenAI "limited" sessions: references past chats but no structured session markers. Zep UI is cloud-only. Letta UI is their ADE (Agent Development Environment).</sub>
 
 > **Active development.** Cairn is under rabid, daily development. It's a real system used in production, but it's also a learning vehicle — the architecture evolves as we learn what actually works for agent memory. We strive to avoid major breaking changes, and migrations handle schema evolution automatically. That said: things move fast. If something breaks, open an issue. Benchmarks are periodically re-evaluated as the system evolves.
 
@@ -253,7 +251,7 @@ Note: stdio connects one client directly to the container. HTTP is preferred —
 
 ### 3. Store your first memory
 
-Once connected, your agent can immediately use all 15 tools. Try:
+Once connected, your agent can immediately use all 17 tools. Try:
 
 > "Remember that we chose PostgreSQL with pgvector for the storage layer because it gives us hybrid search without a separate vector database."
 
@@ -332,20 +330,22 @@ No hooks? No problem. Memories stored with a `session_name` are still grouped, s
 </details>
 
 <details>
-<summary><strong>MCP Tools</strong> — 15 tools</summary>
+<summary><strong>MCP Tools</strong> — 17 tools</summary>
 
 | Tool | What it does |
 |------|-------------|
 | `store` | Persist a memory with auto-enrichment, relationship extraction, and rule conflict detection |
-| `search` | Hybrid semantic search with query expansion and optional confidence gating |
+| `search` | Hybrid semantic search (vector + keyword + tag + recency via RRF) with optional reranking |
 | `recall` | Expand memory IDs to full content with cluster context |
 | `modify` | Update, soft-delete, reactivate, or move memories between projects |
 | `rules` | Behavioral guardrails — global or per-project |
 | `insights` | HDBSCAN clustering with LLM-generated pattern summaries |
 | `projects` | Documents (briefs, PRDs, plans, primers, writeups, guides) and cross-project linking |
-| `tasks` | Task lifecycle — create, complete, list, link to memories |
+| `tasks` | Personal task lifecycle — create, complete, list, promote to work items |
+| `work_items` | Graph-native hierarchical work management — create, claim, complete, gate, heartbeat, dispatch |
 | `think` | Structured reasoning sequences with branching |
 | `status` | System health, counts, embedding model info, active LLM capabilities |
+| `orient` | Single-pass session boot — rules, trail, learnings, and tasks in one call |
 | `synthesize` | Synthesize session memories into a coherent narrative |
 | `consolidate` | Find duplicate memories, recommend merges/promotions/inactivations |
 | `trail` | Walk recent activity — graph-aware boot orientation across projects |
@@ -355,7 +355,7 @@ No hooks? No problem. Memories stored with a `session_name` are still grouped, s
 </details>
 
 <details>
-<summary><strong>REST API</strong> — 68 endpoints</summary>
+<summary><strong>REST API</strong> — 81 endpoints</summary>
 
 REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Optional API key auth when `CAIRN_AUTH_ENABLED=true`.
 
@@ -406,11 +406,36 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Opt
 | `GET /api/analytics/heatmap?days=` | Daily activity counts for heatmap visualization |
 | `GET /api/analytics/token-budget?days=` | Per-model daily token usage with estimated USD cost |
 | `POST /api/chat` | Send messages to the embedded LLM (agentic, with tool calling) |
+| `POST /api/chat/stream` | SSE streaming variant — token-by-token with tool call events |
+| `GET /api/chat/conversations` | List conversations |
+| `POST /api/chat/conversations` | Create a conversation |
+| `GET /api/chat/conversations/{id}` | Get conversation detail |
+| `PATCH /api/chat/conversations/{id}` | Update conversation (rename) |
+| `DELETE /api/chat/conversations/{id}` | Delete a conversation |
+| `GET /api/chat/conversations/{id}/messages` | Get conversation messages |
+| `POST /api/chat/conversations/{id}/messages` | Add a message to a conversation |
 | `GET /api/sessions?project=` | Recent sessions with event counts and digest status |
 | `GET /api/sessions/{name}/events` | Event stream + digests for a session |
 | `POST /api/sessions/{name}/close` | Close session: digest pending batches, store as memories |
 | `GET /api/drift?project=` | Check for memories with stale file references |
 | `POST /api/drift` | Submit file hashes for drift comparison |
+| `GET /api/work-items` | List work items with filters (project, status, type, assignee) |
+| `GET /api/work-items/ready` | Dispatch queue — unblocked, unassigned items |
+| `GET /api/work-items/gated` | Items awaiting human input |
+| `GET /api/work-items/{id}` | Work item detail with hierarchy and dependencies |
+| `POST /api/work-items` | Create a work item |
+| `PATCH /api/work-items/{id}` | Update work item fields |
+| `POST /api/work-items/{id}/claim` | Atomically claim a work item |
+| `POST /api/work-items/{id}/complete` | Mark done + auto-unblock dependents |
+| `POST /api/work-items/{id}/children` | Add a child work item |
+| `POST /api/work-items/block` | Add a dependency between work items |
+| `DELETE /api/work-items/block` | Remove a dependency |
+| `POST /api/work-items/{id}/link-memories` | Link memories to a work item |
+| `POST /api/work-items/{id}/gate` | Set a human-in-the-loop gate |
+| `POST /api/work-items/{id}/gate/resolve` | Resolve a gate |
+| `POST /api/work-items/{id}/heartbeat` | Agent heartbeat (working/stuck/done) |
+| `GET /api/work-items/{id}/activity` | Activity audit trail |
+| `GET /api/work-items/{id}/briefing` | Assembled context for agent dispatch |
 | `GET /api/terminal/config` | Terminal backend mode and settings |
 | `GET /api/terminal/hosts` | List configured terminal hosts |
 | `POST /api/terminal/hosts` | Add a terminal host |
@@ -596,7 +621,7 @@ All bulk operations support `--dry-run` for preview.
 
 ### Database Schema
 
-19 migrations:
+24 migrations:
 
 | Migration | Tables / Changes |
 |-----------|--------|
@@ -619,6 +644,11 @@ All bulk operations support `--dry-run` for preview.
 | **017 Settings** | `app_settings` — runtime config persistence with key-value store |
 | **018 Workspace** | `workspace_sessions` — agent workspace session tracking |
 | **019 Drop Cairns** | Removes `cairns` table and `cairn_id` FK from `memories` |
+| **020 Agent Metadata** | `agent_id`, `agent_type`, `parent_session` on session_events; `is_active`/`closed_at` lifecycle |
+| **021 Graph Deepening** | Graph entity tracking and edge metadata columns |
+| **022 Work Items** | `work_items`, `work_item_memory_links`, `work_item_blocks` with HNSW + GIN indexes |
+| **023 Work Orchestration** | `work_item_activity`, gate columns, risk_tier, agent_state, constraints JSONB |
+| **024 Conversations** | `conversations`, `chat_messages` for persistent chat with tool call storage |
 
 </details>
 

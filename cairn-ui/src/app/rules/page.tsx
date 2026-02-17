@@ -124,7 +124,7 @@ export default function RulesPage() {
       {error && <ErrorState message="Failed to load rules" detail={error} />}
 
       {!loading && !filters.projectsLoading && !error && rules.length === 0 && (
-        <EmptyState message="No rules found." />
+        <EmptyState message="No rules found." detail="Rules are memories with type 'rule' — they guide agent behavior at session start." />
       )}
 
       {!loading && !filters.projectsLoading && !error && rules.length > 0 && (

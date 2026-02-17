@@ -1,14 +1,17 @@
 """AWS Bedrock LLM implementation via Converse API."""
 
+from __future__ import annotations
+
 import logging
 import time
+from collections.abc import Iterator
 
 import boto3
 from botocore.exceptions import ClientError
 
 from cairn.config import LLMConfig
 from cairn.core import stats
-from cairn.llm.interface import LLMInterface, LLMResponse, ToolCallInfo
+from cairn.llm.interface import LLMInterface, LLMResponse, StreamEvent, ToolCallInfo
 
 logger = logging.getLogger(__name__)
 
@@ -227,6 +230,184 @@ class BedrockLLM(LLMInterface):
             success=False, error_message=str(last_error),
         )
         raise last_error
+
+    def generate_stream(
+        self, messages: list[dict], max_tokens: int = 1024,
+    ) -> Iterator[StreamEvent]:
+        """Stream text via Bedrock ConverseStream API."""
+        system_prompts = []
+        converse_messages = []
+        for msg in messages:
+            if msg["role"] == "system":
+                system_prompts.append({"text": msg["content"]})
+            else:
+                converse_messages.append({
+                    "role": msg["role"],
+                    "content": [{"text": msg["content"]}],
+                })
+
+        effective_max = max_tokens * 4 if self.model_id in REASONING_MODELS else max_tokens
+        kwargs = {
+            "modelId": self.model_id,
+            "messages": converse_messages,
+            "inferenceConfig": {"maxTokens": effective_max, "temperature": 0.3},
+        }
+        if system_prompts:
+            kwargs["system"] = system_prompts
+
+        t0 = time.monotonic()
+        full_text = ""
+        try:
+            response = self._client.converse_stream(**kwargs)
+            for event in response.get("stream", []):
+                if "contentBlockDelta" in event:
+                    delta = event["contentBlockDelta"].get("delta", {})
+                    token = delta.get("text", "")
+                    if token:
+                        full_text += token
+                        yield StreamEvent(type="text_delta", text=token)
+
+            latency_ms = (time.monotonic() - t0) * 1000
+            tokens_out = len(full_text) // 4
+            tokens_in = sum(len(m.get("content", "")) for m in messages if isinstance(m.get("content"), str)) // 4
+            if stats.llm_stats:
+                stats.llm_stats.record_call(tokens_est=tokens_in + tokens_out)
+            stats.emit_usage_event(
+                "llm.generate", self.model_id,
+                tokens_in=tokens_in, tokens_out=tokens_out, latency_ms=latency_ms,
+            )
+        except ClientError as e:
+            logger.error("Bedrock streaming error: %s", e)
+            if stats.llm_stats:
+                stats.llm_stats.record_error(str(e))
+            raise
+
+        yield StreamEvent(
+            type="response_complete",
+            response=LLMResponse(text=full_text, stop_reason="end_turn"),
+        )
+
+    def generate_with_tools_stream(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+        max_tokens: int = 2048,
+    ) -> Iterator[StreamEvent]:
+        """Stream generation with tool support via Bedrock ConverseStream API."""
+        if self._tools_unsupported:
+            yield from self.generate_stream(messages, max_tokens)
+            return
+
+        system_prompts, converse_messages = self._prepare_tool_messages(messages)
+        bedrock_tools = [
+            {
+                "toolSpec": {
+                    "name": t["name"],
+                    "description": t["description"],
+                    "inputSchema": {"json": t["parameters"]},
+                }
+            }
+            for t in tools
+        ]
+
+        effective_max = max_tokens * 4 if self.model_id in REASONING_MODELS else max_tokens
+        kwargs = {
+            "modelId": self.model_id,
+            "messages": converse_messages,
+            "inferenceConfig": {"maxTokens": effective_max, "temperature": 0.3},
+            "toolConfig": {"tools": bedrock_tools},
+        }
+        if system_prompts:
+            kwargs["system"] = system_prompts
+
+        t0 = time.monotonic()
+        full_text = ""
+        tool_calls: list[ToolCallInfo] = []
+        stop_reason = "end_turn"
+
+        # Track active tool-use blocks by index
+        active_tool_uses: dict[int, dict] = {}  # block_index -> {id, name, input_json}
+
+        try:
+            response = self._client.converse_stream(**kwargs)
+            for event in response.get("stream", []):
+                if "contentBlockStart" in event:
+                    start = event["contentBlockStart"]
+                    idx = start.get("contentBlockIndex", 0)
+                    if "toolUse" in start.get("start", {}):
+                        tu = start["start"]["toolUse"]
+                        active_tool_uses[idx] = {
+                            "id": tu["toolUseId"],
+                            "name": tu["name"],
+                            "input_json": "",
+                        }
+
+                elif "contentBlockDelta" in event:
+                    delta_evt = event["contentBlockDelta"]
+                    idx = delta_evt.get("contentBlockIndex", 0)
+                    delta = delta_evt.get("delta", {})
+
+                    if "text" in delta:
+                        token = delta["text"]
+                        if token:
+                            full_text += token
+                            yield StreamEvent(type="text_delta", text=token)
+
+                    elif "toolUse" in delta and idx in active_tool_uses:
+                        # Accumulate tool input JSON
+                        active_tool_uses[idx]["input_json"] += delta["toolUse"].get("input", "")
+
+                elif "contentBlockStop" in event:
+                    idx = event["contentBlockStop"].get("contentBlockIndex", 0)
+                    if idx in active_tool_uses:
+                        tu = active_tool_uses.pop(idx)
+                        import json
+                        try:
+                            tool_input = json.loads(tu["input_json"]) if tu["input_json"] else {}
+                        except json.JSONDecodeError:
+                            tool_input = {}
+                        tool_calls.append(ToolCallInfo(
+                            id=tu["id"], name=tu["name"], input=tool_input,
+                        ))
+
+                elif "messageStop" in event:
+                    stop_reason = event["messageStop"].get("stopReason", "end_turn")
+
+                elif "metadata" in event:
+                    usage = event["metadata"].get("usage", {})
+                    latency_ms = (time.monotonic() - t0) * 1000
+                    tokens_in = usage.get("inputTokens", 0)
+                    tokens_out = usage.get("outputTokens", 0)
+                    if stats.llm_stats:
+                        stats.llm_stats.record_call(tokens_est=tokens_in + tokens_out)
+                    stats.emit_usage_event(
+                        "llm.generate_with_tools", self.model_id,
+                        tokens_in=tokens_in, tokens_out=tokens_out, latency_ms=latency_ms,
+                    )
+
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
+            if error_code == "ValidationException" and "toolConfig" in str(e):
+                logger.warning(
+                    "Model %s does not support tool use, disabling for this session",
+                    self.model_id,
+                )
+                self._tools_unsupported = True
+                yield from self.generate_stream(messages, max_tokens)
+                return
+            logger.error("Bedrock streaming error: %s", e)
+            if stats.llm_stats:
+                stats.llm_stats.record_error(str(e))
+            raise
+
+        yield StreamEvent(
+            type="response_complete",
+            response=LLMResponse(
+                text=full_text or None,
+                tool_calls=tool_calls,
+                stop_reason="tool_use" if stop_reason == "tool_use" else "end_turn",
+            ),
+        )
 
     def _prepare_tool_messages(self, messages: list[dict]) -> tuple[list, list]:
         """Convert intermediate message format to Bedrock Converse format.

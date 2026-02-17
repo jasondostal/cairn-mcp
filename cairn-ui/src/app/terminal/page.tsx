@@ -249,7 +249,7 @@ function HostDialog({
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">Hostname</label>
-              <Input value={hostname} onChange={(e) => setHostname(e.target.value)} placeholder="192.168.1.10" required />
+              <Input value={hostname} onChange={(e) => setHostname(e.target.value)} placeholder="server.local" required />
             </div>
           </div>
 

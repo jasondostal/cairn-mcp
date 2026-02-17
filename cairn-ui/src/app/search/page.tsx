@@ -281,7 +281,7 @@ export default function SearchPage() {
       {error && <ErrorState message="Search failed" detail={error} />}
 
       {!loading && !error && searched && results.length === 0 && (
-        <EmptyState message="No results found." />
+        <EmptyState message="No results found." detail="Try different keywords or switch between semantic and keyword modes." />
       )}
 
       {!loading && !error && results.length > 0 && (

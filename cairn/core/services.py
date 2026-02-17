@@ -10,6 +10,7 @@ from cairn.config import Config, LLMCapabilities, load_config
 from cairn.core.analytics import AnalyticsQueryEngine, RollupWorker, UsageTracker, init_analytics_tracker
 # CairnManager removed in v0.37.0 — trail() + temporal graph queries replace cairns
 from cairn.core.clustering import ClusterEngine
+from cairn.core.conversations import ConversationManager
 from cairn.core.digest import DigestWorker
 from cairn.core.consolidation import ConsolidationEngine
 from cairn.core.drift import DriftDetector
@@ -73,6 +74,7 @@ class Services:
     opencode: OpenCodeClient | None
     workspace_manager: WorkspaceManager
     work_item_manager: WorkItemManager
+    conversation_manager: ConversationManager
     analytics_tracker: UsageTracker | None
     rollup_worker: RollupWorker | None
     analytics_engine: AnalyticsQueryEngine | None
@@ -266,6 +268,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
             default_agent=config.workspace.default_agent,
             budget_tokens=config.budget.workspace,
         ),
+        conversation_manager=ConversationManager(db, llm=llm_fast),
         analytics_tracker=analytics_tracker,
         rollup_worker=rollup_worker,
         analytics_engine=analytics_engine,

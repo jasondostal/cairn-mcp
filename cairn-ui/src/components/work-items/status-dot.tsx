@@ -51,3 +51,23 @@ export function PriorityDots({ priority }: { priority: number }) {
     </span>
   );
 }
+
+const priorityColors: Record<number, string> = {
+  1: "text-muted-foreground/70",
+  2: "text-[oklch(0.488_0.243_264)]",
+  3: "text-[oklch(0.769_0.188_70)]",
+  4: "text-[oklch(0.705_0.213_47)]",
+  5: "text-[oklch(0.645_0.246_16)]",
+};
+
+export function PriorityLabel({ priority }: { priority: number }) {
+  if (priority <= 0 || priority > 5) return null;
+  return (
+    <span
+      className={cn("text-[10px] font-mono font-medium shrink-0", priorityColors[priority] ?? "text-muted-foreground")}
+      title={`Priority ${priority}`}
+    >
+      P{priority}
+    </span>
+  );
+}

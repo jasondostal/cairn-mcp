@@ -5,6 +5,89 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.49.0] - 2026-02-17 — "Chat UI"
+
+### Added
+- **assistant-ui integration** — replaced bare-bones chat with `@assistant-ui/react` primitives
+  (Thread, Message, Composer). Markdown rendering, code syntax highlighting, copy buttons,
+  auto-scroll, keyboard navigation — all out of the box.
+- **SSE streaming** — new `POST /chat/stream` endpoint with server-sent events. Tokens stream
+  in real-time. Tool calls appear as they execute. Full agentic loop runs server-side with
+  streaming events: `text_delta`, `tool_call_start`, `tool_call_result`, `done`, `error`.
+- **LLM streaming interface** — `StreamEvent` dataclass + `generate_stream()` /
+  `generate_with_tools_stream()` on all LLM providers (Ollama NDJSON, Bedrock `converse_stream()`
+  with tool call accumulation, OpenAI-compat SSE). Default fallback wraps non-streaming as
+  single yield. Router delegates via `yield from`.
+- **Conversation persistence** — `conversations` + `chat_messages` tables (migration 024).
+  `ConversationManager` with CRUD, auto-title generation via LLM, message saving during streaming.
+  REST API: create, list, get, update, delete conversations + message endpoints.
+- **Conversation sidebar** — history panel with search, relative dates, message counts, delete.
+  Auto-refreshes after title generation. Conversations load with full message history including
+  tool call results.
+- **Rich tool UIs** — 6 custom renderers via `tools.by_name` in `MessagePrimitive.Content`:
+  `search_memories` (memory cards with scores, tags), `recall_memory` (full content display),
+  `store_memory` (confirmation card), `system_status` (mini dashboard), `list_work_items`
+  (status-colored cards), `create_work_item` (creation confirmation). Unregistered tools
+  gracefully degrade to the fallback renderer.
+- **Project scoping** — dropdown in chat header sets project context per conversation. Injected
+  into the system prompt so tool calls default to the selected project.
+- **Model indicator** — model name displayed below assistant messages via metadata.
+- **Keyboard shortcut** — `N` for new conversation (consistent with work items and tasks pages).
+- **`@assistant-ui/react-markdown`** — rich markdown rendering with prose-invert dark mode styling,
+  syntax-highlighted code blocks, and proper typography via `MarkdownTextPrimitive`.
+- **Nav sidebar overhaul** — grouped sections (Core, Context, Reference, Deep Dive, Ops) with
+  muted section labels. Removed Cairns entry. Reordered by access frequency. 19 flat items
+  become 5 scannable groups.
+- **Work items attention badge** — amber count badge in nav sidebar showing gated items awaiting
+  human review, polls every 30s. Same pattern as messages unread badge.
+- **Dashboard operational strip** — compact card at top of dashboard showing work item status
+  distribution (proportional colored bar), gated items count, and active sessions.
+- **Memory type proportional bar** — OKLCH-colored horizontal bar replacing flat type badges.
+  Interactive hover dims other segments. Compact legend with type names and counts.
+- **Empty states improved** — meaningful detail text across 6 pages (tasks, search, rules, docs,
+  thinking, analytics) with action hints and keyboard shortcut references.
+- **README rewrite** — narrative reframed around the ideate-dispatch-review loop. Feature
+  descriptions rewritten in user language. "Memory system" → "memory and orchestration layer".
+
+## [0.48.0] - 2026-02-16 — "Work Orchestration"
+
+### Added
+- **Gate primitives** — human-in-the-loop checkpoints that block work items until resolved.
+  `set_gate` / `resolve_gate` actions on the `work_items()` MCP tool. Human gates present
+  questions/options; timer gates auto-resolve. Risk tier CRITICAL auto-sets a human gate.
+- **Risk tiers** — 4-level risk classification (patrol/caution/action/critical) on work items.
+  Inherited by children. Displayed as colored badges in the UI.
+- **Cascading constraints** — parent work items define rules/boundaries that children inherit.
+  Child constraints merge with (and can override) parent constraints.
+- **Agent heartbeat** — agents report working/stuck/done state with periodic heartbeats.
+  `heartbeat` action on the MCP tool. Stale heartbeats visible in the UI.
+- **Activity logging** — full audit trail of all state changes on work items. New
+  `work_item_activity` table. Every create, status change, claim, gate set/resolve, and
+  checkpoint is logged with actor, timestamp, and metadata.
+- **Agent briefing** — `briefing` action assembles full context for a work item: description,
+  acceptance criteria, cascaded constraints from all ancestors, linked memory summaries.
+- **"Needs Your Input" section** — gated items surface at the top of the work items page
+  with the gate question/context. Click to open detail sheet and resolve.
+- **Activity feed in detail sheet** — timeline of all events on a work item, with type icons
+  and actor attribution.
+- **Inline quick create** — type a title, press Enter. Press N to focus. Fast capture without
+  opening the create dialog.
+- **Auto-refresh polling** — work items list polls every 10s with visibility-aware pausing
+  and exponential backoff on error.
+- **Priority labels** — P1–P5 text labels with OKLCH color coding replace priority dots.
+- **6 new REST endpoints** — gate, resolve gate, heartbeat, activity, briefing, gated items.
+- **6 new MCP actions** — set_gate, resolve_gate, heartbeat, activity, briefing, gated.
+- **Neo4j graph sync** — gate_type and risk_tier stored on WorkItem graph nodes.
+- **Three-tier separation** — enforced conceptual boundaries between tasks (personal
+  reminders, human-only, never agent-dispatchable), work items (the primary
+  dispatch system for agents and humans), and messages (soft-deprecated in favor of
+  work item activity feed). Tool docstrings rewritten to guide agents to the right tool.
+- **`promote` action on tasks()** — promotes a personal task to a full work item.
+  Creates the work item, marks the task completed, transfers linked memories, and
+  logs a `promoted` activity entry on the new work item.
+- **orient() output key rename** — `"tasks"` → `"work_items"` in orient() response
+  to reflect the three-tier separation. Internal budget constant renamed to match.
+
 ## [0.47.1] - 2026-02-16
 
 ### Added

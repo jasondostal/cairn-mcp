@@ -17,7 +17,9 @@ from datetime import date
 
 from cairn.config import LLMConfig, RouterConfig
 from cairn.llm import get_llm
-from cairn.llm.interface import LLMInterface, LLMResponse
+from collections.abc import Iterator
+
+from cairn.llm.interface import LLMInterface, LLMResponse, StreamEvent
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +60,21 @@ class OperationLLM(LLMInterface):
     ) -> LLMResponse:
         backend = self._router._resolve_backend(self._tier)
         return backend.generate_with_tools(messages, tools, max_tokens)
+
+    def generate_stream(
+        self, messages: list[dict], max_tokens: int = 1024,
+    ) -> Iterator[StreamEvent]:
+        backend = self._router._resolve_backend(self._tier)
+        yield from backend.generate_stream(messages, max_tokens)
+
+    def generate_with_tools_stream(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+        max_tokens: int = 2048,
+    ) -> Iterator[StreamEvent]:
+        backend = self._router._resolve_backend(self._tier)
+        yield from backend.generate_with_tools_stream(messages, tools, max_tokens)
 
 
 class ModelRouter(LLMInterface):
@@ -186,3 +203,12 @@ class ModelRouter(LLMInterface):
     ) -> LLMResponse:
         backend = self._resolve_backend("chat")
         return backend.generate_with_tools(messages, tools, max_tokens)
+
+    def generate_with_tools_stream(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+        max_tokens: int = 2048,
+    ) -> Iterator[StreamEvent]:
+        backend = self._resolve_backend("chat")
+        yield from backend.generate_with_tools_stream(messages, tools, max_tokens)

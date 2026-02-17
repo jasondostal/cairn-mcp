@@ -125,7 +125,7 @@ export default function DocsPage() {
       {error && <ErrorState message="Failed to load docs" detail={error} />}
 
       {!loading && !filters.projectsLoading && !error && docs.length === 0 && (
-        <EmptyState message="No documents found." />
+        <EmptyState message="No documents found." detail="Create briefs, PRDs, plans, and guides via the projects MCP tool." />
       )}
 
       {!loading && !filters.projectsLoading && !error && docs.length > 0 && (

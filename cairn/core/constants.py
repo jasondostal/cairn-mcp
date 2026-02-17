@@ -154,6 +154,41 @@ class WorkItemType:
 SHORT_ID_PREFIX = "wi-"
 
 
+class GateType:
+    HUMAN = "human"
+    TIMER = "timer"
+    ALL = {HUMAN, TIMER}
+
+
+class RiskTier:
+    PATROL = 0       # Just do it
+    CAUTION = 1      # Review recommended
+    ACTION = 2       # Requires review
+    CRITICAL = 3     # Human must confirm
+    ALL = {0, 1, 2, 3}
+    LABELS = {0: "patrol", 1: "caution", 2: "action", 3: "critical"}
+
+
+class AgentState:
+    WORKING = "working"
+    STUCK = "stuck"
+    DONE = "done"
+    ALL = {WORKING, STUCK, DONE}
+
+
+class ActivityType:
+    STATUS_CHANGE = "status_change"
+    CLAIM = "claim"
+    GATE_SET = "gate_set"
+    GATE_RESOLVED = "gate_resolved"
+    HEARTBEAT = "heartbeat"
+    CHECKPOINT = "checkpoint"
+    NOTE = "note"
+    CREATED = "created"
+    PROMOTED = "promoted"
+    ALL = {STATUS_CHANGE, CLAIM, GATE_SET, GATE_RESOLVED, HEARTBEAT, CHECKPOINT, NOTE, CREATED, PROMOTED}
+
+
 # ============================================================
 # Thinking Sequences
 # ============================================================
@@ -204,7 +239,7 @@ BUDGET_ORIENT = 6000
 ORIENT_ALLOC_RULES = 0.30
 ORIENT_ALLOC_LEARNINGS = 0.25
 ORIENT_ALLOC_TRAIL = 0.25
-ORIENT_ALLOC_TASKS = 0.20
+ORIENT_ALLOC_WORK_ITEMS = 0.20
 
 # Handler dispatch confidence threshold (SearchV2)
 HANDLER_CONFIDENCE_THRESHOLD = 0.6

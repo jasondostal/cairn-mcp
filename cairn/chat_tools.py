@@ -27,6 +27,8 @@ Tone:
 
 Tool use:
 - Search first, guess never. If the user asks about something, check memories before answering.
+- Use recent_activity when the user asks what's been happening, what we've been working on, \
+or for general context. Don't just list projects — show what's actually going on.
 - Use recall_memory when you need full content — search returns summaries.
 - When storing memories, pick the right memory_type: note, decision, rule, code-snippet, \
 learning, research, discussion, progress, task, debug, design.
@@ -38,7 +40,17 @@ learning, research, discussion, progress, task, debug, design.
 - check_inbox is for checking messages from other agents, not for regular conversation.
 """
 
-CHAT_TOOLS = [
+CHAT_TOOLS: list[dict] = [
+    {
+        "name": "recent_activity",
+        "description": "Get recent activity across the memory system — what's been worked on, recent decisions, progress, and open work items. Use this when the user asks what's been happening, what we've been working on, or for general orientation.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Filter to a specific project (optional)"},
+            },
+        },
+    },
     {
         "name": "search_memories",
         "description": "Search for memories using semantic search. Returns summaries of matching memories. Use recall_memory to get full content.",
@@ -202,6 +214,63 @@ class ChatToolExecutor:
         except Exception as e:
             logger.warning("Chat tool %s failed: %s", name, e, exc_info=True)
             return json.dumps({"error": str(e)})
+
+    def _tool_recent_activity(self, project: str | None = None) -> dict:
+        """Assemble recent context: recent memories, open work items, and trail."""
+        sections: dict = {}
+
+        # Recent memories (last ~10, sorted by recency)
+        try:
+            recent = self.svc.search_engine.search(
+                query="recent progress decisions learnings",
+                project=project, limit=10, include_full=False,
+            )
+            sections["recent_memories"] = [
+                {
+                    "id": r["id"],
+                    "summary": r.get("summary") or r.get("content", "")[:200],
+                    "memory_type": r.get("memory_type"),
+                    "project": r.get("project"),
+                    "importance": r.get("importance"),
+                    "created_at": r.get("created_at"),
+                }
+                for r in recent
+            ]
+        except Exception:
+            sections["recent_memories"] = []
+
+        # Open work items
+        try:
+            if self.svc.work_item_manager:
+                wi_result = self.svc.work_item_manager.list_items(
+                    project=project, limit=10,
+                )
+                sections["open_work_items"] = [
+                    {
+                        "short_id": i["short_id"],
+                        "title": i["title"],
+                        "status": i["status"],
+                        "item_type": i["item_type"],
+                        "assignee": i.get("assignee"),
+                        "project": i.get("project"),
+                    }
+                    for i in wi_result["items"]
+                    if i["status"] not in ("done", "cancelled")
+                ]
+        except Exception:
+            sections["open_work_items"] = []
+
+        # Trail (recent graph activity)
+        try:
+            if self.svc.graph:
+                trail = self.svc.graph.recent_activity(
+                    project=project, limit=10,
+                )
+                sections["trail"] = trail
+        except Exception:
+            pass
+
+        return sections
 
     def _tool_search_memories(
         self, query: str, project: str | None = None,

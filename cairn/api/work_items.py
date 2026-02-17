@@ -18,6 +18,8 @@ class CreateWorkItemBody(BaseModel):
     session_name: str | None = None
     metadata: dict | None = None
     acceptance_criteria: str | None = None
+    constraints: dict | None = None
+    risk_tier: int | None = None
 
 
 class UpdateWorkItemBody(BaseModel):
@@ -30,6 +32,8 @@ class UpdateWorkItemBody(BaseModel):
     session_name: str | None = None
     metadata: dict | None = None
     acceptance_criteria: str | None = None
+    risk_tier: int | None = None
+    constraints: dict | None = None
 
 
 class ClaimBody(BaseModel):
@@ -43,6 +47,8 @@ class AddChildBody(BaseModel):
     session_name: str | None = None
     metadata: dict | None = None
     acceptance_criteria: str | None = None
+    constraints: dict | None = None
+    risk_tier: int | None = None
 
 
 class BlockBody(BaseModel):
@@ -52,6 +58,23 @@ class BlockBody(BaseModel):
 
 class LinkMemoriesBody(BaseModel):
     memory_ids: list[int]
+
+
+class SetGateBody(BaseModel):
+    gate_type: str
+    gate_data: dict | None = None
+    actor: str | None = None
+
+
+class ResolveGateBody(BaseModel):
+    response: dict | None = None
+    actor: str | None = None
+
+
+class HeartbeatBody(BaseModel):
+    agent_name: str
+    state: str = "working"
+    note: str | None = None
 
 
 def register_routes(router: APIRouter, svc: Services, **kw):
@@ -81,6 +104,14 @@ def register_routes(router: APIRouter, svc: Services, **kw):
     ):
         return wim.ready_queue(project, limit=limit)
 
+    @router.get("/work-items/gated")
+    def api_gated(
+        project: str | None = Query(None),
+        gate_type: str | None = Query(None),
+        limit: int = Query(20, ge=1, le=100),
+    ):
+        return wim.gated_items(project=project, gate_type=gate_type, limit=limit)
+
     @router.get("/work-items/{item_id}")
     def api_get_work_item(item_id: int = Path(...)):
         return wim.get(item_id)
@@ -92,6 +123,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             item_type=body.item_type, priority=body.priority,
             parent_id=body.parent_id, session_name=body.session_name,
             metadata=body.metadata, acceptance_criteria=body.acceptance_criteria,
+            constraints=body.constraints, risk_tier=body.risk_tier,
         )
 
     @router.patch("/work-items/{item_id}")
@@ -115,6 +147,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             parent_id=item_id, title=body.title, description=body.description,
             priority=body.priority, session_name=body.session_name,
             metadata=body.metadata, acceptance_criteria=body.acceptance_criteria,
+            constraints=body.constraints, risk_tier=body.risk_tier,
         )
 
     @router.post("/work-items/block")
@@ -128,3 +161,27 @@ def register_routes(router: APIRouter, svc: Services, **kw):
     @router.post("/work-items/{item_id}/link-memories")
     def api_link_memories(item_id: int = Path(...), body: LinkMemoriesBody = Body(...)):
         return wim.link_memories(item_id, body.memory_ids)
+
+    @router.post("/work-items/{item_id}/gate")
+    def api_set_gate(item_id: int = Path(...), body: SetGateBody = Body(...)):
+        return wim.set_gate(item_id, body.gate_type, gate_data=body.gate_data, actor=body.actor)
+
+    @router.post("/work-items/{item_id}/gate/resolve")
+    def api_resolve_gate(item_id: int = Path(...), body: ResolveGateBody = Body(...)):
+        return wim.resolve_gate(item_id, response=body.response, actor=body.actor)
+
+    @router.post("/work-items/{item_id}/heartbeat")
+    def api_heartbeat(item_id: int = Path(...), body: HeartbeatBody = Body(...)):
+        return wim.heartbeat(item_id, body.agent_name, state=body.state, note=body.note)
+
+    @router.get("/work-items/{item_id}/activity")
+    def api_activity(
+        item_id: int = Path(...),
+        limit: int = Query(50, ge=1, le=200),
+        offset: int = Query(0, ge=0),
+    ):
+        return wim.get_activity(item_id, limit=limit, offset=offset)
+
+    @router.get("/work-items/{item_id}/briefing")
+    def api_briefing(item_id: int = Path(...)):
+        return wim.generate_briefing(item_id)

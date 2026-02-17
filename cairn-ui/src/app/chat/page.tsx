@@ -1,257 +1,226 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import { api } from "@/lib/api";
+import { useState, useCallback, useEffect, useRef } from "react";
+import {
+  useLocalRuntime,
+  AssistantRuntimeProvider,
+  type ThreadMessageLike,
+} from "@assistant-ui/react";
+import {
+  cairnChatAdapter,
+  setConversationId,
+  setProjectScope,
+} from "@/lib/chat-adapter";
+import { api, type Conversation, type ChatMessage, type Project } from "@/lib/api";
+import { ChatThread } from "@/components/chat/thread";
+import { ConversationSidebar } from "@/components/chat/conversation-sidebar";
 import { Button } from "@/components/ui/button";
-import { Send, Bot, User, Loader2, Wrench, RotateCcw } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { RotateCcw, PanelLeftClose, PanelLeft } from "lucide-react";
 
-interface ToolCallEntry {
-  name: string;
-  input: Record<string, unknown>;
-  output: unknown;
-}
-
-interface Message {
-  role: "user" | "assistant" | "system";
-  content: string;
-  toolCalls?: ToolCallEntry[];
-}
-
-const STORAGE_KEY = "cairnChat";
-const MAX_PERSISTED = 100;
-
-function loadMessages(): Message[] {
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.slice(-MAX_PERSISTED) : [];
-  } catch {
-    return [];
-  }
-}
-
-function toolDisplayName(name: string): string {
-  return name.replace(/_/g, " ");
-}
-
-function toolInputSummary(name: string, input: Record<string, unknown>): string {
-  if (name === "search_memories" && input.query) return `"${input.query}"`;
-  if (name === "recall_memory" && input.ids) return `#${(input.ids as number[]).join(", #")}`;
-  if (name === "store_memory" && input.project) return `in ${input.project}`;
-  if (name === "list_tasks" && input.project) return `${input.project}`;
-  if (name === "get_rules" && input.project) return `${input.project}`;
-  return "";
+/** Convert stored ChatMessages to assistant-ui ThreadMessageLike format. */
+function toThreadMessages(messages: ChatMessage[]): ThreadMessageLike[] {
+  return messages
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => {
+      if (m.role === "user") {
+        return {
+          role: "user" as const,
+          content: [{ type: "text" as const, text: m.content || "" }],
+        };
+      }
+      // Assistant message — include tool calls + text
+      const content: ThreadMessageLike["content"] = [];
+      if (m.tool_calls) {
+        for (const tc of m.tool_calls) {
+          (content as Array<unknown>).push({
+            type: "tool-call",
+            toolCallId: `${tc.name}-restored-${m.id}`,
+            toolName: tc.name,
+            args: tc.input,
+            result: tc.output,
+            argsText: JSON.stringify(tc.input),
+          });
+        }
+      }
+      if (m.content) {
+        (content as Array<unknown>).push({
+          type: "text",
+          text: m.content,
+        });
+      }
+      return {
+        role: "assistant" as const,
+        content,
+      };
+    });
 }
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>(loadMessages);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [model, setModel] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [activeConvId, setActiveConvId] = useState<number | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [initialMessages, setInitialMessages] = useState<
+    ThreadMessageLike[] | undefined
+  >(undefined);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProject, setActiveProject] = useState<string>("");
 
-  // Persist messages to sessionStorage
+  // Load project list for the scope selector
   useEffect(() => {
+    api.projects({ limit: "100" }).then((r) => setProjects(r.items)).catch(() => {});
+  }, []);
+
+  // Sync project scope to the adapter
+  useEffect(() => {
+    setProjectScope(activeProject || null);
+  }, [activeProject]);
+
+  // Create runtime with initial messages for the loaded conversation
+  const runtime = useLocalRuntime(cairnChatAdapter, {
+    initialMessages,
+  });
+
+  const runtimeRef = useRef(runtime);
+  runtimeRef.current = runtime;
+
+  // Create a new conversation on the backend, set it active
+  const createNewConversation = useCallback(async () => {
     try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-MAX_PERSISTED)));
+      const conv = await api.createConversation({});
+      setActiveConvId(conv.id);
+      setConversationId(conv.id);
+      return conv;
     } catch {
-      // quota exceeded — ignore
+      return null;
     }
-  }, [messages]);
-
-  // Scroll to bottom after paint
-  useEffect(() => {
-    requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    });
-  }, [messages]);
-
-  useEffect(() => {
-    inputRef.current?.focus();
   }, []);
 
   const handleNewChat = useCallback(() => {
-    setMessages([]);
-    setModel(null);
-    sessionStorage.removeItem(STORAGE_KEY);
-    inputRef.current?.focus();
+    setActiveConvId(null);
+    setConversationId(null);
+    setInitialMessages(undefined);
+    runtimeRef.current.switchToNewThread();
   }, []);
 
-  const handleSend = async () => {
-    const content = input.trim();
-    if (!content || loading) return;
+  const handleSelectConversation = useCallback(
+    async (conv: Conversation) => {
+      try {
+        const result = await api.conversationMessages(conv.id);
+        const msgs = toThreadMessages(result.messages);
+        setActiveConvId(conv.id);
+        setConversationId(conv.id);
+        setInitialMessages(msgs);
+        // Force new thread with these messages
+        runtimeRef.current.switchToNewThread();
+      } catch {
+        // silent
+      }
+    },
+    [],
+  );
 
-    const userMessage: Message = { role: "user", content };
-    const updated = [...messages, userMessage];
-    setMessages(updated);
-    setInput("");
-    setLoading(true);
-
-    try {
-      const result = await api.chat(updated, 2048);
-      setModel(result.model);
-      setMessages([
-        ...updated,
-        {
-          role: "assistant",
-          content: result.response,
-          toolCalls: result.tool_calls ?? undefined,
-        },
-      ]);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Failed to get response";
-      setMessages([
-        ...updated,
-        { role: "assistant", content: `Error: ${errorMsg}` },
-      ]);
-    } finally {
-      setLoading(false);
-      setTimeout(() => inputRef.current?.focus(), 50);
+  // Auto-create conversation on first message if none active
+  useEffect(() => {
+    if (!activeConvId) {
+      setConversationId(null);
     }
-  };
+  }, [activeConvId]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+  // Keyboard shortcut: N for new conversation (when not in an input)
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "n" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const target = e.target as HTMLElement;
+        if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+        e.preventDefault();
+        handleNewChat();
+      }
     }
-  };
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [handleNewChat]);
+
+  // When user sends first message without a conversation, create one
+  const ensureConversation = useCallback(async () => {
+    if (!activeConvId) {
+      const conv = await createNewConversation();
+      if (conv) {
+        setActiveConvId(conv.id);
+        setConversationId(conv.id);
+      }
+    }
+  }, [activeConvId, createNewConversation]);
 
   return (
     <div
-      className="flex flex-col -m-4 md:-m-6"
+      className="flex -m-4 md:-m-6"
       style={{ height: "calc(100vh - var(--removed, 0px))" }}
     >
-      {/* Header */}
-      <div className="shrink-0 border-b px-4 py-3 md:px-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold">Chat</h1>
-          <div className="flex items-center gap-2">
-            {model && (
-              <span className="text-xs text-muted-foreground font-mono">
-                {model}
-              </span>
-            )}
-            {messages.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={handleNewChat} className="h-7 px-2 text-xs">
-                <RotateCcw className="mr-1 h-3 w-3" />
-                New
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
-        {messages.length === 0 && (
-          <div className="flex h-full items-center justify-center">
-            <div className="text-center text-muted-foreground">
-              <Bot className="mx-auto mb-3 h-10 w-10 opacity-30" />
-              <p className="text-sm">Talk to your Cairn LLM.</p>
-              <p className="text-xs mt-1 opacity-60">
-                The assistant can search and browse your memories.
-              </p>
-            </div>
-          </div>
-        )}
-
-        <div className="mx-auto max-w-2xl space-y-4">
-          {messages.map((msg, i) => (
-            <div
-              key={i}
-              className={cn(
-                "flex gap-3",
-                msg.role === "user" ? "justify-end" : "justify-start"
-              )}
-            >
-              {msg.role === "assistant" && (
-                <div className="mt-1 shrink-0">
-                  <Bot className="h-5 w-5 text-muted-foreground" />
-                </div>
-              )}
-              <div
-                className={cn(
-                  "rounded-lg px-3 py-2 text-sm max-w-[80%]",
-                  msg.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
-                )}
-              >
-                {/* Tool calls */}
-                {msg.toolCalls && msg.toolCalls.length > 0 && (
-                  <div className="space-y-1 mb-2 pb-2 border-b border-border/50">
-                    {msg.toolCalls.map((tc, j) => (
-                      <details key={j} className="group">
-                        <summary className="cursor-pointer text-xs text-muted-foreground flex items-center gap-1.5 hover:text-foreground transition-colors">
-                          <Wrench className="h-3 w-3 shrink-0" />
-                          <span className="font-medium">{toolDisplayName(tc.name)}</span>
-                          {toolInputSummary(tc.name, tc.input) && (
-                            <span className="opacity-60">{toolInputSummary(tc.name, tc.input)}</span>
-                          )}
-                        </summary>
-                        <pre className="mt-1 text-[10px] bg-background/50 rounded p-1.5 overflow-x-auto whitespace-pre-wrap break-all text-muted-foreground">
-                          {JSON.stringify(tc.output, null, 2)}
-                        </pre>
-                      </details>
-                    ))}
-                  </div>
-                )}
-                {/* Message text */}
-                <div className="whitespace-pre-wrap">{msg.content}</div>
-              </div>
-              {msg.role === "user" && (
-                <div className="mt-1 shrink-0">
-                  <User className="h-5 w-5 text-muted-foreground" />
-                </div>
-              )}
-            </div>
-          ))}
-
-          {loading && (
-            <div className="flex gap-3 justify-start">
-              <div className="mt-1 shrink-0">
-                <Bot className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <div className="bg-muted rounded-lg px-3 py-2">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              </div>
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-      </div>
-
-      {/* Input */}
-      <div className="shrink-0 border-t px-4 py-3 md:px-6">
-        <div className="mx-auto max-w-2xl flex gap-2">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type a message..."
-            rows={1}
-            className={cn(
-              "flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm",
-              "ring-offset-background placeholder:text-muted-foreground",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              "disabled:cursor-not-allowed disabled:opacity-50"
-            )}
-            disabled={loading}
+      {/* Conversation sidebar */}
+      {sidebarOpen && (
+        <div className="w-56 shrink-0 hidden md:block">
+          <ConversationSidebar
+            activeId={activeConvId}
+            onSelect={handleSelectConversation}
+            onNew={handleNewChat}
           />
-          <Button
-            size="icon"
-            onClick={handleSend}
-            disabled={loading || !input.trim()}
-          >
-            <Send className="h-4 w-4" />
-          </Button>
         </div>
+      )}
+
+      {/* Main chat area */}
+      <div className="flex flex-1 flex-col min-w-0">
+        <AssistantRuntimeProvider runtime={runtime}>
+          {/* Header */}
+          <div className="shrink-0 border-b px-4 py-3 md:px-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 hidden md:flex"
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+                >
+                  {sidebarOpen ? (
+                    <PanelLeftClose className="h-4 w-4" />
+                  ) : (
+                    <PanelLeft className="h-4 w-4" />
+                  )}
+                </Button>
+                <h1 className="text-lg font-semibold">Chat</h1>
+                {/* Project scope selector */}
+                <select
+                  value={activeProject}
+                  onChange={(e) => setActiveProject(e.target.value)}
+                  className="h-7 rounded-md border bg-background px-2 text-xs text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">All projects</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleNewChat}
+                  className="h-7 px-2 text-xs"
+                  title="New conversation (N)"
+                >
+                  <RotateCcw className="mr-1 h-3 w-3" />
+                  New
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Thread */}
+          <div className="flex-1 min-h-0">
+            <ChatThread onFirstMessage={ensureConversation} />
+          </div>
+        </AssistantRuntimeProvider>
       </div>
     </div>
   );

@@ -384,6 +384,28 @@ export interface CairnDetail extends Cairn {
   stones: CairnStone[];
 }
 
+export interface Conversation {
+  id: number;
+  title: string | null;
+  project: string | null;
+  model: string | null;
+  message_count: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatMessage {
+  id: number;
+  conversation_id: number;
+  role: string;
+  content: string | null;
+  tool_calls: Array<{ name: string; input: Record<string, unknown>; output: unknown }> | null;
+  model: string | null;
+  token_count: number | null;
+  created_at: string;
+}
+
 export interface Message {
   id: number;
   project: string;
@@ -414,6 +436,9 @@ export interface WorkItem {
   project: string;
   children_count: number;
   session_name: string | null;
+  risk_tier: number;
+  gate_type: string | null;
+  agent_state: string | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
@@ -436,11 +461,41 @@ export interface WorkItemDetail {
   blocking: Array<{ id: number; short_id: string; title: string; status: string }>;
   linked_memories: Array<{ id: number; summary: string; memory_type: string }>;
   metadata: Record<string, unknown>;
+  risk_tier: number;
+  gate_type: string | null;
+  gate_data: Record<string, unknown>;
+  gate_resolved_at: string | null;
+  gate_response: Record<string, unknown> | null;
+  constraints: Record<string, unknown>;
+  agent_state: string | null;
+  last_heartbeat: string | null;
   session_name: string | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
   cancelled_at: string | null;
+}
+
+export interface WorkItemActivity {
+  id: number;
+  actor: string | null;
+  activity_type: string;
+  content: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface GatedItem {
+  id: number;
+  short_id: string;
+  title: string;
+  item_type: string;
+  priority: number;
+  status: string;
+  gate_type: string;
+  gate_data: Record<string, unknown>;
+  risk_tier: number;
+  project: string;
 }
 
 export interface ReadyQueue {
@@ -679,6 +734,9 @@ export const api = {
   tasks: (project?: string, opts?: { include_completed?: string; limit?: string; offset?: string }) =>
     get<Paginated<Task>>("/tasks", { ...(project ? { project } : {}), ...opts }),
 
+  taskCreate: (body: { project: string; description: string }) =>
+    post<Task>("/tasks", body),
+
   taskComplete: (id: number) => post<{ status: string }>(`/tasks/${id}/complete`, {}),
 
   thinking: (project?: string, opts?: { status?: string; limit?: string; offset?: string }) =>
@@ -861,4 +919,52 @@ export const api = {
 
   workItemLinkMemories: (id: number, memoryIds: number[]) =>
     post<{ action: string }>(`/work-items/${id}/link-memories`, { memory_ids: memoryIds }),
+
+  workItemSetGate: (id: number, gateType: string, gateData?: Record<string, unknown>, actor?: string) =>
+    post<{ action: string }>(`/work-items/${id}/gate`, { gate_type: gateType, gate_data: gateData, actor }),
+
+  workItemResolveGate: (id: number, response?: Record<string, unknown>, actor?: string) =>
+    post<{ action: string }>(`/work-items/${id}/gate/resolve`, { response, actor }),
+
+  workItemHeartbeat: (id: number, agentName: string, state?: string, note?: string) =>
+    post<{ action: string }>(`/work-items/${id}/heartbeat`, { agent_name: agentName, state, note }),
+
+  workItemActivity: (id: number, opts?: { limit?: string; offset?: string }) =>
+    get<{ work_item_id: number; short_id: string; total: number; activities: WorkItemActivity[] }>(
+      `/work-items/${id}/activity`, opts
+    ),
+
+  workItemBriefing: (id: number) =>
+    get<{ work_item: Record<string, unknown>; constraints: Record<string, unknown>; context: Array<Record<string, unknown>>; parent_chain: Array<Record<string, unknown>> }>(
+      `/work-items/${id}/briefing`
+    ),
+
+  workItemsGated: (opts?: { project?: string; gate_type?: string; limit?: string }) =>
+    get<{ total: number; items: GatedItem[] }>("/work-items/gated", opts),
+
+  // --- Conversations ---
+
+  conversations: (opts?: { project?: string; limit?: string; offset?: string }) =>
+    get<Paginated<Conversation>>("/chat/conversations", opts),
+
+  conversation: (id: number) => get<Conversation>(`/chat/conversations/${id}`),
+
+  createConversation: (body: { project?: string; title?: string; model?: string }) =>
+    post<Conversation>("/chat/conversations", body),
+
+  updateConversation: (id: number, body: { title: string }) =>
+    patch<Conversation>(`/chat/conversations/${id}`, body),
+
+  deleteConversation: (id: number) =>
+    del<{ deleted: boolean; id: number }>(`/chat/conversations/${id}`),
+
+  conversationMessages: (id: number, opts?: { limit?: string; offset?: string }) =>
+    get<{ conversation_id: number; messages: ChatMessage[] }>(
+      `/chat/conversations/${id}/messages`, opts,
+    ),
+
+  addConversationMessage: (id: number, body: {
+    role: string; content?: string; tool_calls?: Array<Record<string, unknown>>;
+    model?: string; token_count?: number;
+  }) => post<ChatMessage>(`/chat/conversations/${id}/messages`, body),
 };
