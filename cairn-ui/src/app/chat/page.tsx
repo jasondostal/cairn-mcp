@@ -151,10 +151,7 @@ export default function ChatPage() {
   }, [activeConvId, createNewConversation]);
 
   return (
-    <div
-      className="flex -m-4 md:-m-6"
-      style={{ height: "calc(100vh - var(--removed, 0px))" }}
-    >
+    <div className="flex h-full -m-4 md:-m-6">
       {/* Conversation sidebar */}
       {sidebarOpen && (
         <div className="w-56 shrink-0 hidden md:block">

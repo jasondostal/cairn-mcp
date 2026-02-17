@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import type { WorkItemStatus } from "@/lib/api";
 
 const statusColors: Record<WorkItemStatus, string> = {
-  open: "bg-[oklch(0.556_0_0)]",
+  open: "bg-[oklch(0.556_0.04_264)]",
   ready: "bg-[oklch(0.488_0.243_264)]",
   in_progress: "bg-[oklch(0.769_0.188_70)]",
   blocked: "bg-[oklch(0.645_0.246_16)]",
@@ -11,7 +11,7 @@ const statusColors: Record<WorkItemStatus, string> = {
 };
 
 const statusTextColors: Record<WorkItemStatus, string> = {
-  open: "text-[oklch(0.556_0_0)]",
+  open: "text-[oklch(0.556_0.04_264)]",
   ready: "text-[oklch(0.488_0.243_264)]",
   in_progress: "text-[oklch(0.769_0.188_70)]",
   blocked: "text-[oklch(0.645_0.246_16)]",

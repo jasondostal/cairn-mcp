@@ -35,7 +35,7 @@ export function WorkItemRow({
     <div
       className={cn(
         "flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer",
-        (isDone || isCancelled) && "opacity-50",
+        (isDone || isCancelled) && "opacity-35",
       )}
       onClick={onClick}
     >
@@ -72,7 +72,7 @@ export function WorkItemRow({
       </span>
 
       {hasGate && (
-        <Hand className="h-3 w-3 text-[oklch(0.769_0.188_70)] shrink-0" />
+        <Hand className="h-3 w-3 text-[oklch(0.627_0.265_304)] shrink-0" />
       )}
 
       <PriorityLabel priority={item.priority} />

@@ -9,10 +9,7 @@ interface PageLayoutProps {
 
 export function PageLayout({ title, titleExtra, filters, children }: PageLayoutProps) {
   return (
-    <div
-      className="flex flex-col -m-4 md:-m-6"
-      style={{ height: "calc(100vh - var(--removed, 0px))" }}
-    >
+    <div className="flex flex-col h-full -m-4 md:-m-6">
       {/* Fixed header — never scrolls */}
       <div className="shrink-0 px-4 md:px-6 pt-4 md:pt-6 pb-3 border-b border-border bg-background">
         <div className={`flex items-center justify-between${filters ? " mb-3" : ""}`}>
