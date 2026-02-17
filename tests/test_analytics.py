@@ -276,7 +276,9 @@ class TestEntityCountsSparkline:
     def test_returns_totals_and_sparklines(self):
         db = MagicMock()
         db.execute_one = MagicMock(return_value={
-            "memories": 100, "projects": 5, "cairns": 20, "clusters": 3,
+            "memories": 100, "projects": 5, "clusters": 3,
+            "work_items": 12, "tasks": 8, "thinking": 2,
+            "conversations": 4, "messages": 15,
         })
         now = datetime.now(timezone.utc)
         db.execute = MagicMock(return_value=[
@@ -288,10 +290,11 @@ class TestEntityCountsSparkline:
 
         assert result["totals"]["memories"] == 100
         assert result["totals"]["projects"] == 5
+        assert result["totals"]["work_items"] == 12
         assert "sparklines" in result
         assert "memories" in result["sparklines"]
-        # 3 entity types queried (memories, projects, clusters — cairns removed in v0.37.0)
-        assert db.execute.call_count == 3
+        # 8 entity types queried
+        assert db.execute.call_count == 8
 
 
 class TestActivityHeatmap:
