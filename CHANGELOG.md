@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.51.1] - 2026-02-18 — "Knowledge Graph"
+
+### Added
+- **`/api/knowledge-graph` endpoint** — returns entities as nodes and statement triples as
+  edges from Neo4j. Supports `project`, `entity_type`, and `limit` query parameters with a
+  configurable node cap (default 500). Returns 503 gracefully when Neo4j is not configured.
+- **`neo4j_provider.get_knowledge_graph_visualization()`** — queries Neo4j for entities with
+  statement counts (used for node sizing) and subject→object triples with predicates as edges.
+  Filters by `project_id` and `entity_types`.
+- **Knowledge graph UI rewrite** — complete rewrite of `graph/page.tsx` from Postgres
+  memory-relations to Neo4j entity graph:
+  - Entity-type colored nodes (Person, Organization, Place, Event, Project, Task, Technology,
+    Product, Concept) with aspect-colored edges
+  - Predicate labels on edges when hovered or selected
+  - Entity type filter buttons with counts
+  - Search filtering across entity names
+  - Side panel showing selected entity's relationships with clickable navigation
+  - Node name labels at higher zoom levels
+- **`scripts/backfill_knowledge_graph.py`** — backfill script for extracting knowledge from
+  existing un-extracted memories. Queries Neo4j for already-extracted episode IDs and diffs
+  against Postgres active memories. Supports `--dry-run`, `--project`, `--batch-size`.
+- **`KnowledgeNode` / `KnowledgeEdge` / `KnowledgeGraphResult`** TypeScript types and
+  `api.knowledgeGraph()` method in `cairn-ui/src/lib/api.ts`.
+
+### Changed
+- Graph page now queries `/api/knowledge-graph` (Neo4j) instead of `/api/graph` (Postgres
+  `memory_relations`).
+- Node colors represent entity types instead of memory types.
+- Edge colors represent aspect categories instead of relation types.
+
 ## [0.51.0] - 2026-02-17 — "Connected Context"
 
 ### Added
