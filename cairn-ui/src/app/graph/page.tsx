@@ -10,81 +10,84 @@ import {
   type SimulationNodeDatum,
   type SimulationLinkDatum,
 } from "d3-force";
-import { api, type GraphResult } from "@/lib/api";
-import { useMemorySheet } from "@/lib/use-memory-sheet";
+import { api, type KnowledgeGraphResult } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/error-state";
-import { MemorySheet } from "@/components/memory-sheet";
 import { PageLayout } from "@/components/page-layout";
 
-// --- Colors ---
+// --- Entity type colors ---
 
-const TYPE_COLORS: Record<string, string> = {
-  note: "#3b82f6",
-  decision: "#f59e0b",
-  rule: "#ef4444",
-  "code-snippet": "#22c55e",
-  learning: "#8b5cf6",
-  research: "#06b6d4",
-  discussion: "#ec4899",
-  progress: "#14b8a6",
-  task: "#f97316",
-  debug: "#e11d48",
-  design: "#6366f1",
+const ENTITY_COLORS: Record<string, string> = {
+  Person: "#f59e0b",
+  Organization: "#ef4444",
+  Place: "#22c55e",
+  Event: "#ec4899",
+  Project: "#3b82f6",
+  Task: "#f97316",
+  Technology: "#8b5cf6",
+  Product: "#06b6d4",
+  Concept: "#6b7280",
 };
 const DEFAULT_NODE_COLOR = "#6b7280";
 
-const RELATION_COLORS: Record<string, string> = {
-  extends: "#3b82f6",
-  contradicts: "#ef4444",
-  implements: "#22c55e",
-  depends_on: "#f59e0b",
-  related: "#6b7280",
+// --- Aspect colors for edges ---
+const ASPECT_COLORS: Record<string, string> = {
+  Identity: "#f59e0b",
+  Knowledge: "#3b82f6",
+  Belief: "#8b5cf6",
+  Preference: "#ec4899",
+  Action: "#22c55e",
+  Goal: "#14b8a6",
+  Directive: "#ef4444",
+  Decision: "#f97316",
+  Event: "#06b6d4",
+  Problem: "#e11d48",
+  Relationship: "#6366f1",
 };
-const DEFAULT_EDGE_COLOR = "#6b7280";
+const DEFAULT_EDGE_COLOR = "#475569";
 
-const RELATION_TYPES = ["all", "extends", "contradicts", "implements", "depends_on", "related"] as const;
-
-// --- Cluster colors (generated palette for cluster coloring mode) ---
-const CLUSTER_PALETTE = [
-  "#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6",
-  "#06b6d4", "#ec4899", "#14b8a6", "#f97316", "#6366f1",
-  "#84cc16", "#e11d48", "#0ea5e9", "#d946ef", "#facc15",
-];
-const CLUSTER_UNASSIGNED_COLOR = "#4b5563"; // gray-600
+const ENTITY_TYPES = [
+  "all",
+  "Person",
+  "Project",
+  "Technology",
+  "Concept",
+  "Event",
+  "Organization",
+  "Place",
+  "Product",
+  "Task",
+] as const;
 
 // --- Simulation types ---
 
 interface SimNode extends SimulationNodeDatum {
-  id: number;
-  summary: string;
-  memory_type: string;
-  importance: number;
-  project: string;
+  id: string; // uuid
+  name: string;
+  entity_type: string;
+  project_id: number;
+  stmt_count: number;
   radius: number;
-  cluster_id: number | null;
-  cluster_label: string | null;
-  age_days: number;
-  updated_at: string;
 }
 
 interface SimLink extends SimulationLinkDatum<SimNode> {
-  relation: string;
+  predicate: string;
+  fact: string;
+  aspect: string;
 }
 
 const CANVAS_HEIGHT = 600;
 
 export default function GraphPage() {
-  const [data, setData] = useState<GraphResult | null>(null);
+  const [data, setData] = useState<KnowledgeGraphResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [project, setProject] = useState("");
-  const [relationType, setRelationType] = useState("all");
-  const [colorMode, setColorMode] = useState<"type" | "cluster">("type");
-  const [showAge, setShowAge] = useState(false);
+  const [entityTypeFilter, setEntityTypeFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
 
   // Simulation state
   const nodesRef = useRef<SimNode[]>([]);
@@ -95,7 +98,7 @@ export default function GraphPage() {
   const [hoveredNode, setHoveredNode] = useState<SimNode | null>(null);
   const [hoveredEdge, setHoveredEdge] = useState<SimLink | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
-  const { sheetId, sheetOpen, setSheetOpen, openSheet } = useMemorySheet();
+  const [selectedNode, setSelectedNode] = useState<SimNode | null>(null);
 
   // Zoom/pan state
   const transformRef = useRef({ x: 0, y: 0, scale: 1 });
@@ -111,59 +114,56 @@ export default function GraphPage() {
     setLoading(true);
     setError(null);
     api
-      .graph({
+      .knowledgeGraph({
         project: project || undefined,
-        relation_type: relationType === "all" ? undefined : relationType,
+        entity_type: entityTypeFilter === "all" ? undefined : entityTypeFilter,
       })
       .then((result) => {
         setData(result);
         initSimulation(result);
       })
-      .catch((err) => setError(err?.message || "Failed to load graph"))
+      .catch((err) => setError(err?.message || "Failed to load knowledge graph"))
       .finally(() => setLoading(false));
   }
 
-  function initSimulation(result: GraphResult) {
-    // Stop previous
+  function initSimulation(result: KnowledgeGraphResult) {
     if (simRef.current) simRef.current.stop();
     cancelAnimationFrame(rafRef.current);
 
     const width = containerRef.current?.clientWidth || 800;
 
     // Build nodes
-    const nodeMap = new Map<number, SimNode>();
+    const nodeMap = new Map<string, SimNode>();
     const nodes: SimNode[] = result.nodes.map((n) => {
+      const radius = Math.max(5, Math.min(20, 4 + Math.sqrt(n.stmt_count) * 3));
       const node: SimNode = {
-        id: n.id,
-        summary: n.summary,
-        memory_type: n.memory_type,
-        importance: n.importance,
-        project: n.project,
-        radius: n.size ?? (5 + n.importance * 8),
-        cluster_id: n.cluster_id,
-        cluster_label: n.cluster_label,
-        age_days: n.age_days ?? 0,
-        updated_at: n.updated_at ?? n.created_at,
-        x: width / 2 + (Math.random() - 0.5) * 200,
-        y: CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * 200,
+        id: n.uuid,
+        name: n.name,
+        entity_type: n.entity_type,
+        project_id: n.project_id,
+        stmt_count: n.stmt_count,
+        radius,
+        x: width / 2 + (Math.random() - 0.5) * 300,
+        y: CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * 300,
       };
-      nodeMap.set(n.id, node);
+      nodeMap.set(n.uuid, node);
       return node;
     });
 
-    // Build links
+    // Build links — only where both endpoints exist
     const links: SimLink[] = result.edges
       .filter((e) => nodeMap.has(e.source) && nodeMap.has(e.target))
       .map((e) => ({
         source: nodeMap.get(e.source)!,
         target: nodeMap.get(e.target)!,
-        relation: e.relation,
+        predicate: e.predicate,
+        fact: e.fact,
+        aspect: e.aspect,
       }));
 
     nodesRef.current = nodes;
     linksRef.current = links;
 
-    // Reset transform
     transformRef.current = { x: 0, y: 0, scale: 1 };
 
     const sim = forceSimulation<SimNode>(nodes)
@@ -171,13 +171,13 @@ export default function GraphPage() {
         "link",
         forceLink<SimNode, SimLink>(links)
           .id((d) => d.id)
-          .distance(100)
+          .distance(120)
       )
-      .force("charge", forceManyBody<SimNode>().strength(-150))
+      .force("charge", forceManyBody<SimNode>().strength(-200))
       .force("center", forceCenter(width / 2, CANVAS_HEIGHT / 2))
       .force(
         "collide",
-        forceCollide<SimNode>().radius((d) => d.radius + 2)
+        forceCollide<SimNode>().radius((d) => d.radius + 4)
       )
       .alphaDecay(0.01)
       .on("tick", () => {
@@ -214,35 +214,55 @@ export default function GraphPage() {
     const nodes = nodesRef.current;
     const links = linksRef.current;
     const hNode = hoveredNode;
+    const sNode = selectedNode;
+    const activeNode = hNode || sNode;
 
     // Connected node IDs for highlighting
-    const connectedIds = new Set<number>();
-    if (hNode) {
-      connectedIds.add(hNode.id);
+    const connectedIds = new Set<string>();
+    if (activeNode) {
+      connectedIds.add(activeNode.id);
       for (const link of links) {
         const s = link.source as SimNode;
-        const t2 = link.target as SimNode;
-        if (s.id === hNode.id) connectedIds.add(t2.id);
-        if (t2.id === hNode.id) connectedIds.add(s.id);
+        const tgt = link.target as SimNode;
+        if (s.id === activeNode.id) connectedIds.add(tgt.id);
+        if (tgt.id === activeNode.id) connectedIds.add(s.id);
       }
     }
+
+    // Search highlighting
+    const searchLower = searchTerm.toLowerCase();
+    const isSearching = searchLower.length > 0;
+    const matchesSearch = (n: SimNode) =>
+      n.name.toLowerCase().includes(searchLower);
 
     // Draw edges
     for (const link of links) {
       const s = link.source as SimNode;
-      const t2 = link.target as SimNode;
-      if (s.x == null || s.y == null || t2.x == null || t2.y == null) continue;
+      const tgt = link.target as SimNode;
+      if (s.x == null || s.y == null || tgt.x == null || tgt.y == null)
+        continue;
 
       const isHighlighted =
-        hNode && (s.id === hNode.id || t2.id === hNode.id);
+        activeNode && (s.id === activeNode.id || tgt.id === activeNode.id);
 
       ctx.beginPath();
       ctx.moveTo(s.x, s.y);
-      ctx.lineTo(t2.x, t2.y);
-      ctx.strokeStyle = RELATION_COLORS[link.relation] || DEFAULT_EDGE_COLOR;
-      ctx.globalAlpha = isHighlighted ? 0.8 : hNode ? 0.08 : 0.3;
-      ctx.lineWidth = isHighlighted ? 2 : 1;
+      ctx.lineTo(tgt.x, tgt.y);
+      ctx.strokeStyle = ASPECT_COLORS[link.aspect] || DEFAULT_EDGE_COLOR;
+      ctx.globalAlpha = isHighlighted ? 0.8 : activeNode ? 0.06 : 0.2;
+      ctx.lineWidth = isHighlighted ? 2 : 0.5;
       ctx.stroke();
+
+      // Draw predicate label on highlighted edges
+      if (isHighlighted && t.scale > 0.6) {
+        const mx = (s.x + tgt.x) / 2;
+        const my = (s.y + tgt.y) / 2;
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = `${10 / t.scale}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.fillText(link.predicate, mx, my - 4);
+      }
     }
 
     ctx.globalAlpha = 1.0;
@@ -251,44 +271,50 @@ export default function GraphPage() {
     for (const node of nodes) {
       if (node.x == null || node.y == null) continue;
 
-      const dimmed = hNode && !connectedIds.has(node.id);
+      const dimmed = activeNode
+        ? !connectedIds.has(node.id)
+        : isSearching
+        ? !matchesSearch(node)
+        : false;
 
-      // Color mode: type (default) or cluster
-      let fillColor: string;
-      if (colorMode === "cluster") {
-        if (node.cluster_id != null) {
-          fillColor = CLUSTER_PALETTE[node.cluster_id % CLUSTER_PALETTE.length];
-        } else {
-          fillColor = CLUSTER_UNASSIGNED_COLOR;
-        }
-      } else {
-        fillColor = TYPE_COLORS[node.memory_type] || DEFAULT_NODE_COLOR;
-      }
-
-      // Temporal opacity: fade older memories
-      let baseAlpha = dimmed ? 0.15 : 0.85;
-      if (showAge && !dimmed) {
-        baseAlpha = Math.max(0.3, 1 - node.age_days / 90);
-      }
+      const fillColor = ENTITY_COLORS[node.entity_type] || DEFAULT_NODE_COLOR;
+      const alpha = dimmed ? 0.1 : 0.85;
 
       ctx.beginPath();
       ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
       ctx.fillStyle = fillColor;
-      ctx.globalAlpha = baseAlpha;
+      ctx.globalAlpha = alpha;
       ctx.fill();
 
-      // Highlight ring on hover
-      if (hNode && node.id === hNode.id) {
+      // Highlight ring
+      if (activeNode && node.id === activeNode.id) {
         ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2.5;
         ctx.globalAlpha = 1;
         ctx.stroke();
+      }
+
+      // Draw labels at higher zoom or for large nodes
+      if (
+        !dimmed &&
+        (t.scale > 0.8 || node.stmt_count > 10)
+      ) {
+        ctx.globalAlpha = dimmed ? 0.1 : 0.9;
+        ctx.fillStyle = "#e2e8f0";
+        const fontSize = Math.max(9, Math.min(13, node.radius * 0.9));
+        ctx.font = `${fontSize / t.scale}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.fillText(
+          node.name.length > 20 ? node.name.slice(0, 18) + "..." : node.name,
+          node.x,
+          node.y + node.radius + 12 / t.scale
+        );
       }
     }
 
     ctx.globalAlpha = 1.0;
     ctx.restore();
-  }, [hoveredNode, colorMode, showAge]);
+  }, [hoveredNode, selectedNode, searchTerm]);
 
   // Initial load
   useEffect(() => {
@@ -300,10 +326,10 @@ export default function GraphPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Redraw when hover state changes
+  // Redraw on state changes
   useEffect(() => {
     rafRef.current = requestAnimationFrame(draw);
-  }, [hoveredNode, draw, colorMode, showAge]);
+  }, [hoveredNode, selectedNode, draw, searchTerm]);
 
   // --- Canvas to simulation coordinates ---
   function canvasToSim(clientX: number, clientY: number) {
@@ -333,15 +359,17 @@ export default function GraphPage() {
     const links = linksRef.current;
     for (const link of links) {
       const s = link.source as SimNode;
-      const t = link.target as SimNode;
-      if (s.x == null || s.y == null || t.x == null || t.y == null) continue;
-
-      // Point-to-line-segment distance
-      const dx = t.x - s.x;
-      const dy = t.y - s.y;
+      const tgt = link.target as SimNode;
+      if (s.x == null || s.y == null || tgt.x == null || tgt.y == null)
+        continue;
+      const dx = tgt.x - s.x;
+      const dy = tgt.y - s.y;
       const lenSq = dx * dx + dy * dy;
       if (lenSq === 0) continue;
-      const param = Math.max(0, Math.min(1, ((sx - s.x) * dx + (sy - s.y) * dy) / lenSq));
+      const param = Math.max(
+        0,
+        Math.min(1, ((sx - s.x) * dx + (sy - s.y) * dy) / lenSq)
+      );
       const projX = s.x + param * dx;
       const projY = s.y + param * dy;
       const dist = Math.sqrt((sx - projX) ** 2 + (sy - projY) ** 2);
@@ -356,7 +384,6 @@ export default function GraphPage() {
     const { x: sx, y: sy } = canvasToSim(e.clientX, e.clientY);
 
     if (isDraggingRef.current && dragNodeRef.current) {
-      // Dragging a node
       const node = dragNodeRef.current;
       node.fx = sx;
       node.fy = sy;
@@ -365,7 +392,6 @@ export default function GraphPage() {
     }
 
     if (isDraggingRef.current && !dragNodeRef.current) {
-      // Panning
       const t = transformRef.current;
       t.x += e.clientX - dragStartRef.current.x;
       t.y += e.clientY - dragStartRef.current.y;
@@ -374,7 +400,6 @@ export default function GraphPage() {
       return;
     }
 
-    // Hover detection
     const node = findNodeAt(sx, sy);
     if (node) {
       setHoveredNode(node);
@@ -413,14 +438,13 @@ export default function GraphPage() {
   }
 
   function handleClick(e: React.MouseEvent<HTMLCanvasElement>) {
-    // Only trigger click if not dragging far
     const dx = e.clientX - dragStartRef.current.x;
     const dy = e.clientY - dragStartRef.current.y;
     if (dx * dx + dy * dy > 25) return;
 
     const { x: sx, y: sy } = canvasToSim(e.clientX, e.clientY);
     const node = findNodeAt(sx, sy);
-    if (node) openSheet(node.id);
+    setSelectedNode(node === selectedNode ? null : node);
   }
 
   function handleWheel(e: React.WheelEvent<HTMLCanvasElement>) {
@@ -444,14 +468,30 @@ export default function GraphPage() {
     rafRef.current = requestAnimationFrame(draw);
   }
 
-  // Connection count per node
-  function connectionCount(nodeId: number): number {
+  function connectionCount(nodeId: string): number {
     return linksRef.current.filter((l) => {
       const s = l.source as SimNode;
-      const t = l.target as SimNode;
-      return s.id === nodeId || t.id === nodeId;
+      const tgt = l.target as SimNode;
+      return s.id === nodeId || tgt.id === nodeId;
     }).length;
   }
+
+  // Connections for selected node
+  const selectedConnections = selectedNode
+    ? linksRef.current
+        .filter((l) => {
+          const s = l.source as SimNode;
+          const tgt = l.target as SimNode;
+          return s.id === selectedNode.id || tgt.id === selectedNode.id;
+        })
+        .map((l) => {
+          const s = l.source as SimNode;
+          const tgt = l.target as SimNode;
+          const other = s.id === selectedNode.id ? tgt : s;
+          const direction = s.id === selectedNode.id ? "out" : "in";
+          return { other, predicate: l.predicate, fact: l.fact, aspect: l.aspect, direction };
+        })
+    : [];
 
   const stats = data?.stats;
 
@@ -461,172 +501,208 @@ export default function GraphPage() {
       titleExtra={
         stats && (
           <Badge variant="secondary" className="font-mono text-xs">
-            {stats.node_count} nodes, {stats.edge_count} edges
+            {stats.node_count} entities, {stats.edge_count} relationships
           </Badge>
         )
       }
       filters={
         <div className="flex flex-wrap items-center gap-2">
           <Input
+            placeholder="Search entities..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-48"
+          />
+          <Input
             placeholder="Filter by project"
             value={project}
             onChange={(e) => setProject(e.target.value)}
-            className="w-48"
+            className="w-40"
           />
-          <div className="flex gap-1">
-            {RELATION_TYPES.map((rt) => (
+          <div className="flex gap-1 overflow-x-auto">
+            {ENTITY_TYPES.map((et) => (
               <Button
-                key={rt}
-                variant={relationType === rt ? "default" : "outline"}
+                key={et}
+                variant={entityTypeFilter === et ? "default" : "outline"}
                 size="sm"
-                onClick={() => setRelationType(rt)}
+                onClick={() => setEntityTypeFilter(et)}
+                className="whitespace-nowrap"
               >
-                {rt === "all" ? "All" : rt.replace("_", " ")}
+                {et === "all" ? "All" : et}
               </Button>
             ))}
           </div>
           <Button onClick={load}>Apply</Button>
-          <div className="ml-auto flex gap-1">
-            <Button
-              variant={colorMode === "cluster" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setColorMode(colorMode === "cluster" ? "type" : "cluster")}
-            >
-              {colorMode === "cluster" ? "Color: Cluster" : "Color: Type"}
-            </Button>
-            <Button
-              variant={showAge ? "default" : "outline"}
-              size="sm"
-              onClick={() => setShowAge(!showAge)}
-            >
-              Show age
-            </Button>
-          </div>
         </div>
       }
     >
       {loading && <Skeleton className="h-[600px]" />}
 
-      {error && <ErrorState message="Failed to load graph" detail={error} />}
+      {error && <ErrorState message="Failed to load knowledge graph" detail={error} />}
 
       {!loading && !error && data && data.nodes.length === 0 && (
         <div className="flex h-[400px] items-center justify-center rounded-lg border border-border bg-card">
           <div className="text-center">
             <p className="text-sm text-muted-foreground">
-              No relationships found.
+              No entities found in the knowledge graph.
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Relationships are extracted automatically when memories are stored.
-              Try selecting a different project or clearing filters.
+              Knowledge extraction runs automatically when memories are stored
+              (requires Neo4j + knowledge_extraction enabled).
             </p>
           </div>
         </div>
       )}
 
       {!loading && !error && data && data.nodes.length > 0 && (
-        <>
-          <div
-            ref={containerRef}
-            className="relative overflow-hidden rounded-lg border border-border bg-card"
-          >
-            <canvas
-              ref={canvasRef}
-              onMouseMove={handleMouseMove}
-              onMouseDown={handleMouseDown}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={() => {
-                handleMouseUp();
-                setHoveredNode(null);
-                setHoveredEdge(null);
-              }}
-              onClick={handleClick}
-              onWheel={handleWheel}
-              className="w-full cursor-grab active:cursor-grabbing"
-              style={{ height: CANVAS_HEIGHT }}
-            />
-
-            {/* Node tooltip */}
-            {hoveredNode && (
-              <div
-                className="pointer-events-none fixed z-50 max-w-xs rounded-md border border-border bg-popover px-3 py-2 text-sm shadow-md"
-                style={{
-                  left: tooltipPos.x + 12,
-                  top: tooltipPos.y - 8,
+        <div className="flex gap-4">
+          {/* Graph canvas */}
+          <div className="flex-1">
+            <div
+              ref={containerRef}
+              className="relative overflow-hidden rounded-lg border border-border bg-card"
+            >
+              <canvas
+                ref={canvasRef}
+                onMouseMove={handleMouseMove}
+                onMouseDown={handleMouseDown}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={() => {
+                  handleMouseUp();
+                  setHoveredNode(null);
+                  setHoveredEdge(null);
                 }}
-              >
-                <p className="font-medium">{hoveredNode.summary}</p>
-                <p className="text-xs text-muted-foreground">
-                  #{hoveredNode.id} &middot; {hoveredNode.memory_type} &middot;
-                  importance {hoveredNode.importance.toFixed(1)} &middot;{" "}
-                  {connectionCount(hoveredNode.id)} connections
-                </p>
-                {hoveredNode.cluster_label && (
+                onClick={handleClick}
+                onWheel={handleWheel}
+                className="w-full cursor-grab active:cursor-grabbing"
+                style={{ height: CANVAS_HEIGHT }}
+              />
+
+              {/* Node tooltip */}
+              {hoveredNode && (
+                <div
+                  className="pointer-events-none fixed z-50 max-w-xs rounded-md border border-border bg-popover px-3 py-2 text-sm shadow-md"
+                  style={{
+                    left: tooltipPos.x + 12,
+                    top: tooltipPos.y - 8,
+                  }}
+                >
+                  <p className="font-medium">{hoveredNode.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    Cluster: {hoveredNode.cluster_label}
+                    {hoveredNode.entity_type} &middot;{" "}
+                    {hoveredNode.stmt_count} statements &middot;{" "}
+                    {connectionCount(hoveredNode.id)} connections
                   </p>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  {hoveredNode.project && <>{hoveredNode.project} &middot; </>}
-                  {hoveredNode.age_days === 0
-                    ? "Updated today"
-                    : `Updated ${hoveredNode.age_days}d ago`}
+                </div>
+              )}
+
+              {/* Edge tooltip */}
+              {!hoveredNode && hoveredEdge && (
+                <div
+                  className="pointer-events-none fixed z-50 max-w-sm rounded-md border border-border bg-popover px-3 py-2 text-sm shadow-md"
+                  style={{
+                    left: tooltipPos.x + 12,
+                    top: tooltipPos.y - 8,
+                  }}
+                >
+                  <p className="font-medium">{hoveredEdge.predicate}</p>
+                  <p className="text-xs text-muted-foreground">{hoveredEdge.fact}</p>
+                  <p className="text-xs text-muted-foreground/60">
+                    {hoveredEdge.aspect}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Legend */}
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              {Object.entries(ENTITY_COLORS).map(([type, color]) => (
+                <div key={type} className="flex items-center gap-1.5">
+                  <div
+                    className="h-3 w-3 rounded-full"
+                    style={{ backgroundColor: color }}
+                  />
+                  <span className="text-muted-foreground">{type}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Side panel — selected entity details */}
+          {selectedNode && (
+            <div className="w-72 shrink-0 space-y-3 rounded-lg border border-border bg-card p-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div
+                    className="h-3 w-3 rounded-full"
+                    style={{
+                      backgroundColor:
+                        ENTITY_COLORS[selectedNode.entity_type] ||
+                        DEFAULT_NODE_COLOR,
+                    }}
+                  />
+                  <h3 className="font-semibold text-sm">{selectedNode.name}</h3>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {selectedNode.entity_type} &middot;{" "}
+                  {selectedNode.stmt_count} statements &middot;{" "}
+                  {connectionCount(selectedNode.id)} connections
                 </p>
               </div>
-            )}
 
-            {/* Edge tooltip */}
-            {!hoveredNode && hoveredEdge && (
-              <div
-                className="pointer-events-none fixed z-50 rounded-md border border-border bg-popover px-3 py-2 text-sm shadow-md"
-                style={{
-                  left: tooltipPos.x + 12,
-                  top: tooltipPos.y - 8,
-                }}
+              {selectedConnections.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-medium text-muted-foreground mb-2">
+                    Relationships ({selectedConnections.length})
+                  </h4>
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                    {selectedConnections.map((conn, i) => (
+                      <div
+                        key={i}
+                        className="rounded border border-border/50 p-2 text-xs cursor-pointer hover:bg-accent/50"
+                        onClick={() => setSelectedNode(conn.other)}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span className="text-muted-foreground">
+                            {conn.direction === "out" ? "→" : "←"}
+                          </span>
+                          <span className="font-medium">{conn.predicate}</span>
+                          <span className="text-muted-foreground">
+                            {conn.direction === "out" ? "→" : "←"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <div
+                            className="h-2 w-2 rounded-full shrink-0"
+                            style={{
+                              backgroundColor:
+                                ENTITY_COLORS[conn.other.entity_type] ||
+                                DEFAULT_NODE_COLOR,
+                            }}
+                          />
+                          <span>{conn.other.name}</span>
+                        </div>
+                        <p className="text-muted-foreground/70 mt-0.5 line-clamp-2">
+                          {conn.fact}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full"
+                onClick={() => setSelectedNode(null)}
               >
-                <p className="text-xs">
-                  <span className="font-medium">
-                    {hoveredEdge.relation.replace("_", " ")}
-                  </span>
-                  {" "}
-                  #{(hoveredEdge.source as SimNode).id} → #{(hoveredEdge.target as SimNode).id}
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Legend */}
-          <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
-            <span className="font-medium text-muted-foreground">Nodes:</span>
-            {Object.entries(TYPE_COLORS).map(([type, color]) => (
-              <div key={type} className="flex items-center gap-1.5">
-                <div
-                  className="h-3 w-3 rounded-full"
-                  style={{ backgroundColor: color }}
-                />
-                <span className="text-muted-foreground">{type}</span>
-              </div>
-            ))}
-            <span className="ml-4 font-medium text-muted-foreground">Edges:</span>
-            {Object.entries(RELATION_COLORS).map(([rel, color]) => (
-              <div key={rel} className="flex items-center gap-1.5">
-                <div
-                  className="h-0.5 w-4 rounded"
-                  style={{ backgroundColor: color }}
-                />
-                <span className="text-muted-foreground">
-                  {rel.replace("_", " ")}
-                </span>
-              </div>
-            ))}
-          </div>
-        </>
+                Close
+              </Button>
+            </div>
+          )}
+        </div>
       )}
-
-      <MemorySheet
-        memoryId={sheetId}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-      />
     </PageLayout>
   );
 }

@@ -305,6 +305,33 @@ export interface GraphResult {
   };
 }
 
+export interface KnowledgeNode {
+  uuid: string;
+  name: string;
+  entity_type: string;
+  project_id: number;
+  stmt_count: number;
+}
+
+export interface KnowledgeEdge {
+  source: string;
+  target: string;
+  predicate: string;
+  fact: string;
+  aspect: string;
+  episode_id: number;
+}
+
+export interface KnowledgeGraphResult {
+  nodes: KnowledgeNode[];
+  edges: KnowledgeEdge[];
+  stats: {
+    node_count: number;
+    edge_count: number;
+    entity_types: Record<string, number>;
+  };
+}
+
 export interface Document {
   id: number;
   project: string;
@@ -778,6 +805,9 @@ export const api = {
 
   graph: (opts?: { project?: string; relation_type?: string; min_importance?: string }) =>
     get<GraphResult>("/graph", opts),
+
+  knowledgeGraph: (opts?: { project?: string; entity_type?: string; limit?: string }) =>
+    get<KnowledgeGraphResult>("/knowledge-graph", opts),
 
   docs: (opts?: { project?: string; doc_type?: string; limit?: string; offset?: string }) =>
     get<Paginated<Document>>("/docs", opts),

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Query, Path, HTTPException
 
 from cairn.api.utils import parse_multi
 from cairn.core.services import Services
+from cairn.core.utils import get_project
 
 
 def register_routes(router: APIRouter, svc: Services, **kw):
@@ -15,6 +16,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
     memory_store = svc.memory_store
     project_manager = svc.project_manager
     cluster_engine = svc.cluster_engine
+    graph_provider = svc.graph_provider
 
     @router.get("/projects")
     def api_projects(
@@ -212,3 +214,32 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 "relation_colors": relation_colors,
             },
         }
+
+    @router.get("/knowledge-graph")
+    def api_knowledge_graph(
+        project: str | None = Query(None),
+        entity_type: str | None = Query(None),
+        limit: int = Query(500, ge=1, le=2000),
+    ):
+        """Knowledge graph from Neo4j — entities as nodes, statement triples as edges."""
+        if not graph_provider:
+            raise HTTPException(
+                status_code=503,
+                detail="Knowledge graph not available (Neo4j not configured)",
+            )
+
+        project_id = None
+        if project:
+            project_id = get_project(db, project)
+            if project_id is None:
+                return {"nodes": [], "edges": [], "stats": {
+                    "node_count": 0, "edge_count": 0, "entity_types": {},
+                }}
+
+        entity_types = [entity_type] if entity_type else None
+
+        return graph_provider.get_knowledge_graph_visualization(
+            project_id=project_id,
+            entity_types=entity_types,
+            limit=limit,
+        )
