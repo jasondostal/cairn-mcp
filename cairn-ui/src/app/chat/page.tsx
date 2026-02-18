@@ -15,6 +15,7 @@ import { api, type Conversation, type ChatMessage, type Project } from "@/lib/ap
 import { ChatThread } from "@/components/chat/thread";
 import { ConversationSidebar } from "@/components/chat/conversation-sidebar";
 import { Button } from "@/components/ui/button";
+import { SingleSelect } from "@/components/ui/single-select";
 import { RotateCcw, PanelLeftClose, PanelLeft } from "lucide-react";
 
 /** Convert stored ChatMessages to assistant-ui ThreadMessageLike format. */
@@ -63,6 +64,7 @@ export default function ChatPage() {
   >(undefined);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<string>("");
+  const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
 
   // Load project list for the scope selector
   useEffect(() => {
@@ -95,6 +97,7 @@ export default function ChatPage() {
   }, []);
 
   const handleNewChat = useCallback(() => {
+    setSidebarRefreshKey((k) => k + 1);
     setActiveConvId(null);
     setConversationId(null);
     setInitialMessages(undefined);
@@ -159,6 +162,7 @@ export default function ChatPage() {
             activeId={activeConvId}
             onSelect={handleSelectConversation}
             onNew={handleNewChat}
+            refreshKey={sidebarRefreshKey}
           />
         </div>
       )}
@@ -185,18 +189,15 @@ export default function ChatPage() {
                 </Button>
                 <h1 className="text-lg font-semibold">Chat</h1>
                 {/* Project scope selector */}
-                <select
+                <SingleSelect
+                  options={[
+                    { value: "", label: "All projects" },
+                    ...projects.map((p) => ({ value: p.name, label: p.name })),
+                  ]}
                   value={activeProject}
-                  onChange={(e) => setActiveProject(e.target.value)}
-                  className="h-7 rounded-md border bg-background px-2 text-xs text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  <option value="">All projects</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.name}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setActiveProject}
+                  className="h-7 text-xs"
+                />
               </div>
               <div className="flex items-center gap-1">
                 <Button

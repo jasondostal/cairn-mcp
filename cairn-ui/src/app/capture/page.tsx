@@ -7,6 +7,7 @@ import { api, type Project, type IngestResponse } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { SingleSelect } from "@/components/ui/single-select";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageLayout } from "@/components/page-layout";
 import { cn } from "@/lib/utils";
@@ -390,17 +391,12 @@ function CaptureForm() {
 
         <div className="h-4 w-px bg-border" />
 
-        <select
+        <SingleSelect
+          options={MEMORY_TYPES.map((t) => ({ value: t, label: t }))}
           value={memoryType}
-          onChange={(e) => setMemoryType(e.target.value)}
-          className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
-        >
-          {MEMORY_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
+          onValueChange={setMemoryType}
+          className="h-8"
+        />
       </div>
 
       {/* Tags */}

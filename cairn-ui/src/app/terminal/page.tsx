@@ -5,6 +5,7 @@ import { api, type TerminalConfig, type TerminalHost } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SingleSelect } from "@/components/ui/single-select";
 import { Badge } from "@/components/ui/badge";
 import { ErrorState } from "@/components/error-state";
 import {
@@ -266,14 +267,15 @@ function HostDialog({
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Auth</label>
-                  <select
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+                  <SingleSelect
+                    options={[
+                      { value: "password", label: "Password" },
+                      { value: "key", label: "SSH Key" },
+                    ]}
                     value={authMethod}
-                    onChange={(e) => setAuthMethod(e.target.value)}
-                  >
-                    <option value="password">Password</option>
-                    <option value="key">SSH Key</option>
-                  </select>
+                    onValueChange={setAuthMethod}
+                    className="w-full h-9"
+                  />
                 </div>
               </div>
               <div>

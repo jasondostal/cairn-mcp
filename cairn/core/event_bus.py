@@ -11,6 +11,7 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from cairn.core import stats
 from cairn.core.utils import get_or_create_project
 
 if TYPE_CHECKING:
@@ -75,6 +76,8 @@ class EventBus:
         self.db.commit()
 
         event_id = row["id"]
+        if stats.event_bus_stats:
+            stats.event_bus_stats.record_publish(event_type)
         logger.debug(
             "Event published: id=%d session=%s type=%s tool=%s",
             event_id, session_name, event_type, tool_name,
@@ -201,6 +204,8 @@ class EventBus:
         )
         self.db.commit()
 
+        if stats.event_bus_stats:
+            stats.event_bus_stats.record_session_opened()
         return {
             "id": row["id"],
             "session_name": row["session_name"],
@@ -225,6 +230,8 @@ class EventBus:
         if not row:
             return {"session_name": session_name, "status": "already_closed"}
 
+        if stats.event_bus_stats:
+            stats.event_bus_stats.record_session_closed()
         return {
             "session_name": row["session_name"],
             "started_at": row["started_at"].isoformat() if row["started_at"] else None,

@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.51.0] - 2026-02-17 — "Connected Context"
+
+### Added
+- **Session ↔ Work Item linking** — new `session_work_items` junction table (migration 026)
+  tracks which sessions touched which work items, with role escalation
+  (`touch` → `heartbeat` → `updated` → `created` → `claimed` → `completed`).
+  `link_session()` auto-fires on create, update, claim, complete, and heartbeat.
+  Three new endpoints: `GET /sessions/{name}/work-items`,
+  `GET /work-items/{id}/sessions`, and `GET /memories/{id}/work-items`.
+- **Event bus observability** — `EventBusStats` class with thread-safe counters for events
+  published, sessions opened/closed, SSE connections (active/total), events streamed, and
+  errors. Health derived from a sliding window (healthy/degraded/unhealthy). Surfaced in
+  `/api/status` response under `event_bus` key with DB-sourced lifetime totals.
+  Instrumentation wired into `EventBus.publish()`, `open_session()`, `close_session()`,
+  and the SSE stream endpoint.
+- **Memory → Work Item links in UI** — memory detail page and memory sheet show linked work
+  items with status dots and navigation.
+- **Memory relations UI** — memory detail page displays incoming/outgoing relations with
+  color-coded relation types (extends, contradicts, implements, depends_on, related),
+  direction arrows, and links to related memories.
+- **Session detail enrichment** — session detail view shows memories created during the
+  session and linked work items with role badges.
+- **Project detail enrichment** — project page shows work items, recent memories, and
+  sessions sections with counts, status indicators, and links.
+- **Download support** — documents export as Markdown or PDF (via `html2pdf.js`), memories
+  export as Markdown with YAML frontmatter. New `DownloadMenu` component and
+  `triggerDownload`/`sanitizeFilename` utilities.
+- **`SingleSelect` component** — unified searchable select replacing all native `<select>`
+  elements. Auto-enables search when options exceed 5. Adopted across 8 pages: capture,
+  chat, docs, messages, settings, work items, workspace, and work item create dialog.
+- **`useLocalStorage` hook** — SSR-safe React hook for persisting UI state to localStorage
+  with JSON serialization. Used for work items collapsed state and view mode.
+- **Work items view mode** — consolidated the Completed dropdown and Ready toggle into a
+  single **View** selector with 5 modes: All items, Active, Active + recent done, Done to
+  bottom, Ready only. Persisted via `useLocalStorage`.
+- **Work item parent editing** — detail sheet supports re-parenting items via parent selector
+  dropdown filtered to same-project items.
+- **Session deep-linking** — `?selected=` query param on sessions page auto-opens matching
+  session. Links from memories, cairns, and other pages navigate directly to session detail.
+- **Timeline session filter** — `/api/timeline` accepts `session_name` query parameter.
+- **Event bus stats tests** — 11 unit tests covering counters, health states, SSE tracking,
+  singleton lifecycle, and RLock deadlock prevention.
+
+### Changed
+- **Cross-page navigation** — project names, session names, and cluster labels throughout the
+  UI are now clickable links to their respective detail pages (memories, cairns, docs,
+  sessions, memory sheet).
+- **Projects list** — query enriched with `doc_count`, `work_item_count`, and `last_activity`
+  timestamp. Sort order changed from memory count to most recent activity.
+- **Work item MCP tool** — `claim`, `complete`, `heartbeat`, and `update` actions now accept
+  `session_name` for automatic session linking. `update` accepts `parent_id` for re-parenting.
+- **Work item short ID generation** — child ordinal query filters to dotted short IDs only,
+  preventing CAST errors on root-style children.
+- **Work item detail** — API response includes `linked_sessions` array.
+
 ## [0.50.0] - 2026-02-17 — "Event Bus"
 
 ### Added

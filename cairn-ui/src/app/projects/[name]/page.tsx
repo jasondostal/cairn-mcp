@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, type Paginated, type TimelineMemory, type WorkItem, type SessionInfo } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { useFetch } from "@/lib/use-fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +15,9 @@ import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { PageLayout } from "@/components/page-layout";
 import { DocTypeBadge } from "@/components/doc-type-badge";
-import { Download, LayoutList, LayoutGrid, FileText, ArrowLeft } from "lucide-react";
+import { MemoryTypeBadge } from "@/components/memory-type-badge";
+import { StatusDot } from "@/components/work-items/status-dot";
+import { Download, LayoutList, LayoutGrid, FileText, ArrowLeft, Radio } from "lucide-react";
 import { toast } from "sonner";
 
 interface ProjectDetail {
@@ -196,6 +198,18 @@ export default function ProjectDetailPage() {
     () => api.project(name),
     [name]
   );
+  const { data: memories } = useFetch<Paginated<TimelineMemory>>(
+    () => api.timeline({ project: name, limit: "10", days: "30" }),
+    [name]
+  );
+  const { data: workItems } = useFetch<Paginated<WorkItem>>(
+    () => api.workItems({ project: name, limit: "10" }),
+    [name]
+  );
+  const { data: sessionsData } = useFetch<{ count: number; items: SessionInfo[] }>(
+    () => api.sessions({ project: name, limit: "10" }),
+    [name]
+  );
 
   return (
     <PageLayout
@@ -225,6 +239,85 @@ export default function ProjectDetailPage() {
         <div className="space-y-6 max-w-3xl">
           <ProjectDocs docs={project.docs} />
 
+          {/* Work Items */}
+          {workItems && workItems.items.length > 0 && (
+            <div>
+              <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+                Work Items ({workItems.total})
+              </h2>
+              <div className="rounded-md border border-border divide-y divide-border">
+                {workItems.items.map((wi) => (
+                  <Link
+                    key={wi.id}
+                    href={`/work-items?id=${wi.id}`}
+                    className="flex items-center gap-3 px-3 py-2 hover:bg-accent/50 transition-colors text-sm"
+                  >
+                    <StatusDot status={wi.status} />
+                    <span className="font-mono text-xs text-muted-foreground shrink-0">{wi.short_id}</span>
+                    <span className="flex-1 truncate">{wi.title}</span>
+                    <Badge variant="outline" className="text-xs shrink-0">{wi.item_type}</Badge>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Recent Memories */}
+          {memories && memories.items.length > 0 && (
+            <div>
+              <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+                Recent Memories ({memories.total})
+              </h2>
+              <div className="rounded-md border border-border divide-y divide-border">
+                {memories.items.map((m) => (
+                  <Link
+                    key={m.id}
+                    href={`/memories/${m.id}`}
+                    className="flex items-center gap-3 px-3 py-2 hover:bg-accent/50 transition-colors text-sm"
+                  >
+                    <MemoryTypeBadge type={m.memory_type} />
+                    <span className="flex-1 truncate text-muted-foreground">
+                      {m.summary || m.content.slice(0, 80)}
+                    </span>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {formatDate(m.created_at)}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Sessions */}
+          {sessionsData && sessionsData.items.length > 0 && (
+            <div>
+              <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+                Sessions ({sessionsData.count})
+              </h2>
+              <div className="rounded-md border border-border divide-y divide-border">
+                {sessionsData.items.map((s) => (
+                  <Link
+                    key={s.id}
+                    href={`/sessions?selected=${encodeURIComponent(s.session_name)}`}
+                    className="flex items-center gap-3 px-3 py-2 hover:bg-accent/50 transition-colors text-sm"
+                  >
+                    {s.is_active ? (
+                      <span className="relative flex h-2 w-2 shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                      </span>
+                    ) : (
+                      <Radio className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+                    )}
+                    <span className="font-mono text-xs truncate">{s.session_name}</span>
+                    <span className="text-xs text-muted-foreground shrink-0">{s.event_count} events</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Links */}
           <div>
             <h2 className="mb-3 text-sm font-medium text-muted-foreground">
               Links ({project.links.length})
@@ -234,12 +327,14 @@ export default function ProjectDetailPage() {
             ) : (
               <div className="flex flex-wrap gap-2">
                 {project.links.map((link, i) => (
-                  <Badge key={i} variant="secondary" className="gap-1">
-                    {(link.target as string) || "unknown"}
-                    <span className="text-muted-foreground">
-                      ({(link.link_type as string) || "related"})
-                    </span>
-                  </Badge>
+                  <Link key={i} href={`/projects/${encodeURIComponent((link.target as string) || "unknown")}`}>
+                    <Badge variant="secondary" className="gap-1 hover:bg-secondary/80 cursor-pointer">
+                      {(link.target as string) || "unknown"}
+                      <span className="text-muted-foreground">
+                        ({(link.link_type as string) || "related"})
+                      </span>
+                    </Badge>
+                  </Link>
                 ))}
               </div>
             )}

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, type WorkItemDetail, type WorkItemActivity, type WorkItemStatus, type SessionEvent } from "@/lib/api";
+import { api, type WorkItem, type WorkItemDetail, type WorkItemActivity, type WorkItemStatus } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import {
   Sheet,
@@ -14,23 +14,23 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SingleSelect } from "@/components/ui/single-select";
 import { Separator } from "@/components/ui/separator";
 import { StatusDot, StatusText, PriorityLabel } from "./status-dot";
 import { RiskTierBadge } from "./risk-tier-badge";
 import {
   CheckCircle,
   Clock,
-  FileText,
   GitBranch,
   Hand,
   Link2,
   Lock,
-  Play,
+  Pencil,
+  Plus,
   Radio,
   Shield,
-  Square,
   User,
-  Wrench,
+  X,
   XCircle,
 } from "lucide-react";
 
@@ -54,9 +54,10 @@ export function WorkItemSheet({
   const [acting, setActing] = useState(false);
   const [activities, setActivities] = useState<WorkItemActivity[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(false);
-  const [sessionEvents, setSessionEvents] = useState<SessionEvent[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
   const [gateResponse, setGateResponse] = useState("");
+  const [editingParent, setEditingParent] = useState(false);
+  const [parentOptions, setParentOptions] = useState<WorkItem[]>([]);
+  const [parentSaving, setParentSaving] = useState(false);
 
   const fetchDetail = useCallback(() => {
     if (!itemId) return;
@@ -76,21 +77,11 @@ export function WorkItemSheet({
       .finally(() => setActivitiesLoading(false));
   }, [itemId]);
 
-  const fetchSessionEvents = useCallback(() => {
-    if (!itemId) return;
-    setSessionsLoading(true);
-    api.events({ work_item_id: String(itemId), limit: "200", order: "asc" })
-      .then((r) => setSessionEvents(r.items))
-      .catch(() => setSessionEvents([]))
-      .finally(() => setSessionsLoading(false));
-  }, [itemId]);
-
   useEffect(() => {
     if (!itemId || !open) return;
     fetchDetail();
     fetchActivities();
-    fetchSessionEvents();
-  }, [itemId, open, fetchDetail, fetchActivities, fetchSessionEvents]);
+  }, [itemId, open, fetchDetail, fetchActivities]);
 
   async function handleComplete() {
     if (!detail) return;
@@ -146,6 +137,31 @@ export function WorkItemSheet({
     onNavigate?.(id);
   }
 
+  async function startEditParent() {
+    if (!detail) return;
+    setEditingParent(true);
+    try {
+      const result = await api.workItems({ project: detail.project, limit: "100" });
+      // Filter out self and own children
+      setParentOptions(result.items.filter((wi) => wi.id !== detail.id));
+    } catch {
+      setParentOptions([]);
+    }
+  }
+
+  async function handleParentChange(newParentId: string) {
+    if (!detail) return;
+    setParentSaving(true);
+    try {
+      const pid = newParentId === "" ? null : Number(newParentId);
+      await api.workItemUpdate(detail.id, { parent_id: pid });
+      fetchDetail();
+      onAction?.();
+      setEditingParent(false);
+    } catch { /* silent */ }
+    finally { setParentSaving(false); }
+  }
+
   const isTerminal = detail?.status === "done" || detail?.status === "cancelled";
   const hasUnresolvedGate = detail?.gate_type && !detail?.gate_resolved_at;
   const constraints = detail?.constraints ?? {};
@@ -168,9 +184,11 @@ export function WorkItemSheet({
                 <Badge variant="outline" className="font-mono text-xs">
                   {detail.item_type}
                 </Badge>
-                <Badge variant="outline" className="text-xs">
-                  {detail.project}
-                </Badge>
+                <Link href={`/projects/${encodeURIComponent(detail.project)}`} onClick={() => onOpenChange(false)}>
+                  <Badge variant="outline" className="text-xs hover:bg-accent cursor-pointer">
+                    {detail.project}
+                  </Badge>
+                </Link>
                 <PriorityLabel priority={detail.priority} />
                 <RiskTierBadge tier={detail.risk_tier} />
               </div>
@@ -312,33 +330,86 @@ export function WorkItemSheet({
               )}
 
               {/* Hierarchy */}
-              {(detail.parent || detail.children_count > 0) && (
-                <>
-                  <Separator />
-                  <div>
-                    <SectionHeader icon={<GitBranch className="h-3 w-3" />}>
-                      Hierarchy
-                    </SectionHeader>
-                    {detail.parent && (
-                      <div className="mb-2">
-                        <span className="text-xs text-muted-foreground mr-2">Parent:</span>
-                        <button
-                          onClick={() => navigateTo(detail.parent!.id)}
-                          className="text-sm text-primary hover:underline font-mono"
-                        >
-                          {detail.parent.short_id}
-                        </button>
-                        <span className="text-sm text-muted-foreground ml-2">{detail.parent.title}</span>
-                      </div>
-                    )}
-                    {detail.children_count > 0 && (
-                      <div className="text-xs text-muted-foreground">
-                        {detail.children_count} child{detail.children_count !== 1 ? "ren" : ""}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
+              <>
+                <Separator />
+                <div>
+                  <SectionHeader icon={<GitBranch className="h-3 w-3" />}>
+                    Hierarchy
+                  </SectionHeader>
+                  {editingParent ? (
+                    <div className="mb-2 flex items-center gap-2">
+                      <SingleSelect
+                        options={[
+                          { value: "", label: "No parent" },
+                          ...parentOptions.map((wi) => ({
+                            value: String(wi.id),
+                            label: `${wi.short_id} ${wi.title}`,
+                          })),
+                        ]}
+                        value={detail.parent ? String(detail.parent.id) : ""}
+                        onValueChange={handleParentChange}
+                        placeholder="Select parent…"
+                        className="flex-1 h-7 text-xs"
+                        disabled={parentSaving}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0"
+                        onClick={() => setEditingParent(false)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="mb-2 flex items-center gap-1">
+                      {detail.parent ? (
+                        <>
+                          <span className="text-xs text-muted-foreground mr-1">Parent:</span>
+                          <button
+                            onClick={() => navigateTo(detail.parent!.id)}
+                            className="text-sm text-primary hover:underline font-mono"
+                          >
+                            {detail.parent.short_id}
+                          </button>
+                          <span className="text-sm text-muted-foreground ml-1 truncate">{detail.parent.title}</span>
+                          {!isTerminal && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5 ml-auto shrink-0"
+                              onClick={startEditParent}
+                              title="Change parent"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs text-muted-foreground">No parent</span>
+                          {!isTerminal && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-5 px-1.5 ml-auto text-xs gap-1"
+                              onClick={startEditParent}
+                            >
+                              <Plus className="h-3 w-3" />
+                              Set parent
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {detail.children_count > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      {detail.children_count} child{detail.children_count !== 1 ? "ren" : ""}
+                    </div>
+                  )}
+                </div>
+              </>
 
               {/* Dependencies */}
               {(detail.blockers.length > 0 || detail.blocking.length > 0) && (
@@ -491,11 +562,44 @@ export function WorkItemSheet({
                 </div>
               </details>
 
-              {/* Session Events */}
-              {sessionEvents.length > 0 && (
+              {/* Linked Sessions */}
+              {detail.linked_sessions && detail.linked_sessions.length > 0 && (
                 <>
                   <Separator />
-                  <SessionEventsSection events={sessionEvents} loading={sessionsLoading} />
+                  <div>
+                    <SectionHeader icon={<Radio className="h-3 w-3" />}>
+                      Sessions ({detail.linked_sessions.length})
+                    </SectionHeader>
+                    <div className="space-y-1.5">
+                      {detail.linked_sessions.map((ls) => (
+                        <div key={ls.session_name} className="flex items-center gap-2 text-sm">
+                          {ls.is_active ? (
+                            <span className="relative flex h-2 w-2 shrink-0">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                            </span>
+                          ) : (
+                            <span className="h-2 w-2 rounded-full bg-muted-foreground/30 shrink-0" />
+                          )}
+                          <Link
+                            href={`/sessions?selected=${encodeURIComponent(ls.session_name)}`}
+                            onClick={() => onOpenChange(false)}
+                            className="font-mono text-xs text-primary hover:underline truncate"
+                          >
+                            {ls.session_name}
+                          </Link>
+                          <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">
+                            {ls.role}
+                          </Badge>
+                          {ls.touch_count > 1 && (
+                            <span className="text-xs text-muted-foreground/60 shrink-0">
+                              {ls.touch_count}x
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </>
               )}
 
@@ -522,7 +626,7 @@ export function WorkItemSheet({
                 {detail.updated_at && <p>Updated: {formatDateTime(detail.updated_at)}</p>}
                 {detail.completed_at && <p>Completed: {formatDateTime(detail.completed_at)}</p>}
                 {detail.cancelled_at && <p>Cancelled: {formatDateTime(detail.cancelled_at)}</p>}
-                {detail.session_name && <p>Session: {detail.session_name}</p>}
+                {detail.session_name && <p>Session: <Link href={`/sessions?selected=${encodeURIComponent(detail.session_name)}`} onClick={() => onOpenChange(false)} className="text-primary hover:underline">{detail.session_name}</Link></p>}
               </div>
             </div>
           </>
@@ -559,129 +663,3 @@ function ActivityIcon({ type }: { type: string }) {
   );
 }
 
-// -- Session Events Section --
-
-interface GroupedSession {
-  session_name: string;
-  events: SessionEvent[];
-  first_at: string;
-  last_at: string;
-}
-
-function groupBySession(events: SessionEvent[]): GroupedSession[] {
-  const map = new Map<string, SessionEvent[]>();
-  for (const evt of events) {
-    const key = evt.session_name;
-    if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(evt);
-  }
-  return Array.from(map.entries()).map(([session_name, evts]) => ({
-    session_name,
-    events: evts,
-    first_at: evts[0].created_at,
-    last_at: evts[evts.length - 1].created_at,
-  }));
-}
-
-function eventIcon(type: string) {
-  if (type === "tool_use") return <Wrench className="h-3 w-3" />;
-  if (type === "session_start") return <Play className="h-3 w-3" />;
-  if (type === "session_end") return <Square className="h-3 w-3" />;
-  return <FileText className="h-3 w-3" />;
-}
-
-function toolInputPreview(input: Record<string, unknown>): string {
-  if (input.command) return String(input.command).slice(0, 80);
-  if (input.file_path) return String(input.file_path);
-  if (input.pattern) return `/${input.pattern}/`;
-  if (input.query) return `"${String(input.query).slice(0, 60)}"`;
-  if (input.content) return String(input.content).slice(0, 60) + "...";
-  const keys = Object.keys(input);
-  if (keys.length === 0) return "";
-  return keys.slice(0, 3).join(", ");
-}
-
-function timeAgo(dateStr: string): string {
-  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
-function SessionEventsSection({ events, loading }: { events: SessionEvent[]; loading: boolean }) {
-  const groups = groupBySession(events);
-
-  return (
-    <details open={events.length <= 20}>
-      <summary className="cursor-pointer text-xs font-medium text-muted-foreground uppercase tracking-wider hover:text-foreground flex items-center gap-1">
-        <Radio className="h-3 w-3" />
-        Sessions ({groups.length} session{groups.length !== 1 ? "s" : ""}, {events.length} event{events.length !== 1 ? "s" : ""})
-      </summary>
-      {loading && <p className="mt-2 text-xs text-muted-foreground">Loading...</p>}
-      <div className="mt-2 space-y-2">
-        {groups.map((group) => (
-          <details key={group.session_name}>
-            <summary className="cursor-pointer text-xs hover:text-foreground flex items-center gap-2 py-0.5">
-              <span className="font-mono text-muted-foreground truncate">
-                {group.session_name}
-              </span>
-              <span className="text-muted-foreground/60 shrink-0">
-                {group.events.length} event{group.events.length !== 1 ? "s" : ""}
-              </span>
-              <span className="text-muted-foreground/60 shrink-0">
-                {timeAgo(group.last_at)}
-              </span>
-            </summary>
-            <div className="mt-1 ml-2 space-y-0.5 max-h-48 overflow-y-auto">
-              {group.events.map((evt) => {
-                const payload = evt.payload || {};
-                const toolInput = (payload.tool_input ?? payload.input) as Record<string, unknown> | undefined;
-                const toolResponse = (payload.tool_response ?? payload.response) as string | undefined;
-
-                return (
-                  <div
-                    key={evt.id}
-                    className="flex items-start gap-1.5 text-xs py-0.5"
-                  >
-                    <div className="mt-0.5 text-muted-foreground/60 shrink-0">
-                      {eventIcon(evt.event_type)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium text-muted-foreground">
-                          {evt.tool_name || evt.event_type}
-                        </span>
-                        <span className="text-muted-foreground/40 ml-auto shrink-0 font-mono">
-                          {new Date(evt.created_at).toLocaleTimeString()}
-                        </span>
-                      </div>
-                      {toolInput && (
-                        <div className="text-muted-foreground/60 truncate font-mono text-[11px]">
-                          {toolInputPreview(toolInput)}
-                        </div>
-                      )}
-                      {toolResponse && (
-                        <details className="mt-0.5">
-                          <summary className="cursor-pointer text-muted-foreground/60 hover:text-muted-foreground text-[11px]">
-                            response ({toolResponse.length} chars)
-                          </summary>
-                          <pre className="mt-0.5 text-[10px] bg-muted/30 rounded p-1 overflow-x-auto whitespace-pre-wrap break-all text-muted-foreground/60 max-h-24 overflow-y-auto">
-                            {toolResponse}
-                          </pre>
-                        </details>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </details>
-        ))}
-      </div>
-    </details>
-  );
-}

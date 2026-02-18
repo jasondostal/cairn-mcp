@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 def register_routes(router: APIRouter, svc: Services, **kw):
     event_bus = svc.event_bus
+    wim = svc.work_item_manager
     db = svc.db
 
     @router.get("/sessions")
@@ -40,6 +41,11 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             session_name=session_name, project=project, limit=limit,
             order=order,
         )
+
+    @router.get("/sessions/{session_name}/work-items")
+    def api_session_work_items(session_name: str = Path(...)):
+        """Work items linked to this session via junction table."""
+        return wim.work_items_for_session(session_name)
 
     @router.post("/sessions/{session_name}/close")
     def api_session_close(session_name: str = Path(...)):

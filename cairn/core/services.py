@@ -32,7 +32,7 @@ from cairn.core.synthesis import SessionSynthesizer
 from cairn.core.tasks import TaskManager
 from cairn.core.thinking import ThinkingEngine
 from cairn.core.work_items import WorkItemManager
-from cairn.core.stats import init_embedding_stats, init_llm_stats
+from cairn.core.stats import init_embedding_stats, init_event_bus_stats, init_llm_stats
 from cairn.embedding import get_embedding_engine
 from cairn.embedding.interface import EmbeddingInterface
 from cairn.graph import get_graph_provider
@@ -114,6 +114,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     else:
         emb_model = config.embedding.model
     init_embedding_stats(config.embedding.backend, emb_model)
+    init_event_bus_stats()
 
     # LLM enrichment (optional, graceful if disabled)
     llm = None

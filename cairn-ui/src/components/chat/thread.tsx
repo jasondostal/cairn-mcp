@@ -1,11 +1,12 @@
 "use client";
 
-import { forwardRef } from "react";
+import { forwardRef, useRef, useEffect } from "react";
 import {
   ThreadPrimitive,
   ComposerPrimitive,
   MessagePrimitive,
   useMessage,
+  useThreadRuntime,
   type TextMessagePartProps,
   type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
@@ -226,6 +227,24 @@ interface ChatThreadProps {
 }
 
 export function ChatThread({ onFirstMessage }: ChatThreadProps) {
+  const runtime = useThreadRuntime();
+  const calledRef = useRef(false);
+
+  useEffect(() => {
+    return runtime.subscribe(() => {
+      const msgs = runtime.getState().messages;
+      if (msgs.length > 0 && !calledRef.current) {
+        calledRef.current = true;
+        onFirstMessage?.();
+      }
+    });
+  }, [runtime, onFirstMessage]);
+
+  // Reset when thread changes (new runtime subscription = new calledRef)
+  useEffect(() => {
+    calledRef.current = false;
+  }, [runtime]);
+
   return (
     <ThreadPrimitive.Root className="flex h-full flex-col">
       <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-4 py-4 md:px-6">

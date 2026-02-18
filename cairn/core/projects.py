@@ -29,11 +29,16 @@ class ProjectManager:
 
         query = """
             SELECT p.id, p.name, p.created_at,
-                   COUNT(m.id) FILTER (WHERE m.is_active = true) as memory_count
+                   COUNT(DISTINCT m.id) FILTER (WHERE m.is_active = true) AS memory_count,
+                   COUNT(DISTINCT d.id) AS doc_count,
+                   COUNT(DISTINCT wi.id) AS work_item_count,
+                   GREATEST(MAX(m.updated_at), MAX(d.updated_at), MAX(wi.updated_at)) AS last_activity
             FROM projects p
             LEFT JOIN memories m ON m.project_id = p.id
+            LEFT JOIN project_documents d ON d.project_id = p.id
+            LEFT JOIN work_items wi ON wi.project_id = p.id
             GROUP BY p.id, p.name, p.created_at
-            ORDER BY memory_count DESC, p.name
+            ORDER BY last_activity DESC NULLS LAST, p.name
         """
         params: list = []
 
@@ -48,6 +53,9 @@ class ProjectManager:
                 "id": r["id"],
                 "name": r["name"],
                 "memory_count": r["memory_count"],
+                "doc_count": r["doc_count"],
+                "work_item_count": r["work_item_count"],
+                "last_activity": r["last_activity"].isoformat() if r["last_activity"] else None,
                 "created_at": r["created_at"].isoformat(),
             }
             for r in rows

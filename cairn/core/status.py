@@ -45,6 +45,26 @@ def get_status(db: Database, config: Config) -> dict:
     if stats.llm_stats:
         models["llm"] = stats.llm_stats.to_dict()
 
+    # Event bus observability
+    event_bus_info = None
+    if stats.event_bus_stats:
+        eb = stats.event_bus_stats.to_dict()
+        # Enrich with DB-sourced totals (lifetime, not just since restart)
+        try:
+            total_events = db.execute_one("SELECT COUNT(*) as cnt FROM events")
+            active_sessions = db.execute_one(
+                "SELECT COUNT(*) as cnt FROM sessions WHERE closed_at IS NULL"
+            )
+            total_sessions = db.execute_one("SELECT COUNT(*) as cnt FROM sessions")
+            eb["db"] = {
+                "total_events": total_events["cnt"] if total_events else 0,
+                "active_sessions": active_sessions["cnt"] if active_sessions else 0,
+                "total_sessions": total_sessions["cnt"] if total_sessions else 0,
+            }
+        except Exception:
+            pass  # tables may not exist yet
+        event_bus_info = eb
+
     result = {
         "version": __version__,
         "status": "healthy",
@@ -55,6 +75,7 @@ def get_status(db: Database, config: Config) -> dict:
         "clusters": cluster_count["count"],
         "clustering": clustering_info,
         "models": models,
+        "event_bus": event_bus_info,
         "llm_capabilities": config.capabilities.active_list(),
         "experimental_capabilities": sorted(
             c for c in config.capabilities.active_list()

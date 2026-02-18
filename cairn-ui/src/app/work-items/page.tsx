@@ -3,18 +3,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type WorkItem, type GatedItem, type WorkItemStatus, type WorkItemDetail } from "@/lib/api";
 import { usePageFilters } from "@/lib/use-page-filters";
+import { useLocalStorage } from "@/lib/use-local-storage";
 import { PageLayout } from "@/components/page-layout";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { SkeletonList } from "@/components/skeleton-list";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { SingleSelect } from "@/components/ui/single-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { WorkItemRow } from "@/components/work-items/work-item-row";
 import { WorkItemSheet } from "@/components/work-items/work-item-sheet";
 import { CreateWorkItemDialog } from "@/components/work-items/create-dialog";
-import { Hand, Plus, Zap } from "lucide-react";
+import { Hand, Plus } from "lucide-react";
 
 const statusOptions: { value: string; label: string }[] = [
   { value: "open", label: "open" },
@@ -30,6 +32,17 @@ const typeOptions: { value: string; label: string }[] = [
   { value: "task", label: "task" },
   { value: "subtask", label: "subtask" },
 ];
+
+const viewOptions: { value: string; label: string }[] = [
+  { value: "all", label: "All items" },
+  { value: "active", label: "Active" },
+  { value: "active-recent", label: "Active + recent done" },
+  { value: "bottom", label: "Done to bottom" },
+  { value: "ready", label: "Ready only" },
+];
+
+const TERMINAL_STATUSES = new Set(["done", "cancelled"]);
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Build a tree from flat items list
 interface TreeNode {
@@ -59,14 +72,39 @@ function buildTree(items: WorkItem[]): TreeNode[] {
   return roots;
 }
 
-function flattenTree(nodes: TreeNode[], depth = 0): Array<{ item: WorkItem; depth: number; isLast: boolean }> {
-  const result: Array<{ item: WorkItem; depth: number; isLast: boolean }> = [];
+// Recursively sort terminal-status children to the bottom at each level
+function sortCompletedToBottom(nodes: TreeNode[]): TreeNode[] {
+  return [...nodes]
+    .sort((a, b) => {
+      const aTerminal = TERMINAL_STATUSES.has(a.item.status) ? 1 : 0;
+      const bTerminal = TERMINAL_STATUSES.has(b.item.status) ? 1 : 0;
+      return aTerminal - bTerminal;
+    })
+    .map((node) =>
+      node.children.length > 0
+        ? { ...node, children: sortCompletedToBottom(node.children) }
+        : node,
+    );
+}
+
+interface FlatRow {
+  item: WorkItem;
+  depth: number;
+  isLast: boolean;
+  hasChildren: boolean;
+  isCollapsed: boolean;
+}
+
+function flattenTree(nodes: TreeNode[], collapsedSet: Set<number>, depth = 0): FlatRow[] {
+  const result: FlatRow[] = [];
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
     const isLast = i === nodes.length - 1;
-    result.push({ item: node.item, depth, isLast });
-    if (node.children.length > 0) {
-      result.push(...flattenTree(node.children, depth + 1));
+    const hasChildren = node.children.length > 0;
+    const isCollapsed = collapsedSet.has(node.item.id);
+    result.push({ item: node.item, depth, isLast, hasChildren, isCollapsed });
+    if (hasChildren && !isCollapsed) {
+      result.push(...flattenTree(node.children, collapsedSet, depth + 1));
     }
   }
   return result;
@@ -83,12 +121,21 @@ export default function WorkItemsPage() {
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [itemTypeFilter, setItemTypeFilter] = useState<string[]>([]);
   const [assigneeFilter, setAssigneeFilter] = useState("");
-  const [readyOnly, setReadyOnly] = useState(false);
   const [readyIds, setReadyIds] = useState<Set<number>>(new Set());
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [gatedItems, setGatedItems] = useState<GatedItem[]>([]);
+
+  // Persisted UI state
+  const [collapsed, setCollapsed] = useLocalStorage<number[]>("cairn-wi-collapsed", []);
+  const [viewMode, setViewMode] = useLocalStorage<string>("cairn-wi-view", "all");
+
+  const collapsedSet = useMemo(() => new Set(collapsed), [collapsed]);
+
+  function toggleCollapse(id: number) {
+    setCollapsed((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  }
 
   // Inline quick create
   const [quickTitle, setQuickTitle] = useState("");
@@ -175,14 +222,32 @@ export default function WorkItemsPage() {
     };
   }, [projectParam, statusFilter, itemTypeFilter, assigneeFilter]);
 
-  // Build tree and flatten
+  // Filter items based on view mode, build tree, flatten
   const rows = useMemo(() => {
-    const tree = buildTree(items);
-    return flattenTree(tree);
-  }, [items]);
+    let filtered = items;
+    const now = Date.now();
 
-  // Filter for ready-only mode
-  const displayRows = readyOnly
+    if (viewMode === "active") {
+      filtered = items.filter((i) => !TERMINAL_STATUSES.has(i.status));
+    } else if (viewMode === "active-recent") {
+      filtered = items.filter((i) => {
+        if (!TERMINAL_STATUSES.has(i.status)) return true;
+        const completedAt = i.completed_at ? new Date(i.completed_at).getTime() : 0;
+        return now - completedAt < SEVEN_DAYS_MS;
+      });
+    }
+
+    let tree = buildTree(filtered);
+
+    if (viewMode === "bottom") {
+      tree = sortCompletedToBottom(tree);
+    }
+
+    return flattenTree(tree, collapsedSet);
+  }, [items, viewMode, collapsedSet]);
+
+  // Filter for ready-only view mode
+  const displayRows = viewMode === "ready"
     ? rows.filter((r) => readyIds.has(r.item.id))
     : rows;
 
@@ -274,15 +339,12 @@ export default function WorkItemsPage() {
             onChange={(e) => setAssigneeFilter(e.target.value)}
             className="h-8 w-32 text-sm"
           />
-          <Button
-            variant={readyOnly ? "default" : "outline"}
-            size="sm"
-            onClick={() => setReadyOnly(!readyOnly)}
-            title="Show only dispatch-ready items"
-          >
-            <Zap className="mr-1 h-3.5 w-3.5" />
-            Ready
-          </Button>
+          <SingleSelect
+            options={viewOptions}
+            value={viewMode}
+            onValueChange={setViewMode}
+            placeholder="View"
+          />
         </div>
       }
     >
@@ -342,8 +404,8 @@ export default function WorkItemsPage() {
 
       {!loading && !filters.projectsLoading && !error && displayRows.length === 0 && (
         <EmptyState
-          message={readyOnly ? "No dispatch-ready items." : "No work items found."}
-          detail={readyOnly ? "All items are either assigned, blocked, or completed." : undefined}
+          message={viewMode === "ready" ? "No dispatch-ready items." : "No work items found."}
+          detail={viewMode === "ready" ? "All items are either assigned, blocked, or completed." : undefined}
         />
       )}
 
@@ -355,6 +417,9 @@ export default function WorkItemsPage() {
               item={row.item}
               depth={row.depth}
               isLast={row.isLast}
+              hasChildren={row.hasChildren}
+              isCollapsed={row.isCollapsed}
+              onToggleCollapse={toggleCollapse}
               showProject={filters.showAllProjects}
               readyIds={readyIds}
               onClick={() => openSheet(row.item.id)}

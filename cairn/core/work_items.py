@@ -65,12 +65,15 @@ class WorkItemManager:
             return f"{SHORT_ID_PREFIX}{pg_id:04x}"
 
         # Find max existing child ordinal (survives deletions without collision)
+        # Filter to dotted short_ids only — root-style children (e.g. wi-0021)
+        # don't follow the ordinal scheme and would crash the CAST.
         max_row = self.db.execute_one(
             """SELECT MAX(
                 CAST(SPLIT_PART(short_id, '.', array_length(string_to_array(short_id, '.'), 1)) AS INTEGER)
             ) AS max_ord
             FROM work_items
-            WHERE parent_id = %s AND short_id IS NOT NULL""",
+            WHERE parent_id = %s AND short_id IS NOT NULL
+              AND position('.' in short_id) > 0""",
             (parent_id,),
         )
         ordinal = (max_row["max_ord"] + 1) if max_row and max_row["max_ord"] is not None else 1
@@ -229,6 +232,9 @@ class WorkItemManager:
             {"item_type": item_type, "priority": priority, "risk_tier": risk_tier or 0},
         )
 
+        # Link creating session
+        self.link_session(row["id"], session_name, "created")
+
         self.db.commit()
 
         # Risk tier CRITICAL auto-gates with human gate
@@ -264,6 +270,8 @@ class WorkItemManager:
     @track_operation("work_items.update")
     def update(self, id_or_short_id: int | str, **fields) -> dict:
         """Update work item fields. Validates status transitions."""
+        calling_session = fields.pop("_calling_session", None)
+
         item = self._resolve_id(id_or_short_id)
         if not item:
             raise ValueError(f"Work item {id_or_short_id} not found")
@@ -286,7 +294,7 @@ class WorkItemManager:
         # Build dynamic SET clause
         allowed = {"title", "description", "acceptance_criteria", "priority",
                     "status", "assignee", "session_name", "metadata", "item_type",
-                    "risk_tier", "constraints"}
+                    "risk_tier", "constraints", "parent_id"}
         sets = ["updated_at = NOW()"]
         params = []
 
@@ -337,6 +345,7 @@ class WorkItemManager:
                 {"old_status": item["status"], "new_status": new_status},
             )
 
+        self.link_session(item["id"], calling_session, "updated")
         self.db.commit()
 
         # Graph status sync
@@ -359,7 +368,7 @@ class WorkItemManager:
         return {"id": item["id"], "short_id": item["short_id"], "action": "updated"}
 
     @track_operation("work_items.claim")
-    def claim(self, work_item_id: int | str, assignee: str) -> dict:
+    def claim(self, work_item_id: int | str, assignee: str, session_name: str | None = None) -> dict:
         """Atomically claim a work item (open/ready → in_progress)."""
         item = self._resolve_id(work_item_id)
         if not item:
@@ -385,6 +394,7 @@ class WorkItemManager:
             f"Claimed by {assignee}",
             {"assignee": assignee, "old_status": item["status"]},
         )
+        self.link_session(item["id"], session_name, "claimed")
         self.db.commit()
 
         # Graph sync
@@ -404,7 +414,7 @@ class WorkItemManager:
         }
 
     @track_operation("work_items.complete")
-    def complete(self, work_item_id: int | str) -> dict:
+    def complete(self, work_item_id: int | str, session_name: str | None = None) -> dict:
         """Mark a work item as done and auto-unblock dependents."""
         item = self._resolve_id(work_item_id)
         if not item:
@@ -427,6 +437,7 @@ class WorkItemManager:
             f"Completed (was {item['status']})",
             {"old_status": item["status"], "new_status": "done"},
         )
+        self.link_session(item["id"], session_name, "completed")
 
         # Auto-unblock: items that were blocked only by this item
         blocked_rows = self.db.execute(
@@ -820,6 +831,9 @@ class WorkItemManager:
             (item["id"],),
         )
 
+        # Linked sessions
+        linked_sessions = self.sessions_for_work_item(item["id"])
+
         return {
             "id": item["id"],
             "short_id": item["short_id"],
@@ -836,6 +850,7 @@ class WorkItemManager:
             "blockers": [dict(b) for b in blockers],
             "blocking": [dict(b) for b in blocking],
             "linked_memories": [dict(m) for m in linked],
+            "linked_sessions": linked_sessions,
             "metadata": item["metadata"],
             "risk_tier": item.get("risk_tier") or 0,
             "gate_type": item.get("gate_type"),
@@ -883,6 +898,117 @@ class WorkItemManager:
             "linked": memory_ids,
         }
 
+    # ------------------------------------------------------------------
+    # Session ↔ Work Item linking (v0.51.0)
+    # ------------------------------------------------------------------
+
+    # Role escalation order — higher index wins on conflict.
+    _ROLE_ORDER = ["touch", "heartbeat", "updated", "created", "claimed", "completed"]
+
+    def link_session(
+        self,
+        work_item_id: int,
+        session_name: str | None,
+        role: str = "touch",
+    ) -> None:
+        """Upsert a session ↔ work-item link. Idempotent.
+
+        Repeated calls bump last_seen and touch_count.
+        Role only escalates (completed > claimed > created > updated > heartbeat > touch).
+        """
+        if not session_name:
+            return
+
+        if role not in self._ROLE_ORDER:
+            role = "touch"
+
+        self.db.execute(
+            """
+            INSERT INTO session_work_items (session_name, work_item_id, role)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (session_name, work_item_id) DO UPDATE SET
+                last_seen   = NOW(),
+                touch_count = session_work_items.touch_count + 1,
+                role        = CASE
+                    WHEN array_position(
+                            ARRAY['touch','heartbeat','updated','created','claimed','completed'],
+                            EXCLUDED.role
+                         ) >
+                         array_position(
+                            ARRAY['touch','heartbeat','updated','created','claimed','completed'],
+                            session_work_items.role
+                         )
+                    THEN EXCLUDED.role
+                    ELSE session_work_items.role
+                END
+            """,
+            (session_name, work_item_id, role),
+        )
+
+    def sessions_for_work_item(self, work_item_id: int | str) -> list[dict]:
+        """Return sessions linked to a work item, newest first."""
+        item = self._resolve_id(work_item_id)
+        if not item:
+            return []
+
+        rows = self.db.execute(
+            """
+            SELECT swi.session_name, swi.role, swi.first_seen, swi.last_seen,
+                   swi.touch_count,
+                   s.id AS session_id, s.closed_at,
+                   (s.closed_at IS NULL AND s.id IS NOT NULL) AS is_active
+            FROM session_work_items swi
+            LEFT JOIN sessions s ON s.session_name = swi.session_name
+            WHERE swi.work_item_id = %s
+            ORDER BY swi.last_seen DESC
+            """,
+            (item["id"],),
+        )
+        return [
+            {
+                "session_name": r["session_name"],
+                "role": r["role"],
+                "first_seen": r["first_seen"].isoformat() if r["first_seen"] else None,
+                "last_seen": r["last_seen"].isoformat() if r["last_seen"] else None,
+                "touch_count": r["touch_count"],
+                "is_active": bool(r["is_active"]),
+            }
+            for r in rows
+        ]
+
+    def work_items_for_session(self, session_name: str) -> list[dict]:
+        """Return work items linked to a session, newest first."""
+        rows = self.db.execute(
+            """
+            SELECT wi.id, wi.short_id, wi.title, wi.status, wi.item_type,
+                   wi.priority, wi.assignee,
+                   p.name AS project,
+                   swi.role, swi.first_seen, swi.last_seen, swi.touch_count
+            FROM session_work_items swi
+            JOIN work_items wi ON wi.id = swi.work_item_id
+            LEFT JOIN projects p ON wi.project_id = p.id
+            WHERE swi.session_name = %s
+            ORDER BY swi.last_seen DESC
+            """,
+            (session_name,),
+        )
+        return [
+            {
+                "id": r["id"],
+                "short_id": r["short_id"],
+                "title": r["title"],
+                "status": r["status"],
+                "item_type": r["item_type"],
+                "priority": r["priority"],
+                "assignee": r["assignee"],
+                "project": r["project"],
+                "role": r["role"],
+                "first_seen": r["first_seen"].isoformat() if r["first_seen"] else None,
+                "last_seen": r["last_seen"].isoformat() if r["last_seen"] else None,
+                "touch_count": r["touch_count"],
+            }
+            for r in rows
+        ]
 
     # ------------------------------------------------------------------
     # Gate primitives (v0.48.0)
@@ -1010,6 +1136,7 @@ class WorkItemManager:
         agent_name: str,
         state: str = "working",
         note: str | None = None,
+        session_name: str | None = None,
     ) -> dict:
         """Agent reports it's still working. Updates heartbeat timestamp and agent state."""
         if state not in AgentState.ALL:
@@ -1033,6 +1160,7 @@ class WorkItemManager:
                 note, {"agent_state": state},
             )
 
+        self.link_session(item["id"], session_name, "heartbeat")
         self.db.commit()
         return {
             "id": item["id"],
