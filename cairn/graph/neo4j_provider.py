@@ -1110,3 +1110,77 @@ class Neo4jGraphProvider(GraphProvider):
                 limit=limit,
             )
             return [dict(r) for r in result]
+
+    def get_knowledge_graph_visualization(
+        self,
+        project_id: int | None = None,
+        entity_types: list[str] | None = None,
+        limit: int = 500,
+    ) -> dict:
+        """Return entities and their relationships for force-directed graph visualization.
+
+        Returns nodes (entities) and edges (statement triples: subject -[predicate]-> object).
+        """
+        with self._session() as session:
+            # Build WHERE clause
+            entity_where = ["s.invalid_at IS NULL"]
+            params: dict = {"limit": limit}
+            if project_id is not None:
+                entity_where.append("e.project_id = $pid")
+                params["pid"] = project_id
+            if entity_types:
+                entity_where.append("e.entity_type IN $etypes")
+                params["etypes"] = entity_types
+
+            where_clause = " AND ".join(entity_where)
+
+            # Fetch entities that have at least one valid statement
+            entity_result = session.run(
+                f"""
+                MATCH (e:Entity)-[:SUBJECT|OBJECT]-(s:Statement)
+                WHERE {where_clause}
+                WITH e, count(DISTINCT s) AS stmt_count
+                RETURN e.uuid AS uuid, e.name AS name, e.entity_type AS entity_type,
+                       e.project_id AS project_id, stmt_count
+                ORDER BY stmt_count DESC
+                LIMIT $limit
+                """,
+                **params,
+            )
+            entities = [dict(r) for r in entity_result]
+            entity_uuids = {e["uuid"] for e in entities}
+
+            if not entity_uuids:
+                return {"nodes": [], "edges": [], "stats": {
+                    "node_count": 0, "edge_count": 0, "entity_types": {},
+                }}
+
+            # Fetch edges: triples where both subject and object are in our entity set
+            edge_result = session.run(
+                """
+                MATCH (subj:Entity)-[r:SUBJECT]->(s:Statement)<-[:OBJECT]-(obj:Entity)
+                WHERE subj.uuid IN $uuids AND obj.uuid IN $uuids
+                  AND s.invalid_at IS NULL
+                RETURN subj.uuid AS source, obj.uuid AS target,
+                       r.predicate AS predicate, s.fact AS fact,
+                       s.aspect AS aspect, s.episode_id AS episode_id
+                """,
+                uuids=list(entity_uuids),
+            )
+            edges = [dict(r) for r in edge_result]
+
+            # Stats
+            type_counts: dict[str, int] = {}
+            for e in entities:
+                t = e["entity_type"]
+                type_counts[t] = type_counts.get(t, 0) + 1
+
+            return {
+                "nodes": entities,
+                "edges": edges,
+                "stats": {
+                    "node_count": len(entities),
+                    "edge_count": len(edges),
+                    "entity_types": type_counts,
+                },
+            }
