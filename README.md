@@ -356,7 +356,7 @@ No hooks? No problem. Memories stored with a `session_name` are still grouped, s
 </details>
 
 <details>
-<summary><strong>REST API</strong> — 91 endpoints</summary>
+<summary><strong>REST API</strong> — 94 endpoints</summary>
 
 REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Optional API key auth when `CAIRN_AUTH_ENABLED=true`.
 
@@ -368,7 +368,8 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Opt
 | `DELETE /api/settings/{key}` | Remove a single DB setting override |
 | `GET /api/search?q=&project=&type=&mode=&limit=` | Hybrid search (multi-select: `project=a,b`) |
 | `GET /api/memories/:id` | Single memory with cluster context |
-| `GET /api/projects` | All projects with memory counts |
+| `GET /api/memories/:id/work-items` | Work items linked to a memory |
+| `GET /api/projects` | All projects with memory, doc, and work item counts |
 | `GET /api/projects/:name` | Project docs and links |
 | `GET /api/docs?project=&doc_type=` | Browse documents across projects |
 | `GET /api/docs/:id` | Single document with full content |
@@ -383,11 +384,12 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Opt
 | `GET /api/thinking?project=&status=` | Thinking sequences |
 | `GET /api/thinking/:id` | Sequence detail with all thoughts |
 | `GET /api/rules?project=` | Behavioral rules |
-| `GET /api/timeline?project=&type=&days=` | Memory activity feed (multi-select filters) |
+| `GET /api/timeline?project=&type=&session_name=&days=` | Memory activity feed (multi-select filters) |
 | `POST /api/events` | Publish a single event (session_start, tool_use, session_end, etc.) |
 | `GET /api/events?session_name=&project=` | Query events with filters |
 | `GET /api/events/stream?session_name=` | Real-time SSE stream via Postgres LISTEN/NOTIFY |
 | `GET /api/sessions?project=&active_only=` | List sessions with event counts |
+| `GET /api/sessions/{name}/work-items` | Work items linked to a session |
 | `POST /api/sessions/{name}/close` | Close a session (set closed_at) |
 | `POST /api/ingest` | Smart ingestion — text, URL, or both. Classify, chunk, dedup, route. |
 | `POST /api/ingest/doc` | Create a single project document |
@@ -435,6 +437,7 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Opt
 | `POST /api/work-items/{id}/heartbeat` | Agent heartbeat (working/stuck/done) |
 | `GET /api/work-items/{id}/activity` | Activity audit trail |
 | `GET /api/work-items/{id}/briefing` | Assembled context for agent dispatch |
+| `GET /api/work-items/{id}/sessions` | Sessions linked to a work item |
 | `GET /api/terminal/config` | Terminal backend mode and settings |
 | `GET /api/terminal/hosts` | List configured terminal hosts |
 | `POST /api/terminal/hosts` | Add a terminal host |
@@ -619,7 +622,7 @@ All bulk operations support `--dry-run` for preview.
 
 ### Database Schema
 
-25 migrations:
+26 migrations:
 
 | Migration | Tables / Changes |
 |-----------|--------|
@@ -648,6 +651,7 @@ All bulk operations support `--dry-run` for preview.
 | **023 Work Orchestration** | `work_item_activity`, gate columns, risk_tier, agent_state, constraints JSONB |
 | **024 Conversations** | `conversations`, `chat_messages` for persistent chat with tool call storage |
 | **025 Event Bus** | `sessions`, `events` tables with Postgres NOTIFY trigger for real-time streaming |
+| **026 Session Work Items** | `session_work_items` junction table linking sessions to work items with role escalation |
 
 </details>
 

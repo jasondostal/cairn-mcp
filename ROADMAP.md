@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.51.0** — TBD.
+Current: **v0.51.0** — "Connected Context".
 
 ---
 
@@ -23,6 +23,22 @@ Current: **v0.51.0** — TBD.
 ---
 
 ## Shipped
+
+### v0.51.0 — "Connected Context" ✓
+
+Session ↔ work item linking, event bus observability, cross-page navigation, UI component consolidation.
+
+- [x] **Session ↔ Work Item linking** — `session_work_items` junction table (migration 026) with role escalation (touch → heartbeat → updated → created → claimed → completed). Auto-fires on create, update, claim, complete, heartbeat.
+- [x] **Event bus observability** — `EventBusStats` with thread-safe counters, sliding-window health (healthy/degraded/unhealthy), surfaced in `/api/status`. 11 unit tests.
+- [x] **Cross-page navigation** — project names, session names, cluster labels are now clickable links throughout the UI (memories, cairns, docs, sessions, memory sheet).
+- [x] **`SingleSelect` component** — unified searchable select replacing all native `<select>` elements across 8 pages.
+- [x] **Download support** — documents export as Markdown or PDF, memories export as Markdown with YAML frontmatter.
+- [x] **Memory relations UI** — incoming/outgoing relations with color-coded types and direction arrows.
+- [x] **Session/project detail enrichment** — sessions show memories + linked work items; projects show work items, memories, sessions.
+- [x] **Work items view mode** — consolidated Completed dropdown + Ready toggle into single 5-mode View selector.
+- [x] **Work item parent editing** — re-parent items via detail sheet.
+- [x] **Session deep-linking** — `?selected=` query param on sessions page.
+- [x] 3 new REST endpoints, `useLocalStorage` hook, `DownloadMenu` component.
 
 ### v0.50.0 — "Event Bus" ✓
 
