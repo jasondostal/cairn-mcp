@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api, type Memory } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import {
@@ -23,7 +24,8 @@ const RELATION_COLORS: Record<string, string> = {
   depends_on: "text-amber-400",
   related: "text-muted-foreground",
 };
-import { Tag, FileText, Network, ArrowRight, ArrowLeft } from "lucide-react";
+import { StatusDot } from "@/components/work-items/status-dot";
+import { Tag, FileText, Network, ArrowRight, ArrowLeft, Link2 } from "lucide-react";
 
 interface MemorySheetProps {
   memoryId: number | null;
@@ -35,6 +37,7 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
   const [memory, setMemory] = useState<Memory | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [linkedWorkItems, setLinkedWorkItems] = useState<Array<{ id: number; short_id: string; title: string; status: string; item_type: string; project: string }>>([]);
 
   useEffect(() => {
     if (!memoryId || !open) return;
@@ -45,6 +48,10 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
       .then(setMemory)
       .catch((err) => setError(err?.message || "Failed to load memory"))
       .finally(() => setLoading(false));
+    api
+      .memoryWorkItems(memoryId)
+      .then((r) => setLinkedWorkItems(r.work_items))
+      .catch(() => setLinkedWorkItems([]));
   }, [memoryId, open]);
 
   return (
@@ -82,7 +89,7 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
                 {memory.summary || "Memory #" + memory.id}
               </SheetTitle>
               <SheetDescription>
-                {memory.project} &middot;{" "}
+                <Link href={`/projects/${encodeURIComponent(memory.project)}`} onClick={() => onOpenChange(false)} className="text-primary hover:underline">{memory.project}</Link> &middot;{" "}
                 {formatDateTime(memory.created_at)}
               </SheetDescription>
             </SheetHeader>
@@ -208,7 +215,7 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
                       <Network className="h-3 w-3" /> Cluster
                     </h3>
                     <p className="text-sm">
-                      {memory.cluster.label}
+                      <Link href="/clusters" onClick={() => onOpenChange(false)} className="text-primary hover:underline">{memory.cluster.label}</Link>
                       <span className="ml-2 text-xs text-muted-foreground">
                         ({memory.cluster.size} members)
                       </span>
@@ -217,11 +224,37 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
                 </>
               )}
 
+              {/* Linked Work Items */}
+              {linkedWorkItems.length > 0 && (
+                <>
+                  <Separator />
+                  <div>
+                    <h3 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                      <Link2 className="h-3 w-3" /> Linked Work Items
+                    </h3>
+                    <div className="space-y-1.5">
+                      {linkedWorkItems.map((wi) => (
+                        <Link
+                          key={wi.id}
+                          href={`/work-items?id=${wi.id}`}
+                          onClick={() => onOpenChange(false)}
+                          className="flex items-center gap-2 text-sm hover:bg-accent/50 rounded-md p-1 -mx-1 transition-colors"
+                        >
+                          <StatusDot status={wi.status as "open" | "ready" | "in_progress" | "blocked" | "done" | "cancelled"} />
+                          <span className="font-mono text-xs text-muted-foreground">{wi.short_id}</span>
+                          <span className="truncate text-xs">{wi.title}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
               {/* Metadata */}
               <Separator />
               <div className="space-y-1 text-xs text-muted-foreground">
                 {memory.session_name && (
-                  <p>Session: {memory.session_name}</p>
+                  <p>Session: <Link href={`/sessions?selected=${encodeURIComponent(memory.session_name)}`} onClick={() => onOpenChange(false)} className="text-primary hover:underline">{memory.session_name}</Link></p>
                 )}
                 <p>Created: {formatDateTime(memory.created_at)}</p>
                 <p>Updated: {formatDateTime(memory.updated_at)}</p>

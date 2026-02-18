@@ -340,7 +340,7 @@ export default function ThinkingDetailPage() {
             >
               {detail.status}
             </Badge>
-            <span>{detail.project}</span>
+            <Link href={`/projects/${encodeURIComponent(detail.project)}`} className="text-primary hover:underline">{detail.project}</Link>
             <span>&middot;</span>
             <span>{detail.thoughts.length} thoughts</span>
             <span>&middot;</span>

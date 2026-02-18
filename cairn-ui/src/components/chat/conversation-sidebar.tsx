@@ -16,12 +16,14 @@ interface ConversationSidebarProps {
   activeId: number | null;
   onSelect: (conv: Conversation) => void;
   onNew: () => void;
+  refreshKey?: number;
 }
 
 export function ConversationSidebar({
   activeId,
   onSelect,
   onNew,
+  refreshKey,
 }: ConversationSidebarProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,7 +42,7 @@ export function ConversationSidebar({
 
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   // Refresh when active conversation changes (e.g., after auto-title)
   useEffect(() => {

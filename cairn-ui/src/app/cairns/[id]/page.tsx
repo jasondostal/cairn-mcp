@@ -146,8 +146,10 @@ export default function CairnDetailPage() {
       {!loading && !error && detail && (
         <div className="space-y-6 max-w-3xl">
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <Badge variant="outline">{detail.session_name}</Badge>
-            <span>{detail.project}</span>
+            <Link href={`/sessions?selected=${encodeURIComponent(detail.session_name)}`}>
+              <Badge variant="outline" className="hover:bg-accent cursor-pointer">{detail.session_name}</Badge>
+            </Link>
+            <Link href={`/projects/${encodeURIComponent(detail.project)}`} className="text-primary hover:underline">{detail.project}</Link>
             <span>&middot;</span>
             <span className="flex items-center gap-1">
               <Layers className="h-3.5 w-3.5" />

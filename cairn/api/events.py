@@ -10,6 +10,7 @@ import time
 from fastapi import APIRouter, HTTPException, Query
 from starlette.responses import StreamingResponse
 
+from cairn.core import stats
 from cairn.core.constants import EVENT_STREAM_HEARTBEAT_INTERVAL
 from cairn.core.services import Services
 
@@ -82,9 +83,13 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 )
             except Exception as e:
                 logger.error("SSE: failed to connect for LISTEN: %s", e)
+                if stats.event_bus_stats:
+                    stats.event_bus_stats.record_error(f"SSE connect: {e}")
                 yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
                 return
 
+            if stats.event_bus_stats:
+                stats.event_bus_stats.record_sse_connect()
             try:
                 await conn.execute("LISTEN cairn_events")
 
@@ -108,6 +113,8 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                                 continue
 
                             yield f"event: event\ndata: {json.dumps(data, default=str)}\n\n"
+                            if stats.event_bus_stats:
+                                stats.event_bus_stats.record_sse_event()
                             last_heartbeat = time.monotonic()
                             break  # Process one at a time to check heartbeat
                     except asyncio.TimeoutError:
@@ -123,8 +130,12 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 pass
             except Exception as e:
                 logger.error("SSE stream error: %s", e, exc_info=True)
+                if stats.event_bus_stats:
+                    stats.event_bus_stats.record_error(f"SSE stream: {e}")
                 yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
             finally:
+                if stats.event_bus_stats:
+                    stats.event_bus_stats.record_sse_disconnect()
                 await conn.close()
 
         return StreamingResponse(

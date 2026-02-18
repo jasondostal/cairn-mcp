@@ -19,6 +19,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
     def api_timeline(
         project: str | None = Query(None),
         type: str | None = Query(None),
+        session_name: str | None = Query(None),
         days: int = Query(7, ge=1, le=365),
         limit: int = Query(50, ge=1, le=200),
         offset: int = Query(0, ge=0),
@@ -36,6 +37,9 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         if types:
             where.append("m.memory_type = ANY(%s)")
             params.append(types)
+        if session_name:
+            where.append("m.session_name = %s")
+            params.append(session_name)
 
         where_clause = " AND ".join(where)
 
@@ -115,3 +119,32 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         if not results:
             raise HTTPException(status_code=404, detail="Memory not found")
         return results[0]
+
+    @router.get("/memories/{memory_id}/work-items")
+    def api_memory_work_items(memory_id: int = Path(...)):
+        rows = db.execute(
+            """
+            SELECT wi.id, wi.short_id, wi.title, wi.status, wi.item_type,
+                   p.name as project
+            FROM work_item_memory_links wml
+            JOIN work_items wi ON wi.id = wml.work_item_id
+            LEFT JOIN projects p ON wi.project_id = p.id
+            WHERE wml.memory_id = %s
+            ORDER BY wi.created_at DESC
+            """,
+            (memory_id,),
+        )
+        return {
+            "memory_id": memory_id,
+            "work_items": [
+                {
+                    "id": r["id"],
+                    "short_id": r["short_id"],
+                    "title": r["title"],
+                    "status": r["status"],
+                    "item_type": r["item_type"],
+                    "project": r["project"],
+                }
+                for r in rows
+            ],
+        }

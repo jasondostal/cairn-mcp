@@ -8,6 +8,7 @@ import { PageFilters, DenseToggle } from "@/components/page-filters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SingleSelect } from "@/components/ui/single-select";
 import { ErrorState } from "@/components/error-state";
 import { SkeletonList } from "@/components/skeleton-list";
 import { EmptyState } from "@/components/empty-state";
@@ -307,15 +308,12 @@ function ComposeArea({
           }}
         />
         <div className="flex items-center gap-2 flex-wrap">
-          <select
-            className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+          <SingleSelect
+            options={projects.map((p) => ({ value: p.name, label: p.name }))}
             value={project}
-            onChange={(e) => setProject(e.target.value)}
-          >
-            {projects.map((p) => (
-              <option key={p.name} value={p.name}>{p.name}</option>
-            ))}
-          </select>
+            onValueChange={setProject}
+            placeholder="Select project…"
+          />
           <Button
             variant={priority === "urgent" ? "destructive" : "outline"}
             size="sm"

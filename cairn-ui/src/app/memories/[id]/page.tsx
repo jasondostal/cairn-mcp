@@ -12,13 +12,43 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { PageLayout } from "@/components/page-layout";
-import { Tag, FileText, Star, Clock, Network, ArrowLeft } from "lucide-react";
+import { MemoryTypeBadge } from "@/components/memory-type-badge";
+import { StatusDot } from "@/components/work-items/status-dot";
+import { Tag, FileText, Star, Clock, Network, ArrowLeft, ArrowRight, Download, Link2 } from "lucide-react";
+
+const RELATION_COLORS: Record<string, string> = {
+  extends: "text-blue-400",
+  contradicts: "text-red-400",
+  implements: "text-green-400",
+  depends_on: "text-amber-400",
+  related: "text-muted-foreground",
+};
+import { triggerDownload } from "@/lib/download";
+
+function formatMemoryAsMarkdown(memory: Memory): string {
+  const lines = [
+    "---",
+    `id: ${memory.id}`,
+    `type: ${memory.memory_type}`,
+    `importance: ${memory.importance}`,
+    `project: ${memory.project}`,
+  ];
+  if (memory.tags.length) lines.push(`tags: [${memory.tags.join(", ")}]`);
+  lines.push(`created: ${memory.created_at}`);
+  if (memory.session_name) lines.push(`session: ${memory.session_name}`);
+  lines.push("---", "", memory.content);
+  return lines.join("\n");
+}
 
 export default function MemoryDetail() {
   const params = useParams();
   const id = Number(params.id);
   const { data: memory, loading, error } = useFetch<Memory>(
     () => api.memory(id),
+    [id]
+  );
+  const { data: linkedWI } = useFetch(
+    () => api.memoryWorkItems(id),
     [id]
   );
 
@@ -32,6 +62,18 @@ export default function MemoryDetail() {
               {memory.memory_type}
             </Badge>
             {!memory.is_active && <Badge variant="destructive">inactive</Badge>}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => triggerDownload(
+                formatMemoryAsMarkdown(memory),
+                `memory-${memory.id}.md`,
+                "text/markdown"
+              )}
+            >
+              <Download className="mr-1.5 h-4 w-4" />
+              Download
+            </Button>
           </>
         )}
         <Link href="/timeline">
@@ -111,7 +153,7 @@ export default function MemoryDetail() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Project</p>
-                  <p className="text-sm font-medium">{memory.project}</p>
+                  <Link href={`/projects/${encodeURIComponent(memory.project)}`} className="text-sm font-medium text-primary hover:underline">{memory.project}</Link>
                 </div>
               </CardContent>
             </Card>
@@ -121,7 +163,7 @@ export default function MemoryDetail() {
                   <Network className="h-4 w-4 text-muted-foreground" />
                   <div>
                     <p className="text-xs text-muted-foreground">Cluster</p>
-                    <p className="text-sm font-medium">{memory.cluster.label}</p>
+                    <Link href="/clusters" className="text-sm font-medium text-primary hover:underline">{memory.cluster.label}</Link>
                   </div>
                 </CardContent>
               </Card>
@@ -157,6 +199,44 @@ export default function MemoryDetail() {
             </div>
           )}
 
+          {memory.relations && memory.relations.length > 0 && (
+            <div>
+              <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
+                <Network className="h-4 w-4" />
+                Relations
+              </div>
+              <div className="space-y-2">
+                {memory.relations.map((rel, i) => (
+                  <Link
+                    key={`${rel.id}-${rel.relation}-${i}`}
+                    href={`/memories/${rel.id}`}
+                    className="flex items-start gap-2 text-sm group hover:bg-accent/50 rounded-md p-1.5 -mx-1.5 transition-colors"
+                  >
+                    {rel.direction === "outgoing" ? (
+                      <ArrowRight className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                    ) : (
+                      <ArrowLeft className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-xs font-medium ${RELATION_COLORS[rel.relation] || "text-muted-foreground"}`}>
+                          {rel.relation.replace("_", " ")}
+                        </span>
+                        <MemoryTypeBadge type={rel.memory_type} />
+                        <span className="text-xs text-muted-foreground">
+                          #{rel.id}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {rel.summary}
+                      </p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
           {memory.related_files?.length > 0 && (
             <div>
               <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
@@ -173,9 +253,31 @@ export default function MemoryDetail() {
             </div>
           )}
 
+          {linkedWI && linkedWI.work_items.length > 0 && (
+            <div>
+              <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
+                <Link2 className="h-4 w-4" />
+                Linked Work Items
+              </div>
+              <div className="space-y-1.5">
+                {linkedWI.work_items.map((wi) => (
+                  <Link
+                    key={wi.id}
+                    href={`/work-items?id=${wi.id}`}
+                    className="flex items-center gap-2 text-sm hover:bg-accent/50 rounded-md p-1.5 -mx-1.5 transition-colors"
+                  >
+                    <StatusDot status={wi.status as "open" | "ready" | "in_progress" | "blocked" | "done" | "cancelled"} />
+                    <span className="font-mono text-xs text-muted-foreground">{wi.short_id}</span>
+                    <span className="truncate">{wi.title}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
           {memory.session_name && (
             <p className="text-xs text-muted-foreground">
-              Session: {memory.session_name}
+              Session: <Link href={`/sessions?selected=${encodeURIComponent(memory.session_name)}`} className="text-primary hover:underline">{memory.session_name}</Link>
             </p>
           )}
 

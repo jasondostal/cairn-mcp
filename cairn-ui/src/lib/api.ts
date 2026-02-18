@@ -141,6 +141,9 @@ export interface Project {
   id: number;
   name: string;
   memory_count: number;
+  doc_count: number;
+  work_item_count: number;
+  last_activity: string | null;
   created_at: string;
 }
 
@@ -431,6 +434,30 @@ export interface WorkItem {
   completed_at: string | null;
 }
 
+export interface SessionWorkItemLink {
+  session_name: string;
+  role: string;
+  first_seen: string;
+  last_seen: string;
+  touch_count: number;
+  is_active: boolean;
+}
+
+export interface WorkItemSessionLink {
+  id: number;
+  short_id: string;
+  title: string;
+  status: WorkItemStatus;
+  item_type: WorkItemType;
+  priority: number;
+  assignee: string | null;
+  project: string;
+  role: string;
+  first_seen: string;
+  last_seen: string;
+  touch_count: number;
+}
+
 export interface WorkItemDetail {
   id: number;
   short_id: string;
@@ -447,6 +474,7 @@ export interface WorkItemDetail {
   blockers: Array<{ id: number; short_id: string; title: string; status: string }>;
   blocking: Array<{ id: number; short_id: string; title: string; status: string }>;
   linked_memories: Array<{ id: number; summary: string; memory_type: string }>;
+  linked_sessions: SessionWorkItemLink[];
   metadata: Record<string, unknown>;
   risk_tier: number;
   gate_type: string | null;
@@ -691,13 +719,18 @@ export interface TerminalHost {
 export const api = {
   status: () => get<Status>("/status"),
 
-  timeline: (opts?: { project?: string; type?: string; days?: string; limit?: string; offset?: string }) =>
+  timeline: (opts?: { project?: string; type?: string; session_name?: string; days?: string; limit?: string; offset?: string }) =>
     get<Paginated<TimelineMemory>>("/timeline", opts),
 
   search: (q: string, opts?: { project?: string; type?: string; mode?: string; limit?: string; offset?: string }) =>
     get<Paginated<Memory>>("/search", { q, ...opts }),
 
   memory: (id: number) => get<Memory>(`/memories/${id}`),
+
+  memoryWorkItems: (id: number) =>
+    get<{ memory_id: number; work_items: Array<{ id: number; short_id: string; title: string; status: string; item_type: string; project: string }> }>(
+      `/memories/${id}/work-items`
+    ),
 
   projects: (opts?: { limit?: string; offset?: string }) =>
     get<Paginated<Project>>("/projects", opts),
@@ -878,8 +911,8 @@ export const api = {
 
   workItemUpdate: (id: number, body: {
     title?: string; description?: string; status?: string; priority?: number;
-    assignee?: string; item_type?: string; session_name?: string;
-    metadata?: Record<string, unknown>; acceptance_criteria?: string;
+    assignee?: string; item_type?: string; parent_id?: number | null;
+    session_name?: string; metadata?: Record<string, unknown>; acceptance_criteria?: string;
   }) => patch<WorkItemDetail>(`/work-items/${id}`, body),
 
   workItemClaim: (id: number, assignee: string) =>
@@ -923,6 +956,12 @@ export const api = {
 
   workItemsGated: (opts?: { project?: string; gate_type?: string; limit?: string }) =>
     get<{ total: number; items: GatedItem[] }>("/work-items/gated", opts),
+
+  workItemSessions: (id: number) =>
+    get<SessionWorkItemLink[]>(`/work-items/${id}/sessions`),
+
+  sessionWorkItems: (sessionName: string) =>
+    get<WorkItemSessionLink[]>(`/sessions/${encodeURIComponent(sessionName)}/work-items`),
 
   // --- Conversations ---
 

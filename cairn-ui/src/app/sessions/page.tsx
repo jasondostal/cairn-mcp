@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { api, SessionInfo, SessionEvent } from "@/lib/api";
+import { Suspense, useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { api, SessionInfo, SessionEvent, type TimelineMemory, type WorkItemSessionLink, type Paginated } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   Radio,
@@ -15,8 +17,10 @@ import {
   RefreshCw,
   AlertTriangle,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/error-state";
+import { MemoryTypeBadge } from "@/components/memory-type-badge";
 import { PageLayout } from "@/components/page-layout";
 
 function timeAgo(dateStr: string): string {
@@ -108,7 +112,7 @@ function SessionList({
               <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
             </div>
             <div className="flex items-center gap-4 mt-1.5 text-xs text-muted-foreground">
-              <span>{s.project}</span>
+              <Link href={`/projects/${encodeURIComponent(s.project)}`} className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>{s.project}</Link>
               <span>{s.event_count} events</span>
               {s.started_at && <span>{timeAgo(s.started_at)}</span>}
             </div>
@@ -129,6 +133,8 @@ function SessionDetail({
   onBack: () => void;
 }) {
   const [events, setEvents] = useState<SessionEvent[]>([]);
+  const [memories, setMemories] = useState<TimelineMemory[]>([]);
+  const [workItems, setWorkItems] = useState<WorkItemSessionLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(session.is_active);
@@ -147,7 +153,13 @@ function SessionDetail({
 
   useEffect(() => {
     fetchEvents();
-  }, [fetchEvents]);
+    api.timeline({ session_name: session.session_name, days: "365", limit: "50" })
+      .then((r) => setMemories(r.items))
+      .catch(() => setMemories([]));
+    api.sessionWorkItems(session.session_name)
+      .then(setWorkItems)
+      .catch(() => setWorkItems([]));
+  }, [fetchEvents, session.session_name]);
 
   useEffect(() => {
     if (!autoRefresh) return;
@@ -175,7 +187,7 @@ function SessionDetail({
             )}
           </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-            <span>{session.project}</span>
+            <Link href={`/projects/${encodeURIComponent(session.project)}`} className="text-primary hover:underline">{session.project}</Link>
             <span>{events.length} events</span>
             <span>{toolEvents.length} tool calls</span>
           </div>
@@ -197,6 +209,61 @@ function SessionDetail({
           </Button>
         )}
       </div>
+
+      {/* Memories created during this session */}
+      {memories.length > 0 && (
+        <div className="mb-4">
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+            Memories Created ({memories.length})
+          </h3>
+          <div className="rounded-md border border-border divide-y divide-border">
+            {memories.map((m) => (
+              <Link
+                key={m.id}
+                href={`/memories/${m.id}`}
+                className="flex items-center gap-3 px-3 py-2 hover:bg-accent/50 transition-colors text-xs"
+              >
+                <MemoryTypeBadge type={m.memory_type} />
+                <span className="flex-1 truncate text-muted-foreground">
+                  {m.summary || m.content.slice(0, 80)}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Work Items linked to this session */}
+      {workItems.length > 0 && (
+        <div className="mb-4">
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+            Work Items ({workItems.length})
+          </h3>
+          <div className="rounded-md border border-border divide-y divide-border">
+            {workItems.map((wi) => (
+              <Link
+                key={wi.id}
+                href={`/workspace?wi=${wi.short_id}`}
+                className="flex items-center gap-3 px-3 py-2 hover:bg-accent/50 transition-colors text-xs"
+              >
+                <span className={cn(
+                  "h-2 w-2 rounded-full shrink-0",
+                  wi.status === "done" ? "bg-[oklch(0.696_0.17_162)]" :
+                  wi.status === "in_progress" ? "bg-[oklch(0.6_0.25_250)]" :
+                  wi.status === "blocked" ? "bg-[oklch(0.627_0.265_29)]" :
+                  wi.status === "cancelled" ? "bg-muted-foreground/30" :
+                  "bg-[oklch(0.7_0.15_80)]"
+                )} />
+                <span className="font-mono text-muted-foreground shrink-0">{wi.short_id}</span>
+                <span className="flex-1 truncate">{wi.title}</span>
+                <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">
+                  {wi.role}
+                </Badge>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Error banner */}
       {error && !loading && (
@@ -278,7 +345,10 @@ function SessionDetail({
 
 // -- Page --
 
-export default function SessionsPage() {
+function SessionsPageInner() {
+  const searchParams = useSearchParams();
+  const selectedParam = searchParams.get("selected");
+  const appliedParam = useRef<string | null>(null);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [selected, setSelected] = useState<SessionInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -300,6 +370,17 @@ export default function SessionsPage() {
   useEffect(() => {
     fetchSessions();
   }, [fetchSessions]);
+
+  // Auto-select session from ?selected= query param
+  useEffect(() => {
+    if (selectedParam && sessions.length > 0 && appliedParam.current !== selectedParam) {
+      const match = sessions.find((s) => s.session_name === selectedParam);
+      if (match) {
+        setSelected(match);
+        appliedParam.current = selectedParam;
+      }
+    }
+  }, [selectedParam, sessions]);
 
   // Auto-refresh session list every 30s
   useEffect(() => {
@@ -333,5 +414,13 @@ export default function SessionsPage() {
         />
       )}
     </PageLayout>
+  );
+}
+
+export default function SessionsPage() {
+  return (
+    <Suspense>
+      <SessionsPageInner />
+    </Suspense>
   );
 }

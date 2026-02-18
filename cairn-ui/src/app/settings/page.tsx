@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SingleSelect } from "@/components/ui/single-select";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ErrorState } from "@/components/error-state";
 import { SkeletonList } from "@/components/skeleton-list";
@@ -375,13 +376,12 @@ function EditableSelect({
           </button>
         )}
       </div>
-      <select
+      <SingleSelect
+        options={options.map((o) => ({ value: o, label: o }))}
         value={editedValue}
-        onChange={(e) => setLocalEdits({ ...localEdits, [settingKey]: e.target.value })}
-        className="h-7 rounded-md border border-input bg-transparent px-2 text-xs font-mono outline-none focus:ring-2 focus:ring-ring"
-      >
-        {options.map((o) => <option key={o} value={o}>{o}</option>)}
-      </select>
+        onValueChange={(v) => setLocalEdits({ ...localEdits, [settingKey]: v })}
+        className="h-7 text-xs font-mono"
+      />
     </div>
   );
 }

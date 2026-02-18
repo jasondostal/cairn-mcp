@@ -922,6 +922,8 @@ def work_items(
             if not work_item_id:
                 return {"error": "work_item_id is required for update"}
             fields = {}
+            if session_name is not None:
+                fields["_calling_session"] = session_name
             if title is not None:
                 fields["title"] = title
             if description is not None:
@@ -944,17 +946,19 @@ def work_items(
                 fields["risk_tier"] = risk_tier
             if constraints is not None:
                 fields["constraints"] = constraints
+            if parent_id is not None:
+                fields["parent_id"] = parent_id
             return work_item_manager.update(work_item_id, **fields)
 
         if action == "claim":
             if not work_item_id or not assignee:
                 return {"error": "work_item_id and assignee are required for claim"}
-            return work_item_manager.claim(work_item_id, assignee)
+            return work_item_manager.claim(work_item_id, assignee, session_name=session_name)
 
         if action == "complete":
             if not work_item_id:
                 return {"error": "work_item_id is required for complete"}
-            return work_item_manager.complete(work_item_id)
+            return work_item_manager.complete(work_item_id, session_name=session_name)
 
         if action == "add_child":
             if not work_item_id or not title:
@@ -1018,6 +1022,7 @@ def work_items(
                 return {"error": "work_item_id and assignee are required for heartbeat"}
             return work_item_manager.heartbeat(
                 work_item_id, assignee, state=status or "working", note=note,
+                session_name=session_name,
             )
 
         if action == "activity":

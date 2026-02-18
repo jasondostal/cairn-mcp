@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SingleSelect } from "@/components/ui/single-select";
 
 interface CreateWorkItemDialogProps {
   open: boolean;
@@ -70,9 +71,6 @@ export function CreateWorkItemDialog({
     }
   }
 
-  const selectClass =
-    "h-8 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2";
-
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -87,18 +85,13 @@ export function CreateWorkItemDialog({
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               Project
             </span>
-            <select
+            <SingleSelect
+              options={projects}
               value={project}
-              onChange={(e) => setProject(e.target.value)}
-              className={selectClass + " w-full"}
-            >
-              <option value="">Select project…</option>
-              {projects.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
+              onValueChange={setProject}
+              placeholder="Select project…"
+              className="w-full h-8"
+            />
           </div>
 
           {/* Title */}
@@ -126,15 +119,16 @@ export function CreateWorkItemDialog({
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Type
               </span>
-              <select
+              <SingleSelect
+                options={[
+                  { value: "epic", label: "epic" },
+                  { value: "task", label: "task" },
+                  { value: "subtask", label: "subtask" },
+                ]}
                 value={itemType}
-                onChange={(e) => setItemType(e.target.value)}
-                className={selectClass + " w-full"}
-              >
-                <option value="epic">epic</option>
-                <option value="task">task</option>
-                <option value="subtask">subtask</option>
-              </select>
+                onValueChange={setItemType}
+                className="w-full h-8"
+              />
             </div>
             <div className="space-y-1 w-24">
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">

@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SingleSelect } from "@/components/ui/single-select";
 import { Badge } from "@/components/ui/badge";
 import { ErrorState } from "@/components/error-state";
 import {
@@ -237,21 +238,15 @@ function CreateSessionDialog({
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label className="text-xs font-medium text-muted-foreground">Project</label>
-            <select
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
-              value={project}
-              onChange={(e) => setProject(e.target.value)}
-              required
-            >
-              <option value="">Select project...</option>
-              {projects
+            <SingleSelect
+              options={projects
                 .filter((p) => p.name !== "__global__")
-                .map((p) => (
-                  <option key={p.id} value={p.name}>
-                    {p.name}
-                  </option>
-                ))}
-            </select>
+                .map((p) => ({ value: p.name, label: p.name }))}
+              value={project}
+              onValueChange={setProject}
+              placeholder="Select project..."
+              className="w-full h-9"
+            />
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground">
@@ -266,31 +261,31 @@ function CreateSessionDialog({
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground">Agent</label>
-            <select
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+            <SingleSelect
+              options={[
+                { value: "", label: "Default (cairn-build)" },
+                ...agents.map((a) => ({
+                  value: a.id,
+                  label: `${a.name || a.id}${a.model ? ` (${a.model})` : ""}`,
+                })),
+              ]}
               value={agent}
-              onChange={(e) => setAgent(e.target.value)}
-            >
-              <option value="">Default (cairn-build)</option>
-              {agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name || a.id}
-                  {a.model ? ` (${a.model})` : ""}
-                </option>
-              ))}
-            </select>
+              onValueChange={setAgent}
+              className="w-full h-9"
+            />
           </div>
 
           <div>
             <label className="text-xs font-medium text-muted-foreground">Context</label>
-            <select
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+            <SingleSelect
+              options={[
+                { value: "focused", label: "Focused — project rules + task context only" },
+                { value: "full", label: "Full — grimoire, trail, tasks, everything" },
+              ]}
               value={contextMode}
-              onChange={(e) => setContextMode(e.target.value as "focused" | "full")}
-            >
-              <option value="focused">Focused — project rules + task context only</option>
-              <option value="full">Full — grimoire, trail, tasks, everything</option>
-            </select>
+              onValueChange={(v) => setContextMode(v as "focused" | "full")}
+              className="w-full h-9"
+            />
           </div>
 
           {error && <p className="text-xs text-destructive">{error}</p>}

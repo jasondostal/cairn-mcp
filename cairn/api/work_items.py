@@ -29,6 +29,7 @@ class UpdateWorkItemBody(BaseModel):
     priority: int | None = None
     assignee: str | None = None
     item_type: str | None = None
+    parent_id: int | None = None
     session_name: str | None = None
     metadata: dict | None = None
     acceptance_criteria: str | None = None
@@ -38,6 +39,7 @@ class UpdateWorkItemBody(BaseModel):
 
 class ClaimBody(BaseModel):
     assignee: str
+    session_name: str | None = None
 
 
 class AddChildBody(BaseModel):
@@ -71,10 +73,15 @@ class ResolveGateBody(BaseModel):
     actor: str | None = None
 
 
+class CompleteBody(BaseModel):
+    session_name: str | None = None
+
+
 class HeartbeatBody(BaseModel):
     agent_name: str
     state: str = "working"
     note: str | None = None
+    session_name: str | None = None
 
 
 def register_routes(router: APIRouter, svc: Services, **kw):
@@ -135,11 +142,11 @@ def register_routes(router: APIRouter, svc: Services, **kw):
 
     @router.post("/work-items/{item_id}/claim")
     def api_claim_work_item(item_id: int = Path(...), body: ClaimBody = Body(...)):
-        return wim.claim(item_id, body.assignee)
+        return wim.claim(item_id, body.assignee, session_name=body.session_name)
 
     @router.post("/work-items/{item_id}/complete")
-    def api_complete_work_item(item_id: int = Path(...)):
-        return wim.complete(item_id)
+    def api_complete_work_item(item_id: int = Path(...), body: CompleteBody = Body(CompleteBody())):
+        return wim.complete(item_id, session_name=body.session_name)
 
     @router.post("/work-items/{item_id}/children")
     def api_add_child(item_id: int = Path(...), body: AddChildBody = Body(...)):
@@ -172,7 +179,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
 
     @router.post("/work-items/{item_id}/heartbeat")
     def api_heartbeat(item_id: int = Path(...), body: HeartbeatBody = Body(...)):
-        return wim.heartbeat(item_id, body.agent_name, state=body.state, note=body.note)
+        return wim.heartbeat(item_id, body.agent_name, state=body.state, note=body.note, session_name=body.session_name)
 
     @router.get("/work-items/{item_id}/activity")
     def api_activity(
@@ -181,6 +188,10 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         offset: int = Query(0, ge=0),
     ):
         return wim.get_activity(item_id, limit=limit, offset=offset)
+
+    @router.get("/work-items/{item_id}/sessions")
+    def api_work_item_sessions(item_id: int = Path(...)):
+        return wim.sessions_for_work_item(item_id)
 
     @router.get("/work-items/{item_id}/briefing")
     def api_briefing(item_id: int = Path(...)):

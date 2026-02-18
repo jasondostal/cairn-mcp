@@ -61,3 +61,4 @@ eval/quick_failure_check.py
 
 # Claude Code local settings
 .claude/
+.next/

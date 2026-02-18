@@ -4,7 +4,7 @@ import type { WorkItem, WorkItemStatus } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { StatusDot, StatusText, PriorityLabel } from "./status-dot";
 import { RiskTierBadge } from "./risk-tier-badge";
-import { Hand } from "lucide-react";
+import { ChevronRight, Hand } from "lucide-react";
 
 interface WorkItemRowProps {
   item: WorkItem;
@@ -12,6 +12,9 @@ interface WorkItemRowProps {
   isLast?: boolean;
   showProject?: boolean;
   readyIds?: Set<number>;
+  hasChildren?: boolean;
+  isCollapsed?: boolean;
+  onToggleCollapse?: (id: number) => void;
   onClick?: () => void;
 }
 
@@ -21,6 +24,9 @@ export function WorkItemRow({
   isLast = false,
   showProject = false,
   readyIds,
+  hasChildren = false,
+  isCollapsed = false,
+  onToggleCollapse,
   onClick,
 }: WorkItemRowProps) {
   const isReady = readyIds?.has(item.id);
@@ -53,6 +59,27 @@ export function WorkItemRow({
           {isLast ? "└─" : "├─"}
         </span>
       )}
+
+      {/* Collapse chevron or spacer */}
+      {hasChildren ? (
+        <button
+          className="shrink-0 p-0.5 -m-0.5 rounded hover:bg-accent transition-transform"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleCollapse?.(item.id);
+          }}
+          aria-label={isCollapsed ? "Expand" : "Collapse"}
+        >
+          <ChevronRight
+            className={cn(
+              "h-3.5 w-3.5 text-muted-foreground transition-transform",
+              !isCollapsed && "rotate-90",
+            )}
+          />
+        </button>
+      ) : depth > 0 ? (
+        <span className="shrink-0 w-[18px]" />
+      ) : null}
 
       <StatusDot status={effectiveStatus} />
 
