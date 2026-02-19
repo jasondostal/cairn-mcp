@@ -28,7 +28,12 @@ def create_api(svc: Services) -> FastAPI:
     config = svc.config
 
     def _release_db_conn():
-        """Release DB connection after each API request."""
+        """Safety net: release DB connection after each API request.
+
+        Primary cleanup is in @track_operation (service layer). This catches
+        any connection leaked by code outside the decorated service methods
+        (e.g. middleware, auth checks, direct DB queries in endpoints).
+        """
         yield
         db.release_if_held()
 

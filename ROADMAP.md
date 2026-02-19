@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.51.0** — "Connected Context".
+Current: **v0.52.0** — "Event Horizon".
 
 ---
 
@@ -23,6 +23,24 @@ Current: **v0.51.0** — "Connected Context".
 ---
 
 ## Shipped
+
+### v0.52.0 — "Event Horizon" ✓
+
+Event-driven graph projection, startup reconciliation, dual-mode graph, deploy overhaul, UI polish.
+
+- [x] **Event-driven graph projection** — replaced 15 inline dual-write touchpoints with event bus subscriber framework. `GraphProjectionListener` consumes events and syncs to Neo4j via idempotent MERGE.
+- [x] **EventBus subscriber framework** — `subscribe(event_type, handler_name, fn)` with wildcard support. Dispatch records tracked in `event_dispatches` table with retry.
+- [x] **EventDispatcher background worker** — polls pending dispatches, exponential backoff retry (5 attempts, 10s base).
+- [x] **Startup reconciliation** — `reconcile_graph()` compares PG vs Neo4j state on boot. PG wins. Backfills `graph_uuid`.
+- [x] **Dual-mode graph page** — auto-detects Neo4j availability, toggles between Entity (Neo4j) and Memory (Postgres) views. Graceful fallback.
+- [x] **Graph mobile touch** — pinch-to-zoom, single-finger pan, tap-to-select, touch-drag repositioning.
+- [x] **Task → work item promotion UI** — `POST /tasks/{id}/promote` endpoint + "Promote to Work Item" button in task sheet.
+- [x] **Ops log enrichment** — expandable rows with error messages, session deep-links, full operation detail.
+- [x] **Dashboard fixes** — work items widget (silent 422 from limit validation), entity chart selections persisted to localStorage.
+- [x] **Deploy script rewrite** — local build + `docker save | scp | docker load`, no GHCR round-trip. `--skip-build` flag.
+- [x] **DB connection hardening** — `@track_operation` unconditionally releases connections. Fixed `release_if_held()` leak.
+- [x] **Chat fixes** — conversation auto-creation, streaming text accumulation, JSONB casting.
+- [x] Migration 027 (event_dispatches), idempotent Neo4j methods, model router env config.
 
 ### v0.51.0 — "Connected Context" ✓
 

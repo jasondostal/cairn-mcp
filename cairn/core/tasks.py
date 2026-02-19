@@ -11,6 +11,7 @@ from cairn.core.utils import get_or_create_project, get_project
 from cairn.storage.database import Database
 
 if TYPE_CHECKING:
+    from cairn.core.event_bus import EventBus
     from cairn.graph.interface import GraphProvider
 
 logger = logging.getLogger(__name__)
@@ -19,25 +20,34 @@ logger = logging.getLogger(__name__)
 class TaskManager:
     """Handles task lifecycle and memory linking."""
 
-    def __init__(self, db: Database, graph: GraphProvider | None = None):
+    def __init__(
+        self,
+        db: Database,
+        graph: GraphProvider | None = None,
+        event_bus: EventBus | None = None,
+    ):
         self.db = db
         self.graph = graph
+        self.event_bus = event_bus
 
-    def _graph_sync_task(self, pg_id: int, project_id: int, description: str) -> None:
-        """Dual-write: create Task node in graph, update PG sync columns."""
-        if not self.graph:
+    def _publish(self, event_type: str, project_id: int | None = None, **payload) -> None:
+        """Publish an event if event_bus is available."""
+        if not self.event_bus:
             return
+        project_name = None
+        if project_id:
+            row = self.db.execute_one("SELECT name FROM projects WHERE id = %s", (project_id,))
+            if row:
+                project_name = row["name"]
         try:
-            graph_uuid = self.graph.create_task(
-                pg_id=pg_id, project_id=project_id, description=description,
+            self.event_bus.publish(
+                session_name="",
+                event_type=event_type,
+                project=project_name,
+                payload=payload if payload else None,
             )
-            self.db.execute(
-                "UPDATE tasks SET graph_uuid = %s, graph_synced = true WHERE id = %s",
-                (graph_uuid, pg_id),
-            )
-            self.db.commit()
         except Exception:
-            logger.warning("Graph sync failed for task #%d", pg_id, exc_info=True)
+            logger.warning("Failed to publish %s", event_type, exc_info=True)
 
     @track_operation("tasks.create")
     def create(self, project: str, description: str) -> dict:
@@ -54,8 +64,8 @@ class TaskManager:
         )
         self.db.commit()
 
-        # Dual-write to graph
-        self._graph_sync_task(row["id"], project_id, description)
+        # Event-driven graph projection
+        self._publish("task.created", project_id=project_id, task_id=row["id"])
 
         logger.info("Created task #%d for project %s", row["id"], project)
         return {
@@ -69,22 +79,17 @@ class TaskManager:
     @track_operation("tasks.complete")
     def complete(self, task_id: int) -> dict:
         """Mark a task as completed."""
+        row = self.db.execute_one(
+            "SELECT project_id FROM tasks WHERE id = %s", (task_id,),
+        )
         self.db.execute(
             "UPDATE tasks SET status = 'completed', completed_at = NOW() WHERE id = %s",
             (task_id,),
         )
         self.db.commit()
 
-        # Mark complete in graph
-        if self.graph:
-            try:
-                row = self.db.execute_one(
-                    "SELECT graph_uuid FROM tasks WHERE id = %s", (task_id,),
-                )
-                if row and row["graph_uuid"]:
-                    self.graph.complete_task(row["graph_uuid"])
-            except Exception:
-                logger.warning("Graph complete failed for task #%d", task_id, exc_info=True)
+        # Event-driven graph projection
+        self._publish("task.completed", project_id=row["project_id"] if row else None, task_id=task_id)
 
         return {"id": task_id, "action": "completed"}
 
@@ -174,19 +179,12 @@ class TaskManager:
             )
         self.db.commit()
 
-        # Create LINKED_TO edges in graph
-        if self.graph:
-            try:
-                row = self.db.execute_one(
-                    "SELECT graph_uuid FROM tasks WHERE id = %s", (task_id,),
-                )
-                if row and row["graph_uuid"]:
-                    for mid in memory_ids:
-                        try:
-                            self.graph.link_task_to_memory(row["graph_uuid"], mid)
-                        except Exception:
-                            logger.debug("Graph link failed for task #%d -> memory #%d", task_id, mid)
-            except Exception:
-                logger.warning("Graph link_memories failed for task #%d", task_id, exc_info=True)
+        # Event-driven graph projection
+        row = self.db.execute_one("SELECT project_id FROM tasks WHERE id = %s", (task_id,))
+        self._publish(
+            "task.memories_linked",
+            project_id=row["project_id"] if row else None,
+            task_id=task_id, memory_ids=memory_ids,
+        )
 
         return {"task_id": task_id, "linked": memory_ids}

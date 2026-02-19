@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json as _json
 import logging
 from typing import TYPE_CHECKING
 
@@ -29,10 +30,10 @@ class ConversationManager:
     ) -> dict:
         row = self.db.execute_one(
             """INSERT INTO conversations (title, project, model, metadata)
-               VALUES (%s, %s, %s, %s)
+               VALUES (%s, %s, %s, %s::jsonb)
                RETURNING id, title, project, model, message_count,
                          metadata, created_at, updated_at""",
-            (title, project, model, metadata or {}),
+            (title, project, model, _json.dumps(metadata or {})),
         )
         self.db.commit()
         return row
@@ -108,10 +109,10 @@ class ConversationManager:
         row = self.db.execute_one(
             """INSERT INTO chat_messages
                    (conversation_id, role, content, tool_calls, model, token_count)
-               VALUES (%s, %s, %s, %s, %s, %s)
+               VALUES (%s, %s, %s, %s::jsonb, %s, %s)
                RETURNING id, conversation_id, role, content, tool_calls,
                          model, token_count, created_at""",
-            (conversation_id, role, content, tool_calls, model, token_count),
+            (conversation_id, role, content, _json.dumps(tool_calls) if tool_calls else None, model, token_count),
         )
         # Update conversation metadata
         self.db.execute(

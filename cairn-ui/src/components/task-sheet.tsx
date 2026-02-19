@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api, type Task } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import {
@@ -14,7 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle, Circle, Link2 } from "lucide-react";
+import { CheckCircle, Circle, Link2, ArrowUpRight } from "lucide-react";
 
 interface TaskSheetProps {
   task: Task | null;
@@ -26,6 +27,8 @@ interface TaskSheetProps {
 export function TaskSheet({ task, open, onOpenChange, onCompleted }: TaskSheetProps) {
   const done = task?.status === "completed";
   const [completing, setCompleting] = useState(false);
+  const [promoting, setPromoting] = useState(false);
+  const router = useRouter();
 
   const handleComplete = async () => {
     if (!task) return;
@@ -38,6 +41,21 @@ export function TaskSheet({ task, open, onOpenChange, onCompleted }: TaskSheetPr
       // silent — user sees the sheet stays open
     } finally {
       setCompleting(false);
+    }
+  };
+
+  const handlePromote = async () => {
+    if (!task) return;
+    setPromoting(true);
+    try {
+      const result = await api.taskPromote(task.id);
+      onCompleted?.();
+      onOpenChange(false);
+      router.push(`/work-items?id=${result.work_item.id}`);
+    } catch {
+      // silent
+    } finally {
+      setPromoting(false);
     }
   };
 
@@ -111,15 +129,27 @@ export function TaskSheet({ task, open, onOpenChange, onCompleted }: TaskSheetPr
               {!done && (
                 <>
                   <Separator />
-                  <Button
-                    onClick={handleComplete}
-                    disabled={completing}
-                    className="w-full"
-                    size="sm"
-                  >
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    {completing ? "Completing..." : "Mark Complete"}
-                  </Button>
+                  <div className="space-y-2">
+                    <Button
+                      onClick={handleComplete}
+                      disabled={completing || promoting}
+                      className="w-full"
+                      size="sm"
+                    >
+                      <CheckCircle className="mr-2 h-4 w-4" />
+                      {completing ? "Completing..." : "Mark Complete"}
+                    </Button>
+                    <Button
+                      onClick={handlePromote}
+                      disabled={promoting || completing}
+                      variant="outline"
+                      className="w-full"
+                      size="sm"
+                    >
+                      <ArrowUpRight className="mr-2 h-4 w-4" />
+                      {promoting ? "Promoting..." : "Promote to Work Item"}
+                    </Button>
+                  </div>
                 </>
               )}
 

@@ -1111,6 +1111,101 @@ class Neo4jGraphProvider(GraphProvider):
             )
             return [dict(r) for r in result]
 
+    # ------------------------------------------------------------------
+    # Idempotent ensure methods — used by event-driven graph projection
+    # ------------------------------------------------------------------
+
+    def ensure_work_item(self, pg_id: int, project_id: int, **fields) -> str:
+        """MERGE WorkItem by pg_id. Creates if missing, updates if exists."""
+        now = datetime.now(timezone.utc).isoformat()
+        props = {k: v for k, v in fields.items() if v is not None}
+        props["updated_at"] = now
+        with self._session() as session:
+            result = session.run(
+                """
+                MERGE (wi:WorkItem {pg_id: $pg_id})
+                ON CREATE SET wi.uuid = $uuid, wi.project_id = $pid,
+                              wi.created_at = $now, wi += $props
+                ON MATCH SET  wi += $props
+                RETURN wi.uuid AS uuid
+                """,
+                pg_id=pg_id,
+                uuid=str(uuid.uuid4()),
+                pid=project_id,
+                now=now,
+                props=props,
+            )
+            return result.single()["uuid"]
+
+    def ensure_task(self, pg_id: int, project_id: int, **fields) -> str:
+        """MERGE Task by pg_id. Creates if missing, updates if exists."""
+        now = datetime.now(timezone.utc).isoformat()
+        props = {k: v for k, v in fields.items() if v is not None}
+        props["updated_at"] = now
+        with self._session() as session:
+            result = session.run(
+                """
+                MERGE (tk:Task {pg_id: $pg_id})
+                ON CREATE SET tk.uuid = $uuid, tk.project_id = $pid,
+                              tk.created_at = $now, tk += $props
+                ON MATCH SET  tk += $props
+                RETURN tk.uuid AS uuid
+                """,
+                pg_id=pg_id,
+                uuid=str(uuid.uuid4()),
+                pid=project_id,
+                now=now,
+                props=props,
+            )
+            return result.single()["uuid"]
+
+    def ensure_thinking_sequence(self, pg_id: int, project_id: int, **fields) -> str:
+        """MERGE ThinkingSequence by pg_id."""
+        now = datetime.now(timezone.utc).isoformat()
+        props = {k: v for k, v in fields.items() if v is not None}
+        props["updated_at"] = now
+        with self._session() as session:
+            result = session.run(
+                """
+                MERGE (ts:ThinkingSequence {pg_id: $pg_id})
+                ON CREATE SET ts.uuid = $uuid, ts.project_id = $pid,
+                              ts.created_at = $now, ts += $props
+                ON MATCH SET  ts += $props
+                RETURN ts.uuid AS uuid
+                """,
+                pg_id=pg_id,
+                uuid=str(uuid.uuid4()),
+                pid=project_id,
+                now=now,
+                props=props,
+            )
+            return result.single()["uuid"]
+
+    def ensure_thought(self, pg_id: int, sequence_pg_id: int, **fields) -> str:
+        """MERGE Thought by pg_id and link to parent sequence."""
+        now = datetime.now(timezone.utc).isoformat()
+        props = {k: v for k, v in fields.items() if v is not None}
+        props["updated_at"] = now
+        with self._session() as session:
+            result = session.run(
+                """
+                MERGE (t:Thought {pg_id: $pg_id})
+                ON CREATE SET t.uuid = $uuid, t.created_at = $now, t += $props
+                ON MATCH SET  t += $props
+                WITH t
+                OPTIONAL MATCH (ts:ThinkingSequence {pg_id: $seq_pg_id})
+                WHERE ts IS NOT NULL
+                MERGE (ts)-[:CONTAINS]->(t)
+                RETURN t.uuid AS uuid
+                """,
+                pg_id=pg_id,
+                uuid=str(uuid.uuid4()),
+                seq_pg_id=sequence_pg_id,
+                now=now,
+                props=props,
+            )
+            return result.single()["uuid"]
+
     def get_knowledge_graph_visualization(
         self,
         project_id: int | None = None,

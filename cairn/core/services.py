@@ -13,6 +13,7 @@ from cairn.core.clustering import ClusterEngine
 from cairn.core.conversations import ConversationManager
 from cairn.core.consolidation import ConsolidationEngine
 from cairn.core.event_bus import EventBus
+from cairn.core.event_dispatcher import EventDispatcher
 from cairn.core.drift import DriftDetector
 from cairn.core.enrichment import Enricher
 from cairn.core.extraction import KnowledgeExtractor
@@ -75,6 +76,7 @@ class Services:
     workspace_manager: WorkspaceManager
     work_item_manager: WorkItemManager
     conversation_manager: ConversationManager
+    event_dispatcher: EventDispatcher | None
     analytics_tracker: UsageTracker | None
     rollup_worker: RollupWorker | None
     analytics_engine: AnalyticsQueryEngine | None
@@ -184,6 +186,19 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     )
     project_manager = ProjectManager(db)
 
+    # Event bus — created early so managers can publish events
+    event_bus = EventBus(db, project_manager)
+
+    # Register graph projection listener if graph is available
+    if graph_provider:
+        from cairn.listeners.graph_projection import GraphProjectionListener
+        _graph_listener = GraphProjectionListener(graph_provider, db)
+        _graph_listener.register(event_bus)
+        logger.info("GraphProjectionListener registered with EventBus")
+
+    # Event dispatcher — background delivery worker (started in _start_workers)
+    event_dispatcher = EventDispatcher(db, event_bus)
+
     # RRF search engine (core signal fusion)
     rrf_engine = SearchEngine(
         db, embedding, llm=llm_fast, capabilities=capabilities,
@@ -239,10 +254,11 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         search_engine=unified_search,
         cluster_engine=ClusterEngine(db, embedding, llm=llm_fast),
         project_manager=project_manager,
-        task_manager=TaskManager(db, graph=graph_provider),
+        task_manager=TaskManager(db, graph=graph_provider, event_bus=event_bus),
         work_item_manager=WorkItemManager(
             db, embedding, graph=graph_provider,
             knowledge_extractor=knowledge_extractor,
+            event_bus=event_bus,
         ),
         thinking_engine=ThinkingEngine(
             db,
@@ -250,11 +266,13 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
             knowledge_extractor=knowledge_extractor,
             embedding=embedding,
             thought_extraction=capabilities.thought_extraction,
+            event_bus=event_bus,
         ),
         session_synthesizer=SessionSynthesizer(db, llm=llm_fast, capabilities=capabilities),
         consolidation_engine=ConsolidationEngine(db, embedding, llm=llm_fast, capabilities=capabilities),
         cairn_manager=None,  # removed in v0.37.0
-        event_bus=EventBus(db, project_manager),
+        event_bus=event_bus,
+        event_dispatcher=event_dispatcher,
         drift_detector=DriftDetector(db),
         message_manager=(_msg_mgr := MessageManager(db)),
         ingest_pipeline=IngestPipeline(db, project_manager, memory_store, llm_fast, config),

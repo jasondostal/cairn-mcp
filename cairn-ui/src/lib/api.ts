@@ -112,6 +112,7 @@ export interface Status {
   };
   llm_capabilities: string[];
   digest?: DigestInfo;
+  graph_backend?: "neo4j" | null;
 }
 
 export interface Settings {
@@ -777,6 +778,11 @@ export const api = {
     post<Task>("/tasks", body),
 
   taskComplete: (id: number) => post<{ status: string }>(`/tasks/${id}/complete`, {}),
+
+  taskPromote: (id: number) =>
+    post<{ action: string; task_id: number; work_item: { id: number; short_id: string; title: string; status: string } }>(
+      `/tasks/${id}/promote`, {},
+    ),
 
   thinking: (project?: string, opts?: { status?: string; limit?: string; offset?: string }) =>
     get<Paginated<ThinkingSequence>>("/thinking", { ...(project ? { project } : {}), ...opts }),

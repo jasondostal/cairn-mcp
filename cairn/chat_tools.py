@@ -262,8 +262,8 @@ class ChatToolExecutor:
 
         # Trail (recent graph activity)
         try:
-            if self.svc.graph:
-                trail = self.svc.graph.recent_activity(
+            if self.svc.graph_provider:
+                trail = self.svc.graph_provider.recent_activity(
                     project=project, limit=10,
                 )
                 sections["trail"] = trail

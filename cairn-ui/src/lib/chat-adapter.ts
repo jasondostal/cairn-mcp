@@ -49,6 +49,10 @@ interface ToolCallAccumulator {
 let _conversationId: number | null = null;
 /** Project scope — limits tool context to a specific project. */
 let _projectScope: string | null = null;
+/** Callback when a conversation is auto-created during run(). */
+let _onConversationCreated: ((id: number) => void) | null = null;
+/** Callback when streaming completes (for sidebar refresh). */
+let _onStreamComplete: (() => void) | null = null;
 
 export function setConversationId(id: number | null) {
   _conversationId = id;
@@ -62,11 +66,37 @@ export function setProjectScope(project: string | null) {
   _projectScope = project;
 }
 
+export function setOnConversationCreated(cb: ((id: number) => void) | null) {
+  _onConversationCreated = cb;
+}
+
+export function setOnStreamComplete(cb: (() => void) | null) {
+  _onStreamComplete = cb;
+}
+
 export const cairnChatAdapter: ChatModelAdapter = {
   async *run({
     messages,
     abortSignal,
   }: ChatModelRunOptions): AsyncGenerator<ChatModelRunResult> {
+    // Auto-create conversation if none active (fixes race condition with onFirstMessage)
+    if (_conversationId === null) {
+      try {
+        const convRes = await fetch(`${BASE}/chat/conversations`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project: _projectScope || undefined }),
+        });
+        if (convRes.ok) {
+          const conv = await convRes.json();
+          _conversationId = conv.id;
+          _onConversationCreated?.(conv.id);
+        }
+      } catch {
+        // Continue without conversation tracking
+      }
+    }
+
     const res = await fetch(`${BASE}/chat/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -176,6 +206,9 @@ export const cairnChatAdapter: ChatModelAdapter = {
 
     // Final yield with complete state
     yield buildResult(textAccumulator, toolCalls, model);
+
+    // Notify page that streaming is done (for sidebar refresh)
+    _onStreamComplete?.();
   },
 };
 

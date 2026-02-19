@@ -10,6 +10,8 @@ import {
   cairnChatAdapter,
   setConversationId,
   setProjectScope,
+  setOnConversationCreated,
+  setOnStreamComplete,
 } from "@/lib/chat-adapter";
 import { api, type Conversation, type ChatMessage, type Project } from "@/lib/api";
 import { ChatThread } from "@/components/chat/thread";
@@ -84,18 +86,6 @@ export default function ChatPage() {
   const runtimeRef = useRef(runtime);
   runtimeRef.current = runtime;
 
-  // Create a new conversation on the backend, set it active
-  const createNewConversation = useCallback(async () => {
-    try {
-      const conv = await api.createConversation({});
-      setActiveConvId(conv.id);
-      setConversationId(conv.id);
-      return conv;
-    } catch {
-      return null;
-    }
-  }, []);
-
   const handleNewChat = useCallback(() => {
     setSidebarRefreshKey((k) => k + 1);
     setActiveConvId(null);
@@ -121,6 +111,20 @@ export default function ChatPage() {
     [],
   );
 
+  // Wire up adapter callbacks for conversation auto-creation and sidebar refresh
+  useEffect(() => {
+    setOnConversationCreated((id) => {
+      setActiveConvId(id);
+    });
+    setOnStreamComplete(() => {
+      setSidebarRefreshKey((k) => k + 1);
+    });
+    return () => {
+      setOnConversationCreated(null);
+      setOnStreamComplete(null);
+    };
+  }, []);
+
   // Auto-create conversation on first message if none active
   useEffect(() => {
     if (!activeConvId) {
@@ -142,16 +146,6 @@ export default function ChatPage() {
     return () => document.removeEventListener("keydown", handleKey);
   }, [handleNewChat]);
 
-  // When user sends first message without a conversation, create one
-  const ensureConversation = useCallback(async () => {
-    if (!activeConvId) {
-      const conv = await createNewConversation();
-      if (conv) {
-        setActiveConvId(conv.id);
-        setConversationId(conv.id);
-      }
-    }
-  }, [activeConvId, createNewConversation]);
 
   return (
     <div className="flex h-full -m-4 md:-m-6">
@@ -216,7 +210,7 @@ export default function ChatPage() {
 
           {/* Thread */}
           <div className="flex-1 min-h-0">
-            <ChatThread onFirstMessage={ensureConversation} />
+            <ChatThread />
           </div>
         </AssistantRuntimeProvider>
       </div>

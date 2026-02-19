@@ -2,6 +2,7 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { useFetch } from "@/lib/use-fetch";
+import { api } from "@/lib/api";
 import type { WorkItem, WorkItemStatus, Paginated } from "@/lib/api";
 import {
   Kanban,
@@ -88,12 +89,12 @@ function Stat({
 
 export function OperationalStrip() {
   const { data: workItems } = useFetch<Paginated<WorkItem>>(
-    () => fetch("/api/work-items?limit=200").then((r) => r.json()),
+    () => api.workItems({ limit: "100" }),
     [],
   );
 
   const { data: gated } = useFetch<GatedResponse>(
-    () => fetch("/api/work-items/gated?limit=1").then((r) => r.json()),
+    () => api.workItemsGated({ limit: "1" }),
     [],
   );
 

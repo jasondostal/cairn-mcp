@@ -145,12 +145,35 @@ class UsageTracker:
 _SENTINEL = object()
 
 
+def _find_db(args):
+    """Find Database instance from decorated function args.
+
+    Handles both patterns:
+    - Service method: args[0] is self, which has self.db
+    - Standalone function: args[0] might be the Database directly
+    """
+    if not args:
+        return None
+    first = args[0]
+    # Service method: self.db
+    db = getattr(first, "db", None)
+    if db is not None and hasattr(db, "release_if_held"):
+        return db
+    # Standalone function with db as first arg
+    if hasattr(first, "release_if_held"):
+        return first
+    return None
+
+
 def track_operation(operation_name: str, tracker: UsageTracker | None = _SENTINEL):
-    """Decorator that records operation invocations as UsageEvents.
+    """Decorator that records operation invocations and manages DB connections.
 
     Applied to core service methods so all transports (MCP, REST, CLI)
-    are tracked. Uses the module-level _analytics_tracker singleton
-    unless an explicit tracker is passed (useful for tests).
+    are tracked uniformly. Also ensures DB connections are released after
+    every operation — the primary defense against connection pool exhaustion.
+
+    Uses the module-level _analytics_tracker singleton unless an explicit
+    tracker is passed (useful for tests).
 
     At decoration time, inspects the function signature to find the
     index of 'project' and 'session_name' parameters so they can be
@@ -168,7 +191,13 @@ def track_operation(operation_name: str, tracker: UsageTracker | None = _SENTINE
             # Resolve which tracker to use
             active_tracker = tracker if tracker is not _SENTINEL else _analytics_tracker
             if active_tracker is None:
-                return func(*args, **kwargs)
+                # No analytics — still need connection cleanup
+                try:
+                    return func(*args, **kwargs)
+                finally:
+                    db = _find_db(args)
+                    if db is not None:
+                        db.release_if_held()
 
             t0 = time.monotonic()
             success = True
@@ -220,6 +249,14 @@ def track_operation(operation_name: str, tracker: UsageTracker | None = _SENTINE
                     success=success,
                     error_message=error_msg,
                 ))
+
+                # Release DB connection after all tracking work is done.
+                # This is the core defense against pool exhaustion — every
+                # service method returns its connection regardless of entry
+                # point (MCP, REST, CLI, agent orchestration).
+                db = _find_db(args)
+                if db is not None:
+                    db.release_if_held()
 
         return wrapper
     return decorator

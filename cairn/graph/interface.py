@@ -424,3 +424,22 @@ class GraphProvider(ABC):
     @abstractmethod
     def work_item_ready_queue(self, project_id: int, limit: int = 10) -> list[dict]:
         """Return unblocked, unassigned work items ordered by priority."""
+
+    # -- Idempotent ensure methods (event-driven projection) --
+
+    @abstractmethod
+    def ensure_work_item(self, pg_id: int, project_id: int, **fields) -> str:
+        """MERGE a WorkItem node by pg_id. Creates if missing, updates if exists.
+        Returns the node's uuid."""
+
+    @abstractmethod
+    def ensure_task(self, pg_id: int, project_id: int, **fields) -> str:
+        """MERGE a Task node by pg_id. Returns uuid."""
+
+    @abstractmethod
+    def ensure_thinking_sequence(self, pg_id: int, project_id: int, **fields) -> str:
+        """MERGE a ThinkingSequence node by pg_id. Returns uuid."""
+
+    @abstractmethod
+    def ensure_thought(self, pg_id: int, sequence_pg_id: int, **fields) -> str:
+        """MERGE a Thought node by pg_id, link to parent sequence. Returns uuid."""

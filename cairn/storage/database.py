@@ -133,13 +133,15 @@ class Database:
         self._release()
 
     def release_if_held(self) -> None:
-        """Release the current thread's connection if held with an open transaction.
+        """Unconditionally release the current thread's connection to the pool.
 
-        Call at API request boundaries to prevent connection pool exhaustion.
-        Read-only endpoints don't call commit/rollback, leaving connections
-        checked out with stale transactions. This cleans them up.
+        Called automatically by @track_operation after every service method,
+        ensuring connections are returned regardless of entry point (MCP, REST,
+        CLI, agent orchestration). Also called as a safety net by the REST API
+        after each request.
 
-        No-op if no connection is held or if already released by commit/rollback.
+        Rolls back any open transaction before releasing. No-op if no
+        connection is held or if already released by commit/rollback.
         """
         existing = getattr(self._local, "conn", None)
         if existing is None or existing.closed:
@@ -153,7 +155,7 @@ class Database:
                 existing.rollback()
             except Exception:
                 pass
-            self._release()
+        self._release()
 
     def run_migrations(self) -> None:
         """Apply all pending migrations in order."""

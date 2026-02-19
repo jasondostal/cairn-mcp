@@ -20,6 +20,8 @@ CONTEXT_SIZES = {
     "us.meta.llama3-2-90b-instruct-v1:0": 128000,
     "us.meta.llama3-2-11b-instruct-v1:0": 128000,
     "anthropic.claude-3-5-sonnet-20241022-v2:0": 200000,
+    "anthropic.claude-3-5-haiku-20241022-v1:0": 200000,
+    "us.anthropic.claude-3-5-haiku-20241022-v1:0": 200000,
     "us.anthropic.claude-sonnet-4-5-20250929-v1:0": 200000,
     "openai.gpt-oss-120b-1:0": 128000,
     "moonshotai.kimi-k2.5": 128000,
