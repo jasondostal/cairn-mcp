@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -45,6 +46,9 @@ class ClaudeCodeConfig:
     max_budget_usd: float = 10.0        # --max-budget-usd (0 = no limit)
     cairn_mcp_url: str = ""             # Cairn MCP URL for self-service context
     default_risk_tier: int = 0          # default risk tier for new sessions
+    ssh_host: str = ""                  # Remote host (empty = local execution)
+    ssh_user: str = ""                  # SSH user (empty = current user)
+    ssh_key_path: str = ""              # Path to SSH private key (empty = default)
 
 
 # ---------------------------------------------------------------------------
@@ -90,21 +94,30 @@ class ClaudeCodeBackend(WorkspaceBackend):
         return "claude_code"
 
     def is_healthy(self) -> bool:
-        return shutil.which("claude") is not None
+        try:
+            result = self._run_cmd(["claude", "--version"], timeout=10)
+            return result.returncode == 0
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            return False
 
     def health(self) -> BackendHealth:
-        claude_path = shutil.which("claude")
-        if not claude_path:
-            return BackendHealth(healthy=False, extra={"error": "claude CLI not found in PATH"})
         try:
-            result = subprocess.run(
-                ["claude", "--version"],
-                capture_output=True, text=True, timeout=10,
-            )
+            result = self._run_cmd(["claude", "--version"], timeout=10)
+            if result.returncode != 0:
+                return BackendHealth(healthy=False, extra={
+                    "error": result.stderr.strip() or "claude CLI exited non-zero",
+                    "mode": "ssh" if self._config.ssh_host else "local",
+                })
             version = result.stdout.strip() or result.stderr.strip()
-            return BackendHealth(healthy=True, version=version)
+            return BackendHealth(healthy=True, version=version, extra={
+                "mode": "ssh" if self._config.ssh_host else "local",
+                "ssh_host": self._config.ssh_host or None,
+            })
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
-            return BackendHealth(healthy=False, extra={"error": str(exc)})
+            return BackendHealth(healthy=False, extra={
+                "error": str(exc),
+                "mode": "ssh" if self._config.ssh_host else "local",
+            })
 
     def create_session(self, *, title: str | None = None, parent_id: str | None = None) -> AgentSession:
         session_id = f"cc-{int(time.time() * 1000)}"
@@ -150,16 +163,9 @@ class ClaudeCodeBackend(WorkspaceBackend):
                 meta["model"] = resolved_model
 
         args = self._build_cli_args(text, risk_tier=tier, claude_session_id=claude_sid, model=resolved_model)
-        cwd = self._config.working_dir or None
 
         try:
-            result = subprocess.run(
-                args,
-                capture_output=True,
-                text=True,
-                cwd=cwd,
-                timeout=600,  # 10 minute timeout
-            )
+            result = self._run_cmd(args, timeout=600)
         except subprocess.TimeoutExpired:
             raise WorkspaceBackendError(
                 f"Claude CLI timed out after 600s for session {session_id}",
@@ -250,6 +256,67 @@ class ClaudeCodeBackend(WorkspaceBackend):
         return True
 
     # -- Internal ------------------------------------------------------------
+
+    def _run_cmd(
+        self,
+        args: list[str],
+        *,
+        timeout: int = 600,
+    ) -> subprocess.CompletedProcess:
+        """Execute a command locally or via SSH.
+
+        When ``ssh_host`` is configured, wraps the command in an SSH call.
+        MCP config is written as a remote temp file inline in the SSH command.
+        """
+        if not self._config.ssh_host:
+            # Local execution
+            cwd = self._config.working_dir or None
+            return subprocess.run(
+                args, capture_output=True, text=True, cwd=cwd, timeout=timeout,
+            )
+
+        # SSH execution — build remote command string
+        ssh_target = self._config.ssh_host
+        if self._config.ssh_user:
+            ssh_target = f"{self._config.ssh_user}@{self._config.ssh_host}"
+
+        # Rewrite --mcp-config to use a remote temp file
+        remote_args = list(args)
+        mcp_preamble = ""
+        for i, arg in enumerate(remote_args):
+            if arg == "--mcp-config" and i + 1 < len(remote_args):
+                local_path = remote_args[i + 1]
+                # Read the local temp file content and write it remotely
+                try:
+                    mcp_content = Path(local_path).read_text()
+                    remote_path = f"/tmp/cairn-mcp-{int(time.time() * 1000)}.json"
+                    mcp_preamble = f"cat > {remote_path} << 'MCPEOF'\n{mcp_content}\nMCPEOF\n"
+                    remote_args[i + 1] = remote_path
+                except OSError:
+                    pass
+                break
+
+        # Build the remote shell command.
+        # Source .profile so ~/.local/bin (Claude CLI) is on PATH for non-interactive SSH.
+        remote_shell_cmd = shlex.join(remote_args)
+        if self._config.working_dir:
+            remote_shell_cmd = f"cd {shlex.quote(self._config.working_dir)} && {remote_shell_cmd}"
+        if mcp_preamble:
+            remote_shell_cmd = mcp_preamble + remote_shell_cmd
+        remote_shell_cmd = f"source ~/.profile 2>/dev/null; {remote_shell_cmd}"
+
+        ssh_args = [
+            "ssh",
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=10",
+        ]
+        if self._config.ssh_key_path:
+            ssh_args.extend(["-i", self._config.ssh_key_path])
+        ssh_args.extend([ssh_target, remote_shell_cmd])
+
+        return subprocess.run(
+            ssh_args, capture_output=True, text=True, timeout=timeout,
+        )
 
     def _build_cli_args(
         self,

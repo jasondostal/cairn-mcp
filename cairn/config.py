@@ -157,6 +157,9 @@ class WorkspaceConfig:
     claude_code_max_turns: int = 25       # --max-turns
     claude_code_max_budget: float = 10.0  # --max-budget-usd
     claude_code_mcp_url: str = ""         # Cairn MCP URL for self-service context
+    claude_code_ssh_host: str = ""        # SSH host for remote execution (empty = local)
+    claude_code_ssh_user: str = ""        # SSH user (empty = current user)
+    claude_code_ssh_key: str = ""         # Path to SSH private key (empty = default)
 
 
 @dataclass(frozen=True)
@@ -259,6 +262,7 @@ EDITABLE_KEYS: set[str] = {
     "workspace.default_agent", "workspace.claude_code_enabled",
     "workspace.claude_code_working_dir", "workspace.claude_code_max_turns",
     "workspace.claude_code_max_budget", "workspace.claude_code_mcp_url",
+    "workspace.claude_code_ssh_host", "workspace.claude_code_ssh_user", "workspace.claude_code_ssh_key",
     # Budget
     "budget.rules", "budget.search", "budget.recall",
     "budget.cairn_stack", "budget.insights", "budget.workspace",
@@ -508,6 +512,9 @@ _ENV_MAP: dict[str, str] = {
     "workspace.claude_code_max_turns": "CAIRN_CLAUDE_CODE_MAX_TURNS",
     "workspace.claude_code_max_budget": "CAIRN_CLAUDE_CODE_MAX_BUDGET",
     "workspace.claude_code_mcp_url": "CAIRN_CLAUDE_CODE_MCP_URL",
+    "workspace.claude_code_ssh_host": "CAIRN_CLAUDE_CODE_SSH_HOST",
+    "workspace.claude_code_ssh_user": "CAIRN_CLAUDE_CODE_SSH_USER",
+    "workspace.claude_code_ssh_key": "CAIRN_CLAUDE_CODE_SSH_KEY",
     "budget.rules": "CAIRN_BUDGET_RULES",
     "budget.search": "CAIRN_BUDGET_SEARCH",
     "budget.recall": "CAIRN_BUDGET_RECALL",
@@ -656,6 +663,9 @@ def load_config() -> Config:
             claude_code_max_turns=int(os.getenv("CAIRN_CLAUDE_CODE_MAX_TURNS", "25")),
             claude_code_max_budget=float(os.getenv("CAIRN_CLAUDE_CODE_MAX_BUDGET", "10.0")),
             claude_code_mcp_url=os.getenv("CAIRN_CLAUDE_CODE_MCP_URL", ""),
+            claude_code_ssh_host=os.getenv("CAIRN_CLAUDE_CODE_SSH_HOST", ""),
+            claude_code_ssh_user=os.getenv("CAIRN_CLAUDE_CODE_SSH_USER", ""),
+            claude_code_ssh_key=os.getenv("CAIRN_CLAUDE_CODE_SSH_KEY", ""),
         ),
         budget=BudgetConfig(
             rules=int(os.getenv("CAIRN_BUDGET_RULES", "3000")),

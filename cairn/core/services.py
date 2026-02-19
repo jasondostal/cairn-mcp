@@ -254,6 +254,9 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
             max_turns=config.workspace.claude_code_max_turns,
             max_budget_usd=config.workspace.claude_code_max_budget,
             cairn_mcp_url=config.workspace.claude_code_mcp_url,
+            ssh_host=config.workspace.claude_code_ssh_host,
+            ssh_user=config.workspace.claude_code_ssh_user,
+            ssh_key_path=config.workspace.claude_code_ssh_key,
         )
         workspace_backends["claude_code"] = ClaudeCodeBackend(cc_config)
         logger.info("Claude Code workspace backend enabled")
