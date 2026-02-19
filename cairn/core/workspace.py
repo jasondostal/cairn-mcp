@@ -695,6 +695,20 @@ class WorkspaceManager:
             mem_lines = [f"- [{c.get('type', 'note')}] {c.get('summary', 'no summary')}" for c in context]
             sections.append("\n## Linked Context\n" + "\n".join(mem_lines))
 
+        # Gate history — so re-dispatched agents know what was already decided
+        gate_response = wi.get("gate_response")
+        gate_data = wi.get("gate_data")
+        if gate_response:
+            sections.append("\n## Prior Gate (Resolved)")
+            if gate_data and gate_data.get("question"):
+                sections.append(f"**Question asked:** {gate_data['question']}")
+                if gate_data.get("options"):
+                    for opt in gate_data["options"]:
+                        sections.append(f"  - {opt}")
+            resp_text = gate_response.get("text", str(gate_response)) if isinstance(gate_response, dict) else str(gate_response)
+            sections.append(f"**Human answered:** {resp_text}")
+            sections.append("Do NOT re-ask this question. Proceed with the chosen option.")
+
         sections.append("\n## Instructions")
         sections.append("- Update this work item's status as you progress (claim → in_progress → done)")
         sections.append("- Use heartbeat to report progress")
