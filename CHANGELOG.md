@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Multi-backend agent orchestration** — workspace system now supports multiple execution
+  backends beyond OpenCode. `WorkspaceBackend` ABC (`cairn/integrations/interface.py`) defines
+  the contract; backends register by name and are resolved per-session from the database.
+- **Claude Code backend** — `ClaudeCodeBackend` (`cairn/integrations/claude_code.py`) spawns
+  `claude -p` as a subprocess for autonomous agent execution using Opus 4.6. Features session
+  resumption via `--resume`, MCP config generation for Cairn self-service context, and risk
+  tier → permission mapping (4 tiers: patrol/caution/action/critical).
+- **OpenCode adapter** — `OpenCodeBackend` wraps the existing `OpenCodeClient` as a thin
+  adapter implementing `WorkspaceBackend`. Zero changes to `OpenCodeClient` — pure addition.
+- **Backend selection at dispatch time** — `POST /workspace/sessions` accepts optional `backend`
+  and `risk_tier` parameters. `GET /workspace/backends` lists configured backends with
+  capabilities and health status.
+- **Backend selector in workspace UI** — create session dialog shows a backend dropdown when
+  multiple backends are configured (labels: "OpenCode (OSS models)" / "Claude Code (Opus 4.6)").
+  Session sidebar shows CC/OC badges. Health footer shows per-backend status.
+- **DB migration 028** — renames `opencode_session_id` → `backend_session_id`, adds `backend`
+  and `backend_metadata` columns to `workspace_sessions`. Non-destructive, defaults existing
+  rows to `opencode`.
+- **New config fields** — `WorkspaceConfig` expanded with `default_backend`,
+  `claude_code_enabled`, `claude_code_working_dir`, `claude_code_max_turns`,
+  `claude_code_max_budget`, `claude_code_mcp_url`. Six new env vars
+  (`CAIRN_WORKSPACE_BACKEND`, `CAIRN_CLAUDE_CODE_*`).
+
+### Changed
+- **WorkspaceManager refactored** — accepts `dict[str, WorkspaceBackend]` instead of
+  `OpenCodeClient | None`. Resolves backend per-session from DB via `_backend_for_session()`.
+  Claude Code sessions skip prompt-based context injection (uses MCP self-service) and the
+  3-second OpenCode init delay.
+- **Services container** — new `workspace_backends` field on `Services` dataclass. Backends
+  built from config in `create_services()` and passed to `WorkspaceManager`.
+
 ## [0.52.0] — 2026-02-19 "Event Horizon"
 
 ### Added

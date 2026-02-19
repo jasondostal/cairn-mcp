@@ -7,6 +7,7 @@ import {
   type WorkspaceSession,
   type WorkspaceMessage,
   type WorkspaceAgent,
+  type WorkspaceBackendInfo,
   type Project,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -51,12 +52,12 @@ function NotConfiguredState() {
       <div>
         <h2 className="text-xl font-semibold mb-2">Workspace not configured</h2>
         <p className="text-sm text-muted-foreground mb-4">
-          Connect an OpenCode worker to enable the agent workspace.
+          Configure an agent backend to enable the workspace.
         </p>
       </div>
       <div className="text-left w-full space-y-4">
         <div>
-          <h3 className="text-sm font-medium mb-1">Quick start</h3>
+          <h3 className="text-sm font-medium mb-1">OpenCode (OSS models)</h3>
           <pre className="text-xs bg-muted rounded p-3 overflow-x-auto">
 {`# Start OpenCode in headless mode
 opencode serve --hostname 0.0.0.0 --port 4096
@@ -64,6 +65,17 @@ opencode serve --hostname 0.0.0.0 --port 4096
 # Set Cairn env vars
 CAIRN_OPENCODE_URL=http://localhost:4096
 CAIRN_OPENCODE_PASSWORD=your-secret`}
+          </pre>
+        </div>
+        <div>
+          <h3 className="text-sm font-medium mb-1">Claude Code (Opus 4.6)</h3>
+          <pre className="text-xs bg-muted rounded p-3 overflow-x-auto">
+{`# Install Claude Code CLI
+# https://docs.anthropic.com/en/docs/claude-code
+
+# Set Cairn env vars
+CAIRN_CLAUDE_CODE_ENABLED=true
+CAIRN_CLAUDE_CODE_WORKING_DIR=/path/to/project`}
           </pre>
         </div>
       </div>
@@ -126,6 +138,17 @@ function SessionSidebar({
                 <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5">
                   {s.project}
                 </Badge>
+                {s.backend && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[9px] px-1 py-0 h-3.5",
+                      s.backend === "claude_code" ? "border-violet-500/50 text-violet-500" : "border-emerald-500/50 text-emerald-500"
+                    )}
+                  >
+                    {s.backend === "claude_code" ? "CC" : "OC"}
+                  </Badge>
+                )}
               </div>
             </div>
             <button
@@ -140,24 +163,35 @@ function SessionSidebar({
           </div>
         ))}
       </div>
-      <div className="px-3 py-2 border-t border-border flex items-center gap-1.5">
-        {health?.status === "healthy" ? (
-          <>
-            <Wifi className="h-3 w-3 text-green-500" />
-            <span className="text-[10px] text-green-500">
-              OpenCode {health.version || ""}
-            </span>
-          </>
-        ) : health?.status === "not_configured" ? (
-          <>
+      <div className="px-3 py-2 border-t border-border space-y-1">
+        {health?.status === "not_configured" ? (
+          <div className="flex items-center gap-1.5">
             <WifiOff className="h-3 w-3 text-muted-foreground" />
             <span className="text-[10px] text-muted-foreground">Not configured</span>
-          </>
+          </div>
+        ) : health?.backends ? (
+          Object.entries(health.backends).map(([name, info]) => (
+            <div key={name} className="flex items-center gap-1.5">
+              {info.status === "healthy" ? (
+                <Wifi className="h-3 w-3 text-green-500" />
+              ) : (
+                <WifiOff className="h-3 w-3 text-red-500" />
+              )}
+              <span className={cn("text-[10px]", info.status === "healthy" ? "text-green-500" : "text-red-500")}>
+                {name === "claude_code" ? "Claude Code" : "OpenCode"} {info.version || ""}
+              </span>
+            </div>
+          ))
+        ) : health?.status === "healthy" ? (
+          <div className="flex items-center gap-1.5">
+            <Wifi className="h-3 w-3 text-green-500" />
+            <span className="text-[10px] text-green-500">Connected</span>
+          </div>
         ) : (
-          <>
+          <div className="flex items-center gap-1.5">
             <WifiOff className="h-3 w-3 text-red-500" />
             <span className="text-[10px] text-red-500">Disconnected</span>
-          </>
+          </div>
         )}
       </div>
     </div>
@@ -172,19 +206,24 @@ function CreateSessionDialog({
   onClose,
   onCreated,
   agents,
+  backends,
 }: {
   open: boolean;
   onClose: () => void;
   onCreated: (session: WorkspaceSession) => void;
   agents: WorkspaceAgent[];
+  backends: WorkspaceBackendInfo[];
 }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState("");
   const [task, setTask] = useState("");
   const [agent, setAgent] = useState("");
+  const [selectedBackend, setSelectedBackend] = useState("");
   const [contextMode, setContextMode] = useState<"focused" | "full">("focused");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const showBackendSelector = backends.length > 1;
 
   useEffect(() => {
     if (open) {
@@ -196,6 +235,7 @@ function CreateSessionDialog({
     setProject("");
     setTask("");
     setAgent("");
+    setSelectedBackend("");
     setContextMode("focused");
     setError("");
   };
@@ -214,6 +254,7 @@ function CreateSessionDialog({
         task: task || undefined,
         agent: agent || undefined,
         context_mode: contextMode,
+        backend: selectedBackend || undefined,
       });
       if (session.error) {
         setError(session.error);
@@ -227,6 +268,12 @@ function CreateSessionDialog({
     } finally {
       setSaving(false);
     }
+  };
+
+  const backendLabel = (name: string) => {
+    if (name === "claude_code") return "Claude Code (Opus 4.6)";
+    if (name === "opencode") return "OpenCode (OSS models)";
+    return name;
   };
 
   return (
@@ -259,6 +306,27 @@ function CreateSessionDialog({
               placeholder="What should the agent work on?"
             />
           </div>
+
+          {showBackendSelector && (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Backend</label>
+              <SingleSelect
+                options={[
+                  { value: "", label: "Default" },
+                  ...backends
+                    .filter((b) => b.status === "healthy")
+                    .map((b) => ({
+                      value: b.name,
+                      label: `${backendLabel(b.name)}${b.is_default ? " (default)" : ""}`,
+                    })),
+                ]}
+                value={selectedBackend}
+                onValueChange={setSelectedBackend}
+                className="w-full h-9"
+              />
+            </div>
+          )}
+
           <div>
             <label className="text-xs font-medium text-muted-foreground">Agent</label>
             <SingleSelect
@@ -663,6 +731,7 @@ export default function WorkspacePage() {
   const [health, setHealth] = useState<WorkspaceHealth | null>(null);
   const [sessions, setSessions] = useState<WorkspaceSession[]>([]);
   const [agents, setAgents] = useState<WorkspaceAgent[]>([]);
+  const [backends, setBackends] = useState<WorkspaceBackendInfo[]>([]);
   const [activeSession, setActiveSession] = useState<WorkspaceSession | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [diffDialogOpen, setDiffDialogOpen] = useState(false);
@@ -698,16 +767,25 @@ export default function WorkspacePage() {
     }
   }, []);
 
+  const loadBackends = useCallback(async () => {
+    try {
+      const list = await api.workspaceBackends();
+      setBackends(list);
+    } catch {
+      // May fail if not configured
+    }
+  }, []);
+
   useEffect(() => {
     async function init() {
       const h = await loadHealth();
       if (h && h.status !== "not_configured") {
-        await Promise.all([loadSessions(), loadAgents()]);
+        await Promise.all([loadSessions(), loadAgents(), loadBackends()]);
       }
       setLoading(false);
     }
     init();
-  }, [loadHealth, loadSessions, loadAgents]);
+  }, [loadHealth, loadSessions, loadAgents, loadBackends]);
 
   const handleDelete = async (sessionId: string) => {
     try {
@@ -785,6 +863,7 @@ export default function WorkspacePage() {
         onClose={() => setDialogOpen(false)}
         onCreated={handleCreated}
         agents={agents}
+        backends={backends}
       />
 
       {activeSession && (

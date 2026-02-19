@@ -148,9 +148,15 @@ class TerminalConfig:
 
 @dataclass(frozen=True)
 class WorkspaceConfig:
-    url: str = ""                     # OpenCode headless server URL (e.g. http://worker:8080)
-    password: str = ""                # OPENCODE_SERVER_PASSWORD on the worker
-    default_agent: str = "cairn-build"  # Default agent for new sessions
+    default_backend: str = "opencode"     # which backend when not specified
+    url: str = ""                         # OpenCode headless server URL (e.g. http://worker:8080)
+    password: str = ""                    # OPENCODE_SERVER_PASSWORD on the worker
+    default_agent: str = "cairn-build"    # Default agent for new sessions
+    claude_code_enabled: bool = False     # Enable Claude Code backend
+    claude_code_working_dir: str = ""     # cwd for claude subprocess
+    claude_code_max_turns: int = 25       # --max-turns
+    claude_code_max_budget: float = 10.0  # --max-budget-usd
+    claude_code_mcp_url: str = ""         # Cairn MCP URL for self-service context
 
 
 @dataclass(frozen=True)
@@ -248,8 +254,11 @@ EDITABLE_KEYS: set[str] = {
     "terminal.backend", "terminal.max_sessions", "terminal.connect_timeout",
     # Neo4j
     "neo4j.uri", "neo4j.user", "neo4j.password", "neo4j.database",
-    # Workspace (OpenCode)
-    "workspace.url", "workspace.password", "workspace.default_agent",
+    # Workspace
+    "workspace.default_backend", "workspace.url", "workspace.password",
+    "workspace.default_agent", "workspace.claude_code_enabled",
+    "workspace.claude_code_working_dir", "workspace.claude_code_max_turns",
+    "workspace.claude_code_max_budget", "workspace.claude_code_mcp_url",
     # Budget
     "budget.rules", "budget.search", "budget.recall",
     "budget.cairn_stack", "budget.insights", "budget.workspace",
@@ -490,9 +499,15 @@ _ENV_MAP: dict[str, str] = {
     "analytics.cost_embedding_per_1k": "CAIRN_ANALYTICS_COST_EMBEDDING",
     "analytics.cost_llm_input_per_1k": "CAIRN_ANALYTICS_COST_LLM_INPUT",
     "analytics.cost_llm_output_per_1k": "CAIRN_ANALYTICS_COST_LLM_OUTPUT",
+    "workspace.default_backend": "CAIRN_WORKSPACE_BACKEND",
     "workspace.url": "CAIRN_OPENCODE_URL",
     "workspace.password": "CAIRN_OPENCODE_PASSWORD",
     "workspace.default_agent": "CAIRN_OPENCODE_DEFAULT_AGENT",
+    "workspace.claude_code_enabled": "CAIRN_CLAUDE_CODE_ENABLED",
+    "workspace.claude_code_working_dir": "CAIRN_CLAUDE_CODE_WORKING_DIR",
+    "workspace.claude_code_max_turns": "CAIRN_CLAUDE_CODE_MAX_TURNS",
+    "workspace.claude_code_max_budget": "CAIRN_CLAUDE_CODE_MAX_BUDGET",
+    "workspace.claude_code_mcp_url": "CAIRN_CLAUDE_CODE_MCP_URL",
     "budget.rules": "CAIRN_BUDGET_RULES",
     "budget.search": "CAIRN_BUDGET_SEARCH",
     "budget.recall": "CAIRN_BUDGET_RECALL",
@@ -632,9 +647,15 @@ def load_config() -> Config:
             bedrock_region=os.getenv("CAIRN_RERANKER_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1")),
         ),
         workspace=WorkspaceConfig(
+            default_backend=os.getenv("CAIRN_WORKSPACE_BACKEND", "opencode"),
             url=os.getenv("CAIRN_OPENCODE_URL", ""),
             password=os.getenv("CAIRN_OPENCODE_PASSWORD", ""),
             default_agent=os.getenv("CAIRN_OPENCODE_DEFAULT_AGENT", "cairn-build"),
+            claude_code_enabled=os.getenv("CAIRN_CLAUDE_CODE_ENABLED", "false").lower() in ("true", "1", "yes"),
+            claude_code_working_dir=os.getenv("CAIRN_CLAUDE_CODE_WORKING_DIR", ""),
+            claude_code_max_turns=int(os.getenv("CAIRN_CLAUDE_CODE_MAX_TURNS", "25")),
+            claude_code_max_budget=float(os.getenv("CAIRN_CLAUDE_CODE_MAX_BUDGET", "10.0")),
+            claude_code_mcp_url=os.getenv("CAIRN_CLAUDE_CODE_MCP_URL", ""),
         ),
         budget=BudgetConfig(
             rules=int(os.getenv("CAIRN_BUDGET_RULES", "3000")),

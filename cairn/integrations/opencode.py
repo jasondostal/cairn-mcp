@@ -541,3 +541,177 @@ class OpenCodeClient:
                 break
             time.sleep(poll_interval)
         return self.get_messages(session_id)
+
+
+# ---------------------------------------------------------------------------
+# WorkspaceBackend adapter
+# ---------------------------------------------------------------------------
+
+
+from cairn.integrations.interface import (  # noqa: E402
+    AgentInfo,
+    AgentMessage,
+    AgentSession,
+    BackendHealth,
+    WorkspaceBackend,
+    WorkspaceBackendError,
+)
+
+
+class OpenCodeBackend(WorkspaceBackend):
+    """Adapts :class:`OpenCodeClient` to the :class:`WorkspaceBackend` ABC.
+
+    Thin wrapper — delegates every operation to the underlying client and
+    translates OpenCode data types to the shared backend types.
+    """
+
+    def __init__(self, client: OpenCodeClient):
+        self._client = client
+
+    # -- Core ----------------------------------------------------------------
+
+    def backend_name(self) -> str:
+        return "opencode"
+
+    def is_healthy(self) -> bool:
+        return self._client.is_healthy()
+
+    def health(self) -> BackendHealth:
+        try:
+            h = self._client.health()
+            return BackendHealth(healthy=h.healthy, version=h.version)
+        except OpenCodeError as exc:
+            return BackendHealth(healthy=False, extra={"error": str(exc)})
+
+    def create_session(self, *, title: str | None = None, parent_id: str | None = None) -> AgentSession:
+        try:
+            s = self._client.create_session(title=title, parent_id=parent_id)
+            return self._to_agent_session(s)
+        except OpenCodeError as exc:
+            raise WorkspaceBackendError(str(exc), backend="opencode", status=exc.status) from exc
+
+    def send_message(
+        self,
+        session_id: str,
+        text: str,
+        *,
+        agent: str | None = None,
+        **kwargs: Any,
+    ) -> AgentMessage:
+        try:
+            env = self._client.send_message(session_id, text, agent=agent)
+            return AgentMessage(
+                id=env.info.id,
+                role=env.info.role,
+                parts=env.parts,
+                created_at=env.info.created_at,
+                session_id=env.info.session_id,
+            )
+        except OpenCodeError as exc:
+            raise WorkspaceBackendError(str(exc), backend="opencode", status=exc.status) from exc
+
+    def send_message_async(
+        self,
+        session_id: str,
+        text: str,
+        *,
+        agent: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        try:
+            self._client.send_message_async(session_id, text, agent=agent)
+        except OpenCodeError as exc:
+            raise WorkspaceBackendError(str(exc), backend="opencode", status=exc.status) from exc
+
+    # -- Optional (all supported) --------------------------------------------
+
+    def get_session(self, session_id: str) -> AgentSession:
+        try:
+            s = self._client.get_session(session_id)
+            return self._to_agent_session(s)
+        except OpenCodeError as exc:
+            raise WorkspaceBackendError(str(exc), backend="opencode", status=exc.status) from exc
+
+    def delete_session(self, session_id: str) -> bool:
+        try:
+            return self._client.delete_session(session_id)
+        except OpenCodeError as exc:
+            raise WorkspaceBackendError(str(exc), backend="opencode", status=exc.status) from exc
+
+    def abort_session(self, session_id: str) -> bool:
+        try:
+            return self._client.abort_session(session_id)
+        except OpenCodeError as exc:
+            raise WorkspaceBackendError(str(exc), backend="opencode", status=exc.status) from exc
+
+    def fork_session(self, session_id: str, *, message_id: str | None = None) -> AgentSession:
+        try:
+            s = self._client.fork_session(session_id, message_id=message_id)
+            return self._to_agent_session(s)
+        except OpenCodeError as exc:
+            raise WorkspaceBackendError(str(exc), backend="opencode", status=exc.status) from exc
+
+    def get_messages(self, session_id: str, *, limit: int | None = None) -> list[AgentMessage]:
+        try:
+            envelopes = self._client.get_messages(session_id, limit=limit)
+            return [
+                AgentMessage(
+                    id=env.info.id,
+                    role=env.info.role,
+                    parts=env.parts,
+                    created_at=env.info.created_at,
+                    session_id=env.info.session_id,
+                )
+                for env in envelopes
+            ]
+        except OpenCodeError as exc:
+            raise WorkspaceBackendError(str(exc), backend="opencode", status=exc.status) from exc
+
+    def get_diff(self, session_id: str) -> list[dict[str, Any]]:
+        try:
+            return self._client.get_diff(session_id)
+        except OpenCodeError as exc:
+            raise WorkspaceBackendError(str(exc), backend="opencode", status=exc.status) from exc
+
+    def list_agents(self) -> list[AgentInfo]:
+        try:
+            agents = self._client.list_agents()
+            return [
+                AgentInfo(
+                    id=a.id,
+                    name=a.name,
+                    description=a.description,
+                    model=a.model,
+                    backend="opencode",
+                )
+                for a in agents
+            ]
+        except OpenCodeError as exc:
+            raise WorkspaceBackendError(str(exc), backend="opencode", status=exc.status) from exc
+
+    # -- Capabilities --------------------------------------------------------
+
+    def supports_fork(self) -> bool:
+        return True
+
+    def supports_diff(self) -> bool:
+        return True
+
+    def supports_abort(self) -> bool:
+        return True
+
+    def supports_agents(self) -> bool:
+        return True
+
+    # -- Internal ------------------------------------------------------------
+
+    @staticmethod
+    def _to_agent_session(s: Session) -> AgentSession:
+        return AgentSession(
+            id=s.id,
+            title=s.title,
+            parent_id=s.parent_id,
+            created_at=s.created_at,
+            updated_at=s.updated_at,
+            extra=s.extra,
+        )

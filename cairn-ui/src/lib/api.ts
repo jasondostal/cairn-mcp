@@ -681,6 +681,21 @@ export interface WorkspaceHealth {
   status: "healthy" | "unhealthy" | "not_configured" | "unreachable";
   version?: string;
   error?: string;
+  backends?: Record<string, { status: string; version?: string; error?: string }>;
+}
+
+export interface WorkspaceBackendInfo {
+  name: string;
+  status: "healthy" | "unhealthy" | "unreachable";
+  version?: string;
+  error?: string;
+  is_default: boolean;
+  capabilities: {
+    fork: boolean;
+    diff: boolean;
+    abort: boolean;
+    agents: boolean;
+  };
 }
 
 export interface WorkspaceSession {
@@ -690,6 +705,7 @@ export interface WorkspaceSession {
   agent: string;
   title: string;
   task: string | null;
+  backend?: string;
   created_at: string | null;
   // From create response
   context_injected?: boolean;
@@ -718,6 +734,7 @@ export interface WorkspaceAgent {
   name: string | null;
   description: string | null;
   model: string | null;
+  backend?: string;
 }
 
 // --- Terminal types ---
@@ -878,7 +895,10 @@ export const api = {
     project: string; task?: string; message_id?: number; fork_from?: string;
     title?: string; agent?: string; inject_context?: boolean;
     context_mode?: "focused" | "full";
+    backend?: string; risk_tier?: number;
   }) => post<WorkspaceSession>("/workspace/sessions", body),
+
+  workspaceBackends: () => get<WorkspaceBackendInfo[]>("/workspace/backends"),
 
   workspaceGetSession: (sessionId: string) =>
     get<WorkspaceSession>(`/workspace/sessions/${sessionId}`),
