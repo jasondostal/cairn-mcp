@@ -312,6 +312,10 @@ class ClaudeCodeBackend(WorkspaceBackend):
         ]
         if self._config.ssh_key_path:
             ssh_args.extend(["-i", self._config.ssh_key_path])
+            # Use known_hosts from same directory as the key if it exists
+            known_hosts = Path(self._config.ssh_key_path).parent / "known_hosts"
+            if known_hosts.exists():
+                ssh_args.extend(["-o", f"UserKnownHostsFile={known_hosts}"])
         ssh_args.extend([ssh_target, remote_shell_cmd])
 
         return subprocess.run(
