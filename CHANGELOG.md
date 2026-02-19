@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.53.0] — 2026-02-19 "Totally Not Skynet"
 
 ### Added
 - **Multi-backend agent orchestration** — workspace system now supports multiple execution
@@ -40,6 +40,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `model` parameter (e.g. `claude-sonnet-4-6`). Passes `--model` to the CLI, persisted
   per-session for `--resume` continuity. UI shows a model selector when Claude Code
   backend is chosen. Lets users save Opus usage budget on lower-risk tasks.
+- **Gate history in dispatch briefing** — when a work item is re-dispatched after a gate
+  resolution, the briefing includes the original gate question, options, and the human's
+  response. Agents are explicitly told not to re-ask resolved questions, preserving
+  continuity across dispatch cycles.
+- **Slide-out chat drawer** — chat is now accessible from any page via a slide-out drawer
+  (Cmd+. / Ctrl+. to toggle). Supports project scoping, conversation persistence, and
+  all the same tool-calling capabilities as the full chat page. No need to navigate away
+  from work items or the dashboard to talk to your memory.
+- **Workspace setup guide** — dedicated `examples/workspace/README.md` with step-by-step
+  setup for Claude Code and OpenCode backends, risk tier reference, dispatch briefing
+  details, and docker compose examples.
 
 ### Fixed
 - **Claude Code MCP transport** — MCP config generation used `type: url` (Streamable HTTP)
