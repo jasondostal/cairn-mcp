@@ -1230,6 +1230,10 @@ class WorkItemManager:
                 "acceptance_criteria": item_detail.get("acceptance_criteria"),
                 "risk_tier": item_detail.get("risk_tier", 0),
                 "risk_label": RiskTier.LABELS.get(item_detail.get("risk_tier", 0), "patrol"),
+                "status": item_detail.get("status"),
+                "gate_type": item_detail.get("gate_type"),
+                "gate_data": item_detail.get("gate_data"),
+                "gate_response": item_detail.get("gate_response"),
             },
             "constraints": all_constraints,
             "context": [
