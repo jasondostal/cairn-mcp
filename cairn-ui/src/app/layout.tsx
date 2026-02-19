@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { CommandPalette } from "@/components/command-palette";
+import { ChatDrawerTrigger } from "@/components/chat/chat-drawer-trigger";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
@@ -41,6 +42,7 @@ export default function RootLayout({
             </main>
           </div>
           <CommandPalette />
+          <ChatDrawerTrigger />
           <Toaster theme="dark" position="bottom-right" richColors />
         </TooltipProvider>
       </body>

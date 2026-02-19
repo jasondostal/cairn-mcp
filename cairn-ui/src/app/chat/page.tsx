@@ -13,50 +13,13 @@ import {
   setOnConversationCreated,
   setOnStreamComplete,
 } from "@/lib/chat-adapter";
-import { api, type Conversation, type ChatMessage, type Project } from "@/lib/api";
+import { api, type Conversation, type Project } from "@/lib/api";
+import { toThreadMessages } from "@/lib/chat-utils";
 import { ChatThread } from "@/components/chat/thread";
 import { ConversationSidebar } from "@/components/chat/conversation-sidebar";
 import { Button } from "@/components/ui/button";
 import { SingleSelect } from "@/components/ui/single-select";
 import { RotateCcw, PanelLeftClose, PanelLeft } from "lucide-react";
-
-/** Convert stored ChatMessages to assistant-ui ThreadMessageLike format. */
-function toThreadMessages(messages: ChatMessage[]): ThreadMessageLike[] {
-  return messages
-    .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => {
-      if (m.role === "user") {
-        return {
-          role: "user" as const,
-          content: [{ type: "text" as const, text: m.content || "" }],
-        };
-      }
-      // Assistant message — include tool calls + text
-      const content: ThreadMessageLike["content"] = [];
-      if (m.tool_calls) {
-        for (const tc of m.tool_calls) {
-          (content as Array<unknown>).push({
-            type: "tool-call",
-            toolCallId: `${tc.name}-restored-${m.id}`,
-            toolName: tc.name,
-            args: tc.input,
-            result: tc.output,
-            argsText: JSON.stringify(tc.input),
-          });
-        }
-      }
-      if (m.content) {
-        (content as Array<unknown>).push({
-          type: "text",
-          text: m.content,
-        });
-      }
-      return {
-        role: "assistant" as const,
-        content,
-      };
-    });
-}
 
 export default function ChatPage() {
   const [activeConvId, setActiveConvId] = useState<number | null>(null);

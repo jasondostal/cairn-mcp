@@ -45,173 +45,6 @@ interface ToolCallAccumulator {
   argsText: string;
 }
 
-/** Current conversation ID — set by the chat page when a conversation is active. */
-let _conversationId: number | null = null;
-/** Project scope — limits tool context to a specific project. */
-let _projectScope: string | null = null;
-/** Callback when a conversation is auto-created during run(). */
-let _onConversationCreated: ((id: number) => void) | null = null;
-/** Callback when streaming completes (for sidebar refresh). */
-let _onStreamComplete: (() => void) | null = null;
-
-export function setConversationId(id: number | null) {
-  _conversationId = id;
-}
-
-export function getConversationId(): number | null {
-  return _conversationId;
-}
-
-export function setProjectScope(project: string | null) {
-  _projectScope = project;
-}
-
-export function setOnConversationCreated(cb: ((id: number) => void) | null) {
-  _onConversationCreated = cb;
-}
-
-export function setOnStreamComplete(cb: (() => void) | null) {
-  _onStreamComplete = cb;
-}
-
-export const cairnChatAdapter: ChatModelAdapter = {
-  async *run({
-    messages,
-    abortSignal,
-  }: ChatModelRunOptions): AsyncGenerator<ChatModelRunResult> {
-    // Auto-create conversation if none active (fixes race condition with onFirstMessage)
-    if (_conversationId === null) {
-      try {
-        const convRes = await fetch(`${BASE}/chat/conversations`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ project: _projectScope || undefined }),
-        });
-        if (convRes.ok) {
-          const conv = await convRes.json();
-          _conversationId = conv.id;
-          _onConversationCreated?.(conv.id);
-        }
-      } catch {
-        // Continue without conversation tracking
-      }
-    }
-
-    const res = await fetch(`${BASE}/chat/stream`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: toApiMessages(messages),
-        max_tokens: 2048,
-        conversation_id: _conversationId,
-        project: _projectScope,
-      }),
-      signal: abortSignal,
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(err.detail || `${res.status} ${res.statusText}`);
-    }
-
-    if (!res.body) {
-      throw new Error("No response body for streaming");
-    }
-
-    // Parse the SSE stream
-    let textAccumulator = "";
-    const toolCalls = new Map<string, ToolCallAccumulator>();
-    let model = "";
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-
-        // Process complete SSE events (separated by double newlines)
-        const events = buffer.split("\n\n");
-        buffer = events.pop() ?? ""; // Keep incomplete event in buffer
-
-        for (const eventBlock of events) {
-          if (!eventBlock.trim()) continue;
-
-          let eventType = "";
-          let eventData = "";
-
-          for (const line of eventBlock.split("\n")) {
-            if (line.startsWith("event: ")) {
-              eventType = line.slice(7);
-            } else if (line.startsWith("data: ")) {
-              eventData = line.slice(6);
-            }
-          }
-
-          if (!eventType || !eventData) continue;
-
-          let parsed: Record<string, unknown>;
-          try {
-            parsed = JSON.parse(eventData);
-          } catch {
-            continue;
-          }
-
-          switch (eventType) {
-            case "text_delta": {
-              textAccumulator += (parsed.text as string) ?? "";
-              // Yield current state on each text delta for live updates
-              yield buildResult(textAccumulator, toolCalls, model);
-              break;
-            }
-            case "tool_call_start": {
-              const id = parsed.id as string;
-              toolCalls.set(id, {
-                toolCallId: id,
-                toolName: parsed.name as string,
-                args: (parsed.args as Record<string, unknown>) ?? {},
-                argsText: JSON.stringify(parsed.args ?? {}),
-              });
-              yield buildResult(textAccumulator, toolCalls, model);
-              break;
-            }
-            case "tool_call_result": {
-              const tcId = parsed.id as string;
-              const existing = toolCalls.get(tcId);
-              if (existing) {
-                existing.result = parsed.output;
-              }
-              yield buildResult(textAccumulator, toolCalls, model);
-              break;
-            }
-            case "done": {
-              model = (parsed.model as string) ?? "";
-              break;
-            }
-            case "error": {
-              throw new Error(
-                (parsed.message as string) ?? "Streaming error",
-              );
-            }
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock();
-    }
-
-    // Final yield with complete state
-    yield buildResult(textAccumulator, toolCalls, model);
-
-    // Notify page that streaming is done (for sidebar refresh)
-    _onStreamComplete?.();
-  },
-};
-
 /** Build a ChatModelRunResult from the accumulated state. */
 function buildResult(
   text: string,
@@ -245,5 +78,238 @@ function buildResult(
     metadata: {
       custom: { model },
     },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Shared SSE streaming logic — used by both module-level adapter and factory
+// ---------------------------------------------------------------------------
+
+interface AdapterState {
+  getConversationId: () => number | null;
+  setConversationId: (id: number | null) => void;
+  getProjectScope: () => string | null;
+  onConversationCreated: () => ((id: number) => void) | null;
+  onStreamComplete: () => (() => void) | null;
+}
+
+async function* runStream(
+  { messages, abortSignal }: ChatModelRunOptions,
+  state: AdapterState,
+): AsyncGenerator<ChatModelRunResult> {
+  // Auto-create conversation if none active
+  if (state.getConversationId() === null) {
+    try {
+      const convRes = await fetch(`${BASE}/chat/conversations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project: state.getProjectScope() || undefined }),
+      });
+      if (convRes.ok) {
+        const conv = await convRes.json();
+        state.setConversationId(conv.id);
+        state.onConversationCreated()?.(conv.id);
+      }
+    } catch {
+      // Continue without conversation tracking
+    }
+  }
+
+  const res = await fetch(`${BASE}/chat/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messages: toApiMessages(messages),
+      max_tokens: 2048,
+      conversation_id: state.getConversationId(),
+      project: state.getProjectScope(),
+    }),
+    signal: abortSignal,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `${res.status} ${res.statusText}`);
+  }
+
+  if (!res.body) {
+    throw new Error("No response body for streaming");
+  }
+
+  // Parse the SSE stream
+  let textAccumulator = "";
+  const toolCalls = new Map<string, ToolCallAccumulator>();
+  let model = "";
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // Process complete SSE events (separated by double newlines)
+      const events = buffer.split("\n\n");
+      buffer = events.pop() ?? "";
+
+      for (const eventBlock of events) {
+        if (!eventBlock.trim()) continue;
+
+        let eventType = "";
+        let eventData = "";
+
+        for (const line of eventBlock.split("\n")) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7);
+          } else if (line.startsWith("data: ")) {
+            eventData = line.slice(6);
+          }
+        }
+
+        if (!eventType || !eventData) continue;
+
+        let parsed: Record<string, unknown>;
+        try {
+          parsed = JSON.parse(eventData);
+        } catch {
+          continue;
+        }
+
+        switch (eventType) {
+          case "text_delta": {
+            textAccumulator += (parsed.text as string) ?? "";
+            yield buildResult(textAccumulator, toolCalls, model);
+            break;
+          }
+          case "tool_call_start": {
+            const id = parsed.id as string;
+            toolCalls.set(id, {
+              toolCallId: id,
+              toolName: parsed.name as string,
+              args: (parsed.args as Record<string, unknown>) ?? {},
+              argsText: JSON.stringify(parsed.args ?? {}),
+            });
+            yield buildResult(textAccumulator, toolCalls, model);
+            break;
+          }
+          case "tool_call_result": {
+            const tcId = parsed.id as string;
+            const existing = toolCalls.get(tcId);
+            if (existing) {
+              existing.result = parsed.output;
+            }
+            yield buildResult(textAccumulator, toolCalls, model);
+            break;
+          }
+          case "done": {
+            model = (parsed.model as string) ?? "";
+            break;
+          }
+          case "error": {
+            throw new Error(
+              (parsed.message as string) ?? "Streaming error",
+            );
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  // Final yield with complete state
+  yield buildResult(textAccumulator, toolCalls, model);
+
+  // Notify consumer that streaming is done
+  state.onStreamComplete()?.();
+}
+
+// ---------------------------------------------------------------------------
+// Module-level adapter (used by /chat page — backward compatible)
+// ---------------------------------------------------------------------------
+
+let _conversationId: number | null = null;
+let _projectScope: string | null = null;
+let _onConversationCreated: ((id: number) => void) | null = null;
+let _onStreamComplete: (() => void) | null = null;
+
+export function setConversationId(id: number | null) {
+  _conversationId = id;
+}
+
+export function getConversationId(): number | null {
+  return _conversationId;
+}
+
+export function setProjectScope(project: string | null) {
+  _projectScope = project;
+}
+
+export function setOnConversationCreated(cb: ((id: number) => void) | null) {
+  _onConversationCreated = cb;
+}
+
+export function setOnStreamComplete(cb: (() => void) | null) {
+  _onStreamComplete = cb;
+}
+
+const _moduleState: AdapterState = {
+  getConversationId: () => _conversationId,
+  setConversationId: (id) => { _conversationId = id; },
+  getProjectScope: () => _projectScope,
+  onConversationCreated: () => _onConversationCreated,
+  onStreamComplete: () => _onStreamComplete,
+};
+
+export const cairnChatAdapter: ChatModelAdapter = {
+  async *run(options: ChatModelRunOptions): AsyncGenerator<ChatModelRunResult> {
+    yield* runStream(options, _moduleState);
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Factory — creates isolated adapter instances (used by chat drawer)
+// ---------------------------------------------------------------------------
+
+export interface ChatAdapterInstance {
+  adapter: ChatModelAdapter;
+  setConversationId: (id: number | null) => void;
+  getConversationId: () => number | null;
+  setProjectScope: (project: string | null) => void;
+  setOnConversationCreated: (cb: ((id: number) => void) | null) => void;
+  setOnStreamComplete: (cb: (() => void) | null) => void;
+}
+
+export function createChatAdapter(): ChatAdapterInstance {
+  let conversationId: number | null = null;
+  let projectScope: string | null = null;
+  let onConversationCreated: ((id: number) => void) | null = null;
+  let onStreamComplete: (() => void) | null = null;
+
+  const state: AdapterState = {
+    getConversationId: () => conversationId,
+    setConversationId: (id) => { conversationId = id; },
+    getProjectScope: () => projectScope,
+    onConversationCreated: () => onConversationCreated,
+    onStreamComplete: () => onStreamComplete,
+  };
+
+  const adapter: ChatModelAdapter = {
+    async *run(options: ChatModelRunOptions): AsyncGenerator<ChatModelRunResult> {
+      yield* runStream(options, state);
+    },
+  };
+
+  return {
+    adapter,
+    setConversationId: (id) => { conversationId = id; },
+    getConversationId: () => conversationId,
+    setProjectScope: (project) => { projectScope = project; },
+    setOnConversationCreated: (cb) => { onConversationCreated = cb; },
+    setOnStreamComplete: (cb) => { onStreamComplete = cb; },
   };
 }
