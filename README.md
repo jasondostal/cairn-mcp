@@ -356,7 +356,7 @@ No hooks? No problem. Memories stored with a `session_name` are still grouped, s
 </details>
 
 <details>
-<summary><strong>REST API</strong> — 94 endpoints</summary>
+<summary><strong>REST API</strong> — 99 endpoints</summary>
 
 REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Optional API key auth when `CAIRN_AUTH_ENABLED=true`.
 
@@ -376,6 +376,7 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Opt
 | `GET /api/clusters?project=&topic=` | Clusters with member lists |
 | `GET /api/tasks?project=` | Tasks for a project |
 | `POST /api/tasks/{id}/complete` | Mark a task as completed |
+| `POST /api/tasks/{id}/promote` | Promote a task to a work item (transfers linked memories) |
 | `GET /api/messages/unread-count?project=` | Unread message count |
 | `GET /api/messages?project=` | Message inbox |
 | `POST /api/messages` | Send a message |
@@ -398,7 +399,8 @@ REST endpoints at `/api` — powers the web UI, hook scripts, and scripting. Opt
 | `GET /api/bookmarklet.js` | Browser bookmarklet script for one-click capture |
 | `GET /api/clusters/visualization?project=` | t-SNE 2D coordinates for scatter plot |
 | `GET /api/export?project=&format=` | Export project memories (JSON or Markdown) |
-| `GET /api/graph?project=&relation_type=` | Knowledge graph nodes and edges |
+| `GET /api/graph?project=&relation_type=` | Memory relation graph nodes and edges |
+| `GET /api/knowledge-graph?project=&entity_type=&limit=` | Neo4j entity graph with statement triples |
 | `GET /api/analytics/overview?days=` | KPI summary with sparklines |
 | `GET /api/analytics/timeseries?days=&granularity=` | Time-bucketed operations, tokens, errors |
 | `GET /api/analytics/operations?days=&project=&operation=` | Operations breakdown with filters |
@@ -481,7 +483,7 @@ cairn-ui          |                                                             
                   |  core: memory, search, enrichment, clustering, ingest        |
                   |        extraction, router, reranker, search_v2              |
                   |        projects, tasks, thinking, trail                      |
-                  |        synthesis, consolidation, event_bus                   |
+                  |        synthesis, consolidation, event_bus, reconciliation   |
                   |                                                               |
                   |  graph: Neo4j (entities, statements, triples, BFS)          |
                   |  embedding: local (MiniLM), Bedrock (Titan V2) (pluggable)   |
@@ -622,7 +624,7 @@ All bulk operations support `--dry-run` for preview.
 
 ### Database Schema
 
-26 migrations:
+27 migrations:
 
 | Migration | Tables / Changes |
 |-----------|--------|
@@ -652,6 +654,7 @@ All bulk operations support `--dry-run` for preview.
 | **024 Conversations** | `conversations`, `chat_messages` for persistent chat with tool call storage |
 | **025 Event Bus** | `sessions`, `events` tables with Postgres NOTIFY trigger for real-time streaming |
 | **026 Session Work Items** | `session_work_items` junction table linking sessions to work items with role escalation |
+| **027 Event Dispatches** | `event_dispatches` table for reliable event bus subscriber delivery with retry tracking |
 
 </details>
 

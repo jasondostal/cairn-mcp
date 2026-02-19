@@ -80,7 +80,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
 
     @router.get("/status")
     def api_status():
-        return get_status(db, config)
+        return get_status(db, config, graph_provider=svc.graph_provider)
 
     @router.get("/settings")
     def api_settings():

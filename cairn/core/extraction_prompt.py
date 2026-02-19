@@ -123,12 +123,12 @@ Input: "We decided to use Neo4j for the knowledge graph instead of extending Pos
 
 ### Example 2: Infrastructure and deployment
 
-Input: "staging is our dev box at 10.0.0.20. Runs docker compose with cairn, cairn-db, cairn-graph. Production is on prod-1. Everything goes through Bedrock."
+Input: "staging is our dev box at 198.51.100.10. Runs docker compose with cairn, cairn-db, cairn-graph. Production is on prod-1. Everything goes through Bedrock."
 
 ```json
 {
   "entities": [
-    {"name": "staging", "entity_type": "Place", "attributes": {"ip_address": "10.0.0.20", "role": "dev"}},
+    {"name": "staging", "entity_type": "Place", "attributes": {"ip_address": "198.51.100.10", "role": "dev"}},
     {"name": "prod-1", "entity_type": "Place", "attributes": {"role": "production"}},
     {"name": "Bedrock", "entity_type": "Product", "attributes": {}}
   ],
@@ -139,7 +139,7 @@ Input: "staging is our dev box at 10.0.0.20. Runs docker compose with cairn, cai
   ],
   "tags": ["infrastructure", "staging", "production", "bedrock"],
   "importance": 0.7,
-  "summary": "staging (10.0.0.20) is dev, prod-1 is production. All LLM via Bedrock."
+  "summary": "staging (198.51.100.10) is dev, prod-1 is production. All LLM via Bedrock."
 }
 ```
 

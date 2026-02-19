@@ -48,6 +48,7 @@ thinking_engine = None
 session_synthesizer = None
 consolidation_engine = None
 event_bus = None
+event_dispatcher = None
 drift_detector = None
 message_manager = None
 work_item_manager = None
@@ -61,7 +62,7 @@ def _init_services(svc):
     global _svc, config, db, graph_provider, memory_store, search_engine
     global cluster_engine, project_manager, task_manager
     global thinking_engine, session_synthesizer, consolidation_engine
-    global event_bus, drift_detector, message_manager
+    global event_bus, event_dispatcher, drift_detector, message_manager
     global work_item_manager
     global analytics_tracker, rollup_worker, workspace_manager
 
@@ -79,6 +80,7 @@ def _init_services(svc):
     session_synthesizer = svc.session_synthesizer
     consolidation_engine = svc.consolidation_engine
     event_bus = svc.event_bus
+    event_dispatcher = svc.event_dispatcher
     drift_detector = svc.drift_detector
     message_manager = svc.message_manager
     analytics_tracker = svc.analytics_tracker
@@ -107,8 +109,16 @@ def _start_workers(svc, cfg, db_instance):
             svc.graph_provider.connect()
             svc.graph_provider.ensure_schema()
             logger.info("Neo4j graph connected and schema ensured")
+            # Reconcile PG vs Neo4j state (PG wins)
+            try:
+                from cairn.core.reconciliation import reconcile_graph
+                reconcile_graph(db_instance, svc.graph_provider)
+            except Exception:
+                logger.warning("Graph reconciliation failed", exc_info=True)
         except Exception:
             logger.warning("Neo4j connection failed — graph features disabled", exc_info=True)
+    if svc.event_dispatcher:
+        svc.event_dispatcher.start()
     if svc.analytics_tracker:
         svc.analytics_tracker.start()
     if svc.rollup_worker:
@@ -118,6 +128,8 @@ def _start_workers(svc, cfg, db_instance):
 
 def _stop_workers(svc, db_instance):
     """Stop background workers and close connections."""
+    if svc.event_dispatcher:
+        svc.event_dispatcher.stop()
     if svc.rollup_worker:
         svc.rollup_worker.stop()
     if svc.analytics_tracker:

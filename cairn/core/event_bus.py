@@ -1,15 +1,16 @@
-"""EventBus — lightweight event publishing and query.
+"""EventBus — event publishing, subscriber dispatch, and query.
 
-Replaces the DigestWorker pipeline. Individual events are INSERTed into the
-events table (triggering Postgres NOTIFY for real-time streaming). No LLM
-in the hot path.
+Events are INSERTed into the events table (triggering Postgres NOTIFY for
+real-time SSE streaming). Registered handlers get dispatch records created
+in event_dispatches for reliable delivery with retry via EventDispatcher.
 """
 
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from cairn.core import stats
 from cairn.core.utils import get_or_create_project
@@ -22,15 +23,51 @@ logger = logging.getLogger(__name__)
 
 
 class EventBus:
-    """Central publish point for the event bus.
+    """Central publish point with subscriber dispatch.
 
-    Both API endpoints and internal callers use this to insert events
-    and manage sessions.
+    Subscribers register named handlers for event types (including wildcards
+    like ``work_item.*``). On publish, dispatch records are created for each
+    matching handler. The EventDispatcher background thread polls those
+    records and executes handlers with retry.
     """
 
     def __init__(self, db: Database, project_manager: ProjectManager):
         self.db = db
         self.project_manager = project_manager
+        # event_type -> [(handler_name, fn), ...]
+        self._handlers: dict[str, list[tuple[str, Callable]]] = defaultdict(list)
+        # handler_name -> fn (flat lookup for dispatcher)
+        self._handler_lookup: dict[str, Callable] = {}
+
+    # ------------------------------------------------------------------
+    # Subscriber registration
+    # ------------------------------------------------------------------
+
+    def subscribe(self, event_type: str, handler_name: str, fn: Callable) -> None:
+        """Register a named handler for an event type.
+
+        Supports exact types (``work_item.completed``) and domain wildcards
+        (``work_item.*``).  Handler names must be unique across all
+        subscriptions.
+        """
+        self._handlers[event_type].append((handler_name, fn))
+        self._handler_lookup[handler_name] = fn
+        logger.info("EventBus: subscribed handler '%s' to '%s'", handler_name, event_type)
+
+    def get_handler(self, handler_name: str) -> Callable | None:
+        """Look up a handler function by name (used by EventDispatcher)."""
+        return self._handler_lookup.get(handler_name)
+
+    def _matching_handlers(self, event_type: str) -> list[tuple[str, Callable]]:
+        """Return all handlers matching an event type (exact + wildcard)."""
+        handlers = list(self._handlers.get(event_type, []))
+        # Check domain wildcard: "work_item.completed" matches "work_item.*"
+        if "." in event_type:
+            prefix = event_type.split(".")[0] + ".*"
+            handlers += self._handlers.get(prefix, [])
+        # Global wildcard
+        handlers += self._handlers.get("*", [])
+        return handlers
 
     def publish(
         self,
@@ -76,11 +113,32 @@ class EventBus:
         self.db.commit()
 
         event_id = row["id"]
+
+        # Create dispatch records for matching handlers
+        matching = self._matching_handlers(event_type)
+        for handler_name, _ in matching:
+            try:
+                self.db.execute(
+                    """
+                    INSERT INTO event_dispatches (event_id, handler)
+                    VALUES (%s, %s)
+                    ON CONFLICT (event_id, handler) DO NOTHING
+                    """,
+                    (event_id, handler_name),
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to create dispatch for event %d handler '%s'",
+                    event_id, handler_name, exc_info=True,
+                )
+        if matching:
+            self.db.commit()
+
         if stats.event_bus_stats:
             stats.event_bus_stats.record_publish(event_type)
         logger.debug(
-            "Event published: id=%d session=%s type=%s tool=%s",
-            event_id, session_name, event_type, tool_name,
+            "Event published: id=%d session=%s type=%s tool=%s dispatches=%d",
+            event_id, session_name, event_type, tool_name, len(matching),
         )
 
         # Auto-manage session lifecycle from events

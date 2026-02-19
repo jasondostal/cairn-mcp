@@ -5,6 +5,87 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.52.0] — 2026-02-19 "Event Horizon"
+
+### Added
+- **Event-driven graph projection** — replaced 15 inline dual-write touchpoints across
+  `work_items.py`, `tasks.py`, and `thinking.py` with an event bus subscriber framework.
+  Managers publish events (`work_item.created`, `task.completed`, etc.); the
+  `GraphProjectionListener` consumes them and syncs to Neo4j via idempotent MERGE operations.
+- **EventBus subscriber framework** — `subscribe(event_type, handler_name, fn)` with wildcard
+  support (e.g. `work_item.*`). Dispatch records tracked in `event_dispatches` table for
+  reliable delivery with retry.
+- **EventDispatcher background worker** — polls `event_dispatches` for pending records,
+  executes handlers with exponential backoff retry (5 attempts, 10s base).
+- **Startup reconciliation** — on boot, `reconcile_graph()` compares PG vs Neo4j state for
+  all work items, tasks, and thinking sequences. PG wins. Backfills `graph_uuid` where missing.
+- **Idempotent Neo4j methods** — `ensure_work_item()`, `ensure_task()`,
+  `ensure_thinking_sequence()`, `ensure_thought()` use MERGE instead of CREATE. Safe for
+  retries and reconciliation.
+- **Dual-mode graph page** — the `/graph` page now auto-detects Neo4j availability via
+  `/api/status` `graph_backend` field and supports toggling between Entity (Neo4j) and
+  Memory (Postgres) graph views. Persists preference to `localStorage`. Gracefully falls
+  back to Postgres-only when Neo4j is unavailable or fails mid-session.
+- **Graph mobile touch interaction** — canvas supports pinch-to-zoom, single-finger pan,
+  tap-to-select, and touch-drag node repositioning. `touch-action: none` prevents browser
+  gesture interference.
+- **`graph_backend` in status endpoint** — `GET /api/status` now includes
+  `"graph_backend": "neo4j" | null` so clients can detect which graph backends are available.
+- **Chat conversation auto-creation** — the chat adapter now auto-creates a conversation
+  on first message send, fixing a race condition where messages could be lost. Sidebar
+  refreshes automatically after stream completion via new callback hooks.
+- **Model router environment config** — `docker-compose.yml` and `.env.example` now expose
+  `CAIRN_ROUTER_*` variables for multi-tier LLM routing (capable/fast/chat tiers).
+- **Bedrock Haiku model entries** — added `anthropic.claude-3-5-haiku-20241022-v1:0` and
+  cross-region variant to context size lookup.
+- **Task → work item promotion** — new `POST /tasks/{id}/promote` REST endpoint creates a
+  work item from a personal task, transfers linked memories, marks the task completed, and
+  logs a "promoted" activity entry. UI adds "Promote to Work Item" button in the task detail
+  sheet with navigation to the new work item.
+- **Ops log enrichment** — operations log entries are now expandable, showing full detail
+  (model, latency, token counts, project, session, timestamp) and error messages with
+  syntax-highlighted display. Session links deep-link to `/sessions?selected=<name>`.
+
+### Changed
+- **Graph page unified architecture** — both Neo4j entity graph and Postgres memory-relation
+  graph share a single d3-force simulation loop, canvas renderer, and interaction model.
+  Mode-specific behavior (colors, tooltips, click actions, filters, legends) is driven by
+  discriminated union types on `SimNode.meta` and `SimLink.edgeMeta`.
+- **Graph filter controls aligned** — project filter now uses the standard `PageFilters`
+  component with `MultiSelect` (matching all other pages). Filters auto-apply on change
+  instead of requiring a manual Apply button.
+- **Deploy script rewrite** — `scripts/deploy.sh` now builds locally, transfers images via
+  `docker save | scp | docker load` to the remote host, and restarts there. Eliminates the
+  GHCR round-trip for faster production deploys. Supports `--skip-build` flag.
+- **DB connection management hardened** — `@track_operation` decorator now unconditionally
+  releases DB connections after every service method, serving as the primary defense against
+  connection pool exhaustion. `release_if_held()` changed from conditional (only if in
+  transaction) to unconditional release.
+- **Conversations JSONB casting** — `ConversationManager.create()` and `add_message()` now
+  explicitly cast metadata and tool_calls to `::jsonb`, fixing insertion errors with some
+  Postgres configurations.
+- **Chat streaming text accumulation** — `/api/chat/stream` now accumulates text from
+  `text_delta` events and falls back to streamed content when `result.text` is empty,
+  fixing blank responses on some model backends.
+
+### Fixed
+- **Ready queue returning completed items** — work items marked done in Postgres but with
+  `graph_uuid=NULL` were never synced to Neo4j, causing `ready_queue()` to return stale items
+  from the graph. Startup reconciliation and event-driven projection eliminate this class of bug.
+- **`chat_tools.py` attribute name** — fixed `svc.graph` → `svc.graph_provider` reference
+  in the orient tool's trail section.
+- **`release_if_held()` connection leak** — connections without open transactions were not
+  being returned to the pool; now all held connections are unconditionally released.
+- **Dashboard work items widget empty** — `OperationalStrip` requested `limit=200` but the
+  API enforces `le=100`, causing a silent 422. Switched to `api.workItems()` client with
+  proper error handling.
+- **Dashboard entity chart reset** — entity selections on the growth chart reset on every
+  page load. Now persisted to `localStorage` via `useLocalStorage` hook.
+
+### Removed
+- **Inline dual-write pattern** — `_graph_sync_work_item()`, `_graph_sync_sequence()`,
+  `_graph_sync_thought()` removed. All graph sync now flows through the event bus.
+
 ## [0.51.1] - 2026-02-18 — "Knowledge Graph"
 
 ### Added

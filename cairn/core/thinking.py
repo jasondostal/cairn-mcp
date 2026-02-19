@@ -11,6 +11,7 @@ from cairn.core.utils import get_or_create_project, get_project
 from cairn.storage.database import Database
 
 if TYPE_CHECKING:
+    from cairn.core.event_bus import EventBus
     from cairn.core.extraction import KnowledgeExtractor
     from cairn.embedding.interface import EmbeddingInterface
     from cairn.graph.interface import GraphProvider
@@ -28,60 +29,33 @@ class ThinkingEngine:
         knowledge_extractor: KnowledgeExtractor | None = None,
         embedding: EmbeddingInterface | None = None,
         thought_extraction: str = "off",
+        event_bus: EventBus | None = None,
     ):
         self.db = db
         self.graph = graph
         self.knowledge_extractor = knowledge_extractor
         self.embedding = embedding
         self.thought_extraction = thought_extraction
+        self.event_bus = event_bus
 
-    def _graph_sync_sequence(self, pg_id: int, project_id: int, goal: str) -> None:
-        """Dual-write: create ThinkingSequence node in graph, update PG sync columns."""
-        if not self.graph:
+    def _publish(self, event_type: str, project_id: int | None = None, **payload) -> None:
+        """Publish an event if event_bus is available."""
+        if not self.event_bus:
             return
+        project_name = None
+        if project_id:
+            row = self.db.execute_one("SELECT name FROM projects WHERE id = %s", (project_id,))
+            if row:
+                project_name = row["name"]
         try:
-            graph_uuid = self.graph.create_thinking_sequence(
-                pg_id=pg_id, project_id=project_id, goal=goal,
+            self.event_bus.publish(
+                session_name="",
+                event_type=event_type,
+                project=project_name,
+                payload=payload if payload else None,
             )
-            self.db.execute(
-                "UPDATE thinking_sequences SET graph_uuid = %s, graph_synced = true WHERE id = %s",
-                (graph_uuid, pg_id),
-            )
-            self.db.commit()
         except Exception:
-            logger.warning("Graph sync failed for thinking_sequence #%d", pg_id, exc_info=True)
-
-    def _graph_sync_thought(self, pg_id: int, sequence_id: int, thought_type: str, content: str) -> None:
-        """Dual-write: create Thought node in graph, link via CONTAINS."""
-        if not self.graph:
-            return
-        try:
-            seq_row = self.db.execute_one(
-                "SELECT graph_uuid FROM thinking_sequences WHERE id = %s",
-                (sequence_id,),
-            )
-            if not seq_row or not seq_row["graph_uuid"]:
-                return
-            content_embedding = None
-            if self.embedding:
-                try:
-                    content_embedding = self.embedding.embed(content[:500])
-                except Exception:
-                    pass
-            graph_uuid = self.graph.create_thought(
-                pg_id=pg_id,
-                sequence_uuid=seq_row["graph_uuid"],
-                thought_type=thought_type,
-                content=content,
-                content_embedding=content_embedding,
-            )
-            self.db.execute(
-                "UPDATE thoughts SET graph_uuid = %s, graph_synced = true WHERE id = %s",
-                (graph_uuid, pg_id),
-            )
-            self.db.commit()
-        except Exception:
-            logger.warning("Graph sync failed for thought #%d", pg_id, exc_info=True)
+            logger.warning("Failed to publish %s", event_type, exc_info=True)
 
     def _run_extraction(self, sequence_id: int, content: str) -> None:
         """Run entity extraction on content and link results to the sequence."""
@@ -132,8 +106,8 @@ class ThinkingEngine:
         )
         self.db.commit()
 
-        # Dual-write to graph
-        self._graph_sync_sequence(row["id"], project_id, goal)
+        # Event-driven graph projection
+        self._publish("thinking.sequence_started", project_id=project_id, sequence_id=row["id"])
 
         logger.info("Started thinking sequence #%d: %s", row["id"], goal[:80])
         return {
@@ -155,7 +129,7 @@ class ThinkingEngine:
         """Add a thought to an active sequence."""
         # Verify sequence exists and is active
         seq = self.db.execute_one(
-            "SELECT id, status FROM thinking_sequences WHERE id = %s",
+            "SELECT id, status, project_id FROM thinking_sequences WHERE id = %s",
             (sequence_id,),
         )
         if not seq:
@@ -180,8 +154,13 @@ class ThinkingEngine:
         )
         self.db.commit()
 
-        # Dual-write to graph
-        self._graph_sync_thought(row["id"], sequence_id, thought_type, thought)
+        # Event-driven graph projection
+        self._publish(
+            "thinking.thought_added",
+            project_id=seq["project_id"],
+            sequence_id=sequence_id,
+            thought_id=row["id"],
+        )
 
         # Entity extraction on every thought (if configured)
         if self.thought_extraction == "on_every_thought":
@@ -200,7 +179,7 @@ class ThinkingEngine:
         """Conclude a thinking sequence. Adds final thought and marks complete."""
         # Guard: check sequence exists and is still active
         seq = self.db.execute_one(
-            "SELECT id, status FROM thinking_sequences WHERE id = %s",
+            "SELECT id, status, project_id FROM thinking_sequences WHERE id = %s",
             (sequence_id,),
         )
         if not seq:
@@ -222,17 +201,8 @@ class ThinkingEngine:
         )
         self.db.commit()
 
-        # Mark complete in graph
-        if self.graph:
-            try:
-                seq_row = self.db.execute_one(
-                    "SELECT graph_uuid FROM thinking_sequences WHERE id = %s",
-                    (sequence_id,),
-                )
-                if seq_row and seq_row["graph_uuid"]:
-                    self.graph.complete_thinking_sequence(seq_row["graph_uuid"])
-            except Exception:
-                logger.warning("Graph complete failed for sequence #%d", sequence_id, exc_info=True)
+        # Event-driven graph projection
+        self._publish("thinking.sequence_concluded", project_id=seq["project_id"], sequence_id=sequence_id)
 
         # Entity extraction on conclude (if configured)
         if self.thought_extraction == "on_conclude":

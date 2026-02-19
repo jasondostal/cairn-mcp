@@ -155,8 +155,10 @@ def register_routes(router: APIRouter, svc: Services, **kw):
 
         for _iteration in range(MAX_AGENT_ITERATIONS):
             result = None
+            turn_text = ""  # Accumulate text from deltas for this iteration
             for event in llm.generate_with_tools_stream(conversation, CHAT_TOOLS, max_tokens):
                 if event.type == "text_delta" and event.text:
+                    turn_text += event.text
                     yield _sse_event("text_delta", {"text": event.text})
                 elif event.type == "response_complete":
                     result = event.response
@@ -164,9 +166,10 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             if result is None:
                 break
 
-            # Accumulate final text
-            if result.text:
-                all_text = result.text  # Last turn's text is the final response
+            # Use result.text if available, fall back to streamed deltas
+            effective_text = result.text or turn_text
+            if effective_text:
+                all_text = effective_text  # Last turn's text is the final response
 
             if result.stop_reason != "tool_use" or not result.tool_calls:
                 break

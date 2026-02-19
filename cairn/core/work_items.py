@@ -23,6 +23,7 @@ from cairn.core.utils import get_or_create_project, get_project
 from cairn.storage.database import Database
 
 if TYPE_CHECKING:
+    from cairn.core.event_bus import EventBus
     from cairn.embedding.interface import EmbeddingInterface
     from cairn.core.extraction import KnowledgeExtractor
     from cairn.graph.interface import GraphProvider
@@ -39,15 +40,41 @@ class WorkItemManager:
         embedding: EmbeddingInterface,
         graph: GraphProvider | None = None,
         knowledge_extractor: KnowledgeExtractor | None = None,
+        event_bus: EventBus | None = None,
     ):
         self.db = db
         self.embedding = embedding
         self.graph = graph
         self.knowledge_extractor = knowledge_extractor
+        self.event_bus = event_bus
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _publish(
+        self, event_type: str, work_item_id: int | None = None,
+        project_id: int | None = None, session_name: str | None = None,
+        **payload_fields,
+    ) -> None:
+        """Publish an event if event_bus is available."""
+        if not self.event_bus:
+            return
+        project_name = None
+        if project_id:
+            row = self.db.execute_one("SELECT name FROM projects WHERE id = %s", (project_id,))
+            if row:
+                project_name = row["name"]
+        try:
+            self.event_bus.publish(
+                session_name=session_name or "",
+                event_type=event_type,
+                work_item_id=work_item_id,
+                project=project_name,
+                payload=payload_fields if payload_fields else None,
+            )
+        except Exception:
+            logger.warning("Failed to publish %s for work_item %s", event_type, work_item_id, exc_info=True)
 
     def _generate_short_id(self, pg_id: int, parent_id: int | None = None) -> str:
         """Generate a hierarchical short ID.
@@ -89,44 +116,6 @@ class WorkItemManager:
         except Exception:
             logger.warning("Failed to embed work item content", exc_info=True)
             return None
-
-    def _graph_sync_work_item(
-        self, pg_id: int, project_id: int, title: str, description: str | None,
-        item_type: str, priority: int, status: str, short_id: str,
-        content_embedding: list[float] | None = None,
-        parent_id: int | None = None,
-        risk_tier: int = 0,
-        gate_type: str | None = None,
-    ) -> None:
-        """Dual-write: create WorkItem node in graph, update PG sync columns."""
-        if not self.graph:
-            return
-        try:
-            graph_uuid = self.graph.create_work_item(
-                pg_id=pg_id, project_id=project_id, title=title,
-                description=description, item_type=item_type,
-                priority=priority, status=status, short_id=short_id,
-                content_embedding=content_embedding,
-                risk_tier=risk_tier, gate_type=gate_type,
-            )
-            self.db.execute(
-                "UPDATE work_items SET graph_uuid = %s, graph_synced = true WHERE id = %s",
-                (graph_uuid, pg_id),
-            )
-            self.db.commit()
-
-            # Add parent edge if applicable
-            if parent_id:
-                parent_row = self.db.execute_one(
-                    "SELECT graph_uuid FROM work_items WHERE id = %s", (parent_id,),
-                )
-                if parent_row and parent_row["graph_uuid"]:
-                    self.graph.add_work_item_parent_edge(
-                        child_uuid=graph_uuid,
-                        parent_uuid=parent_row["graph_uuid"],
-                    )
-        except Exception:
-            logger.warning("Graph sync failed for work_item #%d", pg_id, exc_info=True)
 
     def _resolve_id(self, id_or_short_id: int | str) -> dict | None:
         """Resolve a work item by numeric ID or short_id string."""
@@ -244,13 +233,11 @@ class WorkItemManager:
                 gate_data={"question": "This is a CRITICAL risk item. Confirm before proceeding.", "auto_set": True},
             )
 
-        # Dual-write to graph
-        self._graph_sync_work_item(
-            pg_id=row["id"], project_id=project_id, title=title,
-            description=description, item_type=item_type, priority=priority,
-            status=WorkItemStatus.OPEN, short_id=short_id,
-            content_embedding=content_embedding, parent_id=parent_id,
-            risk_tier=risk_tier or 0,
+        # Event-driven graph projection
+        self._publish(
+            "work_item.created", work_item_id=row["id"],
+            project_id=project_id, session_name=session_name,
+            short_id=short_id,
         )
 
         logger.info("Created work item %s (#%d) for project %s", short_id, row["id"], project)
@@ -348,22 +335,19 @@ class WorkItemManager:
         self.link_session(item["id"], calling_session, "updated")
         self.db.commit()
 
-        # Graph status sync
-        if new_status and self.graph and item.get("graph_uuid"):
-            try:
-                if new_status == WorkItemStatus.DONE:
-                    self.graph.complete_work_item(item["graph_uuid"])
-                else:
-                    self.graph.update_work_item_status(item["graph_uuid"], new_status)
-            except Exception:
-                logger.warning("Graph status sync failed for work_item #%d", item["id"], exc_info=True)
-
-        # Graph risk_tier sync
-        if "risk_tier" in fields and self.graph and item.get("graph_uuid"):
-            try:
-                self.graph.update_work_item_risk_tier(item["graph_uuid"], fields["risk_tier"])
-            except Exception:
-                logger.debug("Graph risk_tier sync failed for work_item #%d", item["id"])
+        # Event-driven graph projection
+        if new_status:
+            self._publish(
+                "work_item.status_changed", work_item_id=item["id"],
+                project_id=item["project_id"], session_name=calling_session,
+                old_status=item["status"], new_status=new_status,
+            )
+        elif fields:
+            self._publish(
+                "work_item.updated", work_item_id=item["id"],
+                project_id=item["project_id"], session_name=calling_session,
+                fields_changed=list(fields.keys()),
+            )
 
         return {"id": item["id"], "short_id": item["short_id"], "action": "updated"}
 
@@ -397,13 +381,12 @@ class WorkItemManager:
         self.link_session(item["id"], session_name, "claimed")
         self.db.commit()
 
-        # Graph sync
-        if self.graph and item.get("graph_uuid"):
-            try:
-                self.graph.update_work_item_status(item["graph_uuid"], WorkItemStatus.IN_PROGRESS)
-                self.graph.assign_work_item(item["graph_uuid"], assignee)
-            except Exception:
-                logger.warning("Graph claim sync failed for work_item #%d", item["id"], exc_info=True)
+        # Event-driven graph projection
+        self._publish(
+            "work_item.claimed", work_item_id=item["id"],
+            project_id=item["project_id"], session_name=session_name,
+            assignee=assignee,
+        )
 
         return {
             "id": row["id"],
@@ -471,12 +454,12 @@ class WorkItemManager:
 
         self.db.commit()
 
-        # Graph sync
-        if self.graph and item.get("graph_uuid"):
-            try:
-                self.graph.complete_work_item(item["graph_uuid"])
-            except Exception:
-                logger.warning("Graph complete failed for work_item #%d", item["id"], exc_info=True)
+        # Event-driven graph projection
+        self._publish(
+            "work_item.completed", work_item_id=item["id"],
+            project_id=item["project_id"], session_name=session_name,
+            old_status=item["status"],
+        )
 
         return {"id": item["id"], "short_id": item["short_id"], "action": "completed"}
 
@@ -554,15 +537,12 @@ class WorkItemManager:
 
         self.db.commit()
 
-        # Graph sync
-        if self.graph:
-            try:
-                if blocker.get("graph_uuid") and blocked.get("graph_uuid"):
-                    self.graph.add_work_item_blocks_edge(
-                        blocker["graph_uuid"], blocked["graph_uuid"],
-                    )
-            except Exception:
-                logger.warning("Graph block sync failed", exc_info=True)
+        # Event-driven graph projection
+        self._publish(
+            "work_item.blocked",
+            project_id=blocker["project_id"],
+            blocker_id=blocker["id"], blocked_id=blocked["id"],
+        )
 
         return {
             "blocker": {"id": blocker["id"], "short_id": blocker["short_id"]},
@@ -602,15 +582,12 @@ class WorkItemManager:
 
         self.db.commit()
 
-        # Graph sync
-        if self.graph:
-            try:
-                if blocker.get("graph_uuid") and blocked.get("graph_uuid"):
-                    self.graph.remove_work_item_blocks_edge(
-                        blocker["graph_uuid"], blocked["graph_uuid"],
-                    )
-            except Exception:
-                logger.warning("Graph unblock sync failed", exc_info=True)
+        # Event-driven graph projection
+        self._publish(
+            "work_item.unblocked",
+            project_id=blocker["project_id"],
+            blocker_id=blocker["id"], blocked_id=blocked["id"],
+        )
 
         return {
             "blocker": {"id": blocker["id"], "short_id": blocker["short_id"]},
@@ -884,13 +861,12 @@ class WorkItemManager:
             )
         self.db.commit()
 
-        # Graph sync
-        if self.graph and item.get("graph_uuid"):
-            for mid in memory_ids:
-                try:
-                    self.graph.link_work_item_to_memory(item["graph_uuid"], mid)
-                except Exception:
-                    logger.debug("Graph link failed for work_item #%d -> memory #%d", item["id"], mid)
+        # Event-driven graph projection
+        self._publish(
+            "work_item.memories_linked", work_item_id=item["id"],
+            project_id=item["project_id"],
+            memory_ids=memory_ids,
+        )
 
         return {
             "work_item_id": item["id"],
@@ -1046,13 +1022,12 @@ class WorkItemManager:
         )
         self.db.commit()
 
-        # Graph sync
-        if self.graph and item.get("graph_uuid"):
-            try:
-                self.graph.update_work_item_gate(item["graph_uuid"], gate_type)
-                self.graph.update_work_item_status(item["graph_uuid"], WorkItemStatus.BLOCKED)
-            except Exception:
-                logger.debug("Graph gate sync failed for work_item #%d", item["id"])
+        # Event-driven graph projection
+        self._publish(
+            "work_item.gate_set", work_item_id=item["id"],
+            project_id=item["project_id"],
+            gate_type=gate_type,
+        )
 
         return {
             "id": item["id"],
@@ -1109,13 +1084,12 @@ class WorkItemManager:
         )
         self.db.commit()
 
-        # Graph sync
-        if self.graph and item.get("graph_uuid"):
-            try:
-                self.graph.resolve_work_item_gate(item["graph_uuid"])
-                self.graph.update_work_item_status(item["graph_uuid"], new_status)
-            except Exception:
-                logger.debug("Graph gate resolve sync failed for work_item #%d", item["id"])
+        # Event-driven graph projection
+        self._publish(
+            "work_item.gate_resolved", work_item_id=item["id"],
+            project_id=item["project_id"],
+            new_status=new_status,
+        )
 
         return {
             "id": item["id"],

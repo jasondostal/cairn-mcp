@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
+import { useLocalStorage } from "@/lib/use-local-storage";
 import { Card, CardContent } from "@/components/ui/card";
 import { MultiSelect, type MultiSelectOption } from "@/components/ui/multi-select";
 import type { EntitySparklines, SparklinePoint } from "@/lib/api";
@@ -110,7 +111,7 @@ export function EntityGrowthChart({ data }: { data: EntitySparklines }) {
     [data.totals],
   );
 
-  const [active, setActive] = useState<string[]>(["memories"]);
+  const [active, setActive] = useLocalStorage<string[]>("cairn-dashboard-entities", ["memories"]);
 
   // Assign stable colors per key based on entity order
   function colorFor(key: string): string {

@@ -10,7 +10,7 @@ from cairn.storage.database import Database
 
 
 @track_operation("status")
-def get_status(db: Database, config: Config) -> dict:
+def get_status(db: Database, config: Config, graph_provider=None) -> dict:
     """Aggregate system health metrics."""
     memory_count = db.execute_one(
         "SELECT COUNT(*) as count FROM memories WHERE is_active = true"
@@ -99,5 +99,7 @@ def get_status(db: Database, config: Config) -> dict:
             }
     except Exception:
         pass  # tables may not exist yet (pre-migration)
+
+    result["graph_backend"] = "neo4j" if graph_provider else None
 
     return result
