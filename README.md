@@ -41,7 +41,7 @@ There's a full web interface — an operational dashboard showing what's moving,
 - **Auto-enrichment** — Every memory gets an LLM-generated summary, tags, importance score, and relationship links on store. Entities and facts extracted into the knowledge graph automatically.
 - **Smart ingestion** — Text, URLs, or both. Auto-classifies, chunks large documents, deduplicates, and routes. One endpoint, many doorways.
 - **Pattern discovery** — HDBSCAN clustering finds themes across memories. LLM writes the labels. Clusters refresh lazily.
-- **Agent workspace** — Dispatch autonomous coding agents from the web UI or from work items. Cairn assembles project context (rules, memories, trail) and injects it into an [OpenCode](https://github.com/opencode-ai/opencode) session. Chat, view diffs, abort. Optional, disabled by default.
+- **Agent workspace** — Dispatch autonomous coding agents from the web UI or from work items. Multi-backend: [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [OpenCode](https://github.com/opencode-ai/opencode), with model selection and risk tier → permission mapping. Cairn assembles a dispatch briefing (work item details, acceptance criteria, constraints, linked memories) and injects it into the agent session. Chat, view diffs, abort. Optional, disabled by default. See [`examples/workspace/README.md`](examples/workspace/README.md) for setup.
 - **Web terminal** — SSH into your hosts from the browser. Native (xterm.js + asyncssh) or ttyd (iframe). Feature-flagged, disabled by default.
 - **Bring your own LLM** — MCP at `/mcp`, REST at `/api`, same process. PostgreSQL + pgvector, Neo4j knowledge graph. Ollama, Bedrock, Gemini, or anything OpenAI-compatible. Four containers, `docker compose up`.
 
