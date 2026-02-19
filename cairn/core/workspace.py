@@ -19,6 +19,7 @@ from cairn.core.constants import (
 )
 from cairn.core.messages import MessageManager
 from cairn.core.utils import get_or_create_project, get_project
+from cairn.core.work_items import WorkItemManager
 from cairn.integrations.interface import WorkspaceBackend, WorkspaceBackendError
 from cairn.storage.database import Database
 
@@ -41,6 +42,7 @@ class WorkspaceManager:
         *,
         default_backend: str = "opencode",
         message_manager: MessageManager | None = None,
+        work_item_manager: WorkItemManager | None = None,
         default_agent: str = "cairn-build",
         budget_tokens: int = 6000,
     ):
@@ -48,6 +50,7 @@ class WorkspaceManager:
         self._backends = backends or {}
         self._default_backend = default_backend
         self.message_manager = message_manager
+        self.work_item_manager = work_item_manager
         self.default_agent = default_agent
         self.budget_tokens = budget_tokens
 
@@ -227,12 +230,15 @@ class WorkspaceManager:
         context_mode: str = "focused",
         backend: str | None = None,
         risk_tier: int | None = None,
+        work_item_id: int | str | None = None,
+        model: str | None = None,
     ) -> dict[str, Any]:
         """Create a workspace session with Cairn context injected.
 
         Instructions can come from multiple sources:
         - ``task``: Raw text description.
         - ``message_id``: Read instructions from a Cairn message.
+        - ``work_item_id``: Dispatch from a work item (generates structured briefing).
         - ``fork_from``: Fork an existing session (full history carry-over).
         - All can be combined.
 
@@ -240,6 +246,7 @@ class WorkspaceManager:
             project: Cairn project name for context.
             task: Optional task description.
             message_id: Optional Cairn message ID to read instructions from.
+            work_item_id: Optional work item ID — generates a dispatch briefing.
             fork_from: Optional session ID to fork from.
             title: Session title (auto-generated if omitted).
             agent: Agent to use (defaults to workspace default).
@@ -247,6 +254,7 @@ class WorkspaceManager:
             context_mode: "focused" (default, lean) or "full" (grimoire + trail).
             backend: Backend to use (defaults to config default).
             risk_tier: Risk tier for permission scoping (Claude Code only).
+            model: Model override for Claude Code (e.g. "claude-sonnet-4-6").
 
         Returns:
             Dict with session info and context metadata.
@@ -280,13 +288,29 @@ class WorkspaceManager:
             inject_context = False
             self.message_manager.mark_read(message_id)
 
+        # Generate dispatch briefing from work item (overrides generic context)
+        briefing: dict[str, Any] | None = None
+        if work_item_id and self.work_item_manager:
+            try:
+                briefing = self.work_item_manager.generate_briefing(work_item_id)
+            except Exception:
+                logger.warning("Failed to generate briefing for work item %s", work_item_id, exc_info=True)
+
         agent = agent or self.default_agent
         session_title = title or f"cairn:{project}"
-        if instructions:
+        if briefing:
+            wi = briefing.get("work_item", {})
+            session_title = title or f"cairn:{project} — {wi.get('title', '')[:50]}"
+        elif instructions:
             session_title = f"cairn:{project} — {instructions[:50]}"
 
-        # Claude Code uses MCP self-service — skip prompt-based context injection
-        if backend_name == "claude_code":
+        # When we have a dispatch briefing, it replaces generic context injection
+        # for ALL backends — both OpenCode and Claude Code get the same briefing.
+        # Claude Code can still call orient() via MCP for additional context.
+        if briefing:
+            inject_context = False
+        elif backend_name == "claude_code":
+            # No briefing and no generic context — Claude Code uses MCP self-service
             inject_context = False
 
         # Create or fork session
@@ -315,11 +339,19 @@ class WorkspaceManager:
             result["source_message_id"] = message_id
         if fork_from:
             result["forked_from"] = fork_from
+        if work_item_id:
+            result["work_item_id"] = work_item_id
 
         # Build a single message combining context + task.
         message_parts: list[str] = []
 
-        if inject_context:
+        # Dispatch briefing takes priority over generic context
+        if briefing:
+            briefing_text = self._format_briefing(briefing)
+            message_parts.append(briefing_text)
+            result["context_injected"] = True
+            result["briefing"] = True
+        elif inject_context:
             context = self.build_context(project, task=instructions, mode=context_mode)
             if context and "No prior context found" not in context:
                 message_parts.append(f"[PROJECT CONTEXT]\n{context}")
@@ -342,8 +374,11 @@ class WorkspaceManager:
 
             try:
                 send_kwargs: dict[str, Any] = {"agent": agent}
-                if risk_tier is not None and backend_name == "claude_code":
-                    send_kwargs["risk_tier"] = risk_tier
+                if backend_name == "claude_code":
+                    if risk_tier is not None:
+                        send_kwargs["risk_tier"] = risk_tier
+                    if model:
+                        send_kwargs["model"] = model
                 be.send_message_async(session.id, combined, **send_kwargs)
                 result["task_sent"] = True
                 logger.info("Task sent to session %s via %s (async)", session.id, backend_name)
@@ -352,9 +387,13 @@ class WorkspaceManager:
 
         # Track in DB
         project_id = get_or_create_project(self.db, project)
-        backend_metadata = {}
+        backend_metadata: dict[str, Any] = {}
         if risk_tier is not None:
             backend_metadata["risk_tier"] = risk_tier
+        if model:
+            backend_metadata["model"] = model
+        if work_item_id:
+            backend_metadata["work_item_id"] = str(work_item_id)
         row = self.db.execute_one(
             """
             INSERT INTO workspace_sessions
@@ -618,6 +657,51 @@ class WorkspaceManager:
         return result
 
     # -- private helpers -----------------------------------------------------
+
+    def _format_briefing(self, briefing: dict[str, Any]) -> str:
+        """Format a work item dispatch briefing into a prompt for the agent.
+
+        Produces a structured assignment that tells the agent exactly what it's
+        working on, including acceptance criteria, constraints, and linked context.
+        """
+        wi = briefing.get("work_item", {})
+        sections: list[str] = []
+
+        sections.append("[DISPATCH BRIEFING]")
+        sections.append(f"You are assigned to work item **{wi.get('short_id', '?')}**: {wi.get('title', 'Untitled')}")
+        sections.append(f"Risk tier: {wi.get('risk_tier', 0)} ({wi.get('risk_label', 'patrol')})")
+
+        if wi.get("description"):
+            sections.append(f"\n## Description\n{wi['description']}")
+
+        if wi.get("acceptance_criteria"):
+            sections.append(f"\n## Acceptance Criteria\n{wi['acceptance_criteria']}")
+
+        # Parent chain for hierarchy context
+        parent_chain = briefing.get("parent_chain", [])
+        if parent_chain:
+            chain_str = " → ".join(f"{p['short_id']}: {p['title']}" for p in parent_chain)
+            sections.append(f"\n## Parent Context\n{chain_str} → **{wi.get('short_id', '?')}** (you are here)")
+
+        # Cascaded constraints
+        constraints = briefing.get("constraints", {})
+        if constraints:
+            constraint_lines = [f"- **{k}**: {v}" for k, v in constraints.items()]
+            sections.append("\n## Constraints\n" + "\n".join(constraint_lines))
+
+        # Linked memories for context
+        context = briefing.get("context", [])
+        if context:
+            mem_lines = [f"- [{c.get('type', 'note')}] {c.get('summary', 'no summary')}" for c in context]
+            sections.append("\n## Linked Context\n" + "\n".join(mem_lines))
+
+        sections.append("\n## Instructions")
+        sections.append("- Update this work item's status as you progress (claim → in_progress → done)")
+        sections.append("- Use heartbeat to report progress")
+        sections.append("- Set a gate if you need human input before proceeding")
+        sections.append("- You may call orient() or search() via MCP for additional project context")
+
+        return "\n".join(sections)
 
     def _format_rules(self, rules: list[dict], budget: int) -> str:
         """Format rules section within a token budget."""

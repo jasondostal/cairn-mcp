@@ -12,16 +12,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   backends beyond OpenCode. `WorkspaceBackend` ABC (`cairn/integrations/interface.py`) defines
   the contract; backends register by name and are resolved per-session from the database.
 - **Claude Code backend** — `ClaudeCodeBackend` (`cairn/integrations/claude_code.py`) spawns
-  `claude -p` as a subprocess for autonomous agent execution using Opus 4.6. Features session
-  resumption via `--resume`, MCP config generation for Cairn self-service context, and risk
-  tier → permission mapping (4 tiers: patrol/caution/action/critical).
+  `claude -p` as a subprocess for autonomous agent execution. Features session resumption via
+  `--resume`, MCP config generation (`type: http`) for Cairn self-service context, model
+  selection (Opus/Sonnet) at dispatch time, and risk tier → permission mapping (4 tiers:
+  patrol/caution/action/critical).
 - **OpenCode adapter** — `OpenCodeBackend` wraps the existing `OpenCodeClient` as a thin
   adapter implementing `WorkspaceBackend`. Zero changes to `OpenCodeClient` — pure addition.
 - **Backend selection at dispatch time** — `POST /workspace/sessions` accepts optional `backend`
   and `risk_tier` parameters. `GET /workspace/backends` lists configured backends with
   capabilities and health status.
 - **Backend selector in workspace UI** — create session dialog shows a backend dropdown when
-  multiple backends are configured (labels: "OpenCode (OSS models)" / "Claude Code (Opus 4.6)").
+  multiple backends are configured. Claude Code shows a model selector (Opus 4.6 / Sonnet 4.6).
   Session sidebar shows CC/OC badges. Health footer shows per-backend status.
 - **DB migration 028** — renames `opencode_session_id` → `backend_session_id`, adds `backend`
   and `backend_metadata` columns to `workspace_sessions`. Non-destructive, defaults existing
@@ -30,14 +31,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `claude_code_enabled`, `claude_code_working_dir`, `claude_code_max_turns`,
   `claude_code_max_budget`, `claude_code_mcp_url`. Six new env vars
   (`CAIRN_WORKSPACE_BACKEND`, `CAIRN_CLAUDE_CODE_*`).
+- **Dispatch briefing** — `POST /workspace/sessions` accepts optional `work_item_id`.
+  When provided, calls `WorkItemManager.generate_briefing()` and injects a structured
+  assignment prompt for both backends: work item details, acceptance criteria, cascaded
+  constraints, parent chain, and linked memories. Replaces the asymmetric context
+  injection (generic for OpenCode, nothing for Claude Code) with a unified briefing.
+- **Model selection for Claude Code** — `POST /workspace/sessions` accepts optional
+  `model` parameter (e.g. `claude-sonnet-4-6`). Passes `--model` to the CLI, persisted
+  per-session for `--resume` continuity. UI shows a model selector when Claude Code
+  backend is chosen. Lets users save Opus usage budget on lower-risk tasks.
+
+### Fixed
+- **Claude Code MCP transport** — MCP config generation used `type: url` (Streamable HTTP)
+  which silently fails in Claude CLI ≤2.1.47. Changed to `type: http` matching the proven
+  `mcp.json` config pattern. Agents now have full MCP tool access to Cairn for self-service
+  context (orient, search, recall, work item lifecycle).
 
 ### Changed
 - **WorkspaceManager refactored** — accepts `dict[str, WorkspaceBackend]` instead of
   `OpenCodeClient | None`. Resolves backend per-session from DB via `_backend_for_session()`.
-  Claude Code sessions skip prompt-based context injection (uses MCP self-service) and the
-  3-second OpenCode init delay.
+  Now accepts `WorkItemManager` for dispatch briefing generation. When `work_item_id` is
+  provided, briefing replaces generic context injection for all backends.
 - **Services container** — new `workspace_backends` field on `Services` dataclass. Backends
-  built from config in `create_services()` and passed to `WorkspaceManager`.
+  built from config in `create_services()`. `WorkItemManager` shared between `Services`
+  and `WorkspaceManager` via walrus operator (single instance).
 
 ## [0.52.0] — 2026-02-19 "Event Horizon"
 
