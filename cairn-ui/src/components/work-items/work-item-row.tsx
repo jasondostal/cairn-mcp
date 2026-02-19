@@ -1,10 +1,12 @@
 "use client";
 
-import type { WorkItem, WorkItemStatus } from "@/lib/api";
+import { useState } from "react";
+import type { WorkItem, WorkItemStatus, WorkspaceBackendInfo } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { StatusDot, StatusText, PriorityLabel } from "./status-dot";
 import { RiskTierBadge } from "./risk-tier-badge";
-import { ChevronRight, Hand } from "lucide-react";
+import { DispatchDialog } from "./dispatch-dialog";
+import { ChevronRight, Hand, Bot } from "lucide-react";
 
 interface WorkItemRowProps {
   item: WorkItem;
@@ -16,6 +18,8 @@ interface WorkItemRowProps {
   isCollapsed?: boolean;
   onToggleCollapse?: (id: number) => void;
   onClick?: () => void;
+  backends?: WorkspaceBackendInfo[];
+  onDispatch?: () => void;
 }
 
 export function WorkItemRow({
@@ -28,7 +32,10 @@ export function WorkItemRow({
   isCollapsed = false,
   onToggleCollapse,
   onClick,
+  backends,
+  onDispatch,
 }: WorkItemRowProps) {
+  const [dispatchOpen, setDispatchOpen] = useState(false);
   const isReady = readyIds?.has(item.id);
   const effectiveStatus: WorkItemStatus = isReady && (item.status === "open" || item.status === "ready")
     ? "ready"
@@ -104,6 +111,29 @@ export function WorkItemRow({
 
       <PriorityLabel priority={item.priority} />
       <RiskTierBadge tier={item.risk_tier} />
+
+      {backends && backends.length > 0 && !isDone && !isCancelled && item.status !== "in_progress" && (
+        <>
+          <button
+            className="shrink-0 p-0.5 rounded text-muted-foreground/40 hover:text-muted-foreground hover:bg-accent transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              setDispatchOpen(true);
+            }}
+            title="Dispatch to agent"
+            aria-label="Dispatch to agent"
+          >
+            <Bot className="h-3.5 w-3.5" />
+          </button>
+          <DispatchDialog
+            open={dispatchOpen}
+            onOpenChange={setDispatchOpen}
+            item={item}
+            backends={backends}
+            onDispatched={onDispatch}
+          />
+        </>
+      )}
 
       <StatusText status={effectiveStatus} />
 

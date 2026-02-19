@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type WorkItem, type GatedItem, type WorkItemStatus, type WorkItemDetail } from "@/lib/api";
+import { api, type WorkItem, type GatedItem, type WorkItemStatus, type WorkItemDetail, type WorkspaceBackendInfo } from "@/lib/api";
 import { usePageFilters } from "@/lib/use-page-filters";
 import { useLocalStorage } from "@/lib/use-local-storage";
 import { PageLayout } from "@/components/page-layout";
@@ -126,6 +126,7 @@ export default function WorkItemsPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [gatedItems, setGatedItems] = useState<GatedItem[]>([]);
+  const [backends, setBackends] = useState<WorkspaceBackendInfo[]>([]);
 
   // Persisted UI state
   const [collapsed, setCollapsed] = useLocalStorage<number[]>("cairn-wi-collapsed", []);
@@ -180,6 +181,13 @@ export default function WorkItemsPage() {
   useEffect(() => { fetchItems(); }, [fetchItems]);
   useEffect(() => { fetchReady(); }, [fetchReady]);
   useEffect(() => { fetchGated(); }, [fetchGated]);
+
+  // Fetch workspace backends once on mount
+  useEffect(() => {
+    api.workspaceBackends()
+      .then((b) => setBackends(b.filter((be) => be.status === "healthy")))
+      .catch(() => setBackends([]));
+  }, []);
 
   // Polling with visibility awareness
   useEffect(() => {
@@ -423,6 +431,8 @@ export default function WorkItemsPage() {
               showProject={filters.showAllProjects}
               readyIds={readyIds}
               onClick={() => openSheet(row.item.id)}
+              backends={backends}
+              onDispatch={handleAction}
             />
           ))}
         </div>
@@ -436,6 +446,7 @@ export default function WorkItemsPage() {
         onNavigate={(id) => {
           setSelectedItemId(id);
         }}
+        backends={backends}
       />
 
       <CreateWorkItemDialog

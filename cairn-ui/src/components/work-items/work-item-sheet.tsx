@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, type WorkItem, type WorkItemDetail, type WorkItemActivity, type WorkItemStatus } from "@/lib/api";
+import { api, type WorkItem, type WorkItemDetail, type WorkItemActivity, type WorkItemStatus, type WorkspaceBackendInfo } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import {
   Sheet,
@@ -18,7 +18,9 @@ import { SingleSelect } from "@/components/ui/single-select";
 import { Separator } from "@/components/ui/separator";
 import { StatusDot, StatusText, PriorityLabel } from "./status-dot";
 import { RiskTierBadge } from "./risk-tier-badge";
+import { DispatchDialog } from "./dispatch-dialog";
 import {
+  Bot,
   CheckCircle,
   Clock,
   GitBranch,
@@ -40,6 +42,7 @@ interface WorkItemSheetProps {
   onOpenChange: (open: boolean) => void;
   onAction?: () => void;
   onNavigate?: (id: number) => void;
+  backends?: WorkspaceBackendInfo[];
 }
 
 export function WorkItemSheet({
@@ -48,10 +51,12 @@ export function WorkItemSheet({
   onOpenChange,
   onAction,
   onNavigate,
+  backends,
 }: WorkItemSheetProps) {
   const [detail, setDetail] = useState<WorkItemDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [acting, setActing] = useState(false);
+  const [dispatchOpen, setDispatchOpen] = useState(false);
   const [activities, setActivities] = useState<WorkItemActivity[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(false);
   const [gateResponse, setGateResponse] = useState("");
@@ -494,6 +499,30 @@ export function WorkItemSheet({
                 <>
                   <Separator />
                   <div className="flex gap-2">
+                    {backends && backends.length > 0 && detail.status !== "in_progress" && (
+                      <>
+                        <Button
+                          onClick={() => setDispatchOpen(true)}
+                          disabled={acting}
+                          size="sm"
+                          variant="outline"
+                          className="flex-1"
+                        >
+                          <Bot className="mr-1 h-3.5 w-3.5" />
+                          Dispatch
+                        </Button>
+                        <DispatchDialog
+                          open={dispatchOpen}
+                          onOpenChange={setDispatchOpen}
+                          item={detail}
+                          backends={backends}
+                          onDispatched={() => {
+                            onAction?.();
+                            onOpenChange(false);
+                          }}
+                        />
+                      </>
+                    )}
                     {!detail.assignee && (
                       <Button
                         onClick={handleClaim}
