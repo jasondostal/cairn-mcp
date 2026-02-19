@@ -271,11 +271,11 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         cluster_engine=ClusterEngine(db, embedding, llm=llm_fast),
         project_manager=project_manager,
         task_manager=TaskManager(db, graph=graph_provider, event_bus=event_bus),
-        work_item_manager=WorkItemManager(
+        work_item_manager=(_wi_mgr := WorkItemManager(
             db, embedding, graph=graph_provider,
             knowledge_extractor=knowledge_extractor,
             event_bus=event_bus,
-        ),
+        )),
         thinking_engine=ThinkingEngine(
             db,
             graph=graph_provider,
@@ -299,6 +299,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
             db, workspace_backends,
             default_backend=config.workspace.default_backend,
             message_manager=_msg_mgr,
+            work_item_manager=_wi_mgr,
             default_agent=config.workspace.default_agent,
             budget_tokens=config.budget.workspace,
         ),

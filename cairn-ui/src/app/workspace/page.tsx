@@ -68,7 +68,7 @@ CAIRN_OPENCODE_PASSWORD=your-secret`}
           </pre>
         </div>
         <div>
-          <h3 className="text-sm font-medium mb-1">Claude Code (Opus 4.6)</h3>
+          <h3 className="text-sm font-medium mb-1">Claude Code (Opus / Sonnet)</h3>
           <pre className="text-xs bg-muted rounded p-3 overflow-x-auto">
 {`# Install Claude Code CLI
 # https://docs.anthropic.com/en/docs/claude-code
@@ -219,6 +219,7 @@ function CreateSessionDialog({
   const [task, setTask] = useState("");
   const [agent, setAgent] = useState("");
   const [selectedBackend, setSelectedBackend] = useState("");
+  const [selectedModel, setSelectedModel] = useState("");
   const [contextMode, setContextMode] = useState<"focused" | "full">("focused");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -231,11 +232,14 @@ function CreateSessionDialog({
     }
   }, [open]);
 
+  const showModelSelector = selectedBackend === "claude_code";
+
   const reset = () => {
     setProject("");
     setTask("");
     setAgent("");
     setSelectedBackend("");
+    setSelectedModel("");
     setContextMode("focused");
     setError("");
   };
@@ -255,6 +259,7 @@ function CreateSessionDialog({
         agent: agent || undefined,
         context_mode: contextMode,
         backend: selectedBackend || undefined,
+        model: selectedModel || undefined,
       });
       if (session.error) {
         setError(session.error);
@@ -271,7 +276,7 @@ function CreateSessionDialog({
   };
 
   const backendLabel = (name: string) => {
-    if (name === "claude_code") return "Claude Code (Opus 4.6)";
+    if (name === "claude_code") return "Claude Code";
     if (name === "opencode") return "OpenCode (OSS models)";
     return name;
   };
@@ -321,7 +326,25 @@ function CreateSessionDialog({
                     })),
                 ]}
                 value={selectedBackend}
-                onValueChange={setSelectedBackend}
+                onValueChange={(v) => {
+                  setSelectedBackend(v);
+                  if (v !== "claude_code") setSelectedModel("");
+                }}
+                className="w-full h-9"
+              />
+            </div>
+          )}
+
+          {showModelSelector && (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Model</label>
+              <SingleSelect
+                options={[
+                  { value: "", label: "Opus 4.6 (default)" },
+                  { value: "claude-sonnet-4-6", label: "Sonnet 4.6 (faster, saves usage)" },
+                ]}
+                value={selectedModel}
+                onValueChange={setSelectedModel}
                 className="w-full h-9"
               />
             </div>

@@ -118,6 +118,7 @@ class ClaudeCodeBackend(WorkspaceBackend):
                 "session": session,
                 "claude_session_id": None,  # captured from first response
                 "risk_tier": self._config.default_risk_tier,
+                "model": None,  # set on first send_message if provided
             }
         return session
 
@@ -128,6 +129,7 @@ class ClaudeCodeBackend(WorkspaceBackend):
         *,
         agent: str | None = None,
         risk_tier: int | None = None,
+        model: str | None = None,
         **kwargs: Any,
     ) -> AgentMessage:
         with self._lock:
@@ -140,8 +142,14 @@ class ClaudeCodeBackend(WorkspaceBackend):
 
         tier = risk_tier if risk_tier is not None else meta.get("risk_tier", self._config.default_risk_tier)
         claude_sid = meta.get("claude_session_id")
+        resolved_model = model or meta.get("model")
 
-        args = self._build_cli_args(text, risk_tier=tier, claude_session_id=claude_sid)
+        # Persist model choice on session for future --resume calls
+        if resolved_model and not meta.get("model"):
+            with self._lock:
+                meta["model"] = resolved_model
+
+        args = self._build_cli_args(text, risk_tier=tier, claude_session_id=claude_sid, model=resolved_model)
         cwd = self._config.working_dir or None
 
         try:
@@ -178,11 +186,12 @@ class ClaudeCodeBackend(WorkspaceBackend):
         *,
         agent: str | None = None,
         risk_tier: int | None = None,
+        model: str | None = None,
         **kwargs: Any,
     ) -> None:
         def _run():
             try:
-                self.send_message(session_id, text, agent=agent, risk_tier=risk_tier, **kwargs)
+                self.send_message(session_id, text, agent=agent, risk_tier=risk_tier, model=model, **kwargs)
             except WorkspaceBackendError:
                 logger.warning("Async send_message failed for session %s", session_id, exc_info=True)
 
@@ -211,10 +220,17 @@ class ClaudeCodeBackend(WorkspaceBackend):
     def list_agents(self) -> list[AgentInfo]:
         return [
             AgentInfo(
-                id="claude-code",
-                name="Claude Code",
-                description="Claude Code CLI (Opus 4.6)",
+                id="claude-code-opus",
+                name="Claude Code (Opus)",
+                description="Claude Code CLI — Opus 4.6",
                 model="claude-opus-4-6",
+                backend="claude_code",
+            ),
+            AgentInfo(
+                id="claude-code-sonnet",
+                name="Claude Code (Sonnet)",
+                description="Claude Code CLI — Sonnet 4.6",
+                model="claude-sonnet-4-6",
                 backend="claude_code",
             ),
         ]
@@ -241,12 +257,17 @@ class ClaudeCodeBackend(WorkspaceBackend):
         *,
         risk_tier: int = 0,
         claude_session_id: str | None = None,
+        model: str | None = None,
     ) -> list[str]:
         """Build the ``claude`` CLI argument list."""
         args = [
             "claude", "-p", prompt,
             "--output-format", "json",
         ]
+
+        # Model override (e.g. "claude-sonnet-4-6" to save Opus budget)
+        if model:
+            args.extend(["--model", model])
 
         if self._config.max_turns > 0:
             args.extend(["--max-turns", str(self._config.max_turns)])
@@ -278,10 +299,12 @@ class ClaudeCodeBackend(WorkspaceBackend):
         if not self._config.cairn_mcp_url:
             return None
 
+        # Use "type": "http" — matches the proven mcp.json config (see memory #98).
+        # "type": "url" silently fails in Claude CLI ≤2.1.47.
         config = {
             "mcpServers": {
                 "cairn": {
-                    "type": "url",
+                    "type": "http",
                     "url": self._config.cairn_mcp_url,
                 },
             },

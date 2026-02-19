@@ -896,6 +896,7 @@ export const api = {
     title?: string; agent?: string; inject_context?: boolean;
     context_mode?: "focused" | "full";
     backend?: string; risk_tier?: number;
+    work_item_id?: number | string; model?: string;
   }) => post<WorkspaceSession>("/workspace/sessions", body),
 
   workspaceBackends: () => get<WorkspaceBackendInfo[]>("/workspace/backends"),

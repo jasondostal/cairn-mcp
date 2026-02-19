@@ -41,6 +41,8 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             context_mode=body.get("context_mode", "focused"),
             backend=body.get("backend"),
             risk_tier=body.get("risk_tier"),
+            work_item_id=body.get("work_item_id"),
+            model=body.get("model"),
         )
 
     @router.get("/workspace/sessions/{session_id}")
