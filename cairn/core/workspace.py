@@ -1,7 +1,7 @@
-"""Workspace manager: bridge between Cairn context and OpenCode execution.
+"""Workspace manager: bridge between Cairn context and agent backends.
 
 Assembles context from Cairn (rules, memories, project docs, cairn trail)
-and manages OpenCode sessions with that context injected.
+and manages workspace sessions across multiple backends (OpenCode, Claude Code).
 """
 
 from __future__ import annotations
@@ -19,35 +19,69 @@ from cairn.core.constants import (
 )
 from cairn.core.messages import MessageManager
 from cairn.core.utils import get_or_create_project, get_project
-from cairn.integrations.opencode import OpenCodeClient, OpenCodeError
+from cairn.integrations.interface import WorkspaceBackend, WorkspaceBackendError
 from cairn.storage.database import Database
 
 logger = logging.getLogger(__name__)
 
 
 class WorkspaceManager:
-    """Manages workspace sessions bridging Cairn memory and OpenCode execution.
+    """Manages workspace sessions bridging Cairn memory and agent backends.
 
     Responsibilities:
     - Assemble context from Cairn (rules, recent memories, project docs, trail)
-    - Create OpenCode sessions with injected context
-    - Track session→project mapping for cairn lifecycle
+    - Create sessions on any registered backend with injected context
+    - Track session→project→backend mapping for lifecycle management
     """
 
     def __init__(
         self,
         db: Database,
-        opencode: OpenCodeClient | None = None,
+        backends: dict[str, WorkspaceBackend] | None = None,
         *,
+        default_backend: str = "opencode",
         message_manager: MessageManager | None = None,
         default_agent: str = "cairn-build",
         budget_tokens: int = 6000,
     ):
         self.db = db
-        self.opencode = opencode
+        self._backends = backends or {}
+        self._default_backend = default_backend
         self.message_manager = message_manager
         self.default_agent = default_agent
         self.budget_tokens = budget_tokens
+
+    # -- backend resolution --------------------------------------------------
+
+    def _get_backend(self, name: str | None = None) -> WorkspaceBackend:
+        """Resolve a backend by name, falling back to the default.
+
+        Raises WorkspaceBackendError if the requested backend is not available.
+        """
+        backend_name = name or self._default_backend
+        backend = self._backends.get(backend_name)
+        if not backend:
+            available = ", ".join(self._backends) or "none"
+            raise WorkspaceBackendError(
+                f"Backend '{backend_name}' not configured (available: {available})",
+                backend=backend_name,
+            )
+        return backend
+
+    def _backend_for_session(self, session_id: str) -> WorkspaceBackend:
+        """Look up which backend owns a session from the DB record."""
+        row = self.db.execute_one(
+            "SELECT backend FROM workspace_sessions WHERE backend_session_id = %s",
+            (session_id,),
+        )
+        if not row:
+            # Fall back to default if no DB record (e.g. direct OpenCode session)
+            return self._get_backend()
+        return self._get_backend(row["backend"])
+
+    def _has_any_backend(self) -> bool:
+        """Check if at least one backend is configured."""
+        return bool(self._backends)
 
     # -- context assembly ----------------------------------------------------
 
@@ -59,7 +93,7 @@ class WorkspaceManager:
         task: str | None = None,
         mode: str = "focused",
     ) -> str:
-        """Assemble Cairn context into a system prompt for an OpenCode session.
+        """Assemble Cairn context into a prompt for an agent session.
 
         Modes:
         - ``focused`` (default): Lean context for autonomous task agents.
@@ -191,38 +225,41 @@ class WorkspaceManager:
         agent: str | None = None,
         inject_context: bool = True,
         context_mode: str = "focused",
+        backend: str | None = None,
+        risk_tier: int | None = None,
     ) -> dict[str, Any]:
-        """Create an OpenCode session with Cairn context injected.
+        """Create a workspace session with Cairn context injected.
 
         Instructions can come from multiple sources:
         - ``task``: Raw text description.
         - ``message_id``: Read instructions from a Cairn message.
-        - ``fork_from``: Fork an existing OpenCode session (full history carry-over).
+        - ``fork_from``: Fork an existing session (full history carry-over).
         - All can be combined.
-
-        When forking, the new session inherits the full conversation history
-        of the parent — all analysis, decisions, and file changes. Context
-        injection is skipped (parent already has it). The task/message is sent
-        as a continuation message.
-
-        After context injection, instructions are sent as the first real
-        message so the agent starts working autonomously.
 
         Args:
             project: Cairn project name for context.
             task: Optional task description.
             message_id: Optional Cairn message ID to read instructions from.
-            fork_from: Optional OpenCode session ID to fork from.
+            fork_from: Optional session ID to fork from.
             title: Session title (auto-generated if omitted).
             agent: Agent to use (defaults to workspace default).
             inject_context: Whether to inject Cairn context as first message.
             context_mode: "focused" (default, lean) or "full" (grimoire + trail).
+            backend: Backend to use (defaults to config default).
+            risk_tier: Risk tier for permission scoping (Claude Code only).
 
         Returns:
             Dict with session info and context metadata.
         """
-        if not self.opencode:
-            return {"error": "OpenCode not configured (set CAIRN_OPENCODE_URL)"}
+        if not self._has_any_backend():
+            return {"error": "No workspace backend configured"}
+
+        try:
+            be = self._get_backend(backend)
+        except WorkspaceBackendError as exc:
+            return {"error": str(exc)}
+
+        backend_name = be.backend_name()
 
         # Resolve instructions — message_id is passed by reference, not inlined.
         # The agent looks it up via cairn_messages at runtime.
@@ -248,17 +285,21 @@ class WorkspaceManager:
         if instructions:
             session_title = f"cairn:{project} — {instructions[:50]}"
 
+        # Claude Code uses MCP self-service — skip prompt-based context injection
+        if backend_name == "claude_code":
+            inject_context = False
+
         # Create or fork session
         try:
-            if fork_from:
-                session = self.opencode.fork_session(fork_from)
+            if fork_from and be.supports_fork():
+                session = be.fork_session(fork_from)
                 # Forked sessions already have full context — skip injection
                 inject_context = False
                 logger.info("Forked session %s from %s", session.id, fork_from)
             else:
-                session = self.opencode.create_session(title=session_title)
-        except OpenCodeError as exc:
-            logger.error("Failed to create OpenCode session: %s", exc)
+                session = be.create_session(title=session_title)
+        except WorkspaceBackendError as exc:
+            logger.error("Failed to create %s session: %s", backend_name, exc)
             return {"error": str(exc)}
 
         result: dict[str, Any] = {
@@ -266,6 +307,7 @@ class WorkspaceManager:
             "title": session_title,
             "project": project,
             "agent": agent,
+            "backend": backend_name,
             "context_injected": False,
             "task_sent": False,
         }
@@ -275,9 +317,6 @@ class WorkspaceManager:
             result["forked_from"] = fork_from
 
         # Build a single message combining context + task.
-        # OpenCode already injects agent prompt, AGENTS.md, and environment
-        # into the system prompt. Sending context as a separate no_reply
-        # message creates two consecutive user messages which confuses models.
         message_parts: list[str] = []
 
         if inject_context:
@@ -291,39 +330,47 @@ class WorkspaceManager:
             message_parts.append(instructions)
 
         # Send as a single message so the agent sees one coherent prompt.
-        # Brief delay after session creation lets OpenCode finish MCP tool
-        # initialization — without it K2.5 generates empty output on the
-        # first async message (tools aren't available yet).
         if message_parts:
             combined = "\n\n---\n\n".join(message_parts)
-            time.sleep(3)
+
+            # Brief delay after session creation lets OpenCode finish MCP tool
+            # initialization — without it K2.5 generates empty output on the
+            # first async message (tools aren't available yet).
+            # Claude Code doesn't need this delay.
+            if backend_name == "opencode":
+                time.sleep(3)
+
             try:
-                self.opencode.send_message_async(
-                    session.id,
-                    combined,
-                    agent=agent,
-                )
+                send_kwargs: dict[str, Any] = {"agent": agent}
+                if risk_tier is not None and backend_name == "claude_code":
+                    send_kwargs["risk_tier"] = risk_tier
+                be.send_message_async(session.id, combined, **send_kwargs)
                 result["task_sent"] = True
-                logger.info("Task sent to session %s (async)", session.id)
-            except OpenCodeError as exc:
+                logger.info("Task sent to session %s via %s (async)", session.id, backend_name)
+            except WorkspaceBackendError as exc:
                 logger.warning("Failed to send task to session %s: %s", session.id, exc)
 
         # Track in DB
         project_id = get_or_create_project(self.db, project)
+        backend_metadata = {}
+        if risk_tier is not None:
+            backend_metadata["risk_tier"] = risk_tier
         row = self.db.execute_one(
             """
-            INSERT INTO workspace_sessions (project_id, opencode_session_id, agent, title, task)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO workspace_sessions
+                (project_id, backend_session_id, agent, title, task, backend, backend_metadata)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             RETURNING id, created_at
             """,
-            (project_id, session.id, agent, session_title, instructions),
+            (project_id, session.id, agent, session_title, instructions,
+             backend_name, json.dumps(backend_metadata)),
         )
         self.db.commit()
         result["id"] = row["id"]
         result["created_at"] = row["created_at"].isoformat()
 
-        logger.info("Workspace session #%d created (opencode=%s, project=%s)",
-                     row["id"], session.id, project)
+        logger.info("Workspace session #%d created (backend=%s, session=%s, project=%s)",
+                     row["id"], backend_name, session.id, project)
         return result
 
     @track_operation("workspace.send_message")
@@ -335,10 +382,10 @@ class WorkspaceManager:
         agent: str | None = None,
         wait: bool = True,
     ) -> dict[str, Any]:
-        """Send a message to an OpenCode session.
+        """Send a message to a workspace session.
 
         Args:
-            session_id: OpenCode session ID.
+            session_id: Backend session ID.
             text: Message text.
             agent: Override agent for this message.
             wait: If True, wait for response (sync). If False, fire-and-forget.
@@ -346,50 +393,59 @@ class WorkspaceManager:
         Returns:
             Dict with response text and metadata.
         """
-        if not self.opencode:
-            return {"error": "OpenCode not configured"}
+        if not self._has_any_backend():
+            return {"error": "No workspace backend configured"}
+
+        try:
+            be = self._backend_for_session(session_id)
+        except WorkspaceBackendError as exc:
+            return {"error": str(exc)}
 
         try:
             if wait:
-                reply = self.opencode.send_and_collect_text(
-                    session_id, text, agent=agent,
-                )
-                return {"session_id": session_id, "response": reply}
+                msg = be.send_message(session_id, text, agent=agent)
+                # Extract text from parts
+                text_parts = [
+                    p.get("text", "") for p in msg.parts if p.get("type") == "text"
+                ]
+                return {"session_id": session_id, "response": "\n".join(text_parts)}
             else:
-                self.opencode.send_message_async(session_id, text, agent=agent)
+                be.send_message_async(session_id, text, agent=agent)
                 return {"session_id": session_id, "status": "sent"}
-        except OpenCodeError as exc:
+        except WorkspaceBackendError as exc:
             logger.error("Failed to send message to session %s: %s", session_id, exc)
             return {"error": str(exc)}
 
     @track_operation("workspace.get_session")
     def get_session(self, session_id: str) -> dict[str, Any]:
-        """Get session details combining OpenCode and Cairn data."""
-        if not self.opencode:
-            return {"error": "OpenCode not configured"}
+        """Get session details combining backend and Cairn data."""
+        if not self._has_any_backend():
+            return {"error": "No workspace backend configured"}
 
         try:
-            session = self.opencode.get_session(session_id)
-            result = {
+            be = self._backend_for_session(session_id)
+            session = be.get_session(session_id)
+            result: dict[str, Any] = {
                 "session_id": session.id,
                 "title": session.title,
                 "created_at": session.created_at,
             }
+        except WorkspaceBackendError as exc:
+            result = {"session_id": session_id, "error": str(exc)}
 
-            # Enrich with Cairn tracking data
-            row = self.db.execute_one(
-                "SELECT * FROM workspace_sessions WHERE opencode_session_id = %s",
-                (session_id,),
-            )
-            if row:
-                result["project"] = self._get_project_name(row["project_id"])
-                result["agent"] = row["agent"]
-                result["task"] = row["task"]
-                result["cairn_id"] = row["id"]
+        # Enrich with Cairn tracking data
+        row = self.db.execute_one(
+            "SELECT * FROM workspace_sessions WHERE backend_session_id = %s",
+            (session_id,),
+        )
+        if row:
+            result["project"] = self._get_project_name(row["project_id"])
+            result["agent"] = row["agent"]
+            result["task"] = row["task"]
+            result["cairn_id"] = row["id"]
+            result["backend"] = row["backend"]
 
-            return result
-        except OpenCodeError as exc:
-            return {"error": str(exc)}
+        return result
 
     @track_operation("workspace.list_sessions")
     def list_sessions(self, project: str | None = None) -> list[dict[str, Any]]:
@@ -417,11 +473,12 @@ class WorkspaceManager:
         return [
             {
                 "id": r["id"],
-                "session_id": r["opencode_session_id"],
+                "session_id": r["backend_session_id"],
                 "project": r["project_name"],
                 "agent": r["agent"],
                 "title": r["title"],
                 "task": r.get("task"),
+                "backend": r.get("backend", "opencode"),
                 "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
             }
             for r in rows
@@ -429,28 +486,30 @@ class WorkspaceManager:
 
     @track_operation("workspace.abort_session")
     def abort_session(self, session_id: str) -> dict[str, Any]:
-        """Abort a running OpenCode session."""
-        if not self.opencode:
-            return {"error": "OpenCode not configured"}
+        """Abort a running session."""
+        if not self._has_any_backend():
+            return {"error": "No workspace backend configured"}
         try:
-            self.opencode.abort_session(session_id)
+            be = self._backend_for_session(session_id)
+            be.abort_session(session_id)
             return {"session_id": session_id, "status": "aborted"}
-        except OpenCodeError as exc:
+        except WorkspaceBackendError as exc:
             return {"error": str(exc)}
 
     @track_operation("workspace.delete_session")
     def delete_session(self, session_id: str) -> dict[str, Any]:
-        """Delete a workspace session from both OpenCode and Cairn tracking."""
-        if not self.opencode:
-            return {"error": "OpenCode not configured"}
+        """Delete a workspace session from both backend and Cairn tracking."""
+        if not self._has_any_backend():
+            return {"error": "No workspace backend configured"}
 
         try:
-            self.opencode.delete_session(session_id)
-        except OpenCodeError as exc:
-            logger.warning("Failed to delete OpenCode session %s: %s", session_id, exc)
+            be = self._backend_for_session(session_id)
+            be.delete_session(session_id)
+        except WorkspaceBackendError as exc:
+            logger.warning("Failed to delete backend session %s: %s", session_id, exc)
 
         self.db.execute(
-            "DELETE FROM workspace_sessions WHERE opencode_session_id = %s",
+            "DELETE FROM workspace_sessions WHERE backend_session_id = %s",
             (session_id,),
         )
         self.db.commit()
@@ -458,71 +517,105 @@ class WorkspaceManager:
 
     @track_operation("workspace.get_diff")
     def get_diff(self, session_id: str) -> list[dict[str, Any]]:
-        """Get file diffs from an OpenCode session."""
-        if not self.opencode:
+        """Get file diffs from a session."""
+        if not self._has_any_backend():
             return []
         try:
-            return self.opencode.get_diff(session_id)
-        except OpenCodeError as exc:
+            be = self._backend_for_session(session_id)
+            return be.get_diff(session_id)
+        except WorkspaceBackendError as exc:
             logger.warning("Failed to get diff for session %s: %s", session_id, exc)
             return []
 
     @track_operation("workspace.health")
     def health(self) -> dict[str, Any]:
-        """Check OpenCode worker health."""
-        if not self.opencode:
+        """Check health of all configured backends.
+
+        Returns overall status plus per-backend details.
+        Overall is 'healthy' if any backend is healthy.
+        """
+        if not self._backends:
             return {"status": "not_configured"}
-        try:
-            h = self.opencode.health()
-            return {
-                "status": "healthy" if h.healthy else "unhealthy",
-                "version": h.version,
-            }
-        except OpenCodeError as exc:
-            return {"status": "unreachable", "error": str(exc)}
+
+        backends_health: dict[str, dict[str, Any]] = {}
+        any_healthy = False
+
+        for name, be in self._backends.items():
+            try:
+                h = be.health()
+                status = "healthy" if h.healthy else "unhealthy"
+                backends_health[name] = {"status": status, "version": h.version}
+                if h.healthy:
+                    any_healthy = True
+            except Exception as exc:
+                backends_health[name] = {"status": "unreachable", "error": str(exc)}
+
+        return {
+            "status": "healthy" if any_healthy else "unhealthy",
+            "backends": backends_health,
+        }
 
     @track_operation("workspace.get_messages")
     def get_messages(self, session_id: str) -> list[dict[str, Any]]:
-        """Get messages from an OpenCode session.
+        """Get messages from a session.
 
         Returns a list of message dicts with id, role, parts, and created_at.
         """
-        if not self.opencode:
+        if not self._has_any_backend():
             return []
         try:
-            envelopes = self.opencode.get_messages(session_id)
+            be = self._backend_for_session(session_id)
+            messages = be.get_messages(session_id)
             return [
                 {
-                    "id": env.info.id,
-                    "role": env.info.role,
-                    "parts": env.parts,
-                    "created_at": env.info.created_at,
+                    "id": msg.id,
+                    "role": msg.role,
+                    "parts": msg.parts,
+                    "created_at": msg.created_at,
                 }
-                for env in envelopes
+                for msg in messages
             ]
-        except OpenCodeError as exc:
+        except WorkspaceBackendError as exc:
             logger.warning("Failed to get messages for session %s: %s", session_id, exc)
             return []
 
     @track_operation("workspace.list_agents")
     def list_agents(self) -> list[dict[str, Any]]:
-        """List available agents from OpenCode."""
-        if not self.opencode:
-            return []
-        try:
-            agents = self.opencode.list_agents()
-            return [
-                {
-                    "id": a.id,
-                    "name": a.name,
-                    "description": a.description,
-                    "model": a.model,
-                }
-                for a in agents
-            ]
-        except OpenCodeError as exc:
-            logger.warning("Failed to list agents: %s", exc)
-            return []
+        """List available agents from all backends."""
+        all_agents: list[dict[str, Any]] = []
+        for name, be in self._backends.items():
+            try:
+                agents = be.list_agents()
+                for a in agents:
+                    all_agents.append({
+                        "id": a.id,
+                        "name": a.name,
+                        "description": a.description,
+                        "model": a.model,
+                        "backend": a.backend or name,
+                    })
+            except WorkspaceBackendError as exc:
+                logger.warning("Failed to list agents from %s: %s", name, exc)
+        return all_agents
+
+    def list_backends(self) -> list[dict[str, Any]]:
+        """List all configured backends with capabilities and health."""
+        result: list[dict[str, Any]] = []
+        for name, be in self._backends.items():
+            entry: dict[str, Any] = {
+                "name": name,
+                "capabilities": be.capabilities(),
+                "is_default": name == self._default_backend,
+            }
+            try:
+                h = be.health()
+                entry["status"] = "healthy" if h.healthy else "unhealthy"
+                entry["version"] = h.version
+            except Exception as exc:
+                entry["status"] = "unreachable"
+                entry["error"] = str(exc)
+            result.append(entry)
+        return result
 
     # -- private helpers -----------------------------------------------------
 

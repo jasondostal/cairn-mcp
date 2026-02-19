@@ -1,4 +1,4 @@
-"""Workspace endpoints — OpenCode integration."""
+"""Workspace endpoints — agent backend integration."""
 
 from __future__ import annotations
 
@@ -13,6 +13,11 @@ def register_routes(router: APIRouter, svc: Services, **kw):
     @router.get("/workspace/health")
     def api_workspace_health():
         return workspace_manager.health()
+
+    @router.get("/workspace/backends")
+    def api_workspace_backends():
+        """List configured workspace backends with capabilities and health."""
+        return workspace_manager.list_backends()
 
     @router.get("/workspace/sessions")
     def api_workspace_sessions(
@@ -34,6 +39,8 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             agent=body.get("agent"),
             inject_context=body.get("inject_context", True),
             context_mode=body.get("context_mode", "focused"),
+            backend=body.get("backend"),
+            risk_tier=body.get("risk_tier"),
         )
 
     @router.get("/workspace/sessions/{session_id}")

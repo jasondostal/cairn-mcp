@@ -23,7 +23,8 @@ from cairn.core.memory import MemoryStore
 from cairn.core.messages import MessageManager
 from cairn.core.terminal import TerminalHostManager
 from cairn.core.workspace import WorkspaceManager
-from cairn.integrations.opencode import OpenCodeClient
+from cairn.integrations.interface import WorkspaceBackend
+from cairn.integrations.opencode import OpenCodeClient, OpenCodeBackend
 from cairn.core.projects import ProjectManager
 from cairn.core.reranker import get_reranker
 from cairn.core.reranker.interface import RerankerInterface
@@ -72,7 +73,8 @@ class Services:
     message_manager: MessageManager
     ingest_pipeline: IngestPipeline
     terminal_host_manager: TerminalHostManager | None
-    opencode: OpenCodeClient | None
+    opencode: OpenCodeClient | None  # deprecated — use workspace_backends
+    workspace_backends: dict[str, WorkspaceBackend]
     workspace_manager: WorkspaceManager
     work_item_manager: WorkItemManager
     conversation_manager: ConversationManager
@@ -233,14 +235,28 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
             terminal_host_manager = TerminalHostManager(db, config.terminal)
             logger.info("Terminal enabled: backend=%s", config.terminal.backend)
 
-    # OpenCode client (optional, for workspace feature)
+    # Workspace backends (optional, for workspace feature)
     opencode = None
+    workspace_backends: dict[str, WorkspaceBackend] = {}
+
     if config.workspace.url:
         opencode = OpenCodeClient(
             url=config.workspace.url,
             password=config.workspace.password,
         )
-        logger.info("OpenCode workspace enabled: %s", config.workspace.url)
+        workspace_backends["opencode"] = OpenCodeBackend(opencode)
+        logger.info("OpenCode workspace backend enabled: %s", config.workspace.url)
+
+    if config.workspace.claude_code_enabled:
+        from cairn.integrations.claude_code import ClaudeCodeBackend, ClaudeCodeConfig
+        cc_config = ClaudeCodeConfig(
+            working_dir=config.workspace.claude_code_working_dir,
+            max_turns=config.workspace.claude_code_max_turns,
+            max_budget_usd=config.workspace.claude_code_max_budget,
+            cairn_mcp_url=config.workspace.claude_code_mcp_url,
+        )
+        workspace_backends["claude_code"] = ClaudeCodeBackend(cc_config)
+        logger.info("Claude Code workspace backend enabled")
 
     return Services(
         config=config,
@@ -278,8 +294,10 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         ingest_pipeline=IngestPipeline(db, project_manager, memory_store, llm_fast, config),
         terminal_host_manager=terminal_host_manager,
         opencode=opencode,
+        workspace_backends=workspace_backends,
         workspace_manager=WorkspaceManager(
-            db, opencode,
+            db, workspace_backends,
+            default_backend=config.workspace.default_backend,
             message_manager=_msg_mgr,
             default_agent=config.workspace.default_agent,
             budget_tokens=config.budget.workspace,
