@@ -1,17 +1,27 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { Suspense, useState, useEffect } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatDrawer } from "./chat-drawer";
 
-export function ChatDrawerTrigger() {
+function ChatDrawerTriggerInner() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   // Hide on the full chat page — redundant there
   const isOnChatPage = pathname === "/chat";
+
+  // Demo mode: ?demo=true auto-opens with static content
+  const isDemo = searchParams.get("demo") === "true";
+
+  useEffect(() => {
+    if (isDemo && !isOnChatPage) {
+      setOpen(true);
+    }
+  }, [isDemo, isOnChatPage]);
 
   // Keyboard shortcut: Cmd+. (or Ctrl+.) to toggle
   useEffect(() => {
@@ -41,7 +51,15 @@ export function ChatDrawerTrigger() {
         <MessageCircle className="h-5 w-5" />
       </Button>
 
-      <ChatDrawer open={open} onOpenChange={setOpen} />
+      <ChatDrawer open={open} onOpenChange={setOpen} demo={isDemo} />
     </>
+  );
+}
+
+export function ChatDrawerTrigger() {
+  return (
+    <Suspense>
+      <ChatDrawerTriggerInner />
+    </Suspense>
   );
 }
