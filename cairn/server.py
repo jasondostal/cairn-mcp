@@ -349,6 +349,24 @@ def search(
             if meta["omitted"] > 0:
                 results.append({"_overflow": meta["overflow_message"]})
 
+        # Publish search.executed event for access tracking
+        if event_bus and results:
+            try:
+                memory_ids = [r["id"] for r in results if isinstance(r, dict) and "id" in r]
+                event_bus.publish(
+                    session_name="",
+                    event_type="search.executed",
+                    project=project,
+                    payload={
+                        "query": query[:200],
+                        "result_count": len(memory_ids),
+                        "memory_ids": memory_ids[:20],
+                        "search_mode": search_mode,
+                    },
+                )
+            except Exception:
+                logger.debug("Failed to publish search.executed event", exc_info=True)
+
         # Confidence gating: wrap results with assessment when active
         confidence = search_engine.assess_confidence(query, results)
         if confidence is not None:

@@ -15,6 +15,7 @@ from cairn.storage.database import Database
 if TYPE_CHECKING:
     from cairn.config import LLMCapabilities
     from cairn.core.enrichment import Enricher
+    from cairn.core.event_bus import EventBus
     from cairn.core.extraction import KnowledgeExtractor
     from cairn.llm.interface import LLMInterface
 
@@ -30,6 +31,7 @@ class MemoryStore:
         llm: LLMInterface | None = None,
         capabilities: LLMCapabilities | None = None,
         knowledge_extractor: KnowledgeExtractor | None = None,
+        event_bus: EventBus | None = None,
     ):
         self.db = db
         self.embedding = embedding
@@ -37,6 +39,33 @@ class MemoryStore:
         self.llm = llm
         self.capabilities = capabilities
         self.knowledge_extractor = knowledge_extractor
+        self.event_bus = event_bus
+
+    def _publish(
+        self, event_type: str, memory_id: int | None = None,
+        project_id: int | None = None, session_name: str | None = None,
+        **payload_fields,
+    ) -> None:
+        """Publish a memory event if event_bus is available."""
+        if not self.event_bus:
+            return
+        # Ensure memory_id is in the payload for handlers
+        if memory_id is not None:
+            payload_fields.setdefault("memory_id", memory_id)
+        project_name = None
+        if project_id:
+            row = self.db.execute_one("SELECT name FROM projects WHERE id = %s", (project_id,))
+            if row:
+                project_name = row["name"]
+        try:
+            self.event_bus.publish(
+                session_name=session_name or "",
+                event_type=event_type,
+                project=project_name,
+                payload=payload_fields if payload_fields else None,
+            )
+        except Exception:
+            logger.warning("Failed to publish %s for memory %s", event_type, memory_id, exc_info=True)
 
     @track_operation("store")
     def store(
@@ -169,13 +198,79 @@ class MemoryStore:
                 )
 
         # Phase 1 commit: core memory is now safely persisted.
-        # Enrichment operations (relationship extraction, graph persist, etc.)
-        # run in a separate transaction so their failures can't roll back
-        # the primary INSERT.
+        # Enrichment operations (graph persist, relationship extraction, etc.)
+        # run asynchronously via event handler when event_bus is available,
+        # or inline in a separate transaction as fallback.
         self.db.commit()
         logger.info("Stored memory #%d (type=%s, project=%s, enrich=%s)", memory_id, final_type, project, enrich)
 
-        # Phase 2: best-effort enrichment in a new transaction
+        # Publish memory.created event — enables async enrichment + subscribers
+        self._publish(
+            "memory.created",
+            memory_id=memory_id,
+            project_id=project_id,
+            session_name=session_name,
+            memory_type=final_type,
+            enrich=enrich,
+            **({"extraction_result": extraction_result.model_dump()} if extraction_result else {}),
+        )
+
+        # Phase 2: best-effort enrichment
+        # When event_bus is wired, the MemoryEnrichmentListener handles this
+        # asynchronously with retry. Otherwise, run inline for backward compat.
+        enrichment_result = {}
+        if not self.event_bus:
+            enrichment_result = self._post_store_enrichment(
+                memory_id=memory_id,
+                project_id=project_id,
+                extraction_result=extraction_result,
+                enrich=enrich,
+                content=content,
+                vector=vector,
+                session_name=session_name,
+                entities=entities,
+                final_type=final_type,
+                project=project,
+            )
+
+        result = {
+            "id": memory_id,
+            "content": content,
+            "memory_type": final_type,
+            "importance": final_importance,
+            "project": project,
+            "tags": caller_tags,
+            "auto_tags": auto_tags,
+            "summary": summary,
+            "author": author,
+            "auto_relations": enrichment_result.get("auto_relations", []),
+            "conflicts": enrichment_result.get("conflicts", []),
+            "rule_conflicts": enrichment_result.get("rule_conflicts"),
+            "created_at": row["created_at"].isoformat(),
+        }
+        if enrichment_result.get("graph_stats"):
+            result["graph"] = enrichment_result["graph_stats"]
+        return result
+
+    def _post_store_enrichment(
+        self,
+        memory_id: int,
+        project_id: int,
+        extraction_result,
+        enrich: bool,
+        content: str,
+        vector: list[float],
+        session_name: str | None,
+        entities: list[str],
+        final_type: str,
+        project: str,
+    ) -> dict:
+        """Phase 2: best-effort enrichment after PG commit.
+
+        Runs graph persist (extraction path) or relationship extraction +
+        temporal/co-occurrence edges (legacy path). Called inline when no
+        event_bus, or by MemoryEnrichmentListener asynchronously.
+        """
         auto_relations = []
         conflicts = []
         rule_conflicts = None
@@ -183,7 +278,6 @@ class MemoryStore:
 
         try:
             if extraction_result is not None:
-                # Knowledge extraction path: persist graph, skip old relationship pipeline
                 try:
                     graph_stats = self.knowledge_extractor.resolve_and_persist(
                         extraction_result, memory_id, project_id,
@@ -196,7 +290,6 @@ class MemoryStore:
                         graph_stats.get("contradictions_found", 0),
                     )
 
-                    # Post-extraction: resolve dangling string objects
                     try:
                         resolved = self.knowledge_extractor.resolve_dangling_objects(project_id)
                         if resolved > 0:
@@ -207,26 +300,20 @@ class MemoryStore:
                 except Exception:
                     logger.warning("Graph persist failed (non-blocking)", exc_info=True)
 
-                # Rule conflict detection still applies
                 if final_type == "rule":
                     rule_conflicts = self._check_rule_conflicts(content, project)
 
             elif enrich:
-                # Legacy enrichment path
                 auto_relations = self._extract_relationships(memory_id, content, vector, project_id)
 
-                # Temporal edge: link to previous memory in same session
                 if session_name:
                     self._create_temporal_edge(memory_id, session_name, project_id)
 
-                # Entity co-occurrence edges: memories sharing 2+ entities
                 if entities and len(entities) >= 2:
                     self._create_entity_cooccurrence_edges(memory_id, entities, project_id)
 
-                # Escalate high-importance contradictions
                 conflicts = self._escalate_contradictions(auto_relations)
 
-                # Rule conflict detection
                 if final_type == "rule":
                     rule_conflicts = self._check_rule_conflicts(content, project)
 
@@ -238,24 +325,12 @@ class MemoryStore:
             except Exception:
                 pass
 
-        result = {
-            "id": memory_id,
-            "content": content,
-            "memory_type": final_type,
-            "importance": final_importance,
-            "project": project,
-            "tags": caller_tags,
-            "auto_tags": auto_tags,
-            "summary": summary,
-            "author": author,
+        return {
             "auto_relations": auto_relations,
             "conflicts": conflicts,
             "rule_conflicts": rule_conflicts,
-            "created_at": row["created_at"].isoformat(),
+            "graph_stats": graph_stats,
         }
-        if graph_stats:
-            result["graph"] = graph_stats
-        return result
 
     def _extract_relationships(
         self, memory_id: int, content: str, embedding: list[float], project_id: int,
@@ -573,6 +648,13 @@ class MemoryStore:
 
         return results
 
+    def _get_memory_project_id(self, memory_id: int) -> int | None:
+        """Look up the project_id for a memory (for event publishing)."""
+        row = self.db.execute_one(
+            "SELECT project_id FROM memories WHERE id = %s", (memory_id,),
+        )
+        return row["project_id"] if row else None
+
     @track_operation("modify")
     def modify(
         self,
@@ -597,6 +679,12 @@ class MemoryStore:
                 (reason or "No reason provided", memory_id),
             )
             self.db.commit()
+            self._publish(
+                "memory.inactivated",
+                memory_id=memory_id,
+                project_id=self._get_memory_project_id(memory_id),
+                reason=reason or "No reason provided",
+            )
             return {"id": memory_id, "action": "inactivated"}
 
         if action == MemoryAction.REACTIVATE:
@@ -609,6 +697,11 @@ class MemoryStore:
                 (memory_id,),
             )
             self.db.commit()
+            self._publish(
+                "memory.reactivated",
+                memory_id=memory_id,
+                project_id=self._get_memory_project_id(memory_id),
+            )
             return {"id": memory_id, "action": "reactivated"}
 
         if action == MemoryAction.UPDATE:
@@ -655,6 +748,12 @@ class MemoryStore:
                 tuple(params),
             )
             self.db.commit()
+            self._publish(
+                "memory.updated",
+                memory_id=memory_id,
+                project_id=self._get_memory_project_id(memory_id),
+                content_changed=content is not None,
+            )
             return {"id": memory_id, "action": "updated"}
 
         raise ValueError(f"Unknown action: {action}")

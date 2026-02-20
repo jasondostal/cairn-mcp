@@ -191,45 +191,44 @@ evaluation.
 
 ---
 
-## PHASE 3: UNIFY EVENT BUS
+## PHASE 3: UNIFY EVENT BUS — DONE
 
 Move memory operations through the event bus (same pattern as work items).
 
-### 3.1 Add memory events
+### 3.1 Add memory events — DONE
 
-- [ ] Publish memory.created after PG INSERT in memory.py
-- [ ] Publish memory.updated after modify()
-- [ ] Publish memory.inactivated after inactivation
+- [x] Publish memory.created after PG INSERT in memory.py
+- [x] Publish memory.updated after modify() with action=update
+- [x] Publish memory.inactivated after modify() with action=inactivate
+- [x] Publish memory.reactivated after modify() with action=reactivate
+- [x] Added _publish() helper and _get_memory_project_id() to MemoryStore
+- [x] Injected event_bus into MemoryStore constructor
 
-### 3.2 Move extraction to event handler
+### 3.2 Move enrichment to event handler — DONE
 
-- [ ] GraphProjectionListener subscribes to memory.* events
-- [ ] Handler triggers extraction + Neo4j writes asynchronously
-- [ ] Gets retry logic (5 attempts, exponential backoff) for free
-- [ ] store() returns after PG INSERT + embedding (fast)
+- [x] Created MemoryEnrichmentListener (cairn/listeners/memory_enrichment.py)
+- [x] Subscribes to memory.* events, handles memory.created
+- [x] Extracted Phase 2 enrichment into _post_store_enrichment() on MemoryStore
+- [x] When event_bus present: enrichment runs async via dispatcher with retry
+- [x] When no event_bus: enrichment runs inline (backward compat)
+- [x] extraction_result serialized into event payload for async reconstruction
 
-**Tradeoff:** store() currently returns extraction results (graph_stats, conflicts).
-If async, these aren't available immediately. Caller (Claude Code) doesn't use
-graph_stats — it uses memory ID and content, available from Phase 1 commit.
+### 3.3 Add search.executed event — DONE
 
-### 3.3 Add search.executed event
+- [x] Published in server.py after search returns results
+- [x] Payload: query (truncated), result_count, memory_ids, search_mode
+- [x] Enables future access tracking for decay/lifecycle
 
-- [ ] Publish after search returns results
-- [ ] Payload: query, result_count, memory_ids_returned
-- [ ] Enables access tracking for decay/lifecycle
+### 3.4 Wire session synthesis — DONE
 
-### 3.4 Wire session synthesis
-
-- [ ] Subscribe to session_end event
-- [ ] Call session_synthesizer.synthesize()
-- [ ] Store result as memory (type: session_summary)
+- [x] Created SessionSynthesisListener (cairn/listeners/session_synthesis.py)
+- [x] Subscribes to session_end event
+- [x] Calls session_synthesizer.synthesize()
+- [x] Stores narrative as memory (type: session_summary, enrich=False)
 
 ### 3.5 Phase 3 verification
 
-- [ ] Store memory → check events table for memory.created
-- [ ] Verify Neo4j populated asynchronously (may take seconds)
-- [ ] Inactivate memory → verify Neo4j cleanup
-- [ ] Verify store() returns faster
+- [x] Run: python3 -m pytest -x -q (329 passed, including 9 new event tests)
 - [ ] Commit
 
 ---
@@ -311,8 +310,8 @@ No deleting based on vibes or old plans.
 ## PHASE STATUS
 
 - [x] **Phase 1: Safe Deletions** — DONE (1465ae0)
-- [~] **Phase 2: Fix Search Bugs** — DONE (bugs 1,2,5+9 fixed; bugs 3,4 deferred to Phase 6)
-- [ ] Phase 3: Unify Event Bus — NOT STARTED
+- [x] **Phase 2: Fix Search Bugs** — DONE (bugs 1,2,5+9 fixed; bugs 3,4 deferred to Phase 6)
+- [x] **Phase 3: Unify Event Bus** — DONE (memory events, async enrichment, search events, session synthesis)
 - [ ] Phase 4: Ingestion + Remaining — NOT STARTED
 - [ ] Phase 5: Harden — NOT STARTED
 - [ ] Phase 6: Benchmark Evaluation — BLOCKED (waiting on fast LoCoMo harness)

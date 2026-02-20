@@ -184,11 +184,31 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     memory_store = MemoryStore(
         db, embedding, enricher=enricher, llm=llm_capable, capabilities=capabilities,
         knowledge_extractor=knowledge_extractor,
+        event_bus=None,  # set after event_bus creation below
     )
     project_manager = ProjectManager(db)
 
     # Event bus — created early so managers can publish events
     event_bus = EventBus(db, project_manager)
+
+    # Wire event_bus into memory_store (created before event_bus for DI ordering)
+    memory_store.event_bus = event_bus
+
+    # Register memory enrichment listener (async graph persist + relationships)
+    from cairn.listeners.memory_enrichment import MemoryEnrichmentListener
+    _memory_listener = MemoryEnrichmentListener(memory_store)
+    _memory_listener.register(event_bus)
+    logger.info("MemoryEnrichmentListener registered with EventBus")
+
+    # Register session synthesis listener (auto-summarize on session close)
+    from cairn.listeners.session_synthesis import SessionSynthesisListener
+    _synthesis_listener = SessionSynthesisListener(
+        synthesizer=SessionSynthesizer(db, llm=llm_fast, capabilities=capabilities),
+        memory_store=memory_store,
+        db=db,
+    )
+    _synthesis_listener.register(event_bus)
+    logger.info("SessionSynthesisListener registered with EventBus")
 
     # Register graph projection listener if graph is available
     if graph_provider:
