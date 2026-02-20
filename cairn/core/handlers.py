@@ -31,6 +31,7 @@ class SearchContext:
     embedding: EmbeddingInterface
     graph: GraphProvider | None
     limit: int = 10
+    resolved_entities: list | None = None
 
 
 def handle_aspect_query(ctx: SearchContext) -> list[dict]:
@@ -81,51 +82,89 @@ def handle_aspect_query(ctx: SearchContext) -> list[dict]:
 
 
 def handle_entity_lookup(ctx: SearchContext) -> list[dict]:
-    """Entity-centric search — find entity by name, return its statements/episodes.
+    """Entity-centric graph-primary search with multi-hop BFS.
 
-    Combines graph entity resolution with vector search for coverage.
+    Uses pre-resolved entities from SearchV2's query entity extraction
+    when available, avoiding redundant embedding + resolution calls.
 
-    Best for: "Who is X?" "What is Y?" "Tell me about Z"
+    Multi-hop BFS inspired by Core:
+    - Hop 1: Direct statements connected to query entities (score 2.0x)
+    - Hop 2: Statements connected to hop-1 entities (score 1.3x)
+
+    Falls back to string-based resolution from entity_hints if no
+    pre-resolved entities are provided.
     """
-    if not ctx.graph or not ctx.route.entity_hints:
+    if not ctx.graph:
         return _vector_search(ctx)
 
     try:
         if ctx.project_id is None:
             return []
 
-        all_episode_ids = set()
-
-        for entity_name in ctx.route.entity_hints:
-            # Vector search for entity
-            name_embedding = ctx.embedding.embed(entity_name)
-            entities = ctx.graph.search_entities_by_embedding(
-                name_embedding, ctx.project_id, limit=5,
-            )
-
-            # Also try fulltext search
-            ft_entities = ctx.graph.search_entities_fulltext(
-                entity_name, ctx.project_id, limit=5,
-            )
-
-            # Combine, deduplicate by UUID
+        # Use pre-resolved entities if available, else resolve from hints
+        entities = ctx.resolved_entities or []
+        if not entities and ctx.route.entity_hints:
             seen_uuids = set()
-            combined = []
-            for e in entities + ft_entities:
-                if e.uuid not in seen_uuids:
-                    seen_uuids.add(e.uuid)
-                    combined.append(e)
+            for hint in ctx.route.entity_hints:
+                name_embedding = ctx.embedding.embed(hint)
+                for e in ctx.graph.search_entities_by_embedding(
+                    name_embedding, ctx.project_id, limit=5,
+                ):
+                    if e.uuid not in seen_uuids:
+                        seen_uuids.add(e.uuid)
+                        entities.append(e)
 
-            # Get episode IDs for each entity
-            for entity in combined:
-                episode_ids = ctx.graph.find_entity_episodes(entity.uuid)
-                all_episode_ids.update(episode_ids)
+        if not entities:
+            return _vector_search(ctx)
 
-        # Vector search is primary — graph supplements with entity-matched results
-        vector_results = _vector_search(ctx, limit=ctx.limit * 3)
-        graph_results = _fetch_memories_by_ids(ctx.db, list(all_episode_ids), ctx.limit) if all_episode_ids else []
+        # --- Multi-hop BFS ---
+        # Hop 1: Direct entity → statement → episode_id (score boost 2.0)
+        hop1_episodes: dict[int, float] = {}
+        hop1_entity_uuids: set[str] = set()
 
-        return _blend_results(vector_results, graph_results, ctx.limit * 3)
+        for entity in entities:
+            hop1_entity_uuids.add(entity.uuid)
+            episode_ids = ctx.graph.find_entity_episodes(entity.uuid)
+            for eid in episode_ids:
+                hop1_episodes[eid] = max(hop1_episodes.get(eid, 0), 2.0)
+
+        # Hop 2: BFS depth=2 from each entity, collect statements not in hop1
+        hop2_episodes: dict[int, float] = {}
+        for entity in entities:
+            try:
+                stmts = ctx.graph.bfs_traverse(entity.uuid, max_depth=2)
+                for stmt in stmts:
+                    if stmt.episode_id and stmt.episode_id not in hop1_episodes:
+                        hop2_episodes[stmt.episode_id] = max(
+                            hop2_episodes.get(stmt.episode_id, 0), 1.3,
+                        )
+            except Exception:
+                logger.debug(
+                    "BFS hop-2 failed for entity %s", entity.uuid, exc_info=True,
+                )
+
+        # Merge hop1 and hop2 episode IDs with their scores
+        scored_episodes = {**hop2_episodes, **hop1_episodes}  # hop1 overwrites hop2
+
+        if not scored_episodes:
+            return []
+
+        # Fetch memories and apply hop scores
+        all_ids = list(scored_episodes.keys())
+        graph_results = _fetch_memories_by_ids(ctx.db, all_ids, ctx.limit * 3)
+        for r in graph_results:
+            r["score"] = scored_episodes.get(r["id"], 1.0) * r.get("score", 1.0)
+
+        # Sort by score descending
+        graph_results.sort(key=lambda r: r["score"], reverse=True)
+
+        logger.debug(
+            "Entity lookup: %d entities → %d hop1 + %d hop2 episodes → %d memories",
+            len(entities), len(hop1_episodes), len(hop2_episodes), len(graph_results),
+        )
+
+        return graph_results
+
     except Exception:
         logger.warning("Entity lookup handler failed", exc_info=True)
         return _vector_search(ctx)

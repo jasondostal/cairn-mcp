@@ -14,7 +14,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         project: str | None = Query(None),
         limit: int = Query(20, ge=1, le=50),
     ):
-        return {"deprecated": "Cairns removed in v0.37.0. Use trail() tool for boot orientation."}
+        return {"deprecated": "Cairns removed in v0.37.0. Use orient() tool for boot orientation."}
 
     @router.post("/cairns")
     def api_set_cairn(body: dict):

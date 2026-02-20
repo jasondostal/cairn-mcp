@@ -33,7 +33,6 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         return workspace_manager.create_session(
             project=project,
             task=body.get("task"),
-            message_id=body.get("message_id"),
             fork_from=body.get("fork_from"),
             title=body.get("title"),
             agent=body.get("agent"),

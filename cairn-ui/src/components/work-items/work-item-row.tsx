@@ -50,7 +50,7 @@ export function WorkItemRow({
         "flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer",
         (isDone || isCancelled) && "opacity-50",
       )}
-      onClick={onClick}
+      onClick={() => { if (!dispatchOpen) onClick?.(); }}
     >
       {/* Indentation with tree connectors */}
       {depth > 0 && (
@@ -95,7 +95,7 @@ export function WorkItemRow({
       </span>
 
       {item.item_type === "epic" && (
-        <span className="text-xs text-muted-foreground/70 shrink-0">Epic:</span>
+        <span className="text-xs text-muted-foreground shrink-0">Epic:</span>
       )}
 
       <span className={cn(
@@ -115,7 +115,7 @@ export function WorkItemRow({
       {backends && backends.length > 0 && !isDone && !isCancelled && item.status !== "in_progress" && (
         <>
           <button
-            className="shrink-0 p-0.5 rounded text-muted-foreground/40 hover:text-muted-foreground hover:bg-accent transition-colors"
+            className="shrink-0 p-0.5 rounded text-muted-foreground/60 hover:text-muted-foreground hover:bg-accent transition-colors"
             onClick={(e) => {
               e.stopPropagation();
               setDispatchOpen(true);
@@ -144,7 +144,7 @@ export function WorkItemRow({
       )}
 
       {showProject && (
-        <span className="font-mono text-xs text-muted-foreground/60 shrink-0">
+        <span className="font-mono text-xs text-muted-foreground shrink-0">
           {item.project}
         </span>
       )}

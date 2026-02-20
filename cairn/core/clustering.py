@@ -12,6 +12,7 @@ from sklearn.cluster import HDBSCAN
 from sklearn.manifold import TSNE
 from sklearn.metrics.pairwise import cosine_distances
 
+from cairn.config import ClusteringConfig
 from cairn.core.analytics import track_operation
 from cairn.core.utils import extract_json, parse_vector
 from cairn.embedding.interface import EmbeddingInterface
@@ -23,27 +24,21 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# HDBSCAN parameters — auto-tunes density, no eps needed.
-# min_cluster_size=5: minimum members for a real cluster
-# min_samples=3: conservative core-point density (lower = more clusters, higher = tighter)
-HDBSCAN_MIN_CLUSTER_SIZE = 5
-HDBSCAN_MIN_SAMPLES = 3
-
-# t-SNE is O(n^2) — cap input to avoid OOM on large memory sets
-TSNE_MAX_SAMPLES = 500
-
-# Staleness thresholds
-STALENESS_HOURS = 24
-STALENESS_GROWTH_RATIO = 0.20  # 20% memory growth triggers recluster
-
 
 class ClusterEngine:
     """HDBSCAN clustering with LLM-generated summaries and lazy reclustering."""
 
-    def __init__(self, db: Database, embedding: EmbeddingInterface, llm: LLMInterface | None = None):
+    def __init__(
+        self,
+        db: Database,
+        embedding: EmbeddingInterface,
+        llm: LLMInterface | None = None,
+        config: ClusteringConfig | None = None,
+    ):
         self.db = db
         self.embedding = embedding
         self.llm = llm
+        self.config = config or ClusteringConfig()
 
     # ============================================================
     # Staleness Detection
@@ -73,13 +68,14 @@ class ClusterEngine:
         # Check time staleness
         now = datetime.now(timezone.utc)
         age_hours = (now - run["created_at"]).total_seconds() / 3600
-        if age_hours > STALENESS_HOURS:
+        if age_hours > self.config.staleness_hours:
             return True
 
         # Check growth staleness
         current_count = self._count_active_memories(project_id)
         last_count = run["memory_count"]
-        if last_count > 0 and (current_count - last_count) / last_count > STALENESS_GROWTH_RATIO:
+        growth_ratio = self.config.staleness_growth_pct / 100.0
+        if last_count > 0 and (current_count - last_count) / last_count > growth_ratio:
             return True
 
         return False
@@ -111,9 +107,10 @@ class ClusterEngine:
             )
 
         memory_count = len(rows)
+        min_size = self.config.min_cluster_size
 
         # Not enough memories to cluster
-        if memory_count < HDBSCAN_MIN_CLUSTER_SIZE:
+        if memory_count < min_size:
             self._record_run(project_id, memory_count, 0, 0, start)
             return {"cluster_count": 0, "noise_count": 0, "memory_count": memory_count,
                     "duration_ms": self._elapsed_ms(start)}
@@ -121,7 +118,7 @@ class ClusterEngine:
         # Parse embeddings into numpy array (skip memories without embeddings)
         paired = [(r, parse_vector(r["embedding"])) for r in rows]
         paired = [(r, v) for r, v in paired if v is not None]
-        if len(paired) < HDBSCAN_MIN_CLUSTER_SIZE:
+        if len(paired) < min_size:
             self._record_run(project_id, memory_count, 0, 0, start)
             return {"cluster_count": 0, "noise_count": 0, "memory_count": memory_count,
                     "duration_ms": self._elapsed_ms(start)}
@@ -131,9 +128,10 @@ class ClusterEngine:
 
         # HDBSCAN on cosine metric — no precomputed distance matrix needed
         hdb = HDBSCAN(
-            min_cluster_size=HDBSCAN_MIN_CLUSTER_SIZE,
-            min_samples=HDBSCAN_MIN_SAMPLES,
+            min_cluster_size=min_size,
+            min_samples=self.config.min_samples,
             metric="cosine",
+            cluster_selection_method=self.config.selection_method,
             copy=True,
         )
         labels = hdb.fit_predict(embeddings)
@@ -307,10 +305,11 @@ class ClusterEngine:
 
         # Sample down if too many memories (t-SNE is O(n^2))
         total_available = len(rows)
+        tsne_cap = self.config.tsne_max_samples
         sampled = False
-        if total_available > TSNE_MAX_SAMPLES:
+        if total_available > tsne_cap:
             rng = np.random.default_rng(42)
-            indices = rng.choice(total_available, size=TSNE_MAX_SAMPLES, replace=False)
+            indices = rng.choice(total_available, size=tsne_cap, replace=False)
             rows = [rows[i] for i in sorted(indices)]
             sampled = True
 
@@ -360,7 +359,7 @@ class ClusterEngine:
         if sampled:
             result["sampled"] = True
             result["total_memories"] = total_available
-            result["sampled_count"] = TSNE_MAX_SAMPLES
+            result["sampled_count"] = tsne_cap
         return result
 
     def get_last_run(self, project: str | None = None) -> dict | None:

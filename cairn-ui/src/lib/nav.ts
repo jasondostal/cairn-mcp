@@ -12,7 +12,6 @@ import {
   Shield,
   PenLine,
   MessageCircle,
-  Mail,
   Radio,
   Boxes,
   Terminal,
@@ -70,7 +69,6 @@ export const navGroups: NavGroup[] = [
   {
     label: "Ops",
     items: [
-      { href: "/messages", label: "Messages", icon: Mail },
       { href: "/terminal", label: "Terminal", icon: Terminal },
       { href: "/analytics", label: "Ops Log", icon: BarChart3 },
       { href: "/settings", label: "Settings", icon: Settings },

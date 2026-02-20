@@ -46,14 +46,14 @@ export function PriorityDots({ priority }: { priority: number }) {
   return (
     <span className="inline-flex gap-px" title={`Priority ${priority}`}>
       {Array.from({ length: count }, (_, i) => (
-        <span key={i} className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground/60" />
+        <span key={i} className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground" />
       ))}
     </span>
   );
 }
 
 const priorityColors: Record<number, string> = {
-  1: "text-muted-foreground/70",
+  1: "text-muted-foreground",
   2: "text-[oklch(0.488_0.243_264)]",
   3: "text-[oklch(0.769_0.188_70)]",
   4: "text-[oklch(0.705_0.213_47)]",

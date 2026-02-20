@@ -5,6 +5,77 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.54.0] — 2026-02-20 "Use The Graph, Luke"
+
+### Added
+- **Graph-primary search** — `SearchV2._routed_search()` rewritten to use Neo4j entity
+  traversal as the PRIMARY retrieval mechanism. Extracts entities from query via chunk+embed
+  (no LLM), traverses graph for entity-anchored memories, uses RRF as backfill. Inverts the
+  previous architecture where graph was optional/supplementary.
+- **Query entity extraction** — `SearchV2._extract_query_entities()` chunks query into
+  words, bigrams, and full query, embeds each chunk, finds matching entities in Neo4j via
+  vector similarity. Zero LLM calls. Replaces the router-based entity resolution for the
+  primary search path.
+- **Multi-hop BFS in entity lookup** — `handle_entity_lookup()` now does 2-hop BFS from
+  matched entities. Hop 1 (direct entity→statement→episode) scored at 2.0x, hop 2 (BFS
+  depth=2) scored at 1.3x. Uses pre-resolved entities from query extraction to avoid
+  redundant embedding calls.
+- **Normalization pre-step for extraction** — `KnowledgeExtractor.normalize()` rewrites
+  raw conversational text into clean factual sentences before extraction. Converts dialog
+  to third-person, resolves pronouns, preserves all specific details. Returns
+  `NOTHING_TO_REMEMBER` for filler/acknowledgment content (skips extraction entirely).
+- **SSH remote execution for Claude Code** — `ClaudeCodeBackend` can execute `claude -p`
+  on a remote host via SSH, enabling agent orchestration from the control plane while the
+  CLI runs on a separate machine. Local subprocess remains the default when `ssh_host` is
+  unconfigured. New config fields: `ssh_host`, `ssh_user`, `ssh_key_path`.
+- **Dispatch-to-agent button** — work items list and detail sheet now have a bot icon
+  to kick off agent dispatch directly from the row. Dialog opens inline without navigating.
+
+### Fixed
+- **Benchmark never populated Neo4j** — `runner_bench.py` was missing
+  `knowledge_extraction` capability and never created `KnowledgeExtractor`. Previous
+  `llm_extract` benchmark runs paid for LLM extraction but never wrote entities/statements
+  to the graph. Fixed: `CAIRN_KNOWLEDGE_EXTRACTION=true` env var now wires the full
+  extraction pipeline including graph persistence.
+- **Benchmark SearchV2 always in passthrough** — `search_v2` capability was missing from
+  benchmark capabilities, so `SearchV2.enhanced` was always False. Fixed: added to
+  capabilities, gated by `CAIRN_SEARCH_V2` env var.
+- **Benchmark SearchV2 required LLM** — guard condition `if use_search_v2 and llm` blocked
+  graph-primary search when LLM was unavailable. Removed LLM requirement since the
+  graph-primary path uses embeddings, not LLM.
+- **Dispatch dialog click propagation** — clicking cancel or outside the dispatch dialog
+  no longer triggers the underlying work item row click (detail view open).
+- **Active work item styling** — secondary info (epic labels, project names, priority dots)
+  on active items was over-faded. Boosted opacity to `text-muted-foreground` for readability
+  while keeping done/cancelled rows dimmed.
+- **SSH known_hosts resolution** — host key verification now reads `known_hosts` from the
+  SSH key directory rather than the container's default, fixing verification failures when
+  keys are mounted from the host.
+
+### Removed
+- **MCP tools: `trail`, `synthesize`, `messages`** — tool count reduced from 17 to 14.
+  `orient()` subsumes `trail()`. `synthesize()` was unused at the MCP layer (engine retained
+  internally). `messages()` feature removed entirely — activity feeds on work items replaced
+  inter-agent messaging.
+- **Messages feature** — full removal: MCP tool, REST API (`/messages/*`), UI page, nav
+  entries, command palette entry, chat tool definitions (`send_message`, `check_inbox`),
+  `MessageManager` wiring from services and workspace. Migration `015_messages.sql` retained
+  per policy.
+
+### Changed
+- **ClaudeCodeBackend transport** — extracted `_run_cmd()` with SSH transport layer, MCP
+  config relay, and PATH sourcing. Health checks work over SSH.
+- **Dockerfile** — added `openssh-client` for SSH transport support.
+- **HDBSCAN clustering tuned** — `min_cluster_size` 5→3, `min_samples` 3→2,
+  `cluster_selection_method` set to `leaf` (finer-grained clusters from the condensed tree).
+  Previously produced 4 mega-clusters for 177 memories with 33% noise; `leaf` selection
+  splits the hierarchy into topic-level groups. All params configurable via new
+  `ClusteringConfig` dataclass and `CAIRN_CLUSTER_*` env vars, editable from UI settings.
+- **`work_items` docstring** — slimmed from ~85 lines to ~20 lines. Actions listed as
+  one-liners with required params, reducing context token cost for LLM callers.
+- **`handle_entity_lookup` signature** — accepts pre-resolved entities via
+  `SearchContext.resolved_entities`, falling back to string-based hint resolution.
+
 ## [0.53.0] — 2026-02-19 "Totally Not Skynet"
 
 ### Added

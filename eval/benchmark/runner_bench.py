@@ -26,7 +26,7 @@ from eval.benchmark.base import BenchmarkAdapter, BenchmarkResult, IngestStrateg
 from eval.benchmark.locomo.adapter import LoCoMoAdapter
 from eval.benchmark.longmemeval.adapter import LongMemEvalAdapter
 from eval.benchmark.qa_metrics import compute_accuracy, compute_per_type
-from eval.benchmark.rag import evaluate_question
+from eval.benchmark.rag import evaluate_question, evaluate_retrieval
 from eval.benchmark.report_bench import print_benchmark_results, write_benchmark_json
 from eval.corpus import create_eval_db, drop_eval_db
 from eval.model_compare import MODEL_REGISTRY
@@ -162,7 +162,7 @@ def _create_services(eval_dsn: str, model_spec: dict, skip_enricher: bool = Fals
 
     import os as _os
     capabilities = LLMCapabilities(
-        query_expansion=True,
+        query_expansion=_os.getenv("CAIRN_QUERY_EXPANSION", "true").lower() in ("true", "1", "yes"),
         relationship_extract=False,  # Skip for benchmarks
         rule_conflict_check=False,
         session_synthesis=False,
@@ -172,6 +172,8 @@ def _create_services(eval_dsn: str, model_spec: dict, skip_enricher: bool = Fals
         type_routing=_os.getenv("CAIRN_TYPE_ROUTING", "false").lower() in ("true", "1", "yes"),
         spreading_activation=_os.getenv("CAIRN_SPREADING_ACTIVATION", "false").lower() in ("true", "1", "yes"),
         mca_gate=_os.getenv("CAIRN_MCA_GATE", "false").lower() in ("true", "1", "yes"),
+        search_v2=_os.getenv("CAIRN_SEARCH_V2", "false").lower() in ("true", "1", "yes"),
+        knowledge_extraction=_os.getenv("CAIRN_KNOWLEDGE_EXTRACTION", "false").lower() in ("true", "1", "yes"),
     )
 
     enricher = Enricher(llm) if (llm and not skip_enricher) else None
@@ -190,11 +192,31 @@ def _create_services(eval_dsn: str, model_spec: dict, skip_enricher: bool = Fals
         from cairn.core.activation import ActivationEngine
         activation_engine = ActivationEngine(db)
 
+    # Knowledge extractor — requires graph + LLM
+    knowledge_extractor = None
+    graph = None
+    if capabilities.knowledge_extraction and llm:
+        try:
+            from cairn.core.extraction import KnowledgeExtractor
+            from cairn.graph import get_graph_provider
+
+            graph = get_graph_provider()
+            if graph:
+                graph.connect()
+                graph.ensure_schema()
+                knowledge_extractor = KnowledgeExtractor(llm, embedding, graph)
+                logger.info("Knowledge extraction enabled for benchmark")
+            else:
+                logger.warning("Knowledge extraction requested but no graph provider")
+        except Exception:
+            logger.warning("Knowledge extractor init failed", exc_info=True)
+
     memory_store = MemoryStore(
         db, embedding,
         enricher=enricher,
         llm=llm,
         capabilities=capabilities,
+        knowledge_extractor=knowledge_extractor,
     )
     search_engine = SearchEngine(
         db, embedding,
@@ -205,17 +227,20 @@ def _create_services(eval_dsn: str, model_spec: dict, skip_enricher: bool = Fals
         activation_engine=activation_engine,
     )
 
-    # SearchV2 — intent-routed search with Neo4j graph handlers
+    # SearchV2 — graph-primary search with Neo4j entity traversal
     use_search_v2 = _os.getenv("CAIRN_SEARCH_V2", "false").lower() in ("true", "1", "yes")
-    if use_search_v2 and llm:
+    if use_search_v2:
         try:
             from cairn.core.search_v2 import SearchV2
-            from cairn.graph import get_graph_provider
 
-            graph = get_graph_provider()
+            # Reuse graph from knowledge extractor if available, else init fresh
+            if not graph:
+                from cairn.graph import get_graph_provider
+                graph = get_graph_provider()
+                if graph:
+                    graph.connect()
+                    graph.ensure_schema()
             if graph:
-                graph.connect()
-                graph.ensure_schema()
                 search_engine = SearchV2(
                     db=db,
                     embedding=embedding,
@@ -265,6 +290,7 @@ def run_benchmark(
     search_limit: int = 10,
     workers: int = 1,
     conversation_filter: str | None = None,
+    scorer: str = "llm",
 ) -> list[BenchmarkResult]:
     """Run a benchmark evaluation.
 
@@ -350,10 +376,32 @@ def run_benchmark(
                 )
 
             # Evaluate
-            judge_llm = llm
+            use_retrieval_scorer = scorer == "retrieval"
+            judge_llm = None if use_retrieval_scorer else llm
             effective_workers = min(workers, len(questions))
             parallel_note = f" ({effective_workers} workers)" if effective_workers > 1 else ""
-            print(f"  Evaluating {len(questions)} questions{parallel_note}...")
+            scorer_note = " [retrieval scorer — no LLM]" if use_retrieval_scorer else ""
+            print(f"  Evaluating {len(questions)} questions{parallel_note}{scorer_note}...")
+
+            def _eval_single(question):
+                extra_kwargs = adapter.get_search_kwargs(question)
+                if use_retrieval_scorer:
+                    return evaluate_retrieval(
+                        question=question,
+                        search_engine=search_engine,
+                        project="benchmark",
+                        search_limit=search_limit,
+                        extra_search_kwargs=extra_kwargs,
+                    )
+                return evaluate_question(
+                    question=question,
+                    search_engine=search_engine,
+                    llm=llm,
+                    judge_llm=judge_llm,
+                    project="benchmark",
+                    search_limit=search_limit,
+                    extra_search_kwargs=extra_kwargs,
+                )
 
             if effective_workers <= 1:
                 # Sequential path
@@ -361,18 +409,7 @@ def run_benchmark(
                 for i, question in enumerate(questions, 1):
                     if verbose or (i % 10 == 0):
                         print(f"    [{i}/{len(questions)}] {question.question_type}: {question.question[:60]}...")
-
-                    extra_kwargs = adapter.get_search_kwargs(question)
-                    result = evaluate_question(
-                        question=question,
-                        search_engine=search_engine,
-                        llm=llm,
-                        judge_llm=judge_llm,
-                        project="benchmark",
-                        search_limit=search_limit,
-                        extra_search_kwargs=extra_kwargs,
-                    )
-                    answer_results.append(result)
+                    answer_results.append(_eval_single(question))
             else:
                 # Parallel path — each question is independent
                 counter = {"done": 0}
@@ -381,16 +418,7 @@ def run_benchmark(
                 t_start = time.time()
 
                 def _eval_one(question):
-                    extra_kwargs = adapter.get_search_kwargs(question)
-                    result = evaluate_question(
-                        question=question,
-                        search_engine=search_engine,
-                        llm=llm,
-                        judge_llm=judge_llm,
-                        project="benchmark",
-                        search_limit=search_limit,
-                        extra_search_kwargs=extra_kwargs,
-                    )
+                    result = _eval_single(question)
                     with counter_lock:
                         counter["done"] += 1
                         n = counter["done"]
@@ -516,6 +544,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Parallel workers for evaluation (default: 1, try 8-16 for Bedrock)",
     )
     parser.add_argument(
+        "--scorer",
+        default="llm",
+        choices=["llm", "retrieval"],
+        help="Scoring mode: 'llm' (LLM-as-judge, expensive) or 'retrieval' (token F1, free)",
+    )
+    parser.add_argument(
         "--download",
         metavar="DATASET",
         help="Download a dataset (longmemeval or locomo)",
@@ -557,6 +591,7 @@ def main(argv: list[str] | None = None):
         verbose=args.verbose,
         search_limit=args.k,
         workers=args.workers,
+        scorer=args.scorer,
     )
 
 

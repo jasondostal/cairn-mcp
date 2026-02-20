@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from cairn.config import Config, LLMCapabilities, load_config
 from cairn.core.analytics import AnalyticsQueryEngine, RollupWorker, UsageTracker, init_analytics_tracker
-# CairnManager removed in v0.37.0 — trail() + temporal graph queries replace cairns
+# CairnManager removed in v0.37.0 — orient() + temporal graph queries replace cairns
 from cairn.core.clustering import ClusterEngine
 from cairn.core.conversations import ConversationManager
 from cairn.core.consolidation import ConsolidationEngine
@@ -20,7 +20,7 @@ from cairn.core.extraction import KnowledgeExtractor
 from cairn.core.ingest import IngestPipeline
 from cairn.core.activation import ActivationEngine
 from cairn.core.memory import MemoryStore
-from cairn.core.messages import MessageManager
+
 from cairn.core.terminal import TerminalHostManager
 from cairn.core.workspace import WorkspaceManager
 from cairn.integrations.interface import WorkspaceBackend
@@ -70,7 +70,6 @@ class Services:
     cairn_manager: object  # deprecated — kept as None for backward compat
     event_bus: EventBus
     drift_detector: DriftDetector
-    message_manager: MessageManager
     ingest_pipeline: IngestPipeline
     terminal_host_manager: TerminalHostManager | None
     opencode: OpenCodeClient | None  # deprecated — use workspace_backends
@@ -271,7 +270,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         knowledge_extractor=knowledge_extractor,
         memory_store=memory_store,
         search_engine=unified_search,
-        cluster_engine=ClusterEngine(db, embedding, llm=llm_fast),
+        cluster_engine=ClusterEngine(db, embedding, llm=llm_fast, config=config.clustering),
         project_manager=project_manager,
         task_manager=TaskManager(db, graph=graph_provider, event_bus=event_bus),
         work_item_manager=(_wi_mgr := WorkItemManager(
@@ -293,7 +292,6 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         event_bus=event_bus,
         event_dispatcher=event_dispatcher,
         drift_detector=DriftDetector(db),
-        message_manager=(_msg_mgr := MessageManager(db)),
         ingest_pipeline=IngestPipeline(db, project_manager, memory_store, llm_fast, config),
         terminal_host_manager=terminal_host_manager,
         opencode=opencode,
@@ -301,7 +299,6 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         workspace_manager=WorkspaceManager(
             db, workspace_backends,
             default_backend=config.workspace.default_backend,
-            message_manager=_msg_mgr,
             work_item_manager=_wi_mgr,
             default_agent=config.workspace.default_agent,
             budget_tokens=config.budget.workspace,

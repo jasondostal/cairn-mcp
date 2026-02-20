@@ -1,14 +1,15 @@
-"""Unified search engine.
+"""Unified search engine — graph-primary retrieval.
 
 Always instantiated as the single search entry point. Two modes:
 
 - **Passthrough** (capabilities.search_v2=false): Delegates directly to
   SearchEngine (RRF hybrid search). Zero overhead.
-- **Enhanced** (capabilities.search_v2=true): Adds intent routing, entity
-  coverage gate, cross-encoder reranking, and token budget enforcement.
+- **Enhanced** (capabilities.search_v2=true): Graph-primary retrieval.
+  Extracts entities from query via embedding, traverses Neo4j graph for
+  entity-anchored results, uses RRF as backfill. Reranking + token budget.
 
 Graceful degradation chain:
-  Enhanced pipeline → SearchEngine (RRF) → vector-only → empty results.
+  Graph retrieval → SearchEngine (RRF) → vector-only → empty results.
 
 On any failure in the enhanced pipeline, falls back to SearchEngine
 transparently. The caller never needs to know which path executed.
@@ -20,8 +21,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from cairn.core.budget import estimate_tokens
-from cairn.core.constants import HANDLER_CONFIDENCE_THRESHOLD
-from cairn.core.handlers import HANDLERS, SearchContext, _blend_results
+from cairn.core.handlers import HANDLERS, SearchContext, _blend_results, _fetch_memories_by_ids
 from cairn.core.router import QueryRouter
 
 if TYPE_CHECKING:
@@ -117,6 +117,41 @@ class SearchV2:
             return self.fallback_engine.assess_confidence(query, results)
         return None
 
+    def _extract_query_entities(self, query: str, project_id: int) -> list:
+        """Extract entities from query using Core-style chunk+embed approach.
+
+        Chunks query into words, bigrams, and full query. Embeds each chunk
+        and finds matching entities in Neo4j via vector similarity. No LLM call.
+        """
+        if not self.graph:
+            return []
+
+        words = query.lower().split()
+        # Build chunks: individual words (3+ chars), bigrams, full query
+        chunks = {w for w in words if len(w) >= 3}
+        for i in range(len(words) - 1):
+            chunks.add(f"{words[i]} {words[i+1]}")
+        chunks.add(query)
+
+        entities = {}
+        for chunk in chunks:
+            try:
+                embedding = self.embedding.embed(chunk)
+                matches = self.graph.search_entities_by_embedding(
+                    embedding, project_id, limit=3,
+                )
+                for entity in matches:
+                    if entity.uuid not in entities:
+                        entities[entity.uuid] = entity
+            except Exception:
+                logger.debug("Entity extraction failed for chunk '%s'", chunk, exc_info=True)
+
+        logger.debug(
+            "Query entity extraction: %d chunks → %d entities",
+            len(chunks), len(entities),
+        )
+        return list(entities.values())
+
     def _routed_search(
         self,
         query: str,
@@ -125,14 +160,55 @@ class SearchV2:
         limit: int,
         include_full: bool,
     ) -> list[dict]:
-        """Enhanced pipeline: RRF base + intent routing + rerank + token budget.
+        """Graph-primary search pipeline.
 
-        Strategy: SearchEngine (RRF) provides the strong multi-signal base.
-        Intent routing informs graph-based boosting. Reranking sorts by
-        cross-encoder relevance. Token budget trims the tail.
+        Strategy: Extract entities from query → graph traversal as PRIMARY
+        retrieval → RRF as backfill when graph returns insufficient results.
+        Reranking sorts by cross-encoder relevance. Token budget trims tail.
         """
+        project_id = self._resolve_project_id(project) if project else None
 
-        # Step 1: RRF base — always run SearchEngine for a solid candidate pool
+        # Step 1: Extract entities from query (no LLM, just embedding + Neo4j)
+        query_entities = []
+        if self.graph and project_id:
+            try:
+                query_entities = self._extract_query_entities(query, project_id)
+            except Exception:
+                logger.warning("Query entity extraction failed", exc_info=True)
+
+        # Step 2: Graph-primary path if entities found
+        candidates = []
+        if query_entities and self.graph:
+            try:
+                # Build a synthetic route with the extracted entity hints
+                from cairn.core.router import RouterOutput
+                entity_route = RouterOutput(
+                    query_type="entity_lookup",
+                    entity_hints=[e.name for e in query_entities],
+                    confidence=1.0,  # We found real entities, not guessing
+                )
+
+                ctx = SearchContext(
+                    query=query, route=entity_route, project_id=project_id,
+                    project_name=project if isinstance(project, str) else None,
+                    db=self.db, embedding=self.embedding, graph=self.graph,
+                    limit=limit,
+                    resolved_entities=query_entities,
+                )
+
+                # Entity lookup is the primary graph handler
+                handler = HANDLERS.get("entity_lookup")
+                if handler:
+                    candidates = handler(ctx)
+                    logger.debug(
+                        "Graph-primary: entity_lookup returned %d results",
+                        len(candidates),
+                    )
+            except Exception:
+                logger.warning("Graph-primary search failed", exc_info=True)
+                candidates = []
+
+        # Step 3: RRF backfill — always run, blend with graph results
         rrf_results = []
         if self.fallback_engine:
             rrf_results = self.fallback_engine.search(
@@ -140,65 +216,33 @@ class SearchV2:
                 project=project,
                 memory_type=memory_type,
                 search_mode="semantic",
-                limit=self.rerank_candidates,  # Wide pool for reranking
+                limit=self.rerank_candidates,
                 include_full=True,
             )
 
-        # Step 2: Route the query for graph boost
-        if self.router:
-            route = self.router.route(query)
-        else:
-            from cairn.core.router import RouterOutput
-            route = RouterOutput()
-
-        # Step 3: Handler dispatch — intent-weighted blending
-        ENTITY_ANCHORED = {"entity_lookup", "aspect_query", "relationship"}
-        candidates = rrf_results
-
-        try:
-            project_id = self._resolve_project_id(project) if project else None
-
-            if (
-                self.router
-                and route.confidence >= HANDLER_CONFIDENCE_THRESHOLD
-                and route.query_type in ENTITY_ANCHORED
-                and self.graph
-            ):
-                # High-confidence entity-anchored: handler primary, RRF backfills
-                ctx = SearchContext(
-                    query=query, route=route, project_id=project_id,
-                    project_name=project if isinstance(project, str) else None,
-                    db=self.db, embedding=self.embedding, graph=self.graph,
-                    limit=limit,
-                )
-                handler = HANDLERS.get(route.query_type)
-                if handler:
-                    handler_results = handler(ctx)
-                    if handler_results:
-                        candidates = _blend_results(handler_results, rrf_results, limit * 3)
-
-            elif (
-                self.router
-                and route.confidence >= HANDLER_CONFIDENCE_THRESHOLD
-                and route.query_type in {"temporal", "exploratory"}
-            ):
-                # Temporal/exploratory: RRF primary, handler supplements
-                ctx = SearchContext(
-                    query=query, route=route, project_id=project_id,
-                    project_name=project if isinstance(project, str) else None,
-                    db=self.db, embedding=self.embedding, graph=self.graph,
-                    limit=limit,
-                )
-                handler = HANDLERS.get(route.query_type)
-                if handler:
-                    handler_results = handler(ctx)
-                    if handler_results:
-                        candidates = _blend_results(rrf_results, handler_results, limit * 3)
-
-            # else: low confidence or no router — candidates stays as rrf_results
-        except Exception:
-            logger.warning("Handler dispatch failed, using RRF results only", exc_info=True)
+        if candidates:
+            # Graph is primary, RRF backfills
+            candidates = _blend_results(candidates, rrf_results, limit * 3)
+        elif rrf_results:
+            # No graph results — try router-based handlers as supplement
             candidates = rrf_results
+            try:
+                if self.router and self.graph and project_id:
+                    route = self.router.route(query)
+                    if route.query_type in {"temporal", "exploratory"}:
+                        ctx = SearchContext(
+                            query=query, route=route, project_id=project_id,
+                            project_name=project if isinstance(project, str) else None,
+                            db=self.db, embedding=self.embedding, graph=self.graph,
+                            limit=limit,
+                        )
+                        handler = HANDLERS.get(route.query_type)
+                        if handler:
+                            handler_results = handler(ctx)
+                            if handler_results:
+                                candidates = _blend_results(rrf_results, handler_results, limit * 3)
+            except Exception:
+                logger.debug("Supplementary handler dispatch failed", exc_info=True)
 
         if not candidates:
             return []
@@ -213,7 +257,7 @@ class SearchV2:
             try:
                 candidates = self.reranker.rerank(query, candidates, limit=limit)
             except Exception:
-                logger.warning("Reranking failed, using RRF order", exc_info=True)
+                logger.warning("Reranking failed, using current order", exc_info=True)
                 candidates = candidates[:limit]
         else:
             candidates = candidates[:limit]

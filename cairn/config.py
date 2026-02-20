@@ -191,6 +191,16 @@ class AnalyticsConfig:
 
 
 @dataclass(frozen=True)
+class ClusteringConfig:
+    min_cluster_size: int = 3       # Minimum members for a cluster
+    min_samples: int = 2            # Core-point density (lower = more clusters)
+    selection_method: str = "leaf"  # "eom" (fewer, larger) or "leaf" (finer-grained)
+    staleness_hours: int = 24       # Recluster after this many hours
+    staleness_growth_pct: int = 20  # Recluster after this % memory growth
+    tsne_max_samples: int = 500     # t-SNE sample cap (O(n^2) memory)
+
+
+@dataclass(frozen=True)
 class Config:
     db: DatabaseConfig = field(default_factory=DatabaseConfig)
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
@@ -204,6 +214,7 @@ class Config:
     reranker: RerankerConfig = field(default_factory=RerankerConfig)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
     budget: BudgetConfig = field(default_factory=BudgetConfig)
+    clustering: ClusteringConfig = field(default_factory=ClusteringConfig)
     enrichment_enabled: bool = True
     profile: str = ""  # Active CAIRN_PROFILE name (empty = no profile)
     transport: str = "stdio"  # "stdio" or "http"
@@ -267,6 +278,10 @@ EDITABLE_KEYS: set[str] = {
     "budget.rules", "budget.search", "budget.recall",
     "budget.cairn_stack", "budget.insights", "budget.workspace",
     "budget.orient",
+    # Clustering
+    "clustering.min_cluster_size", "clustering.min_samples",
+    "clustering.selection_method", "clustering.staleness_hours",
+    "clustering.staleness_growth_pct", "clustering.tsne_max_samples",
     # Top-level
     "enrichment_enabled",
     "ingest_chunk_size", "ingest_chunk_overlap",
@@ -283,6 +298,7 @@ _SECTION_CLASSES = {
     "neo4j": Neo4jConfig,
     "workspace": WorkspaceConfig,
     "budget": BudgetConfig,
+    "clustering": ClusteringConfig,
 }
 
 _BOOL_TRUTHY = {"true", "1", "yes"}
@@ -522,6 +538,12 @@ _ENV_MAP: dict[str, str] = {
     "budget.insights": "CAIRN_BUDGET_INSIGHTS",
     "budget.workspace": "CAIRN_BUDGET_WORKSPACE",
     "budget.orient": "CAIRN_BUDGET_ORIENT",
+    "clustering.min_cluster_size": "CAIRN_CLUSTER_MIN_SIZE",
+    "clustering.min_samples": "CAIRN_CLUSTER_MIN_SAMPLES",
+    "clustering.selection_method": "CAIRN_CLUSTER_SELECTION_METHOD",
+    "clustering.staleness_hours": "CAIRN_CLUSTER_STALENESS_HOURS",
+    "clustering.staleness_growth_pct": "CAIRN_CLUSTER_STALENESS_GROWTH_PCT",
+    "clustering.tsne_max_samples": "CAIRN_CLUSTER_TSNE_MAX_SAMPLES",
     "enrichment_enabled": "CAIRN_ENRICHMENT_ENABLED",
     "profile": "CAIRN_PROFILE",
     "transport": "CAIRN_TRANSPORT",
@@ -675,6 +697,14 @@ def load_config() -> Config:
             insights=int(os.getenv("CAIRN_BUDGET_INSIGHTS", "4000")),
             workspace=int(os.getenv("CAIRN_BUDGET_WORKSPACE", "6000")),
         orient=int(os.getenv("CAIRN_BUDGET_ORIENT", "6000")),
+        ),
+        clustering=ClusteringConfig(
+            min_cluster_size=int(os.getenv("CAIRN_CLUSTER_MIN_SIZE", "3")),
+            min_samples=int(os.getenv("CAIRN_CLUSTER_MIN_SAMPLES", "2")),
+            selection_method=os.getenv("CAIRN_CLUSTER_SELECTION_METHOD", "leaf"),
+            staleness_hours=int(os.getenv("CAIRN_CLUSTER_STALENESS_HOURS", "24")),
+            staleness_growth_pct=int(os.getenv("CAIRN_CLUSTER_STALENESS_GROWTH_PCT", "20")),
+            tsne_max_samples=int(os.getenv("CAIRN_CLUSTER_TSNE_MAX_SAMPLES", "500")),
         ),
         enrichment_enabled=os.getenv("CAIRN_ENRICHMENT_ENABLED", "true").lower() in ("true", "1", "yes"),
         profile=profile_name,

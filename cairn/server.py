@@ -50,7 +50,7 @@ consolidation_engine = None
 event_bus = None
 event_dispatcher = None
 drift_detector = None
-message_manager = None
+
 work_item_manager = None
 analytics_tracker = None
 rollup_worker = None
@@ -62,7 +62,7 @@ def _init_services(svc):
     global _svc, config, db, graph_provider, memory_store, search_engine
     global cluster_engine, project_manager, task_manager
     global thinking_engine, session_synthesizer, consolidation_engine
-    global event_bus, event_dispatcher, drift_detector, message_manager
+    global event_bus, event_dispatcher, drift_detector
     global work_item_manager
     global analytics_tracker, rollup_worker, workspace_manager
 
@@ -82,7 +82,6 @@ def _init_services(svc):
     event_bus = svc.event_bus
     event_dispatcher = svc.event_dispatcher
     drift_detector = svc.drift_detector
-    message_manager = svc.message_manager
     analytics_tracker = svc.analytics_tracker
     rollup_worker = svc.rollup_worker
     workspace_manager = svc.workspace_manager
@@ -179,7 +178,7 @@ mcp_kwargs = dict(
         "\n"
         "SESSION STARTUP SEQUENCE:\n"
         "Preferred: orient(project) — single call returning rules, trail, learnings, and work items.\n"
-        "Granular fallback: rules() + trail() + search(query='learning') + work_items(action='list') individually.\n"
+        "Granular fallback: rules() + search(query='learning') + work_items(action='list') individually.\n"
         "Then summarize the landscape and ask what we're working on.\n"
         "\n"
         "ONGOING USE — Memory is not just for boot:\n"
@@ -831,92 +830,25 @@ def work_items(
     actor: str | None = None,
     note: str | None = None,
 ) -> dict | list[dict]:
-    """THE primary work-tracking system. Agents and humans both operate here.
+    """Work tracking with hierarchy, dependencies, and agent dispatch.
 
-    Work items are the dispatchable unit of work in Cairn. Unlike tasks() (which
-    are personal reminders), work items support agent dispatch, gates, heartbeats,
-    risk tiers, and a full activity feed. Use tasks() only for personal reminders;
-    use work_items() for everything else.
-
-    TRIGGER — Use when the user wants to track, plan, or dispatch work:
-    - "create a task", "add a work item", "plan this epic"
-    - "what's ready to work on", "what's unblocked", "dispatch queue"
-    - "claim this", "I'm working on", "assign to"
-    - "block", "depends on", "unblock"
-    - "mark done", "complete", "finish"
-    - "what's the status of", "show me work items"
-    - "set a gate", "needs human input", "wait for approval"
-    - "resolve gate", "answer the question", "approve"
-    - "heartbeat", "still working", "I'm stuck"
-    - "what happened", "activity log", "show history"
-    - "brief me", "context for this item", "what do I need to know"
-    - "what needs my input", "gated items", "pending gates"
-
-    WHEN TO USE: For structured work tracking with hierarchy and dependencies.
-    Use flat tasks() for personal reminders only; use work_items() for real work management.
-
-    STATUS FLOW: open → ready → in_progress → done
-                 Any active state → blocked (when dependency added or gate set)
-                 blocked → open (when all blockers resolve and gate resolved)
-                 Any active state → cancelled
-
-    HIERARCHY: epic → task → subtask (auto-inferred via add_child)
-
-    GATES: Human-in-the-loop checkpoints. Set a gate to block on human input.
-    Resolve it with a response to unblock. Gate data includes question/options/context.
-
-    RISK TIERS: 0=patrol (just do it), 1=caution (review recommended),
-    2=action (requires review), 3=critical (human must confirm — auto-gates).
-
-    CONSTRAINTS: Rules/boundaries that cascade from parent to children.
-    Children inherit parent constraints; child-specific constraints override.
-
-    Actions:
-    - 'create': Create a new work item. Requires project, title.
-    - 'update': Update fields. Requires work_item_id.
-    - 'claim': Atomically claim an item. Requires work_item_id, assignee.
-    - 'complete': Mark done + auto-unblock dependents. Requires work_item_id.
-    - 'add_child': Add child item to parent. Requires work_item_id (parent), title.
-    - 'block': Add dependency. Requires blocker_id, blocked_id.
-    - 'unblock': Remove dependency. Requires blocker_id, blocked_id.
-    - 'list': Filtered list. Optional project, status, item_type, assignee.
-    - 'ready': Dispatch queue — unblocked, unassigned items. Requires project.
-    - 'get': Full detail for one item. Requires work_item_id.
-    - 'link_memories': Link memories to item. Requires work_item_id, memory_ids.
-    - 'set_gate': Block on gate. Requires work_item_id, gate_type. Optional gate_data, actor.
-    - 'resolve_gate': Resolve a gate. Requires work_item_id. Optional gate_response, actor.
-    - 'heartbeat': Agent heartbeat. Requires work_item_id, assignee. Optional state ('working'|'stuck'|'done'), note.
-    - 'activity': Activity log. Requires work_item_id. Optional limit.
-    - 'briefing': Agent briefing context. Requires work_item_id.
-    - 'gated': Items awaiting gate resolution. Optional project, gate_type.
-
-    Args:
-        action: One of the actions listed above.
-        project: Project name (required for create, list, ready).
-        title: Work item title (required for create, add_child).
-        description: Detailed description.
-        item_type: 'epic', 'task', or 'subtask' (default 'task').
-        priority: Higher = more urgent (default 0).
-        parent_id: Parent work item ID (for create with explicit parent).
-        work_item_id: Work item ID or short_id (for update, claim, complete, get, add_child, link_memories).
-        blocker_id: Blocker work item ID/short_id (for block, unblock).
-        blocked_id: Blocked work item ID/short_id (for block, unblock).
-        assignee: Agent or person name (for claim, heartbeat).
-        status: Filter by status (for list) or new status (for update).
-        session_name: Associate with a session.
-        metadata: Additional JSON metadata.
-        acceptance_criteria: Definition of done.
-        memory_ids: Memory IDs to link (for link_memories).
-        include_children: Include subtree in list results.
-        limit: Max results for list/ready (default 20).
-        offset: Pagination offset for list.
-        gate_type: 'human' or 'timer' (for set_gate).
-        gate_data: Gate context — question, options, timer_until (for set_gate).
-        gate_response: Human's answer when resolving a gate (for resolve_gate).
-        risk_tier: 0-3 risk level (for create, add_child, update).
-        constraints: Rules/boundaries dict (for create, add_child, update). Cascades to children.
-        actor: Who performed the action — agent name, 'human', session ID.
-        note: Free-text note (for heartbeat).
+    Actions (required params in parens):
+    - 'create': New item (project, title). Optional: description, item_type, priority, risk_tier, constraints.
+    - 'update': Modify fields (work_item_id). Any field can be updated.
+    - 'list': Filtered list. Optional: project, status, item_type, assignee, limit, offset.
+    - 'get': Full detail (work_item_id).
+    - 'complete': Mark done + auto-unblock dependents (work_item_id).
+    - 'claim': Assign to agent/person (work_item_id, assignee).
+    - 'add_child': Add subtask (work_item_id as parent, title).
+    - 'block'/'unblock': Manage dependencies (blocker_id, blocked_id).
+    - 'ready': Dispatch queue — unblocked, unassigned items (project).
+    - 'link_memories': Attach context (work_item_id, memory_ids).
+    - 'set_gate': Block on human input (work_item_id, gate_type). Optional: gate_data, actor.
+    - 'resolve_gate': Unblock (work_item_id). Optional: gate_response, actor.
+    - 'heartbeat': Agent progress (work_item_id, assignee). Optional: state, note.
+    - 'activity': History log (work_item_id).
+    - 'briefing': Agent dispatch context (work_item_id).
+    - 'gated': Items awaiting gates. Optional: project, gate_type.
     """
     try:
         if action == "create":
@@ -1156,39 +1088,7 @@ def status() -> dict:
 
 
 # ============================================================
-# Tool 11: synthesize
-# ============================================================
-
-@mcp.tool()
-def synthesize(
-    project: str,
-    session_name: str,
-) -> dict:
-    """Synthesize session memories into a coherent narrative.
-
-    WHEN TO USE: Session wrap-up — creating a narrative summary of what happened.
-    On-demand session review, or when reviewing past session work.
-
-    Fetches all memories for a session and uses LLM to create a narrative summary.
-    Falls back to a structured list of memory summaries when LLM is unavailable.
-
-    Args:
-        project: Project name.
-        session_name: Session identifier to synthesize.
-    """
-    try:
-        if not project or not project.strip():
-            return {"error": "project is required"}
-        if not session_name or not session_name.strip():
-            return {"error": "session_name is required"}
-        return session_synthesizer.synthesize(project, session_name)
-    except Exception as e:
-        logger.exception("synthesize failed")
-        return {"error": f"Internal error: {e}"}
-
-
-# ============================================================
-# Tool 12: consolidate
+# Tool: consolidate
 # ============================================================
 
 @mcp.tool()
@@ -1352,60 +1252,17 @@ def _fetch_trail_data(
 
 
 # ============================================================
-# Tool 13: trail
-# ============================================================
-
-@mcp.tool()
-def trail(
-    project: str | None = None,
-    since: str | None = None,
-    limit: int = 20,
-) -> dict:
-    """Walk the recent activity trail. Boot orientation — what happened recently.
-
-    Returns recent knowledge graph activity: entities modified, facts added,
-    decisions made. Use this at session start for graph-aware orientation
-    (step 2 of the boot sequence).
-
-    Falls back to recent memories if graph is unavailable.
-
-    Args:
-        project: Filter to a specific project. Omit for all projects.
-        since: ISO date string (default: 7 days ago). How far back to look.
-        limit: Maximum activity items to return (default 20).
-    """
-    try:
-        result = _fetch_trail_data(project=project, since=since, limit=limit)
-
-        # Apply budget
-        budget = config.budget.cairn_stack
-        if budget > 0 and result.get("source") == "graph":
-            from cairn.core.budget import estimate_tokens
-            if estimate_tokens(str(result)) > budget:
-                for s in result.get("sessions", []):
-                    s["key_facts"] = s.get("key_facts", [])[:3]
-                result["sessions"] = result.get("sessions", [])[:5]
-
-        return result
-    except Exception as e:
-        logger.exception("trail failed")
-        return {"error": f"Internal error: {e}"}
-
-
-# ============================================================
-# Tool 14: orient
+# Tool: orient
 # ============================================================
 
 @mcp.tool()
 def orient(project: str | None = None) -> dict:
     """Single-pass session boot. Returns rules, trail, learnings, and work items.
 
-    Replaces the 4-call boot sequence (rules + trail + search + work_items) with
-    one call. Each section gets a token budget allocation with surplus flowing to
-    the next section.
+    Replaces calling rules() + search() + work_items() individually with one call.
+    Each section gets a token budget allocation with surplus flowing to the next.
 
-    Use this at session start instead of calling rules(), trail(), search(),
-    and work_items() separately. Individual tools remain available for granular
+    Use this at session start. Individual tools remain available for granular
     use mid-session.
 
     Args:
@@ -1580,94 +1437,6 @@ def drift_check(
         return drift_detector.check(project=project, files=files)
     except Exception as e:
         logger.exception("drift_check failed")
-        return {"error": f"Internal error: {e}"}
-
-
-# ============================================================
-# Tool 16: messages
-# ============================================================
-
-@mcp.tool()
-def messages(
-    action: str,
-    project: str | None = None,
-    content: str | None = None,
-    sender: str | None = None,
-    priority: str = "normal",
-    message_id: int | None = None,
-    include_archived: bool = False,
-    limit: int = 20,
-) -> dict | list[dict]:
-    """SOFT-DEPRECATED: Prefer work item activity feed for agent communication.
-
-    The activity log on work_items() is now the primary channel for agent ↔ human
-    communication (use heartbeat, note, gate actions). This tool remains functional
-    for backward compatibility and for messages not tied to a specific work item.
-
-    WHEN TO USE (legacy):
-    - Leaving a note for the user that isn't tied to a work item
-    - Checking if anyone left you a message (historical)
-
-    Actions:
-    - 'send': Send a message. Requires content and project.
-    - 'inbox': Check messages. Optional project filter.
-    - 'mark_read': Mark a message as read. Requires message_id.
-    - 'mark_all_read': Mark all messages as read. Optional project filter.
-    - 'archive': Archive a message. Requires message_id.
-    - 'unread_count': Get count of unread messages. Optional project filter.
-
-    Args:
-        action: One of 'send', 'inbox', 'mark_read', 'mark_all_read', 'archive', 'unread_count'.
-        project: Project name (required for send, optional filter for others).
-        content: Message content (required for send).
-        sender: Who is sending (default "assistant"). Any string — agent name, "user", etc.
-        priority: "normal" or "urgent" (default "normal").
-        message_id: Message ID (required for mark_read, archive).
-        include_archived: Include archived messages in inbox (default false).
-        limit: Max messages to return for inbox (default 20).
-    """
-    try:
-        if action == "send":
-            if not content:
-                return {"error": "content is required for send"}
-            if not project:
-                return {"error": "project is required for send"}
-            return message_manager.send(
-                content=content,
-                project=project,
-                sender=sender or "assistant",
-                priority=priority,
-            )
-
-        if action == "inbox":
-            return message_manager.inbox(
-                project=project,
-                include_archived=include_archived,
-                limit=min(limit, MAX_LIMIT),
-            )["items"]
-
-        if action == "mark_read":
-            if not message_id:
-                return {"error": "message_id is required for mark_read"}
-            return message_manager.mark_read(message_id)
-
-        if action == "mark_all_read":
-            return message_manager.mark_all_read(project=project)
-
-        if action == "archive":
-            if not message_id:
-                return {"error": "message_id is required for archive"}
-            return message_manager.archive(message_id)
-
-        if action == "unread_count":
-            count = message_manager.unread_count(project=project)
-            return {"count": count, "project": project}
-
-        return {"error": f"Unknown action: {action}"}
-    except ValueError as e:
-        return {"error": str(e)}
-    except Exception as e:
-        logger.exception("messages failed")
         return {"error": f"Internal error: {e}"}
 
 

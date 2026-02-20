@@ -424,19 +424,6 @@ export interface ChatMessage {
   created_at: string;
 }
 
-export interface Message {
-  id: number;
-  project: string;
-  sender: string;
-  content: string;
-  priority: string;
-  is_read: boolean;
-  archived: boolean;
-  metadata: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
-}
-
 // --- Work Item types ---
 
 export type WorkItemStatus = "open" | "ready" | "in_progress" | "blocked" | "done" | "cancelled";
@@ -847,21 +834,6 @@ export const api = {
       "/chat", { messages, max_tokens: maxTokens, ...(tools === false ? { tools: false } : {}) }
     ),
 
-  messages: (opts?: { project?: string; include_archived?: string; limit?: string; offset?: string }) =>
-    get<Paginated<Message>>("/messages", opts),
-
-  sendMessage: (body: { content: string; project: string; sender?: string; priority?: string; metadata?: Record<string, unknown> }) =>
-    post<{ id: number; created_at: string }>("/messages", body),
-
-  updateMessage: (id: number, body: { is_read?: boolean; archived?: boolean }) =>
-    patch<{ updated: boolean; id: number }>(`/messages/${id}`, body),
-
-  markAllMessagesRead: (project?: string) =>
-    post<{ action: string; project: string | null }>("/messages/mark-all-read", project ? { project } : {}),
-
-  unreadCount: (project?: string) =>
-    get<{ count: number }>("/messages/unread-count", project ? { project } : {}),
-
   analyticsOverview: (opts?: { days?: string }) =>
     get<AnalyticsOverview>("/analytics/overview", opts),
 
@@ -892,7 +864,7 @@ export const api = {
     get<WorkspaceSession[]>("/workspace/sessions", project ? { project } : {}),
 
   workspaceCreateSession: (body: {
-    project: string; task?: string; message_id?: number; fork_from?: string;
+    project: string; task?: string; fork_from?: string;
     title?: string; agent?: string; inject_context?: boolean;
     context_mode?: "focused" | "full";
     backend?: string; risk_tier?: number;

@@ -16,7 +16,11 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, field_validator
 
 from cairn.core.constants import VALID_MEMORY_TYPES
-from cairn.core.extraction_prompt import build_extraction_messages, build_extraction_retry_messages
+from cairn.core.extraction_prompt import (
+    build_extraction_messages,
+    build_extraction_retry_messages,
+    build_normalize_messages,
+)
 from cairn.core.utils import extract_json
 
 if TYPE_CHECKING:
@@ -135,24 +139,57 @@ class KnowledgeExtractor:
             self._embed_cache[text] = vec
         return vec
 
+    _NOTHING = "NOTHING_TO_REMEMBER"
+
+    def normalize(
+        self, content: str, created_at: str | None = None, author: str | None = None,
+    ) -> str | None:
+        """Normalize raw content into clean factual sentences.
+
+        Returns normalized text, or None if the content has no extractable facts.
+        """
+        try:
+            messages = build_normalize_messages(content, created_at=created_at, author=author)
+            raw = self.llm.generate(messages, max_tokens=1024)
+            text = raw.strip()
+            if self._NOTHING in text:
+                logger.debug("Normalization returned NOTHING_TO_REMEMBER")
+                return None
+            return text
+        except Exception:
+            logger.warning("Normalization failed, using raw content", exc_info=True)
+            return content  # Fall back to raw content, don't block extraction
+
     def extract(
         self, content: str, created_at: str | None = None, author: str | None = None,
         known_entities: list[dict] | None = None,
+        skip_normalize: bool = False,
     ) -> ExtractionResult | None:
-        """Run extraction LLM call and parse result.
+        """Normalize content, then run extraction LLM call and parse result.
 
         Args:
             content: Memory text to extract from.
             created_at: ISO timestamp for resolving relative dates.
             author: Voice attribution ("user", "assistant", "collaborative").
             known_entities: Existing entity names/types for canonicalization.
+            skip_normalize: Skip normalization step (for already-clean content).
 
-        Returns ExtractionResult on success, None on total failure.
-        Retries once on parse failure.
+        Returns ExtractionResult on success, None if content has no facts
+        or on total failure. Retries once on parse failure.
         """
+        # Step 1: Normalize raw content into clean factual sentences
+        extract_content = content
+        if not skip_normalize:
+            normalized = self.normalize(content, created_at=created_at, author=author)
+            if normalized is None:
+                # NOTHING_TO_REMEMBER — no extractable facts
+                return None
+            extract_content = normalized
+
+        # Step 2: Extract from normalized content
         try:
             messages = build_extraction_messages(
-                content, created_at=created_at, author=author,
+                extract_content, created_at=created_at, author=author,
                 known_entities=known_entities,
             )
             raw = self.llm.generate(messages, max_tokens=2048)
@@ -160,7 +197,7 @@ class KnowledgeExtractor:
         except Exception as first_error:
             logger.warning("Extraction first attempt failed: %s", first_error)
             try:
-                messages = build_extraction_retry_messages(content, str(first_error))
+                messages = build_extraction_retry_messages(extract_content, str(first_error))
                 raw = self.llm.generate(messages, max_tokens=2048)
                 return self._parse(raw)
             except Exception:

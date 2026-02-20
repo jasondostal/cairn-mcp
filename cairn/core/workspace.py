@@ -17,7 +17,7 @@ from cairn.core.constants import (
     WORKSPACE_ALLOC_MEMORIES, WORKSPACE_ALLOC_RULES,
     WORKSPACE_ALLOC_TASKS, WORKSPACE_ALLOC_TRAIL,
 )
-from cairn.core.messages import MessageManager
+
 from cairn.core.utils import get_or_create_project, get_project
 from cairn.core.work_items import WorkItemManager
 from cairn.integrations.interface import WorkspaceBackend, WorkspaceBackendError
@@ -41,7 +41,6 @@ class WorkspaceManager:
         backends: dict[str, WorkspaceBackend] | None = None,
         *,
         default_backend: str = "opencode",
-        message_manager: MessageManager | None = None,
         work_item_manager: WorkItemManager | None = None,
         default_agent: str = "cairn-build",
         budget_tokens: int = 6000,
@@ -49,7 +48,6 @@ class WorkspaceManager:
         self.db = db
         self._backends = backends or {}
         self._default_backend = default_backend
-        self.message_manager = message_manager
         self.work_item_manager = work_item_manager
         self.default_agent = default_agent
         self.budget_tokens = budget_tokens
@@ -222,7 +220,6 @@ class WorkspaceManager:
         project: str,
         *,
         task: str | None = None,
-        message_id: int | None = None,
         fork_from: str | None = None,
         title: str | None = None,
         agent: str | None = None,
@@ -237,7 +234,6 @@ class WorkspaceManager:
 
         Instructions can come from multiple sources:
         - ``task``: Raw text description.
-        - ``message_id``: Read instructions from a Cairn message.
         - ``work_item_id``: Dispatch from a work item (generates structured briefing).
         - ``fork_from``: Fork an existing session (full history carry-over).
         - All can be combined.
@@ -245,7 +241,6 @@ class WorkspaceManager:
         Args:
             project: Cairn project name for context.
             task: Optional task description.
-            message_id: Optional Cairn message ID to read instructions from.
             work_item_id: Optional work item ID — generates a dispatch briefing.
             fork_from: Optional session ID to fork from.
             title: Session title (auto-generated if omitted).
@@ -269,24 +264,7 @@ class WorkspaceManager:
 
         backend_name = be.backend_name()
 
-        # Resolve instructions — message_id is passed by reference, not inlined.
-        # The agent looks it up via cairn_messages at runtime.
         instructions: str | None = task
-        source_message: dict | None = None
-        if message_id and self.message_manager:
-            source_message = self.message_manager.get(message_id)
-            if not source_message:
-                return {"error": f"Message #{message_id} not found"}
-            msg_project = source_message.get("project", project)
-            # Tell the agent WHERE to find instructions, don't inline them.
-            # Skip context injection — the message itself IS the context.
-            ref = f"Your task is in Cairn message #{message_id} (project: {msg_project}). Read it with cairn_messages(action=\"inbox\", project=\"{msg_project}\"), find message id={message_id}, and execute its instructions."
-            if task:
-                instructions = f"{ref}\n\nAdditional context: {task}"
-            else:
-                instructions = ref
-            inject_context = False
-            self.message_manager.mark_read(message_id)
 
         # Generate dispatch briefing from work item (overrides generic context)
         briefing: dict[str, Any] | None = None
@@ -335,8 +313,6 @@ class WorkspaceManager:
             "context_injected": False,
             "task_sent": False,
         }
-        if source_message:
-            result["source_message_id"] = message_id
         if fork_from:
             result["forked_from"] = fork_from
         if work_item_id:

@@ -146,6 +146,63 @@ Input: "staging is our dev box at 198.51.100.10. Runs docker compose with cairn,
 Now extract knowledge from the following text. Return ONLY the JSON object, no other text."""
 
 
+# --- Normalization prompt (pre-extraction) ---
+
+NORMALIZE_SYSTEM_PROMPT = """\
+You are a pre-processor for a knowledge extraction pipeline. Your job is to \
+rewrite raw conversational text into clean, factual statements that are easy \
+to extract entities and relationships from.
+
+## Rules
+
+1. Convert dialog into third-person factual sentences.
+   - "I went to the store" → "The user went to the store."
+   - "Yeah so Caroline told me about this group" → "Caroline told the user about a group."
+
+2. Preserve ALL specific details: names, dates, times, numbers, locations, \
+frequencies, amounts. Never generalize.
+   - "every Tuesday and Thursday at 3pm" stays exactly that, not "twice a week"
+   - "$42.50" stays "$42.50", not "about $40"
+
+3. Resolve pronouns to their referents when clear from context.
+   - "She said she'd go" (where she = Caroline) → "Caroline said she would go."
+
+4. Drop conversational filler with ZERO information content:
+   - "ok", "sure", "sounds good", "hmm", "yeah", "thanks", "got it"
+   - Acknowledgments, greetings, pleasantries
+
+5. If the ENTIRE text is filler/acknowledgment with no factual content, \
+respond with exactly: NOTHING_TO_REMEMBER
+
+6. Keep it concise. One sentence per distinct fact. No commentary or explanation.
+
+## Output
+
+Return ONLY the normalized text (one sentence per line) or NOTHING_TO_REMEMBER. \
+No JSON, no markdown, no preamble."""
+
+
+def build_normalize_messages(
+    content: str,
+    created_at: str | None = None,
+    author: str | None = None,
+) -> list[dict]:
+    """Build messages for the normalization LLM call."""
+    user_content = content
+    metadata_parts = []
+    if created_at:
+        metadata_parts.append(f"[Timestamp: {created_at}]")
+    if author:
+        metadata_parts.append(f"[Speaker: {author}]")
+    if metadata_parts:
+        user_content = "\n".join(metadata_parts) + f"\n\n{content}"
+
+    return [
+        {"role": "system", "content": NORMALIZE_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
+
+
 def build_extraction_messages(
     content: str,
     created_at: str | None = None,
