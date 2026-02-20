@@ -50,10 +50,6 @@ function SourceBadge({ source }: { source: "default" | "env" | "db" }) {
 interface CapabilityMeta { label: string; description: string; }
 
 const CAPABILITY_META: Record<string, CapabilityMeta> = {
-  query_expansion: {
-    label: "Query Expansion",
-    description: "Rewrites search queries using LLM to improve recall. Adds synonyms, related terms, and rephrased variants. Costs one LLM call per search.",
-  },
   relationship_extract: {
     label: "Relationship Extraction",
     description: "Extracts entity relationships from stored memories and builds a knowledge graph. Runs during enrichment on store.",
@@ -73,10 +69,6 @@ const CAPABILITY_META: Record<string, CapabilityMeta> = {
   confidence_gating: {
     label: "Confidence Gating",
     description: "Filters search results below a confidence threshold. Prevents low-quality matches from reaching the caller.",
-  },
-  event_digest: {
-    label: "Event Digest",
-    description: "Processes batched session events into structured digests. Part of the CAPTURE-BATCH-DIGEST pipeline.",
   },
   reranking: {
     label: "Cross-Encoder Reranking",
@@ -101,10 +93,6 @@ const CAPABILITY_META: Record<string, CapabilityMeta> = {
   search_v2: {
     label: "Search V2 (Intent-Routed)",
     description: "Intent-aware search pipeline that classifies queries and applies specialized retrieval strategies per intent type.",
-  },
-  cairn_narratives: {
-    label: "Cairn Narratives",
-    description: "Generates LLM-written narrative summaries when setting cairns at session end. Captures the arc of a work session.",
   },
 };
 

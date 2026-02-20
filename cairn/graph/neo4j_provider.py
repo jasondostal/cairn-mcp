@@ -563,38 +563,6 @@ class Neo4jGraphProvider(GraphProvider):
                 "duplicate_deleted": duplicate_id,
             }
 
-    def search_entities_fulltext(
-        self,
-        query: str,
-        project_id: int,
-        limit: int = 10,
-    ) -> list[Entity]:
-        with self._session() as session:
-            result = session.run(
-                """
-                CALL db.index.fulltext.queryNodes('entity_name_ft', $search_term)
-                YIELD node, score
-                WHERE node.project_id = $pid
-                RETURN node.uuid AS uuid, node.name AS name, node.entity_type AS entity_type,
-                       node.project_id AS project_id, node.attributes AS attributes
-                ORDER BY score DESC
-                LIMIT $limit
-                """,
-                search_term=query,
-                pid=project_id,
-                limit=limit,
-            )
-            return [
-                Entity(
-                    uuid=r["uuid"],
-                    name=r["name"],
-                    entity_type=r["entity_type"],
-                    project_id=r["project_id"],
-                    attributes=json.loads(r["attributes"]) if r["attributes"] else {},
-                )
-                for r in result
-            ]
-
     # -- Temporal queries (v0.37.0) --
 
     def recent_activity(
@@ -609,6 +577,7 @@ class Neo4jGraphProvider(GraphProvider):
                 MATCH (subj:Entity)-[:SUBJECT]->(s:Statement)
                 WHERE ($pid IS NULL OR s.project_id = $pid)
                   AND s.created_at > $since AND s.invalid_at IS NULL
+                  AND subj.entity_type IN ['Person', 'Organization', 'Project', 'Task', 'Event']
                 OPTIONAL MATCH (obj:Entity)-[:OBJECT]->(s)
                 RETURN s.uuid AS uuid, s.fact AS fact, s.aspect AS aspect,
                        s.episode_id AS episode_id, s.created_at AS created_at,
@@ -910,79 +879,6 @@ class Neo4jGraphProvider(GraphProvider):
 
     # -- Work item graph nodes (v0.47.0) --
 
-    def create_work_item(
-        self,
-        pg_id: int,
-        project_id: int,
-        title: str,
-        description: str | None,
-        item_type: str,
-        priority: int,
-        status: str,
-        short_id: str,
-        content_embedding: list[float] | None = None,
-        risk_tier: int = 0,
-        gate_type: str | None = None,
-    ) -> str:
-        wi_uuid = str(uuid.uuid4())
-        with self._session() as session:
-            session.run(
-                """
-                CREATE (wi:WorkItem {
-                    uuid: $uuid,
-                    pg_id: $pg_id,
-                    project_id: $project_id,
-                    title: $title,
-                    description: $description,
-                    item_type: $item_type,
-                    priority: $priority,
-                    status: $status,
-                    short_id: $short_id,
-                    content_embedding: $embedding,
-                    risk_tier: $risk_tier,
-                    gate_type: $gate_type,
-                    created_at: $now
-                })
-                """,
-                uuid=wi_uuid,
-                pg_id=pg_id,
-                project_id=project_id,
-                title=title,
-                description=description or "",
-                item_type=item_type,
-                priority=priority,
-                status=status,
-                short_id=short_id,
-                embedding=content_embedding,
-                risk_tier=risk_tier,
-                gate_type=gate_type,
-                now=datetime.now(timezone.utc).isoformat(),
-            )
-        return wi_uuid
-
-    def update_work_item_status(self, work_item_uuid: str, status: str) -> None:
-        with self._session() as session:
-            session.run(
-                """
-                MATCH (wi:WorkItem {uuid: $uuid})
-                SET wi.status = $status, wi.updated_at = $now
-                """,
-                uuid=work_item_uuid,
-                status=status,
-                now=datetime.now(timezone.utc).isoformat(),
-            )
-
-    def complete_work_item(self, work_item_uuid: str) -> None:
-        with self._session() as session:
-            session.run(
-                """
-                MATCH (wi:WorkItem {uuid: $uuid})
-                SET wi.status = 'done', wi.completed_at = $now, wi.updated_at = $now
-                """,
-                uuid=work_item_uuid,
-                now=datetime.now(timezone.utc).isoformat(),
-            )
-
     def add_work_item_parent_edge(self, child_uuid: str, parent_uuid: str) -> None:
         with self._session() as session:
             session.run(
@@ -1016,41 +912,6 @@ class Neo4jGraphProvider(GraphProvider):
                 """,
                 blocker_uuid=blocker_uuid,
                 blocked_uuid=blocked_uuid,
-            )
-
-    def assign_work_item(self, work_item_uuid: str, assignee: str) -> None:
-        with self._session() as session:
-            session.run(
-                """
-                MATCH (wi:WorkItem {uuid: $uuid})
-                SET wi.assignee = $assignee, wi.updated_at = $now
-                """,
-                uuid=work_item_uuid,
-                assignee=assignee,
-                now=datetime.now(timezone.utc).isoformat(),
-            )
-
-    def update_work_item_gate(self, work_item_uuid: str, gate_type: str) -> None:
-        with self._session() as session:
-            session.run(
-                """
-                MATCH (wi:WorkItem {uuid: $uuid})
-                SET wi.gate_type = $gate_type, wi.updated_at = $now
-                """,
-                uuid=work_item_uuid,
-                gate_type=gate_type,
-                now=datetime.now(timezone.utc).isoformat(),
-            )
-
-    def resolve_work_item_gate(self, work_item_uuid: str) -> None:
-        with self._session() as session:
-            session.run(
-                """
-                MATCH (wi:WorkItem {uuid: $uuid})
-                SET wi.gate_type = NULL, wi.updated_at = $now
-                """,
-                uuid=work_item_uuid,
-                now=datetime.now(timezone.utc).isoformat(),
             )
 
     def update_work_item_risk_tier(self, work_item_uuid: str, risk_tier: int) -> None:

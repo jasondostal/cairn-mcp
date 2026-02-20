@@ -16,13 +16,15 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 from sklearn.metrics.pairwise import cosine_distances
 
-from cairn.core.clustering import (
-    ClusterEngine,
-    HDBSCAN_MIN_CLUSTER_SIZE,
-    HDBSCAN_MIN_SAMPLES,
-    STALENESS_HOURS,
-    STALENESS_GROWTH_RATIO,
-)
+from cairn.config import ClusteringConfig
+from cairn.core.clustering import ClusterEngine
+
+# Defaults from ClusteringConfig — tests use these as reference values
+_CLUSTER_DEFAULTS = ClusteringConfig()
+HDBSCAN_MIN_CLUSTER_SIZE = _CLUSTER_DEFAULTS.min_cluster_size
+HDBSCAN_MIN_SAMPLES = _CLUSTER_DEFAULTS.min_samples
+STALENESS_HOURS = _CLUSTER_DEFAULTS.staleness_hours
+STALENESS_GROWTH_RATIO = _CLUSTER_DEFAULTS.staleness_growth_pct / 100.0
 from cairn.llm.interface import LLMInterface
 
 

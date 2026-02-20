@@ -235,15 +235,6 @@ class GraphProvider(ABC):
         """
 
     @abstractmethod
-    def search_entities_fulltext(
-        self,
-        query: str,
-        project_id: int,
-        limit: int = 10,
-    ) -> list[Entity]:
-        """Fulltext search over entity names."""
-
-    @abstractmethod
     def recent_activity(
         self,
         project_id: int | None,
@@ -361,31 +352,6 @@ class GraphProvider(ABC):
     # -- Work item graph nodes (v0.47.0) --
 
     @abstractmethod
-    def create_work_item(
-        self,
-        pg_id: int,
-        project_id: int,
-        title: str,
-        description: str | None,
-        item_type: str,
-        priority: int,
-        status: str,
-        short_id: str,
-        content_embedding: list[float] | None = None,
-        risk_tier: int = 0,
-        gate_type: str | None = None,
-    ) -> str:
-        """Create a WorkItem node. Returns UUID."""
-
-    @abstractmethod
-    def update_work_item_status(self, work_item_uuid: str, status: str) -> None:
-        """Update a WorkItem node's status."""
-
-    @abstractmethod
-    def complete_work_item(self, work_item_uuid: str) -> None:
-        """Mark a WorkItem as done with completed_at timestamp."""
-
-    @abstractmethod
     def add_work_item_parent_edge(self, child_uuid: str, parent_uuid: str) -> None:
         """Create PARENT_OF edge: (parent)-[:PARENT_OF]->(child)."""
 
@@ -396,18 +362,6 @@ class GraphProvider(ABC):
     @abstractmethod
     def remove_work_item_blocks_edge(self, blocker_uuid: str, blocked_uuid: str) -> None:
         """Remove BLOCKS edge between two work items."""
-
-    @abstractmethod
-    def assign_work_item(self, work_item_uuid: str, assignee: str) -> None:
-        """Set assignee on a WorkItem node."""
-
-    @abstractmethod
-    def update_work_item_gate(self, work_item_uuid: str, gate_type: str) -> None:
-        """Set gate_type on a WorkItem node (blocks it on a gate)."""
-
-    @abstractmethod
-    def resolve_work_item_gate(self, work_item_uuid: str) -> None:
-        """Clear gate_type on a WorkItem node (gate resolved)."""
 
     @abstractmethod
     def update_work_item_risk_tier(self, work_item_uuid: str, risk_tier: int) -> None:

@@ -540,6 +540,7 @@ class WorkItemManager:
         # Event-driven graph projection
         self._publish(
             "work_item.blocked",
+            work_item_id=blocker["id"],
             project_id=blocker["project_id"],
             blocker_id=blocker["id"], blocked_id=blocked["id"],
         )
@@ -585,6 +586,7 @@ class WorkItemManager:
         # Event-driven graph projection
         self._publish(
             "work_item.unblocked",
+            work_item_id=blocker["id"],
             project_id=blocker["project_id"],
             blocker_id=blocker["id"], blocked_id=blocked["id"],
         )

@@ -117,43 +117,12 @@ class SearchEngine:
         Returns:
             List of memory dicts with relevance scores.
         """
-        # Query expansion: enrich query for vector search only.
-        # Keyword and tag signals use the original query to avoid
-        # world-knowledge poisoning (e.g. "Caroline" expanding to
-        # "Caroline Kennedy" when the corpus has a different Caroline).
-        expanded = self._expand_query(query)
-
         if search_mode == "keyword":
             return self._keyword_search(query, project, memory_type, limit, include_full)
         elif search_mode == "vector":
-            return self._vector_search(expanded, project, memory_type, limit, include_full)
+            return self._vector_search(query, project, memory_type, limit, include_full)
         else:
-            return self._hybrid_search(query, expanded, project, memory_type, limit, include_full)
-
-    def _expand_query(self, query: str) -> str:
-        """Expand search query with related terms via LLM.
-
-        Returns the original query unchanged if LLM is unavailable, flag is off, or call fails.
-        """
-        can_expand = (
-            self.llm is not None
-            and self.capabilities is not None
-            and self.capabilities.query_expansion
-        )
-        if not can_expand:
-            return query
-
-        try:
-            from cairn.llm.prompts import build_query_expansion_messages
-            messages = build_query_expansion_messages(query)
-            expanded = self.llm.generate(messages, max_tokens=256)
-            if expanded and expanded.strip():
-                logger.debug("Query expanded: %r -> %r", query, expanded.strip())
-                return expanded.strip()
-        except Exception:
-            logger.warning("Query expansion failed, using original query", exc_info=True)
-
-        return query
+            return self._hybrid_search(query, query, project, memory_type, limit, include_full)
 
     def _build_filters(self, project: str | list[str] | None, memory_type: str | list[str] | None) -> tuple[str, list]:
         """Build WHERE clause fragments for common filters."""

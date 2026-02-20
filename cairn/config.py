@@ -103,12 +103,10 @@ class LLMCapabilities:
     # --- Experimental capabilities ---
     # These work but have unproven benefit/cost ratios or high resource demands.
     # Included in the 'enterprise' profile. May change behavior between releases.
-    query_expansion: bool = False       # EXPERIMENTAL: LLM on every search, unproven benefit
     confidence_gating: bool = False     # EXPERIMENTAL: high reasoning demand per query
     type_routing: bool = False          # EXPERIMENTAL: query intent classification + type boost
     spreading_activation: bool = False  # EXPERIMENTAL: graph-based spreading activation retrieval
     mca_gate: bool = False              # EXPERIMENTAL: keyword coverage pre-filter (MCA)
-    cairn_narratives: bool = False      # EXPERIMENTAL: LLM narrative generation on cairn set
     thought_extraction: str = "off"     # EXPERIMENTAL: extract entities from thinking sequences
                                         #   "off" = no extraction, "on_conclude" = extract on conclude,
                                         #   "on_every_thought" = extract on each add_thought()
@@ -120,8 +118,8 @@ class LLMCapabilities:
                 "relationship_extract", "rule_conflict_check",
                 "session_synthesis", "consolidation",
                 "reranking", "knowledge_extraction", "search_v2",
-                "query_expansion", "confidence_gating", "type_routing",
-                "spreading_activation", "mca_gate", "cairn_narratives",
+                "confidence_gating", "type_routing",
+                "spreading_activation", "mca_gate",
             )
             if getattr(self, name)
         ]
@@ -132,8 +130,8 @@ class LLMCapabilities:
 
 # Capabilities marked as experimental — may change behavior between releases.
 EXPERIMENTAL_CAPABILITIES: frozenset[str] = frozenset({
-    "query_expansion", "confidence_gating", "type_routing",
-    "spreading_activation", "mca_gate", "cairn_narratives",
+    "confidence_gating", "type_routing",
+    "spreading_activation", "mca_gate",
     "thought_extraction",
 })
 
@@ -249,14 +247,13 @@ EDITABLE_KEYS: set[str] = {
     "router.fast.backend", "router.fast.model", "router.fast.daily_budget",
     "router.chat.backend", "router.chat.model", "router.chat.daily_budget",
     # Capabilities
-    "capabilities.query_expansion", "capabilities.relationship_extract",
+    "capabilities.relationship_extract",
     "capabilities.rule_conflict_check", "capabilities.session_synthesis",
     "capabilities.consolidation", "capabilities.confidence_gating",
     "capabilities.reranking",
     "capabilities.type_routing", "capabilities.spreading_activation",
     "capabilities.mca_gate", "capabilities.knowledge_extraction",
     "capabilities.search_v2",
-    "capabilities.cairn_narratives",
     "capabilities.thought_extraction",
     # Analytics
     "analytics.enabled", "analytics.retention_days",
@@ -337,10 +334,8 @@ PROFILE_PRESETS: dict[str, dict[str, str]] = {
         "CAIRN_RERANKING": "true",
         "CAIRN_SPREADING_ACTIVATION": "true",
         "CAIRN_MCA_GATE": "true",
-        "CAIRN_LLM_QUERY_EXPANSION": "true",
         "CAIRN_LLM_CONFIDENCE_GATING": "true",
         "CAIRN_ROUTER_ENABLED": "true",
-        "CAIRN_CAIRN_NARRATIVES": "true",
     },
 }
 
@@ -494,7 +489,6 @@ _ENV_MAP: dict[str, str] = {
     "reranker.backend": "CAIRN_RERANKER_BACKEND",
     "reranker.model": "CAIRN_RERANKER_MODEL",
     "reranker.candidates": "CAIRN_RERANK_CANDIDATES",
-    "capabilities.query_expansion": "CAIRN_LLM_QUERY_EXPANSION",
     "capabilities.relationship_extract": "CAIRN_LLM_RELATIONSHIP_EXTRACT",
     "capabilities.rule_conflict_check": "CAIRN_LLM_RULE_CONFLICT_CHECK",
     "capabilities.session_synthesis": "CAIRN_LLM_SESSION_SYNTHESIS",
@@ -506,7 +500,6 @@ _ENV_MAP: dict[str, str] = {
     "capabilities.mca_gate": "CAIRN_MCA_GATE",
     "capabilities.knowledge_extraction": "CAIRN_KNOWLEDGE_EXTRACTION",
     "capabilities.search_v2": "CAIRN_SEARCH_V2",
-    "capabilities.cairn_narratives": "CAIRN_CAIRN_NARRATIVES",
     "capabilities.thought_extraction": "CAIRN_THOUGHT_EXTRACTION",
     "terminal.backend": "CAIRN_TERMINAL_BACKEND",
     "terminal.max_sessions": "CAIRN_TERMINAL_MAX_SESSIONS",
@@ -611,7 +604,6 @@ def load_config() -> Config:
             openai_api_key=os.getenv("CAIRN_OPENAI_API_KEY", ""),
         ),
         capabilities=LLMCapabilities(
-            query_expansion=os.getenv("CAIRN_LLM_QUERY_EXPANSION", "false").lower() in ("true", "1", "yes"),
             relationship_extract=os.getenv("CAIRN_LLM_RELATIONSHIP_EXTRACT", "true").lower() in ("true", "1", "yes"),
             rule_conflict_check=os.getenv("CAIRN_LLM_RULE_CONFLICT_CHECK", "true").lower() in ("true", "1", "yes"),
             session_synthesis=os.getenv("CAIRN_LLM_SESSION_SYNTHESIS", "true").lower() in ("true", "1", "yes"),
@@ -623,7 +615,6 @@ def load_config() -> Config:
             mca_gate=os.getenv("CAIRN_MCA_GATE", "false").lower() in ("true", "1", "yes"),
             knowledge_extraction=os.getenv("CAIRN_KNOWLEDGE_EXTRACTION", "false").lower() in ("true", "1", "yes"),
             search_v2=os.getenv("CAIRN_SEARCH_V2", "false").lower() in ("true", "1", "yes"),
-            cairn_narratives=os.getenv("CAIRN_CAIRN_NARRATIVES", "false").lower() in ("true", "1", "yes"),
             thought_extraction=os.getenv("CAIRN_THOUGHT_EXTRACTION", "off").lower().strip(),
         ),
         terminal=TerminalConfig(

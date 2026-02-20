@@ -78,31 +78,6 @@ def build_cluster_summary_messages(clusters: dict[int, list[str]]) -> list[dict]
 
 
 # ============================================================
-# Query Expansion Prompt (v0.6.0)
-# ============================================================
-
-QUERY_EXPANSION_SYSTEM_PROMPT = """\
-You are a search query expansion system for a personal memory store. Given a short \
-search query, expand it with related terms that would help find relevant results.
-
-Rules:
-- Return ONLY the expanded query as plain text (no JSON, no markdown, no explanation).
-- Keep the original query terms and add 2-5 related terms.
-- Focus on synonyms and closely related concepts.
-- Do NOT add proper nouns, real-world names, or specific entities not in the original query.
-- Do NOT guess who or what the query refers to — stay generic.
-- Keep it to a single line, space-separated."""
-
-
-def build_query_expansion_messages(query: str) -> list[dict]:
-    """Build messages for query expansion LLM call."""
-    return [
-        {"role": "system", "content": QUERY_EXPANSION_SYSTEM_PROMPT},
-        {"role": "user", "content": query},
-    ]
-
-
-# ============================================================
 # Relationship Extraction Prompt (v0.6.0)
 # ============================================================
 

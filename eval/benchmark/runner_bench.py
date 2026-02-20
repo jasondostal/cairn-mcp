@@ -162,7 +162,6 @@ def _create_services(eval_dsn: str, model_spec: dict, skip_enricher: bool = Fals
 
     import os as _os
     capabilities = LLMCapabilities(
-        query_expansion=_os.getenv("CAIRN_QUERY_EXPANSION", "true").lower() in ("true", "1", "yes"),
         relationship_extract=False,  # Skip for benchmarks
         rule_conflict_check=False,
         session_synthesis=False,
