@@ -117,11 +117,17 @@ class SearchV2:
             return self.fallback_engine.assess_confidence(query, results)
         return None
 
+    # Minimum cosine similarity for entity extraction from queries.
+    # Without this, every word matches random entities (Bug 1, LoCoMo diagnostic).
+    ENTITY_EXTRACTION_THRESHOLD = 0.7
+
     def _extract_query_entities(self, query: str, project_id: int) -> list:
         """Extract entities from query using Core-style chunk+embed approach.
 
         Chunks query into words, bigrams, and full query. Embeds each chunk
         and finds matching entities in Neo4j via vector similarity. No LLM call.
+
+        Uses ENTITY_EXTRACTION_THRESHOLD to filter garbage matches.
         """
         if not self.graph:
             return []
@@ -139,6 +145,7 @@ class SearchV2:
                 embedding = self.embedding.embed(chunk)
                 matches = self.graph.search_entities_by_embedding(
                     embedding, project_id, limit=3,
+                    threshold=self.ENTITY_EXTRACTION_THRESHOLD,
                 )
                 for entity in matches:
                     if entity.uuid not in entities:
@@ -147,8 +154,8 @@ class SearchV2:
                 logger.debug("Entity extraction failed for chunk '%s'", chunk, exc_info=True)
 
         logger.debug(
-            "Query entity extraction: %d chunks → %d entities",
-            len(chunks), len(entities),
+            "Query entity extraction: %d chunks → %d entities (threshold=%.2f)",
+            len(chunks), len(entities), self.ENTITY_EXTRACTION_THRESHOLD,
         )
         return list(entities.values())
 

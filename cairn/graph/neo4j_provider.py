@@ -424,13 +424,14 @@ class Neo4jGraphProvider(GraphProvider):
         embedding: list[float],
         project_id: int,
         limit: int = 10,
+        threshold: float = 0.0,
     ) -> list[Entity]:
         with self._session() as session:
             result = session.run(
                 """
                 CALL db.index.vector.queryNodes('entity_name_vec', $limit, $embedding)
                 YIELD node, score
-                WHERE node.project_id = $pid
+                WHERE node.project_id = $pid AND score > $threshold
                 RETURN node.uuid AS uuid, node.name AS name, node.entity_type AS entity_type,
                        node.project_id AS project_id, node.attributes AS attributes, score
                 ORDER BY score DESC
@@ -438,6 +439,7 @@ class Neo4jGraphProvider(GraphProvider):
                 embedding=embedding,
                 pid=project_id,
                 limit=limit,
+                threshold=threshold,
             )
             return [
                 Entity(

@@ -88,12 +88,17 @@ def handle_entity_lookup(ctx: SearchContext) -> list[dict]:
     when available, avoiding redundant embedding + resolution calls.
 
     Multi-hop BFS inspired by Core:
-    - Hop 1: Direct statements connected to query entities (score 2.0x)
-    - Hop 2: Statements connected to hop-1 entities (score 1.3x)
+    - Hop 1: Direct statements connected to query entities (score 2.0x, cap 30/entity)
+    - Hop 2: Statements connected to hop-1 entities (score 1.3x, cap 15/entity)
 
     Falls back to string-based resolution from entity_hints if no
     pre-resolved entities are provided.
     """
+    # Fan-out caps prevent unbounded graph expansion (Bug 2, LoCoMo diagnostic).
+    # Without these, a single popular entity could return 128+ memories.
+    HOP1_CAP_PER_ENTITY = 30
+    HOP2_CAP_PER_ENTITY = 15
+
     if not ctx.graph:
         return _vector_search(ctx)
 
@@ -125,7 +130,8 @@ def handle_entity_lookup(ctx: SearchContext) -> list[dict]:
         for entity in entities:
             hop1_entity_uuids.add(entity.uuid)
             episode_ids = ctx.graph.find_entity_episodes(entity.uuid)
-            for eid in episode_ids:
+            # Cap per entity to prevent popular entities from flooding results
+            for eid in episode_ids[:HOP1_CAP_PER_ENTITY]:
                 hop1_episodes[eid] = max(hop1_episodes.get(eid, 0), 2.0)
 
         # Hop 2: BFS depth=2 from each entity, collect statements not in hop1
@@ -133,11 +139,15 @@ def handle_entity_lookup(ctx: SearchContext) -> list[dict]:
         for entity in entities:
             try:
                 stmts = ctx.graph.bfs_traverse(entity.uuid, max_depth=2)
+                hop2_count = 0
                 for stmt in stmts:
+                    if hop2_count >= HOP2_CAP_PER_ENTITY:
+                        break
                     if stmt.episode_id and stmt.episode_id not in hop1_episodes:
                         hop2_episodes[stmt.episode_id] = max(
                             hop2_episodes.get(stmt.episode_id, 0), 1.3,
                         )
+                        hop2_count += 1
             except Exception:
                 logger.debug(
                     "BFS hop-2 failed for entity %s", entity.uuid, exc_info=True,
@@ -360,7 +370,12 @@ def _blend_results(
     supplement: list[dict],
     limit: int,
 ) -> list[dict]:
-    """Merge primary and supplementary results, dedup by ID, primary order preserved."""
+    """Merge results by score, deduplicating by ID.
+
+    Both sources compete equally — sorted by score descending.
+    Previously graph results filled all slots first, burying RRF
+    results past the limit (Bugs 5+9, LoCoMo diagnostic).
+    """
     seen_ids = set()
     blended = []
 
@@ -373,6 +388,9 @@ def _blend_results(
         if r["id"] not in seen_ids:
             seen_ids.add(r["id"])
             blended.append(r)
+
+    # Sort by score so both sources compete equally
+    blended.sort(key=lambda r: r.get("score", 0.0), reverse=True)
 
     return blended[:limit]
 

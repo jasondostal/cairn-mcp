@@ -190,8 +190,9 @@ class GraphProvider(ABC):
         embedding: list[float],
         project_id: int,
         limit: int = 10,
+        threshold: float = 0.0,
     ) -> list[Entity]:
-        """Vector search over entity name embeddings."""
+        """Vector search over entity name embeddings. Threshold filters by cosine similarity."""
 
     @abstractmethod
     def search_statements_by_aspect(

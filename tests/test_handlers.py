@@ -80,23 +80,24 @@ class TestHandlerFallbackBehavior:
 
 
 class TestBlendLogic:
-    """Test _blend_results merging behavior."""
+    """Test _blend_results merging behavior — score-ordered, both sources compete."""
 
-    def test_handler_primary_preserves_handler_order(self):
+    def test_blend_sorts_by_score(self):
         handler = [{"id": 10, "score": 1.0}, {"id": 20, "score": 0.9}]
         rrf = [{"id": 30, "score": 0.8}, {"id": 10, "score": 0.7}]
         result = _blend_results(handler, rrf, 10)
-        # Handler results first, then unique RRF results
+        # Sorted by score: id=10 (1.0), id=20 (0.9), id=30 (0.8). Dedup keeps first.
         ids = [r["id"] for r in result]
         assert ids == [10, 20, 30]
 
-    def test_rrf_primary_preserves_rrf_order(self):
+    def test_blend_dedup_keeps_first_occurrence(self):
         rrf = [{"id": 30, "score": 0.8}, {"id": 10, "score": 0.7}]
         handler = [{"id": 10, "score": 1.0}, {"id": 20, "score": 0.9}]
         result = _blend_results(rrf, handler, 10)
-        # RRF results first, then unique handler results
+        # id=10 deduped (rrf's 0.7 kept, not handler's 1.0), then sorted by score
+        # id=20 (0.9) > id=30 (0.8) > id=10 (0.7)
         ids = [r["id"] for r in result]
-        assert ids == [30, 10, 20]
+        assert ids == [20, 30, 10]
 
     def test_empty_handler_returns_rrf(self):
         rrf = [{"id": 1, "score": 0.9}]
