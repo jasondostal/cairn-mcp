@@ -271,10 +271,32 @@ stored. The flag serves as a cost control gate — not a ghost flag.
 
 ## PHASE 5: HARDEN
 
-### 5.1 CI dead code detection
-### 5.2 Config flag coverage tests
-### 5.3 Benchmark regression gate
-### 5.4 Enable features in production config
+### 5.1 CI pipeline — DONE
+
+- [x] Created `.github/workflows/ci.yml` — runs on push/PR to main
+- [x] Steps: checkout, Python 3.12 setup, install deps (CPU torch), pytest, dead import check
+
+### 5.2 Config flag coverage tests — DONE
+
+- [x] Created `tests/test_config_coverage.py` — 14 parametrized tests
+- [x] Every LLMCapabilities flag must have implementation code (not just config.py)
+- [x] active_list() must mention every boolean flag
+- [x] EXPERIMENTAL_CAPABILITIES must be subset of real flag names
+- [x] Prevents ghost flags from recurring
+
+### 5.3 Benchmark regression gate — DEFERRED
+
+Blocked on fast LoCoMo harness (Phase 6). Can't gate CI on a 7-hour benchmark.
+Will add once Bedrock batch testing is available.
+
+### 5.4 Enable features in production config — DEFERRED
+
+Requires benchmark data to know which features to enable. Moves to Phase 6.
+
+### 5.5 Phase 5 verification
+
+- [x] Run: python3 -m pytest -x -q (all tests passing including 14 new config coverage tests)
+- [ ] Commit
 
 ---
 
@@ -321,7 +343,7 @@ No deleting based on vibes or old plans.
 - [x] **Phase 2: Fix Search Bugs** — DONE (bugs 1,2,5+9 fixed; bugs 3,4 deferred to Phase 6)
 - [x] **Phase 3: Unify Event Bus** — DONE (memory events, async enrichment, search events, session synthesis)
 - [x] **Phase 4: Ingestion + Remaining** — DONE (ingest MCP tool, clustering fix; API/orient deferred)
-- [ ] Phase 5: Harden — NOT STARTED
+- [x] **Phase 5: Harden** — DONE (CI pipeline, config flag coverage tests; benchmark gate deferred to Phase 6)
 - [ ] Phase 6: Benchmark Evaluation — BLOCKED (waiting on fast LoCoMo harness)
 
 ---
@@ -346,7 +368,11 @@ No deleting based on vibes or old plans.
 | cairn/graph/neo4j_provider.py | Neo4j operations (51 methods) |
 | cairn/core/activation.py | Spreading activation — KEEP, evaluate by benchmark |
 | cairn/core/mca.py | MCA keyword gate — KEEP, evaluate by benchmark |
-| cairn/core/synthesis.py | Session synthesis — orphaned, wire in Phase 4 |
-| cairn/core/ingest.py | Ingest pipeline — wire MCP in Phase 5 |
-| cairn/core/clustering.py | HDBSCAN clustering — fix labels |
+| cairn/listeners/memory_enrichment.py | Async memory enrichment listener (Phase 3) |
+| cairn/listeners/session_synthesis.py | Session synthesis listener (Phase 3) |
+| cairn/core/synthesis.py | Session synthesis — wired via listener in Phase 3 |
+| cairn/core/ingest.py | Ingest pipeline — wired as MCP tool in Phase 4 |
+| cairn/core/clustering.py | HDBSCAN clustering — labels improved in Phase 4 |
+| .github/workflows/ci.yml | CI pipeline (Phase 5) |
+| tests/test_config_coverage.py | Ghost flag prevention tests (Phase 5) |
 | eval/benchmark/rag.py | Benchmark scorer — fix in Phase 6 |
