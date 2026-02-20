@@ -55,6 +55,7 @@ work_item_manager = None
 analytics_tracker = None
 rollup_worker = None
 workspace_manager = None
+ingest_pipeline = None
 
 
 def _init_services(svc):
@@ -65,6 +66,7 @@ def _init_services(svc):
     global event_bus, event_dispatcher, drift_detector
     global work_item_manager
     global analytics_tracker, rollup_worker, workspace_manager
+    global ingest_pipeline
 
     _svc = svc
     config = svc.config
@@ -85,6 +87,7 @@ def _init_services(svc):
     analytics_tracker = svc.analytics_tracker
     rollup_worker = svc.rollup_worker
     workspace_manager = svc.workspace_manager
+    ingest_pipeline = svc.ingest_pipeline
 
 
 def _build_config_with_overrides(db_instance):
@@ -1455,6 +1458,76 @@ def drift_check(
         return drift_detector.check(project=project, files=files)
     except Exception as e:
         logger.exception("drift_check failed")
+        return {"error": f"Internal error: {e}"}
+
+
+# ============================================================
+# Tool 16: ingest
+# ============================================================
+
+@mcp.tool()
+def ingest(
+    content: str | None = None,
+    project: str | None = None,
+    url: str | None = None,
+    hint: str = "auto",
+    doc_type: str | None = None,
+    title: str | None = None,
+    source: str | None = None,
+    tags: list[str] | None = None,
+    session_name: str | None = None,
+    memory_type: str | None = None,
+) -> dict:
+    """Ingest content into Cairn: dedup, classify, chunk, and store.
+
+    Smart ingestion pipeline that handles text and URLs. Content is classified
+    as doc, memory, or both. Large content is automatically chunked. Duplicates
+    are detected by content hash.
+
+    WHEN TO USE:
+    - Importing documents, articles, or web pages into the knowledge base
+    - Bulk loading content that needs to be chunked and indexed
+    - Ingesting URLs (fetches, extracts readable text, stores)
+
+    DON'T USE FOR: Quick notes or decisions — use store() instead.
+
+    Args:
+        content: Text content to ingest. Required unless url is provided.
+        project: Project name. Required.
+        url: URL to fetch and ingest. If content is also provided, url becomes source metadata.
+        hint: Classification hint: 'auto' (LLM classifies), 'doc', 'memory', or 'both'.
+        doc_type: Document type if storing as doc: 'brief', 'prd', 'plan', 'primer', 'writeup', 'guide'.
+        title: Optional title for the document.
+        source: Source attribution (auto-set to url if url provided).
+        tags: Optional tags for memories created from chunks.
+        session_name: Optional session grouping for memories.
+        memory_type: Override memory type for chunks (default: 'note').
+    """
+    try:
+        if not content and not url:
+            return {"error": "content or url is required"}
+        if not project:
+            return {"error": "project is required"}
+        if hint not in ("auto", "doc", "memory", "both"):
+            return {"error": "hint must be one of: auto, doc, memory, both"}
+
+        result = ingest_pipeline.ingest(
+            content=content,
+            project=project,
+            url=url,
+            hint=hint,
+            doc_type=doc_type,
+            title=title,
+            source=source,
+            tags=tags,
+            session_name=session_name,
+            memory_type=memory_type,
+        )
+        return result
+    except ValueError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        logger.exception("ingest failed")
         return {"error": f"Internal error: {e}"}
 
 

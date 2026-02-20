@@ -497,20 +497,34 @@ class ClusterEngine:
             return self._generic_summaries(cluster_data)
 
     def _parse_summaries(self, raw: str, cluster_data: list[dict]) -> dict[int, dict]:
-        """Parse LLM response into summary mapping. Falls back to generic on parse failure."""
+        """Parse LLM response into summary mapping.
+
+        Fills gaps with generic labels for any clusters the LLM missed,
+        rather than falling back entirely on partial success.
+        """
         items = extract_json(raw, json_type="array")
         if items is None:
-            logger.warning("No valid JSON array in cluster summary response")
+            logger.warning("No valid JSON array in cluster summary response: %s", raw[:200])
             return self._generic_summaries(cluster_data)
 
         result = {}
         for item in items:
+            if not isinstance(item, dict):
+                continue
             cid = item.get("cluster_id")
             if cid is not None:
                 result[cid] = {
                     "label": str(item.get("label", "Unlabeled"))[:255],
                     "summary": str(item.get("summary", "")),
                 }
+
+        # Fill any missing clusters with generic labels
+        generic = self._generic_summaries(cluster_data)
+        for cid, fallback in generic.items():
+            if cid not in result:
+                result[cid] = fallback
+                logger.debug("Cluster %d: LLM missed label, using generic", cid)
+
         return result
 
     def _generic_summaries(self, cluster_data: list[dict]) -> dict[int, dict]:

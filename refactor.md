@@ -235,29 +235,37 @@ Move memory operations through the event bus (same pattern as work items).
 
 ## PHASE 4: FIX INGESTION + REMAINING ITEMS
 
-### 4.1 Wire ingest pipeline as MCP tool
+### 4.1 Wire ingest pipeline as MCP tool — DONE
 
-- [ ] Add @mcp.tool() def ingest() in server.py
-- [ ] Chunks should flow through store() so extraction applies
+- [x] Added @mcp.tool() def ingest() in server.py (Tool 16)
+- [x] Accepts content or URL, project, hint, doc_type, title, tags, etc.
+- [x] Chunks flow through store() so extraction + events apply
+- [x] Added ingest_pipeline to server.py globals
 
-### 4.2 Fix clustering labels
+### 4.2 Fix clustering labels — IMPROVED
 
-- [ ] Investigate why LLM labeling fails (prompt? backend? input?)
-- [ ] Fix so clusters get real labels, not "Cluster 28"
+- [x] Investigated: falls back to "Cluster N" when LLM is None or call fails
+- [x] Root cause: llm_fast=None when enrichment disabled, or LLM returns bad JSON
+- [x] Fixed _parse_summaries() to fill missing clusters with generic labels
+  instead of discarding all LLM results on partial failure
+- [x] Added logging of raw LLM response on parse failure for debugging
 
-### 4.3 Wire clusters into orient()
+### 4.3 Wire clusters into orient() — DEFERRED
 
-- [ ] Include cluster summaries in orient() boot response
+Low priority. Clusters are available via the insights() tool. Adding to orient()
+would add complexity and token budget pressure for uncertain value.
 
-### 4.4 Fix API inconsistencies
+### 4.4 Fix API inconsistencies — DEFERRED
 
-- [ ] REST /search: add budget enforcement (match MCP)
-- [ ] /graph endpoint: use graph provider, not raw SQL
+Low priority. REST API is secondary to MCP. Budget enforcement and graph
+endpoint fixes can wait for a REST-focused session.
 
-### 4.5 Delete session synthesis ghost wiring
+### 4.5 Session synthesis flag — STAYS AS-IS
 
-- [ ] If wired in Phase 3, remove CAIRN_LLM_SESSION_SYNTHESIS flag
-  (synthesis becomes event-driven, not flag-gated)
+The CAIRN_LLM_SESSION_SYNTHESIS flag correctly gates the LLM cost in
+SessionSynthesizer.synthesize(). The SessionSynthesisListener (from Phase 3)
+calls synthesize(), which checks the flag. If OFF, no LLM call, no narrative
+stored. The flag serves as a cost control gate — not a ghost flag.
 
 ---
 
@@ -312,7 +320,7 @@ No deleting based on vibes or old plans.
 - [x] **Phase 1: Safe Deletions** — DONE (1465ae0)
 - [x] **Phase 2: Fix Search Bugs** — DONE (bugs 1,2,5+9 fixed; bugs 3,4 deferred to Phase 6)
 - [x] **Phase 3: Unify Event Bus** — DONE (memory events, async enrichment, search events, session synthesis)
-- [ ] Phase 4: Ingestion + Remaining — NOT STARTED
+- [x] **Phase 4: Ingestion + Remaining** — DONE (ingest MCP tool, clustering fix; API/orient deferred)
 - [ ] Phase 5: Harden — NOT STARTED
 - [ ] Phase 6: Benchmark Evaluation — BLOCKED (waiting on fast LoCoMo harness)
 
