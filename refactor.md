@@ -307,11 +307,14 @@ researching batch LoCoMo testing via Bedrock to speed this up.
 
 These features exist, work, and might help. We need LoCoMo data before deciding.
 
-### 6.1 Fix the scorer first
+### 6.1 Fix the scorer first — DONE
 
 **Why:** Can't evaluate anything if the scorer is broken (Bug 10 — concatenated F1).
 
-- [ ] Change eval/benchmark/rag.py evaluate_retrieval() to per-memory F1 (take max)
+- [x] Changed _score_retrieval() to per-memory F1 (take max) instead of concatenated
+- [x] Per-memory substring containment check too
+- [x] Abstention scoring also per-memory
+- [x] Added tests/test_retrieval_scorer.py (9 tests)
 - [ ] Run LoCoMo baseline with fixed scorer to get real numbers
 
 ### 6.2 Ablation tests

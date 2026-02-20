@@ -246,51 +246,60 @@ _ABSTENTION_MARKERS = {
 }
 
 
-def _score_retrieval(expected: str, context: str, is_abstention: bool) -> tuple[float, str]:
-    """Score retrieved context against expected answer without LLM.
+def _score_retrieval(
+    expected: str, memory_contents: list[str], is_abstention: bool,
+) -> tuple[float, str]:
+    """Score retrieved memories against expected answer without LLM.
 
-    For normal questions: token F1 between expected answer and retrieved context,
-    quantized to 0.0/0.5/1.0.
+    Computes token F1 **per memory** and takes the max, so one good hit
+    isn't diluted by noise from other retrieved memories (Bug 10 fix).
 
-    For abstention questions: 1.0 if context is empty or lacks relevant info,
-    0.0 if context contains plausible-looking content (potential hallucination source).
+    For abstention questions: 1.0 if no memory matches the adversarial answer.
     """
     expected = str(expected)  # some ground-truth answers are numeric
-    context_lower = context.lower()
+    all_context = "\n".join(memory_contents).lower()
 
     if is_abstention:
-        # Adversarial question — no correct answer exists in the data.
-        # Good retrieval = returning nothing relevant (empty or generic).
-        # We check if the expected answer tokens appear (they shouldn't).
-        if not context.strip():
+        if not all_context.strip():
             return 1.0, "No context retrieved (correct for adversarial)"
-        # If expected is empty, any retrieval is potentially misleading
         if not expected.strip():
             return 0.5, "Context retrieved for unanswerable question"
-        f1 = compute_f1(context_lower, expected.lower())
-        if f1 < 0.1:
-            return 1.0, f"Retrieved context irrelevant to adversarial answer (f1={f1:.2f})"
-        return 0.0, f"Retrieved context matches adversarial answer (f1={f1:.2f})"
+        # Per-memory max F1 against adversarial answer
+        best_f1 = max(
+            (compute_f1(m.lower(), expected.lower()) for m in memory_contents if m.strip()),
+            default=0.0,
+        )
+        if best_f1 < 0.1:
+            return 1.0, f"Retrieved context irrelevant to adversarial answer (best_f1={best_f1:.2f})"
+        return 0.0, f"Retrieved context matches adversarial answer (best_f1={best_f1:.2f})"
 
-    # Normal question — check if expected answer is in retrieved context
+    # Normal question — check per-memory
     if not expected.strip():
         return 0.0, "Empty expected answer"
 
-    # Substring containment check (case-insensitive)
     expected_lower = expected.lower().strip()
-    if expected_lower in context_lower:
-        return 1.0, f"Exact substring match in context"
 
-    # Token F1 between expected answer and context
-    f1 = compute_f1(context_lower, expected_lower)
+    # Substring containment check per memory
+    for m in memory_contents:
+        if expected_lower in m.lower():
+            return 1.0, "Exact substring match in a retrieved memory"
+
+    # Per-memory token F1 — take the best
+    best_f1 = 0.0
+    for m in memory_contents:
+        if not m.strip():
+            continue
+        f1 = compute_f1(m.lower(), expected_lower)
+        if f1 > best_f1:
+            best_f1 = f1
 
     # Quantize to 0.0 / 0.5 / 1.0
-    if f1 >= 0.5:
-        return 1.0, f"Token F1={f1:.2f} (strong match)"
-    elif f1 >= 0.2:
-        return 0.5, f"Token F1={f1:.2f} (partial match)"
+    if best_f1 >= 0.5:
+        return 1.0, f"Best per-memory F1={best_f1:.2f} (strong match)"
+    elif best_f1 >= 0.2:
+        return 0.5, f"Best per-memory F1={best_f1:.2f} (partial match)"
     else:
-        return 0.0, f"Token F1={f1:.2f} (no match)"
+        return 0.0, f"Best per-memory F1={best_f1:.2f} (no match)"
 
 
 def evaluate_retrieval(
@@ -324,8 +333,8 @@ def evaluate_retrieval(
         logger.exception("Search failed for question %s", question.id)
         memories = []
 
-    # 2. Concatenate retrieved content
-    context = "\n".join(m.get("content", "") for m in memories)
+    # 2. Collect per-memory contents (Bug 10 fix: score per-memory, not concatenated)
+    memory_contents = [m.get("content", "") for m in memories]
 
     # 3. Score
     is_abstention = (
@@ -333,7 +342,7 @@ def evaluate_retrieval(
         or question.metadata.get("has_answer") is False
     )
     score, reasoning = _score_retrieval(
-        question.expected_answer, context, is_abstention
+        question.expected_answer, memory_contents, is_abstention
     )
 
     return AnswerResult(
