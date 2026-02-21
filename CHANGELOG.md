@@ -53,8 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.55.0] — 2026-02-21 "Show Your Work"
 
 ### Added
-- **LoCoMo benchmark: 79.4%** — LLM-judged evaluation across 1,986 questions. Beats Mem0
-  (66.9%) and Letta (74.0%). Titan V2 embeddings, plain RRF search, Llama-3.3-70B judge.
+- **LoCoMo benchmark: 79.4%** — LLM-judged evaluation across 1,986 questions (Mem0: 66.9%,
+  Letta: 74.0%). Titan V2 embeddings, plain RRF search, Llama-3.3-70B judge.
 - **Ingest MCP tool** — `ingest()` accepts content or URL with project, hint, doc type,
   title, and tags. Chunks flow through `store()` so extraction and events apply.
 - **Memory events on the event bus** — `store()` publishes `memory.created`, `modify()`
@@ -1884,7 +1884,18 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.40.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.56.0...HEAD
+[0.56.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.55.0...v0.56.0
+[0.55.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.52.0...v0.55.0
+[0.52.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.51.0...v0.52.0
+[0.51.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.50.0...v0.51.0
+[0.50.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.49.0...v0.50.0
+[0.49.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.48.0...v0.49.0
+[0.48.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.47.0...v0.48.0
+[0.47.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.43.0...v0.47.0
+[0.43.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.42.0...v0.43.0
+[0.42.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.41.0...v0.42.0
+[0.41.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.40.0...v0.41.0
 [0.40.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.39.0...v0.40.0
 [0.39.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.38.0...v0.39.0
 [0.38.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.37.0...v0.38.0

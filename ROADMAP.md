@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.55.0** — "Show Your Work".
+Current: **v0.56.0** — "Use It or Lose It".
 
 ---
 
@@ -23,6 +23,36 @@ Current: **v0.55.0** — "Show Your Work".
 ---
 
 ## Shipped
+
+### v0.56.0 — "Use It or Lose It" ✓
+
+Memory lifecycle. Access tracking, decay scoring, controlled forgetting, importance boosting, enrichment status tracking.
+
+- [x] **Memory access tracking** — `access_count` and `last_accessed_at` columns, `MemoryAccessListener` on event bus
+- [x] **Access-frequency search signal** — new RRF signal (~10% weight), gated behind `CAIRN_ACCESS_FREQUENCY`
+- [x] **Enhanced decay scoring** — exponential decay combining age with access frequency
+- [x] **Controlled forgetting** — `DecayWorker` background thread, auto-inactivation below threshold, protected classes, dry-run default
+- [x] **Importance as RRF Signal 9** — ~8% weight, always active
+- [x] **Enrichment status tracking** — `enrichment_status` column, migration 030, backfill from existing data
+- [x] **`re_enrich()` method** — recovery path for failed/partial enrichments
+- [x] **Zero-work enrichment detection** — warns on high-importance memories with no entities
+- [x] **orient() merged trail** — PG+graph fusion, HA philosophy
+- [x] **Enricher status returns** — `complete`/`partial`/`failed` instead of silent `{}`
+- [x] Migrations 029 (memory lifecycle), 030 (enrichment status)
+
+### v0.55.0 — "Show Your Work" ✓
+
+LoCoMo benchmark, ingest tool, event-driven enrichment, CI pipeline.
+
+- [x] **LoCoMo benchmark: 79.4%** — LLM-judged evaluation across 1,986 questions
+- [x] **Ingest MCP tool** — `ingest()` accepts content or URL with chunking
+- [x] **Memory events on event bus** — `memory.created`, `memory.updated`, `search.executed`
+- [x] **Async memory enrichment** — `MemoryEnrichmentListener` via event bus with retry/backoff
+- [x] **Session synthesis listener** — `SessionSynthesisListener` on `session_end`
+- [x] **CI pipeline** — GitHub Actions: Python 3.12, pytest, dead import check
+- [x] **Config flag coverage tests** — parametrized tests preventing ghost flags
+- [x] **Query entity extraction fix** — proper noun extraction replacing brute-force word splitting
+- [x] **Per-memory F1 scoring** — benchmark scorer fixed from concatenated to per-memory max
 
 ### v0.52.0 — "Event Horizon" ✓
 
