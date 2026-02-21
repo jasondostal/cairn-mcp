@@ -1,14 +1,19 @@
 """Local SentenceTransformer embedding engine. The default provider."""
 
+from __future__ import annotations
+
 import logging
 import time
+from typing import TYPE_CHECKING
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
 from cairn.config import EmbeddingConfig
 from cairn.core import stats
 from cairn.embedding.interface import EmbeddingInterface
+
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +32,8 @@ class EmbeddingEngine(EmbeddingInterface):
     def model(self) -> SentenceTransformer:
         """Lazy-load the model on first use."""
         if self._model is None:
+            from sentence_transformers import SentenceTransformer
+
             logger.info("Loading embedding model: %s", self.config.model)
             self._model = SentenceTransformer(self.config.model)
             logger.info(

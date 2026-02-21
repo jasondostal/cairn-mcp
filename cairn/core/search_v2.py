@@ -121,22 +121,74 @@ class SearchV2:
     # Without this, every word matches random entities (Bug 1, LoCoMo diagnostic).
     ENTITY_EXTRACTION_THRESHOLD = 0.7
 
+    # Common words that should never be embedded for entity search.
+    # These waste embed calls and never match real entities at threshold 0.7.
+    _STOP_WORDS = frozenset({
+        "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+        "have", "has", "had", "do", "does", "did", "will", "would", "could",
+        "should", "may", "might", "shall", "can", "need", "must",
+        "i", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us",
+        "them", "my", "your", "his", "its", "our", "their",
+        "what", "which", "who", "whom", "whose", "when", "where", "why", "how",
+        "that", "this", "these", "those",
+        "and", "but", "or", "nor", "not", "no", "so", "if", "then", "than",
+        "of", "in", "on", "at", "to", "for", "with", "from", "by", "about",
+        "into", "through", "during", "before", "after", "above", "below",
+        "between", "out", "off", "over", "under", "again", "further",
+        "very", "just", "also", "more", "most", "some", "any", "all", "each",
+        "every", "both", "few", "many", "much", "own", "same", "other",
+        "only", "such", "too", "here", "there", "now",
+        "get", "got", "go", "going", "went", "come", "came", "make", "made",
+        "take", "took", "give", "gave", "say", "said", "tell", "told",
+        "think", "know", "see", "want", "like", "find", "use", "try",
+    })
+
     def _extract_query_entities(self, query: str, project_id: int) -> list:
-        """Extract entities from query using Core-style chunk+embed approach.
+        """Extract candidate entities from query via embed + Neo4j vector search.
 
-        Chunks query into words, bigrams, and full query. Embeds each chunk
-        and finds matching entities in Neo4j via vector similarity. No LLM call.
+        Strategy (Bug 12 fix): Instead of embedding every word and bigram
+        (~20 chunks per question), extract only meaningful candidate terms:
+        1. Capitalized words (proper nouns): "Caroline", "Paris", "NBA"
+        2. Adjacent capitalized phrases: "New York", "John Smith"
+        3. Full query (catches entity names split across words)
 
-        Uses ENTITY_EXTRACTION_THRESHOLD to filter garbage matches.
+        Falls back to non-stop content words if no capitalized terms found.
+        Uses ENTITY_EXTRACTION_THRESHOLD (0.7) to filter garbage matches.
         """
         if not self.graph:
             return []
 
-        words = query.lower().split()
-        # Build chunks: individual words (3+ chars), bigrams, full query
-        chunks = {w for w in words if len(w) >= 3}
-        for i in range(len(words) - 1):
-            chunks.add(f"{words[i]} {words[i+1]}")
+        # Extract capitalized words from original query (preserving case info)
+        raw_words = query.split()
+        # Skip first word (always capitalized in a question) and punctuation
+        capitalized = []
+        for i, w in enumerate(raw_words):
+            clean = w.strip("?.,!:;\"'()[]")
+            if not clean:
+                continue
+            if i > 0 and clean[0].isupper():
+                capitalized.append(clean)
+
+        # Build chunks from capitalized terms
+        chunks = set()
+        for w in capitalized:
+            chunks.add(w)
+
+        # Adjacent capitalized phrases: "New York", "John Smith"
+        for i in range(len(raw_words) - 1):
+            w1 = raw_words[i].strip("?.,!:;\"'()[]")
+            w2 = raw_words[i + 1].strip("?.,!:;\"'()[]")
+            if w1 and w2 and w1[0].isupper() and w2[0].isupper() and i > 0:
+                chunks.add(f"{w1} {w2}")
+
+        # Fallback: if no capitalized terms, use non-stop content words (≥4 chars)
+        if not chunks:
+            for w in raw_words:
+                clean = w.strip("?.,!:;\"'()[]").lower()
+                if len(clean) >= 4 and clean not in self._STOP_WORDS:
+                    chunks.add(clean)
+
+        # Always include the full query as a chunk
         chunks.add(query)
 
         entities = {}

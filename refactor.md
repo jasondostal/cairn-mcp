@@ -187,7 +187,7 @@ evaluation.
 ### 2.6 Phase 2 verification
 
 - [x] Run: python3 -m pytest -x -q (303 passed)
-- [ ] Commit
+- [x] Commit: 00aa355 refactor: Phase 2 — fix search bugs (entity threshold, BFS caps, blend)
 
 ---
 
@@ -229,7 +229,7 @@ Move memory operations through the event bus (same pattern as work items).
 ### 3.5 Phase 3 verification
 
 - [x] Run: python3 -m pytest -x -q (329 passed, including 9 new event tests)
-- [ ] Commit
+- [x] Commit: af29cc8 refactor: Phase 3 — unify event bus, async memory enrichment
 
 ---
 
@@ -296,16 +296,16 @@ Requires benchmark data to know which features to enable. Moves to Phase 6.
 ### 5.5 Phase 5 verification
 
 - [x] Run: python3 -m pytest -x -q (all tests passing including 14 new config coverage tests)
-- [ ] Commit
+- [x] Commit: d06dd4e refactor: Phase 5 — CI pipeline, config flag coverage tests
 
 ---
 
-## PHASE 6: BENCHMARK EVALUATION (requires fast LoCoMo harness)
+## PHASE 6: BENCHMARK EVALUATION
 
-Deferred to last — each run takes ~7 hours currently. Jason has an agent
-researching batch LoCoMo testing via Bedrock to speed this up.
-
-These features exist, work, and might help. We need LoCoMo data before deciding.
+Two scoring modes:
+- **Retrieval scoring** (local, fast, ~6 min): token F1 only, Titan V2 embeddings, no LLM
+- **LLM judge scoring** (full, via Bedrock batch): LLM generates answer + LLM-as-judge scores
+  → Submit JSONL to S3, async processing, 50% cheaper, no rate limits
 
 ### 6.1 Fix the scorer first — DONE
 
@@ -315,11 +315,56 @@ These features exist, work, and might help. We need LoCoMo data before deciding.
 - [x] Per-memory substring containment check too
 - [x] Abstention scoring also per-memory
 - [x] Added tests/test_retrieval_scorer.py (9 tests)
-- [ ] Run LoCoMo baseline with fixed scorer to get real numbers
+- [x] Commit: 6a6d028 fix: Bug 10 — per-memory F1 scoring instead of concatenated
 
-### 6.2 Ablation tests
+### 6.2 Baseline run — DONE
 
-Run LoCoMo with each feature toggled independently:
+- [x] Run LoCoMo with fixed scorer, plain RRF, no optional features
+- [x] Report: eval/reports/bench_locomo_20260220_184047.json
+
+**Baseline results (retrieval scoring, SearchV2=OFF, no graph):**
+
+| Question Type | Count | Accuracy |
+|--------------|-------|----------|
+| adversarial   | 446   | 50.2%    |
+| multi-hop     | 321   | 17.1%    |
+| open-domain   | 841   | 39.6%    |
+| single-hop    | 282   | 20.4%    |
+| temporal      | 96    | 16.7%    |
+| **OVERALL**   | 1986  | **34.5%** |
+
+Previous reported accuracy was 8.6% (broken scorer). Fixed scorer → 34.5%.
+
+### 6.3 Fix query entity extraction (Bug 12 — chunk+embed waste)
+
+**Evidence:** SearchV2._extract_query_entities() splits query into every word (≥3 chars)
+and every bigram, embeds each one independently. "What did Caroline do?" generates ~20
+chunks including "what", "did", "does", each getting a Bedrock embed call + Neo4j vector
+search. 1,986 questions → 100K+ embed calls instead of ~2K. The threshold (Bug 1 fix)
+filters garbage matches so results aren't wrong, just massively wasteful.
+
+**The router already does this right.** `cairn/core/router.py` uses one LLM call to
+extract entity_hints cleanly: `["Caroline"]`. The chunk+embed approach in search_v2.py
+bypasses the router with a brute-force alternative.
+
+**Fix:** Replace brute-force chunking with the router's entity extraction approach.
+For no-LLM mode (benchmark retrieval scoring), use a simple heuristic: embed only
+capitalized words (proper nouns) + the full query. Skip stop words and common verbs.
+
+- [ ] Fix _extract_query_entities() in search_v2.py
+- [ ] Test: verify ~2-5 embed calls per question, not 20+
+- [ ] Run SearchV2 ablation with fixed extraction
+
+### 6.4 Other fixes found during benchmark setup
+
+- [x] Made sentence_transformers import lazy in cairn/embedding/engine.py
+  (was crashing benchmark even when using Bedrock embeddings)
+- [x] Cleaned Neo4j namespace contamination (Bug 7): deleted 687 production
+  entities + 1,573 statements from benchmark project_id=2 using timestamp cutoff
+
+### 6.5 Ablation tests
+
+Run LoCoMo with each feature toggled independently against 34.5% baseline:
 
 - [ ] Spreading activation ON vs OFF — does it help RRF?
 - [ ] MCA gate ON vs OFF — does keyword coverage filtering help?
@@ -332,7 +377,15 @@ Run LoCoMo with each feature toggled independently:
 **Decision rule:** If a feature improves LoCoMo score, KEEP. If it hurts or is neutral, REMOVE.
 No deleting based on vibes or old plans.
 
-### 6.3 Document results and decide
+### 6.6 Bedrock batch full LoCoMo run
+
+Build batch inference pipeline for LLM-judged evaluation:
+- [ ] Create JSONL formatter for LoCoMo questions (Bedrock batch input format)
+- [ ] Upload to S3, submit batch job via Bedrock API
+- [ ] Parse batch output, compute LLM judge scores
+- [ ] Compare LLM judge scores vs retrieval scores
+
+### 6.7 Document results and decide
 
 - [ ] Record ablation results in a memory
 - [ ] Update this file with deletion/keep decisions based on data
@@ -343,11 +396,18 @@ No deleting based on vibes or old plans.
 ## PHASE STATUS
 
 - [x] **Phase 1: Safe Deletions** — DONE (1465ae0)
-- [x] **Phase 2: Fix Search Bugs** — DONE (bugs 1,2,5+9 fixed; bugs 3,4 deferred to Phase 6)
-- [x] **Phase 3: Unify Event Bus** — DONE (memory events, async enrichment, search events, session synthesis)
-- [x] **Phase 4: Ingestion + Remaining** — DONE (ingest MCP tool, clustering fix; API/orient deferred)
-- [x] **Phase 5: Harden** — DONE (CI pipeline, config flag coverage tests; benchmark gate deferred to Phase 6)
-- [ ] Phase 6: Benchmark Evaluation — BLOCKED (waiting on fast LoCoMo harness)
+- [x] **Phase 2: Fix Search Bugs** — DONE (00aa355, bugs 1,2,5+9 fixed; bugs 3,4 deferred)
+- [x] **Phase 3: Unify Event Bus** — DONE (af29cc8, memory events, async enrichment, session synthesis)
+- [x] **Phase 4: Ingestion + Remaining** — DONE (5e48326, ingest MCP tool, clustering fix)
+- [x] **Phase 5: Harden** — DONE (d06dd4e, CI pipeline, config flag coverage tests)
+- [ ] **Phase 6: Benchmark Evaluation** — IN PROGRESS
+  - [x] 6.1 Scorer fix (6a6d028)
+  - [x] 6.2 Baseline: 34.5% (retrieval scoring, plain RRF)
+  - [ ] 6.3 Fix chunk+embed waste (Bug 12)
+  - [x] 6.4 Lazy import fix, Neo4j contamination cleanup
+  - [ ] 6.5 Ablation tests
+  - [ ] 6.6 Bedrock batch full LoCoMo run
+  - [ ] 6.7 Document results and decide
 
 ---
 
