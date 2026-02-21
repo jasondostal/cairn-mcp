@@ -68,6 +68,7 @@ class MemoryEnrichmentListener:
         row = self.memory_store.db.execute_one(
             """
             SELECT content, embedding, session_name, entities,
+                   importance, enrichment_status,
                    p.name as project_name
             FROM memories m
             LEFT JOIN projects p ON m.project_id = p.id
@@ -92,7 +93,26 @@ class MemoryEnrichmentListener:
             project=row.get("project_name") or "",
         )
 
-        logger.info("MemoryEnrichment: enrichment complete for memory #%d", memory_id)
+        # Detect zero-work completion: enrichment ran but produced nothing useful
+        entities = row.get("entities") or []
+        importance = row.get("importance", 0.5)
+        enrichment_status = row.get("enrichment_status", "pending")
+
+        if enrich and not entities and enrichment_status in ("failed", "partial"):
+            if importance >= 0.7:
+                logger.warning(
+                    "MemoryEnrichment: HIGH-IMPORTANCE memory #%d (%.1f) has "
+                    "no entities after enrichment (status=%s)",
+                    memory_id, importance, enrichment_status,
+                )
+            else:
+                logger.info(
+                    "MemoryEnrichment: memory #%d completed with status=%s "
+                    "(no entities extracted)",
+                    memory_id, enrichment_status,
+                )
+        else:
+            logger.info("MemoryEnrichment: enrichment complete for memory #%d", memory_id)
 
     def _handle_inactivated(self, event: dict) -> None:
         """Handle memory inactivation — future: Neo4j statement cleanup."""

@@ -39,6 +39,8 @@ from cairn.core.constants import (
     RRF_WEIGHTS_DEFAULT,
     RRF_WEIGHTS_WITH_ACTIVATION,
     RRF_WEIGHTS_WITH_ENTITIES,
+    RRF_WEIGHTS_WITH_ACCESS,
+    RRF_WEIGHTS_WITH_ACCESS_ENTITIES,
     RRF_WEIGHTS_WITH_GRAPH,
     TYPE_ROUTING_BOOST,
 )
@@ -80,6 +82,7 @@ class SearchEngine:
         rerank_candidates: int = 50,
         activation_engine: ActivationEngine | None = None,
         graph_provider: GraphProvider | None = None,
+        decay_lambda: float = 0.01,
     ):
         self.db = db
         self.embedding = embedding
@@ -87,6 +90,7 @@ class SearchEngine:
         self.capabilities = capabilities
         self.reranker = reranker
         self.rerank_candidates = rerank_candidates
+        self.decay_lambda = decay_lambda
         self.activation_engine = activation_engine
         self.graph_provider = graph_provider
         self._mca_gate: MCAGate | None = None
@@ -103,6 +107,7 @@ class SearchEngine:
         search_mode: str = "semantic",
         limit: int = 10,
         include_full: bool = False,
+        required_tags: list[str] | None = None,
     ) -> list[dict]:
         """Search memories using hybrid RRF.
 
@@ -113,18 +118,22 @@ class SearchEngine:
             search_mode: "semantic" (hybrid), "keyword", or "vector".
             limit: Max results to return.
             include_full: If True, return full content. If False, return summary/truncated.
+            required_tags: If set, only return memories containing ALL of these tags.
 
         Returns:
             List of memory dicts with relevance scores.
         """
         if search_mode == "keyword":
-            return self._keyword_search(query, project, memory_type, limit, include_full)
+            return self._keyword_search(query, project, memory_type, limit, include_full, required_tags)
         elif search_mode == "vector":
-            return self._vector_search(query, project, memory_type, limit, include_full)
+            return self._vector_search(query, project, memory_type, limit, include_full, required_tags)
         else:
-            return self._hybrid_search(query, query, project, memory_type, limit, include_full)
+            return self._hybrid_search(query, query, project, memory_type, limit, include_full, required_tags)
 
-    def _build_filters(self, project: str | list[str] | None, memory_type: str | list[str] | None) -> tuple[str, list]:
+    def _build_filters(
+        self, project: str | list[str] | None, memory_type: str | list[str] | None,
+        required_tags: list[str] | None = None,
+    ) -> tuple[str, list]:
         """Build WHERE clause fragments for common filters."""
         clauses = ["m.is_active = true"]
         params = []
@@ -145,15 +154,19 @@ class SearchEngine:
                 clauses.append("m.memory_type = %s")
                 params.append(memory_type)
 
+        if required_tags:
+            clauses.append("m.tags @> %s")
+            params.append(required_tags)
+
         return " AND ".join(clauses), params
 
     def _vector_search(
         self, query: str, project: str | None, memory_type: str | None,
-        limit: int, include_full: bool,
+        limit: int, include_full: bool, required_tags: list[str] | None = None,
     ) -> list[dict]:
         """Pure vector similarity search."""
         query_vector = self.embedding.embed(query)
-        where, params = self._build_filters(project, memory_type)
+        where, params = self._build_filters(project, memory_type, required_tags)
 
         # pgvector cosine distance: <=> returns distance (0 = identical)
         # We convert to similarity: 1 - distance
@@ -184,10 +197,10 @@ class SearchEngine:
 
     def _keyword_search(
         self, query: str, project: str | None, memory_type: str | None,
-        limit: int, include_full: bool,
+        limit: int, include_full: bool, required_tags: list[str] | None = None,
     ) -> list[dict]:
         """PostgreSQL full-text search."""
-        where, params = self._build_filters(project, memory_type)
+        where, params = self._build_filters(project, memory_type, required_tags)
 
         rows = self.db.execute(
             f"""
@@ -216,7 +229,7 @@ class SearchEngine:
 
     def _hybrid_search(
         self, query: str, expanded: str, project: str | None, memory_type: str | None,
-        limit: int, include_full: bool,
+        limit: int, include_full: bool, required_tags: list[str] | None = None,
     ) -> list[dict]:
         """Hybrid search: vector + keyword + tag, fused via RRF.
 
@@ -225,7 +238,7 @@ class SearchEngine:
         """
         # Vector signal uses the expanded query for richer semantic matching
         query_vector = self.embedding.embed(expanded)
-        where, params = self._build_filters(project, memory_type)
+        where, params = self._build_filters(project, memory_type, required_tags)
 
         # When reranking is enabled, widen the RRF pool to give the cross-encoder
         # more candidates to pick from. The reranker narrows back to `limit`.
@@ -277,17 +290,26 @@ class SearchEngine:
         )
         keyword_ranks = {r["id"]: r["rank"] for r in keyword_rows}
 
-        # Signal 3: Recency (newer memories ranked higher by updated_at)
+        # Signal 3: Decay-adjusted recency
+        # Combines age with access frequency via exponential decay:
+        #   score = e^(-lambda * days_since_last_access)
+        # COALESCE falls back to updated_at for memories with no access history.
         recency_rows = self.db.execute(
             f"""
             SELECT m.id,
-                   ROW_NUMBER() OVER (ORDER BY m.updated_at DESC) as rank
+                   ROW_NUMBER() OVER (
+                       ORDER BY EXP(
+                           -%s * EXTRACT(EPOCH FROM (
+                               NOW() - COALESCE(m.last_accessed_at, m.updated_at)
+                           )) / 86400.0
+                       ) DESC
+                   ) as rank
             FROM memories m
             LEFT JOIN projects p ON m.project_id = p.id
             WHERE {where}
             LIMIT %s
             """,
-            params + [candidate_limit],
+            [self.decay_lambda] + params + [candidate_limit],
         )
         recency_ranks = {r["id"]: r["rank"] for r in recency_rows}
 
@@ -420,13 +442,55 @@ class SearchEngine:
             except Exception:
                 logger.debug("Graph neighbor signal failed", exc_info=True)
 
+        # Signal 8: Access frequency (log-normalized access_count)
+        access_ranks = {}
+        use_access = (
+            self.capabilities is not None
+            and self.capabilities.access_frequency
+        )
+        if use_access:
+            try:
+                access_rows = self.db.execute(
+                    f"""
+                    SELECT m.id,
+                           ROW_NUMBER() OVER (
+                               ORDER BY LN(1 + m.access_count) DESC
+                           ) as rank
+                    FROM memories m
+                    LEFT JOIN projects p ON m.project_id = p.id
+                    WHERE {where}
+                        AND m.access_count > 0
+                    LIMIT %s
+                    """,
+                    params + [candidate_limit],
+                )
+                access_ranks = {r["id"]: r["rank"] for r in access_rows}
+            except Exception:
+                logger.debug("Access frequency signal failed", exc_info=True)
+
+        # Signal 9: Importance (always active — core column, no capability gate)
+        importance_rows = self.db.execute(
+            f"""
+            SELECT m.id,
+                   ROW_NUMBER() OVER (ORDER BY m.importance DESC) as rank
+            FROM memories m
+            LEFT JOIN projects p ON m.project_id = p.id
+            WHERE {where}
+            LIMIT %s
+            """,
+            params + [candidate_limit],
+        )
+        importance_ranks = {r["id"]: r["rank"] for r in importance_rows}
+
         # Dynamic weight selection based on available signals
         if activation_ranks and entity_ranks:
             weights = RRF_WEIGHTS_WITH_ACTIVATION
         elif graph_ranks:
             weights = RRF_WEIGHTS_WITH_GRAPH
         elif entity_ranks:
-            weights = RRF_WEIGHTS_WITH_ENTITIES
+            weights = RRF_WEIGHTS_WITH_ACCESS_ENTITIES if access_ranks else RRF_WEIGHTS_WITH_ENTITIES
+        elif access_ranks:
+            weights = RRF_WEIGHTS_WITH_ACCESS
         else:
             weights = RRF_WEIGHTS_DEFAULT
 
@@ -434,7 +498,7 @@ class SearchEngine:
         all_ids = (
             set(vector_ranks) | set(keyword_ranks) | set(recency_ranks)
             | set(tag_ranks) | set(entity_ranks) | set(activation_ranks)
-            | set(graph_ranks)
+            | set(graph_ranks) | set(access_ranks) | set(importance_ranks)
         )
         if not all_ids:
             return []
@@ -465,6 +529,12 @@ class SearchEngine:
             if "graph" in weights and memory_id in graph_ranks:
                 components["graph"] = weights["graph"] * (1.0 / (RRF_K + graph_ranks[memory_id]))
                 score += components["graph"]
+            if "access" in weights and memory_id in access_ranks:
+                components["access"] = weights["access"] * (1.0 / (RRF_K + access_ranks[memory_id]))
+                score += components["access"]
+            if "importance" in weights and memory_id in importance_ranks:
+                components["importance"] = weights["importance"] * (1.0 / (RRF_K + importance_ranks[memory_id]))
+                score += components["importance"]
             scored[memory_id] = score
             score_components[memory_id] = components
 

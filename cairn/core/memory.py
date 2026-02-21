@@ -123,10 +123,15 @@ class MemoryStore:
 
         # --- Enrichment (skip for chunks/bulk, or when extraction succeeded) ---
         enrichment = {}
+        enrichment_status = "none"  # default for enrich=False
         if extraction_result is not None:
             enrichment = self.knowledge_extractor.extract_enrichment_fields(extraction_result)
+            enrichment_status = "complete"
         elif enrich and self.enricher:
             enrichment = self.enricher.enrich(content)
+            enrichment_status = enrichment.pop("_status", "pending")
+        elif enrich:
+            enrichment_status = "pending"  # enricher not available
 
         # Override logic: caller-provided values win
         # Tags: caller tags stay in `tags`, LLM tags go to `auto_tags`
@@ -159,10 +164,12 @@ class MemoryStore:
             INSERT INTO memories
                 (content, memory_type, importance, project_id, session_name,
                  embedding, tags, auto_tags, summary, related_files, source_doc_id,
-                 file_hashes, entities, author)
+                 file_hashes, entities, author,
+                 enrichment_status, enriched_at)
             VALUES
                 (%s, %s, %s, %s, %s, %s::vector, %s, %s, %s, %s, %s,
-                 %s::jsonb, %s, %s)
+                 %s::jsonb, %s, %s,
+                 %s, CASE WHEN %s IN ('complete', 'partial') THEN NOW() ELSE NULL END)
             RETURNING id, created_at
             """,
             (
@@ -180,6 +187,8 @@ class MemoryStore:
                 file_hashes_json,
                 entities,
                 author,
+                enrichment_status,
+                enrichment_status,
             ),
         )
 
@@ -251,6 +260,72 @@ class MemoryStore:
         if enrichment_result.get("graph_stats"):
             result["graph"] = enrichment_result["graph_stats"]
         return result
+
+    def re_enrich(self, memory_id: int) -> dict:
+        """Re-run enrichment for a specific memory.
+
+        Useful for recovering from failed/partial enrichment.
+        Returns updated enrichment data.
+        """
+        row = self.db.execute_one(
+            """
+            SELECT m.id, m.content, m.importance, m.memory_type,
+                   m.project_id, m.session_name, m.embedding,
+                   p.name as project
+            FROM memories m
+            LEFT JOIN projects p ON m.project_id = p.id
+            WHERE m.id = %s AND m.is_active = true
+            """,
+            (memory_id,),
+        )
+        if not row:
+            return {"error": f"Memory #{memory_id} not found or inactive"}
+
+        if not self.enricher:
+            return {"error": "Enricher not available"}
+
+        enrichment = self.enricher.enrich(row["content"])
+        enrichment_status = enrichment.pop("_status", "failed")
+
+        updates = ["enrichment_status = %s"]
+        update_params: list = [enrichment_status]
+
+        if enrichment_status in ("complete", "partial"):
+            updates.append("enriched_at = NOW()")
+
+        entities = enrichment.get("entities", [])
+        if entities:
+            updates.append("entities = %s")
+            update_params.append(entities)
+
+        auto_tags = enrichment.get("tags", [])
+        if auto_tags:
+            updates.append("auto_tags = %s")
+            update_params.append(auto_tags)
+
+        summary = enrichment.get("summary")
+        if summary:
+            updates.append("summary = %s")
+            update_params.append(summary)
+
+        updates.append("updated_at = NOW()")
+        update_params.append(memory_id)
+
+        self.db.execute(
+            f"UPDATE memories SET {', '.join(updates)} WHERE id = %s",
+            tuple(update_params),
+        )
+        self.db.commit()
+
+        logger.info("Re-enriched memory #%d: status=%s, entities=%d",
+                     memory_id, enrichment_status, len(entities))
+
+        return {
+            "id": memory_id,
+            "enrichment_status": enrichment_status,
+            "entities": entities,
+            "auto_tags": auto_tags,
+        }
 
     def _post_store_enrichment(
         self,

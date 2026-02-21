@@ -36,6 +36,9 @@ class OpenAICompatibleLLM(LLMInterface):
         self.model = config.openai_model
         self.api_key = config.openai_api_key
         self.base_url = config.openai_base_url.rstrip("/")
+        # Normalize: strip /v1 suffix if present — we append it ourselves
+        if self.base_url.endswith("/v1"):
+            self.base_url = self.base_url[:-3]
         if not self.api_key:
             raise ValueError("CAIRN_OPENAI_API_KEY is required for openai backend")
         logger.info("OpenAI-compatible LLM ready: %s at %s", self.model, self.base_url)
@@ -55,12 +58,14 @@ class OpenAICompatibleLLM(LLMInterface):
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
+                "User-Agent": "cairn/0.55.0",
             },
         )
 
+        max_retries = 5
         t0 = time.monotonic()
         last_error = None
-        for attempt in range(3):
+        for attempt in range(max_retries):
             try:
                 with urllib.request.urlopen(req, timeout=120) as resp:
                     raw = resp.read()
@@ -92,20 +97,20 @@ class OpenAICompatibleLLM(LLMInterface):
             except urllib.error.HTTPError as e:
                 if e.code in (429, 500, 502, 503):
                     last_error = e
-                    wait = 2 ** attempt
+                    wait = min(2 ** attempt + 1, 30)  # 2s, 3s, 5s, 9s, 17s
                     logger.warning(
-                        "API transient error (attempt %d/3): HTTP %d. Retrying in %ds...",
-                        attempt + 1, e.code, wait,
+                        "API transient error (attempt %d/%d): HTTP %d. Retrying in %ds...",
+                        attempt + 1, max_retries, e.code, wait,
                     )
                     time.sleep(wait)
                     continue
                 raise
             except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
                 last_error = e
-                wait = 2 ** attempt
+                wait = min(2 ** attempt + 1, 30)
                 logger.warning(
-                    "API transient error (attempt %d/3): %s. Retrying in %ds...",
-                    attempt + 1, e, wait,
+                    "API transient error (attempt %d/%d): %s. Retrying in %ds...",
+                    attempt + 1, max_retries, e, wait,
                 )
                 time.sleep(wait)
                 continue
@@ -137,6 +142,7 @@ class OpenAICompatibleLLM(LLMInterface):
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
+                "User-Agent": "cairn/0.55.0",
             },
         )
 

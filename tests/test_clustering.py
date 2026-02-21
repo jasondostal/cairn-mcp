@@ -157,8 +157,9 @@ def test_confidence_from_probabilities():
     center_a /= np.linalg.norm(center_a)
     center_b = -center_a
 
-    tight = make_tight_cluster(center_a, n=8, noise=0.01)
-    loose = make_tight_cluster(center_b, n=8, noise=0.10)
+    n_per = 20
+    tight = make_tight_cluster(center_a, n=n_per, noise=0.01)
+    loose = make_tight_cluster(center_b, n=n_per, noise=0.40)
 
     all_embeddings = np.vstack([tight, loose])
 
@@ -184,10 +185,8 @@ def test_confidence_from_probabilities():
 
     # Tight cluster members should have higher average probability
     if len(unique) == 2:
-        tight_label = labels[0]
-        loose_label = labels[8]
-        tight_probs = hdb.probabilities_[:8]
-        loose_probs = hdb.probabilities_[8:]
+        tight_probs = hdb.probabilities_[:n_per]
+        loose_probs = hdb.probabilities_[n_per:]
         assert tight_probs.mean() >= loose_probs.mean(), (
             f"Tight cluster probs ({tight_probs.mean():.3f}) should >= "
             f"loose ({loose_probs.mean():.3f})"

@@ -125,6 +125,8 @@ def _start_workers(svc, cfg, db_instance):
         svc.analytics_tracker.start()
     if svc.rollup_worker:
         svc.rollup_worker.start()
+    if svc.decay_worker:
+        svc.decay_worker.start()
     logger.info("Cairn started. Embedding: %s (%d-dim)", cfg.embedding.backend, cfg.embedding.dimensions)
 
 
@@ -134,6 +136,8 @@ def _stop_workers(svc, db_instance):
         svc.event_dispatcher.stop()
     if svc.rollup_worker:
         svc.rollup_worker.stop()
+    if svc.decay_worker:
+        svc.decay_worker.stop()
     if svc.analytics_tracker:
         svc.analytics_tracker.stop()
     if svc.graph_provider:
@@ -192,8 +196,10 @@ mcp_kwargs = dict(
         "PROGRESSIVE DISCLOSURE: search (summaries) → recall (full content). "
         "Search first, recall specific IDs when you need details.\n"
         "\n"
-        "STORE THOUGHTFULLY: Consolidate, don't fragment. One comprehensive memory after a task "
-        "completes is better than five incremental notes during it."
+        "STORE THOUGHTFULLY: Ask — would losing this diminish a future session? "
+        "If yes, store it. Consolidate when possible, but don't let consolidation prevent you "
+        "from capturing high-signal moments (relationship milestones, key realizations, trust "
+        "events, paradigm shifts) just because a task isn't 'done' yet."
     ),
     lifespan=lifespan,
 )
@@ -223,21 +229,18 @@ def store(
 ) -> dict:
     """Store a memory with automatic embedding generation and optional LLM enrichment.
 
-    WHEN TO STORE — Consolidate, Don't Fragment:
-    - Task/feature COMPLETE — capture the full journey (investigation → solution)
-    - Discussion CONCLUDES — consolidate decisions and learnings into one memory
+    WHEN TO STORE — Ask: "Would losing this diminish a future session?"
+    - Key decisions, architecture choices, learnings — the usual
+    - Relationship milestones, trust events, paradigm shifts — these matter as much
+      as technical decisions and only live in memory, not in git
+    - Context switches — save state before moving to a different topic
     - User explicitly says "remember this", "save this", "store this"
-    - Context switch — save state before moving to a different topic
-    - Key decision made — architecture choices, tool selections, process changes
-    - Learning discovered — something that should persist across sessions
+    Consolidate when you can (one journey memory > five incremental notes),
+    but never skip a high-signal moment just because the task isn't "done."
 
     DON'T STORE:
-    - Every small step during a task (wait for completion)
-    - Mid-conversation thoughts (wait for conclusions)
-    - Incremental progress updates (one summary at the end is better)
+    - Low-signal incremental steps that won't matter next session
     - Duplicate information already stored (search first!)
-
-    ONE comprehensive memory > multiple fragments.
 
     MEMORY TYPES: note, decision, rule, code-snippet, learning, research,
     discussion, progress, task, debug, design.
@@ -421,6 +424,21 @@ def recall(ids: list[int]) -> list[dict]:
             )
             if meta["omitted"] > 0:
                 results.append({"_overflow": meta["overflow_message"]})
+        # Publish memory.recalled event for access tracking
+        if event_bus and results:
+            try:
+                memory_ids = [r["id"] for r in results if isinstance(r, dict) and "id" in r]
+                event_bus.publish(
+                    session_name="",
+                    event_type="memory.recalled",
+                    payload={
+                        "memory_ids": memory_ids,
+                        "count": len(memory_ids),
+                    },
+                )
+            except Exception:
+                logger.debug("Failed to publish memory.recalled event", exc_info=True)
+
         return results
     except Exception as e:
         logger.exception("recall failed")
@@ -1151,8 +1169,10 @@ def _fetch_trail_data(
 ) -> dict:
     """Fetch recent activity trail data. Used by both trail() and orient().
 
-    Returns structured dict with source, since, and sessions.
-    Tries graph-based trail first, falls back to memory query.
+    Merges two data sources following the HA philosophy:
+    - PG (always): source of truth for what memories exist
+    - Graph (when available): enriches with entity types and facts
+    Neither source can suppress the other.
     """
     from datetime import datetime, timedelta, timezone
 
@@ -1164,86 +1184,11 @@ def _fetch_trail_data(
         from cairn.core.utils import get_project
         project_id = get_project(db, project)
 
-    # Try graph-based trail first
-    if graph_provider:
-        try:
-            activity = graph_provider.recent_activity(
-                project_id=project_id, since=since, limit=limit,
-            )
-            if activity:
-                episode_ids = list({a["episode_id"] for a in activity if a.get("episode_id")})
-                session_map = {}
-                if episode_ids:
-                    placeholders = ",".join(["%s"] * len(episode_ids))
-                    rows = db.execute(
-                        f"SELECT id, session_name FROM memories WHERE id IN ({placeholders})",
-                        tuple(episode_ids),
-                    )
-                    session_map = {r["id"]: r["session_name"] for r in rows}
-
-                sessions: dict[str, dict] = {}
-                for a in activity:
-                    session_name = session_map.get(a.get("episode_id"), "unknown")
-                    if session_name not in sessions:
-                        sessions[session_name] = {
-                            "session_name": session_name,
-                            "entities_touched": set(),
-                            "key_facts": [],
-                            "time_range": {"earliest": a.get("created_at"), "latest": a.get("created_at")},
-                        }
-                    s = sessions[session_name]
-                    if a.get("subject_name"):
-                        s["entities_touched"].add(a["subject_name"])
-                    if a.get("object_name"):
-                        s["entities_touched"].add(a["object_name"])
-                    if len(s["key_facts"]) < 5:
-                        s["key_facts"].append(a.get("fact", ""))
-                    ts = a.get("created_at")
-                    if ts:
-                        if not s["time_range"]["earliest"] or ts < s["time_range"]["earliest"]:
-                            s["time_range"]["earliest"] = ts
-                        if not s["time_range"]["latest"] or ts > s["time_range"]["latest"]:
-                            s["time_range"]["latest"] = ts
-
-                session_list = []
-                for s in sessions.values():
-                    s["entities_touched"] = sorted(s["entities_touched"])
-                    session_list.append(s)
-
-                result = {
-                    "source": "graph",
-                    "since": since,
-                    "sessions": session_list[:10],
-                }
-
-                # Include thinking activity if available
-                try:
-                    thinking_activity = graph_provider.recent_thinking_activity(
-                        project_id=project_id, since=since, limit=10,
-                    )
-                    if thinking_activity:
-                        result["thinking"] = [
-                            {
-                                "type": "thinking",
-                                "goal": t.get("goal", ""),
-                                "status": t.get("status", ""),
-                                "thought_count": t.get("thought_count", 0),
-                                "created_at": t.get("created_at", ""),
-                            }
-                            for t in thinking_activity
-                        ]
-                except Exception:
-                    logger.debug("Thinking trail failed", exc_info=True)
-
-                return result
-        except Exception:
-            logger.debug("Graph trail failed, falling back to memory query", exc_info=True)
-
-    # Fallback: simple memory query
+    # --- PRIMARY: PG-based trail (always runs) ---
     rows = db.execute(
         """
-        SELECT m.session_name, m.memory_type, m.summary,
-               m.created_at, p.name AS project
+        SELECT m.id, m.session_name, m.memory_type, m.importance,
+               m.summary, m.entities, m.created_at, p.name AS project
         FROM memories m
         LEFT JOIN projects p ON m.project_id = p.id
         WHERE m.is_active = true AND m.created_at > %s
@@ -1253,23 +1198,101 @@ def _fetch_trail_data(
         (since,) + ((project_id,) if project_id else ()) + (limit,),
     )
 
-    sessions_fallback: dict[str, list] = {}
+    sessions: dict[str, dict] = {}
     for r in rows:
         sn = r["session_name"] or "no-session"
-        sessions_fallback.setdefault(sn, []).append({
-            "type": r["memory_type"],
-            "summary": r["summary"] or "",
-            "project": r["project"],
-        })
+        if sn not in sessions:
+            ts = r["created_at"].isoformat() if hasattr(r["created_at"], "isoformat") else str(r["created_at"])
+            sessions[sn] = {
+                "session_name": sn,
+                "entities_touched": set(),
+                "key_facts": [],
+                "time_range": {"earliest": ts, "latest": ts},
+            }
+        s = sessions[sn]
+        for entity in (r.get("entities") or []):
+            s["entities_touched"].add(entity)
+        if len(s["key_facts"]) < 5:
+            summary = r.get("summary") or ""
+            if summary:
+                s["key_facts"].append(summary)
+        ts = r["created_at"].isoformat() if hasattr(r["created_at"], "isoformat") else str(r["created_at"])
+        if ts < s["time_range"]["earliest"]:
+            s["time_range"]["earliest"] = ts
+        if ts > s["time_range"]["latest"]:
+            s["time_range"]["latest"] = ts
 
-    return {
-        "source": "memory",
+    # Convert sets to sorted lists for JSON serialization
+    for s in sessions.values():
+        s["entities_touched"] = sorted(s["entities_touched"])
+
+    source = "memory"
+
+    # --- ENRICHMENT: Graph data when available (non-blocking) ---
+    if graph_provider:
+        try:
+            activity = graph_provider.recent_activity(
+                project_id=project_id, since=since, limit=limit,
+            )
+            if activity:
+                # Map episode_ids to session_names for merging
+                episode_ids = list({a["episode_id"] for a in activity if a.get("episode_id")})
+                ep_session_map = {}
+                if episode_ids:
+                    placeholders = ",".join(["%s"] * len(episode_ids))
+                    ep_rows = db.execute(
+                        f"SELECT id, session_name FROM memories WHERE id IN ({placeholders})",
+                        tuple(episode_ids),
+                    )
+                    ep_session_map = {r["id"]: r["session_name"] for r in ep_rows}
+
+                for a in activity:
+                    sn = ep_session_map.get(a.get("episode_id"), "unknown")
+                    if sn in sessions:
+                        s = sessions[sn]
+                        if a.get("subject_name"):
+                            s["entities_touched"].add(a["subject_name"])
+                        if a.get("object_name"):
+                            s["entities_touched"].add(a["object_name"])
+                        if a.get("fact") and len(s["key_facts"]) < 5:
+                            s["key_facts"].append(a["fact"])
+
+                # Re-sort entities after merge
+                for s in sessions.values():
+                    if isinstance(s["entities_touched"], set):
+                        s["entities_touched"] = sorted(s["entities_touched"])
+
+                source = "memory+graph"
+        except Exception:
+            logger.debug("Graph trail enrichment failed (non-blocking)", exc_info=True)
+
+    result = {
+        "source": source,
         "since": since,
-        "sessions": [
-            {"session_name": sn, "memories": mems[:5]}
-            for sn, mems in list(sessions_fallback.items())[:10]
-        ],
+        "sessions": list(sessions.values())[:10],
     }
+
+    # --- ENRICHMENT: Thinking activity from graph (non-blocking) ---
+    if graph_provider:
+        try:
+            thinking_activity = graph_provider.recent_thinking_activity(
+                project_id=project_id, since=since, limit=10,
+            )
+            if thinking_activity:
+                result["thinking"] = [
+                    {
+                        "type": "thinking",
+                        "goal": t.get("goal", ""),
+                        "status": t.get("status", ""),
+                        "thought_count": t.get("thought_count", 0),
+                        "created_at": t.get("created_at", ""),
+                    }
+                    for t in thinking_activity
+                ]
+        except Exception:
+            logger.debug("Thinking trail failed", exc_info=True)
+
+    return result
 
 
 # ============================================================

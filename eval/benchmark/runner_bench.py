@@ -15,10 +15,13 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
+from pathlib import Path
 
 import psycopg
 
@@ -34,6 +37,35 @@ from eval.utils import build_admin_dsn, replace_dbname
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Lightweight event log — key milestones written to a file for visibility
+# when stdout is buffered or you're tailing from another terminal.
+# ---------------------------------------------------------------------------
+_event_log_path: Path | None = None
+_event_lock = threading.Lock()
+
+
+def _init_event_log(benchmark_name: str, strategy_name: str) -> Path:
+    """Open (or create) the event log for this run."""
+    global _event_log_path
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    log_dir = Path("eval/reports")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    _event_log_path = log_dir / f"bench_events_{benchmark_name}_{strategy_name}_{ts}.log"
+    _event_log_path.write_text("")  # truncate
+    return _event_log_path
+
+
+def event(tag: str, detail: str = "") -> None:
+    """Append a timestamped event line to the log file."""
+    if _event_log_path is None:
+        return
+    ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
+    line = f"{ts} | {tag:18s} | {detail}\n"
+    with _event_lock:
+        with open(_event_log_path, "a") as f:
+            f.write(line)
+
 # Benchmark registry
 BENCHMARKS: dict[str, type[BenchmarkAdapter]] = {
     "locomo": LoCoMoAdapter,
@@ -47,6 +79,7 @@ STRATEGIES = {
     "two_pass": "eval.benchmark.strategies.two_pass:TwoPassStrategy",
     "raw_turns": "eval.benchmark.strategies.raw_turns:RawTurnsStrategy",
     "session_summary": "eval.benchmark.strategies.session_summary:SessionSummaryStrategy",
+    "episodic": "eval.benchmark.strategies.episodic:EpisodicStrategy",
 }
 
 # Default data directory
@@ -86,6 +119,11 @@ def _get_strategy(strategy_name: str, llm=None) -> IngestStrategy:
         if llm is None:
             raise ValueError("session_summary strategy requires an LLM backend")
         return SessionSummaryStrategy(llm)
+    elif strategy_name == "episodic":
+        from eval.benchmark.strategies.episodic import EpisodicStrategy
+        if llm is None:
+            raise ValueError("episodic strategy requires an LLM backend")
+        return EpisodicStrategy(llm)
     else:
         raise ValueError(
             f"Unknown strategy: {strategy_name}. "
@@ -291,6 +329,7 @@ def run_benchmark(
     conversation_filter: str | None = None,
     scorer: str = "llm",
     judge_model: str | None = None,
+    required_tags: list[str] | None = None,
 ) -> list[BenchmarkResult]:
     """Run a benchmark evaluation.
 
@@ -300,6 +339,10 @@ def run_benchmark(
 
     if model_names is None:
         model_names = ["minilm"]
+
+    log_path = _init_event_log(benchmark_name, strategy_name)
+    event("run_start", f"benchmark={benchmark_name} strategy={strategy_name} models={model_names} workers={workers} scorer={scorer}")
+    print(f"  Event log: {log_path}")
 
     adapter = _get_adapter(benchmark_name)
 
@@ -314,6 +357,7 @@ def run_benchmark(
     print(f"\nLoading {benchmark_name} dataset...")
     dataset = adapter.load(data_dir)
     print(f"  Sessions: {len(dataset.sessions)}, Questions: {len(dataset.questions)}")
+    event("dataset_loaded", f"sessions={len(dataset.sessions)} questions={len(dataset.questions)}")
 
     # Filter questions if needed
     questions = dataset.questions
@@ -340,6 +384,7 @@ def run_benchmark(
         db_name = f"cairn_eval_{benchmark_name}_{model_name}{strategy_suffix}"
 
         print(f"\n--- Model: {model_name} ({model_spec['dimensions']}-dim) ---")
+        event("model_start", f"model={model_name} dims={model_spec['dimensions']}")
 
         eval_dsn = replace_dbname(admin_dsn, db_name)
         ingest_stats = {}
@@ -369,11 +414,13 @@ def run_benchmark(
                     ingest_sessions = [s for s in ingest_sessions if s.session_id.startswith(prefix)]
                     print(f"  Filtered sessions to {conversation_filter}: {len(ingest_sessions)} sessions")
                 print(f"  Ingesting with strategy: {strategy.name}...")
+                event("ingest_start", f"strategy={strategy.name} sessions={len(ingest_sessions)}")
                 ingest_stats = strategy.ingest(ingest_sessions, memory_store, project="benchmark")
                 print(
                     f"  Ingested: {ingest_stats.get('memory_count', '?')} memories "
                     f"in {ingest_stats.get('duration_s', '?')}s"
                 )
+                event("ingest_done", f"memories={ingest_stats.get('memory_count', '?')} duration={ingest_stats.get('duration_s', '?')}s")
 
             # Evaluate
             use_retrieval_scorer = scorer == "retrieval"
@@ -396,10 +443,14 @@ def run_benchmark(
             effective_workers = min(workers, len(questions))
             parallel_note = f" ({effective_workers} workers)" if effective_workers > 1 else ""
             scorer_note = " [retrieval scorer — no LLM]" if use_retrieval_scorer else ""
-            print(f"  Evaluating {len(questions)} questions{parallel_note}{scorer_note}...")
+            tags_note = f" tags={required_tags}" if required_tags else ""
+            print(f"  Evaluating {len(questions)} questions{parallel_note}{scorer_note}{tags_note}...")
+            event("eval_start", f"questions={len(questions)} workers={effective_workers} scorer={'retrieval' if use_retrieval_scorer else 'llm'}{tags_note}")
 
             def _eval_single(question):
                 extra_kwargs = adapter.get_search_kwargs(question)
+                if required_tags:
+                    extra_kwargs["required_tags"] = required_tags
                 if use_retrieval_scorer:
                     return evaluate_retrieval(
                         question=question,
@@ -427,7 +478,7 @@ def run_benchmark(
                     answer_results.append(_eval_single(question))
             else:
                 # Parallel path — each question is independent
-                counter = {"done": 0}
+                counter = {"done": 0, "errors": 0}
                 counter_lock = threading.Lock()
                 total = len(questions)
                 t_start = time.time()
@@ -436,12 +487,18 @@ def run_benchmark(
                     result = _eval_single(question)
                     with counter_lock:
                         counter["done"] += 1
+                        if result.generated_answer.startswith("Error"):
+                            counter["errors"] += 1
                         n = counter["done"]
+                        errs = counter["errors"]
                         elapsed = time.time() - t_start
                         rate = n / elapsed if elapsed > 0 else 0
                         eta = (total - n) / rate if rate > 0 else 0
                         if verbose or (n % 50 == 0) or n == total:
-                            print(f"    [{n}/{total}] {rate:.1f} q/s  ETA {eta:.0f}s")
+                            err_str = f" errors={errs}" if errs else ""
+                            msg = f"[{n}/{total}] {rate:.1f} q/s  ETA {eta:.0f}s{err_str}"
+                            print(f"    {msg}")
+                            event("progress", msg)
                     return result
 
                 answer_results = [None] * total
@@ -457,6 +514,8 @@ def run_benchmark(
             # Compute metrics
             overall_accuracy = compute_accuracy(answer_results)
             per_type = compute_per_type(answer_results)
+            type_strs = [f"{k}: {v['accuracy']:.1%}" for k, v in per_type.items()]
+            event("eval_done", f"overall={overall_accuracy:.1%} types={{{', '.join(type_strs)}}}")
 
             bench_result = BenchmarkResult(
                 benchmark_name=benchmark_name,
@@ -476,6 +535,9 @@ def run_benchmark(
 
             results.append(bench_result)
 
+        except Exception as exc:
+            event("error", f"model={model_name} {type(exc).__name__}: {exc}")
+            raise
         finally:
             if not keep_dbs and not reuse_db:
                 print(f"  Dropping eval database: {db_name}")
@@ -483,6 +545,7 @@ def run_benchmark(
             else:
                 print(f"  Keeping eval database: {db_name}")
 
+    event("run_complete", f"models={len(results)} results=[{', '.join(f'{r.model_name}={r.overall_accuracy:.1%}' for r in results)}]")
     return results
 
 
@@ -570,6 +633,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Separate model for LLM-as-judge (e.g. hf:meta-llama/Llama-3.3-70B-Instruct). Uses main LLM if not set.",
     )
     parser.add_argument(
+        "--tags",
+        nargs="+",
+        default=None,
+        help="Require these tags on search results (e.g. --tags layer:extracted)",
+    )
+    parser.add_argument(
         "--download",
         metavar="DATASET",
         help="Download a dataset (longmemeval or locomo)",
@@ -582,13 +651,16 @@ def main(argv: list[str] | None = None):
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    # Configure logging
+    # Configure logging — verbose enables DEBUG for cairn/eval only, not botocore/urllib3
     level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(
         level=level,
         format="%(asctime)s %(levelname)-5s %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
+    # Silence noisy third-party loggers even in verbose mode
+    for noisy in ("botocore", "urllib3", "httpcore", "httpx"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
     if args.download:
         _download_dataset(args.download)
@@ -613,6 +685,7 @@ def main(argv: list[str] | None = None):
         workers=args.workers,
         scorer=args.scorer,
         judge_model=args.judge_model,
+        required_tags=args.tags,
     )
 
 

@@ -149,28 +149,28 @@ def test_tags_limited_to_ten():
 # Graceful Degradation
 # ============================================================
 
-def test_llm_exception_returns_empty_dict():
-    """If the LLM throws, enrichment returns empty dict."""
+def test_llm_exception_returns_failed_status():
+    """If the LLM throws, enrichment returns _status=failed."""
     enricher = Enricher(ExplodingLLM())
     result = enricher.enrich("some content")
 
-    assert result == {}
+    assert result == {"_status": "failed"}
 
 
-def test_garbage_response_returns_empty_dict():
-    """If the LLM returns non-JSON garbage, enrichment returns empty dict."""
+def test_garbage_response_returns_failed_status():
+    """If the LLM returns non-JSON garbage, enrichment returns _status=failed."""
     enricher = Enricher(MockLLM("I don't understand the question."))
     result = enricher.enrich("some content")
 
-    assert result == {}
+    assert result == {"_status": "failed"}
 
 
-def test_empty_response_returns_empty_dict():
-    """If the LLM returns nothing, enrichment returns empty dict."""
+def test_empty_response_returns_failed_status():
+    """If the LLM returns nothing, enrichment returns _status=failed."""
     enricher = Enricher(MockLLM(""))
     result = enricher.enrich("some content")
 
-    assert result == {}
+    assert result == {"_status": "failed"}
 
 
 # ============================================================

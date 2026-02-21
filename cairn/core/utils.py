@@ -75,7 +75,9 @@ def get_or_create_project(db: Database, project_name: str) -> int:
         return project_id
 
     row = db.execute_one(
-        "INSERT INTO projects (name) VALUES (%s) RETURNING id",
+        "INSERT INTO projects (name) VALUES (%s) "
+        "ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name "
+        "RETURNING id",
         (project_name,),
     )
     db.commit()

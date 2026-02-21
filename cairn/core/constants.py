@@ -32,33 +32,54 @@ CONTRADICTION_ESCALATION_THRESHOLD = 0.7  # min importance to trigger conflict e
 # RRF weight configurations — dynamically selected based on available signals.
 # All weight sets must sum to 1.0.
 RRF_WEIGHTS_DEFAULT = {
-    "vector": 0.50,
-    "recency": 0.20,
-    "keyword": 0.20,
+    "vector": 0.46,
+    "recency": 0.18,
+    "keyword": 0.18,
     "tag": 0.10,
+    "importance": 0.08,
 }
 RRF_WEIGHTS_WITH_ENTITIES = {
-    "vector": 0.40,
-    "entity": 0.20,
-    "keyword": 0.20,
-    "recency": 0.10,
+    "vector": 0.37,
+    "entity": 0.18,
+    "keyword": 0.18,
+    "recency": 0.09,
     "tag": 0.10,
+    "importance": 0.08,
 }
 RRF_WEIGHTS_WITH_ACTIVATION = {
-    "vector": 0.30,
-    "activation": 0.25,
-    "entity": 0.15,
-    "keyword": 0.15,
+    "vector": 0.27,
+    "activation": 0.23,
+    "entity": 0.14,
+    "keyword": 0.14,
     "recency": 0.05,
-    "tag": 0.10,
+    "tag": 0.09,
+    "importance": 0.08,
 }
 RRF_WEIGHTS_WITH_GRAPH = {
-    "vector": 0.35,
-    "graph": 0.20,
+    "vector": 0.32,
+    "graph": 0.18,
+    "keyword": 0.14,
+    "recency": 0.13,
+    "entity": 0.09,
+    "tag": 0.06,
+    "importance": 0.08,
+}
+RRF_WEIGHTS_WITH_ACCESS = {
+    "vector": 0.41,
+    "recency": 0.16,
+    "keyword": 0.16,
+    "tag": 0.09,
+    "access": 0.10,
+    "importance": 0.08,
+}
+RRF_WEIGHTS_WITH_ACCESS_ENTITIES = {
+    "vector": 0.32,
+    "entity": 0.16,
     "keyword": 0.15,
-    "recency": 0.15,
-    "entity": 0.10,
-    "tag": 0.05,
+    "recency": 0.09,
+    "tag": 0.10,
+    "access": 0.10,
+    "importance": 0.08,
 }
 
 # Query type affinity map — maps query intent to memory types that are most likely relevant.

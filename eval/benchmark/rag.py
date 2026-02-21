@@ -203,8 +203,15 @@ def evaluate_question(
         ]
         try:
             generated = llm.generate(messages, max_tokens=2048)
-        except Exception:
+        except Exception as exc:
             logger.exception("Answer generation failed for question %s", question.id)
+            # Surface to event log so failures are visible
+            try:
+                from eval.benchmark.runner_bench import event
+                code = getattr(exc, "code", type(exc).__name__)
+                event("answer_error", f"q={question.id} {code}")
+            except Exception:
+                pass
             generated = "Error generating answer."
 
     # 4. Judge — extract final answer from CoT if present

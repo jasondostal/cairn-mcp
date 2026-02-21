@@ -19,20 +19,29 @@ class Enricher:
     def enrich(self, content: str) -> dict:
         """Single LLM call -> parsed enrichment dict.
 
-        Returns dict with keys: tags, importance, memory_type, summary.
-        Returns empty dict on ANY failure (LLM down, bad JSON, timeout).
+        Returns dict with keys: tags, importance, memory_type, summary, entities,
+        plus _status: "complete" | "partial" | "failed".
         """
         try:
             messages = build_enrichment_messages(content)
             raw = self.llm.generate(messages, max_tokens=512)
             result = self._parse_response(raw)
-            logger.info("Enrichment succeeded: %d tags, importance=%.1f, type=%s",
+            entities = result.get("entities", [])
+            if entities:
+                result["_status"] = "complete"
+            else:
+                result["_status"] = "partial"
+                logger.warning(
+                    "Enrichment produced no entities (content length=%d)",
+                    len(content),
+                )
+            logger.info("Enrichment succeeded: %d tags, importance=%.1f, type=%s, entities=%d",
                         len(result.get("tags", [])), result.get("importance", 0),
-                        result.get("memory_type", "unknown"))
+                        result.get("memory_type", "unknown"), len(entities))
             return result
         except Exception:
             logger.warning("Enrichment failed, storing without enrichment", exc_info=True)
-            return {}
+            return {"_status": "failed"}
 
     def _parse_response(self, raw: str) -> dict:
         """Parse LLM response into enrichment dict. Handles markdown fences."""

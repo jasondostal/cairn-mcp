@@ -5,7 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.56.0] — 2026-02-21 "Use It or Lose It"
+
+### Added
+- **Memory access tracking** — `access_count` and `last_accessed_at` columns on memories.
+  `MemoryAccessListener` subscribes to `search.executed` and `memory.recalled` events,
+  bumping counters asynchronously via the event bus. Foundation for decay scoring and
+  controlled forgetting.
+- **Access-frequency search signal** — `access_count` is a new RRF signal (log-normalized,
+  ~10% weight). Frequently-accessed memories rank higher. Gated behind `CAIRN_ACCESS_FREQUENCY`
+  capability flag (default off).
+- **Enhanced decay scoring** — recency signal now uses exponential decay combining age with
+  access frequency: `e^(-lambda * days_since_last_access)`. Frequently-accessed old memories
+  stay relevant; untouched old ones naturally sink. Configurable via `CAIRN_DECAY_LAMBDA`
+  (default 0.01, half-life ~69 days).
+- **Controlled forgetting** — `DecayWorker` background thread scans for memories below a
+  configurable decay threshold and auto-inactivates them with reason `"decay"`. Protected
+  classes: rules, high-importance (>= 0.8), and recently-created (< 90 days). Starts in
+  dry-run mode by default. Configure via `CAIRN_DECAY_*` env vars.
+- **Importance as RRF Signal 9** — `importance` is now a search ranking signal (~8% weight)
+  across all 6 weight configurations. High-importance memories get a ranking boost regardless
+  of semantic similarity. Always active — no capability gate required.
+- **Enrichment status tracking** — new `enrichment_status` column on memories tracks the
+  enrichment lifecycle: `pending` | `complete` | `partial` | `failed` | `none`. Migration 030
+  backfills from existing data. Partial index on actionable statuses for efficient re-enrichment
+  queries.
+- **`re_enrich()` method** — `MemoryStore.re_enrich(memory_id)` fetches a memory, re-runs
+  the Enricher, and updates entities/auto_tags/summary/status. Enables recovery of failed
+  or partial enrichments.
+- **Zero-work enrichment detection** — `MemoryEnrichmentListener` now checks for high-importance
+  memories (>= 0.7) that end up with no entities after enrichment. Logs `WARNING` for these
+  so operators can investigate. Lower-importance zero-entity results log at `INFO`.
+
+### Changed
+- **orient() merged trail** — `_fetch_trail_data()` rewritten to merge PG and graph sources
+  following the HA philosophy: PG always runs (source of truth for what exists), graph enriches
+  when available (entity types, facts, relationships). Neither source can suppress the other.
+  Trail entries include `source: "memory"` or `"memory+graph"` for transparency.
+- **Enricher status returns** — `Enricher.enrich()` now returns a `_status` key: `"complete"`
+  (has entities), `"partial"` (no entities), `"failed"` (exception). Previously returned `{}`
+  on failure with no way to distinguish failure from empty enrichment.
+- **Store guidance** — MCP tool docstring reframed from task-lifecycle checklist to
+  intent-based principle: "Would losing this diminish a future session?"
+- **Neo4j configuration warning** — startup logs a warning when Neo4j is configured (non-default
+  URI) but `knowledge_extraction` is disabled. Transparent nudge without auto-behavior change.
 
 ## [0.55.0] — 2026-02-21 "Show Your Work"
 

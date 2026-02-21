@@ -107,6 +107,7 @@ class LLMCapabilities:
     type_routing: bool = False          # EXPERIMENTAL: query intent classification + type boost
     spreading_activation: bool = False  # EXPERIMENTAL: graph-based spreading activation retrieval
     mca_gate: bool = False              # EXPERIMENTAL: keyword coverage pre-filter (MCA)
+    access_frequency: bool = False     # EXPERIMENTAL: access-count signal in search RRF
     thought_extraction: str = "off"     # EXPERIMENTAL: extract entities from thinking sequences
                                         #   "off" = no extraction, "on_conclude" = extract on conclude,
                                         #   "on_every_thought" = extract on each add_thought()
@@ -119,7 +120,7 @@ class LLMCapabilities:
                 "session_synthesis", "consolidation",
                 "reranking", "knowledge_extraction", "search_v2",
                 "confidence_gating", "type_routing",
-                "spreading_activation", "mca_gate",
+                "spreading_activation", "mca_gate", "access_frequency",
             )
             if getattr(self, name)
         ]
@@ -132,7 +133,7 @@ class LLMCapabilities:
 EXPERIMENTAL_CAPABILITIES: frozenset[str] = frozenset({
     "confidence_gating", "type_routing",
     "spreading_activation", "mca_gate",
-    "thought_extraction",
+    "access_frequency", "thought_extraction",
 })
 
 
@@ -199,6 +200,17 @@ class ClusteringConfig:
 
 
 @dataclass(frozen=True)
+class DecayConfig:
+    enabled: bool = False              # Master switch for controlled forgetting
+    scan_interval_hours: int = 24      # How often to scan (hours)
+    threshold: float = 0.05            # Decay score below which memories are forgotten
+    min_age_days: int = 90             # Don't forget anything younger than this
+    protect_importance: float = 0.8    # Memories with importance >= this are protected
+    protect_types: tuple[str, ...] = ("rule",)  # Memory types exempt from forgetting
+    dry_run: bool = True               # Log what would be forgotten without acting
+
+
+@dataclass(frozen=True)
 class Config:
     db: DatabaseConfig = field(default_factory=DatabaseConfig)
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
@@ -222,6 +234,8 @@ class Config:
     event_archive_dir: str | None = None  # File-based event archive (e.g. /data/events)
     ingest_chunk_size: int = 512       # tokens per chunk (Chonkie)
     ingest_chunk_overlap: int = 64     # overlap tokens between chunks
+    decay_lambda: float = 0.01        # Exponential decay rate (half-life ~69 days at 0.01)
+    decay: DecayConfig = field(default_factory=DecayConfig)
 
 
 def _parse_cors_origins(raw: str) -> list[str]:
@@ -252,7 +266,8 @@ EDITABLE_KEYS: set[str] = {
     "capabilities.consolidation", "capabilities.confidence_gating",
     "capabilities.reranking",
     "capabilities.type_routing", "capabilities.spreading_activation",
-    "capabilities.mca_gate", "capabilities.knowledge_extraction",
+    "capabilities.mca_gate", "capabilities.access_frequency",
+    "capabilities.knowledge_extraction",
     "capabilities.search_v2",
     "capabilities.thought_extraction",
     # Analytics
@@ -281,7 +296,9 @@ EDITABLE_KEYS: set[str] = {
     "clustering.staleness_growth_pct", "clustering.tsne_max_samples",
     # Top-level
     "enrichment_enabled",
-    "ingest_chunk_size", "ingest_chunk_overlap",
+    "ingest_chunk_size", "ingest_chunk_overlap", "decay_lambda",
+    "decay.enabled", "decay.scan_interval_hours", "decay.threshold",
+    "decay.min_age_days", "decay.protect_importance", "decay.dry_run",
 }
 
 # Map of section -> dataclass for sub-configs that are editable
@@ -296,6 +313,7 @@ _SECTION_CLASSES = {
     "workspace": WorkspaceConfig,
     "budget": BudgetConfig,
     "clustering": ClusteringConfig,
+    "decay": DecayConfig,
 }
 
 _BOOL_TRUTHY = {"true", "1", "yes"}
@@ -334,6 +352,7 @@ PROFILE_PRESETS: dict[str, dict[str, str]] = {
         "CAIRN_RERANKING": "true",
         "CAIRN_SPREADING_ACTIVATION": "true",
         "CAIRN_MCA_GATE": "true",
+        "CAIRN_ACCESS_FREQUENCY": "true",
         "CAIRN_LLM_CONFIDENCE_GATING": "true",
         "CAIRN_ROUTER_ENABLED": "true",
     },
@@ -498,6 +517,7 @@ _ENV_MAP: dict[str, str] = {
     "capabilities.type_routing": "CAIRN_TYPE_ROUTING",
     "capabilities.spreading_activation": "CAIRN_SPREADING_ACTIVATION",
     "capabilities.mca_gate": "CAIRN_MCA_GATE",
+    "capabilities.access_frequency": "CAIRN_ACCESS_FREQUENCY",
     "capabilities.knowledge_extraction": "CAIRN_KNOWLEDGE_EXTRACTION",
     "capabilities.search_v2": "CAIRN_SEARCH_V2",
     "capabilities.thought_extraction": "CAIRN_THOUGHT_EXTRACTION",
@@ -544,6 +564,13 @@ _ENV_MAP: dict[str, str] = {
     "http_port": "CAIRN_HTTP_PORT",
     "ingest_chunk_size": "CAIRN_INGEST_CHUNK_SIZE",
     "ingest_chunk_overlap": "CAIRN_INGEST_CHUNK_OVERLAP",
+    "decay_lambda": "CAIRN_DECAY_LAMBDA",
+    "decay.enabled": "CAIRN_DECAY_ENABLED",
+    "decay.scan_interval_hours": "CAIRN_DECAY_SCAN_INTERVAL",
+    "decay.threshold": "CAIRN_DECAY_THRESHOLD",
+    "decay.min_age_days": "CAIRN_DECAY_MIN_AGE_DAYS",
+    "decay.protect_importance": "CAIRN_DECAY_PROTECT_IMPORTANCE",
+    "decay.dry_run": "CAIRN_DECAY_DRY_RUN",
 }
 
 
@@ -613,6 +640,7 @@ def load_config() -> Config:
             type_routing=os.getenv("CAIRN_TYPE_ROUTING", "false").lower() in ("true", "1", "yes"),
             spreading_activation=os.getenv("CAIRN_SPREADING_ACTIVATION", "false").lower() in ("true", "1", "yes"),
             mca_gate=os.getenv("CAIRN_MCA_GATE", "false").lower() in ("true", "1", "yes"),
+            access_frequency=os.getenv("CAIRN_ACCESS_FREQUENCY", "false").lower() in ("true", "1", "yes"),
             knowledge_extraction=os.getenv("CAIRN_KNOWLEDGE_EXTRACTION", "false").lower() in ("true", "1", "yes"),
             search_v2=os.getenv("CAIRN_SEARCH_V2", "false").lower() in ("true", "1", "yes"),
             thought_extraction=os.getenv("CAIRN_THOUGHT_EXTRACTION", "off").lower().strip(),
@@ -706,4 +734,14 @@ def load_config() -> Config:
         event_archive_dir=os.getenv("CAIRN_EVENT_ARCHIVE_DIR") or None,
         ingest_chunk_size=int(os.getenv("CAIRN_INGEST_CHUNK_SIZE", "512")),
         ingest_chunk_overlap=int(os.getenv("CAIRN_INGEST_CHUNK_OVERLAP", "64")),
+        decay_lambda=float(os.getenv("CAIRN_DECAY_LAMBDA", "0.01")),
+        decay=DecayConfig(
+            enabled=os.getenv("CAIRN_DECAY_ENABLED", "false").lower() in ("true", "1", "yes"),
+            scan_interval_hours=int(os.getenv("CAIRN_DECAY_SCAN_INTERVAL", "24")),
+            threshold=float(os.getenv("CAIRN_DECAY_THRESHOLD", "0.05")),
+            min_age_days=int(os.getenv("CAIRN_DECAY_MIN_AGE_DAYS", "90")),
+            protect_importance=float(os.getenv("CAIRN_DECAY_PROTECT_IMPORTANCE", "0.8")),
+            protect_types=tuple(os.getenv("CAIRN_DECAY_PROTECT_TYPES", "rule").split(",")),
+            dry_run=os.getenv("CAIRN_DECAY_DRY_RUN", "true").lower() in ("true", "1", "yes"),
+        ),
     )

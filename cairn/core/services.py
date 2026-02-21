@@ -80,6 +80,7 @@ class Services:
     event_dispatcher: EventDispatcher | None
     analytics_tracker: UsageTracker | None
     rollup_worker: RollupWorker | None
+    decay_worker: "DecayWorker | None"
     analytics_engine: AnalyticsQueryEngine | None
 
 
@@ -99,6 +100,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     # Analytics first — so the tracker singleton is available when backends emit events
     analytics_tracker = None
     rollup_worker = None
+    decay_worker = None
     analytics_engine = None
     if config.analytics.enabled:
         analytics_tracker = UsageTracker(db)
@@ -166,6 +168,18 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         elif not llm:
             logger.warning("Knowledge extraction requested but LLM not available")
 
+    # Warn if Neo4j appears configured but knowledge_extraction is off
+    if not capabilities.knowledge_extraction:
+        neo4j_uri = config.neo4j.uri
+        if neo4j_uri and neo4j_uri != "bolt://localhost:7687":
+            # Non-default Neo4j URI suggests intentional Neo4j setup
+            logger.warning(
+                "Neo4j configured (%s) but knowledge_extraction disabled. "
+                "Graph trail and entity search will have limited data. "
+                "Set CAIRN_KNOWLEDGE_EXTRACTION=true or use 'knowledge' profile.",
+                neo4j_uri,
+            )
+
     # Reranker (optional, lazy-loaded on first query)
     reranker = None
     if capabilities.reranking:
@@ -217,6 +231,12 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         _graph_listener.register(event_bus)
         logger.info("GraphProjectionListener registered with EventBus")
 
+    # Register memory access tracking listener (bumps access_count on search/recall)
+    from cairn.listeners.memory_access import MemoryAccessListener
+    _access_listener = MemoryAccessListener(db)
+    _access_listener.register(event_bus)
+    logger.info("MemoryAccessListener registered with EventBus")
+
     # Event dispatcher — background delivery worker (started in _start_workers)
     event_dispatcher = EventDispatcher(db, event_bus)
 
@@ -226,6 +246,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         reranker=reranker, rerank_candidates=config.reranker.candidates,
         activation_engine=activation_engine,
         graph_provider=graph_provider,
+        decay_lambda=config.decay_lambda,
     )
 
     # Unified search — always wraps SearchEngine
@@ -244,6 +265,12 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         logger.info("Search: enhanced mode (intent routing + token budgets)")
     else:
         logger.info("Search: standard mode (RRF hybrid)")
+
+    # Decay worker (controlled forgetting — background thread)
+    if config.decay.enabled:
+        from cairn.core.decay import DecayWorker
+        decay_worker = DecayWorker(db, config.decay, decay_lambda=config.decay_lambda)
+        logger.info("DecayWorker enabled (dry_run=%s)", config.decay.dry_run)
 
     # Terminal host manager (optional, based on config)
     terminal_host_manager = None
@@ -326,5 +353,6 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         conversation_manager=ConversationManager(db, llm=llm_fast),
         analytics_tracker=analytics_tracker,
         rollup_worker=rollup_worker,
+        decay_worker=decay_worker,
         analytics_engine=analytics_engine,
     )

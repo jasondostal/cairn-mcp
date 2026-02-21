@@ -114,9 +114,9 @@ def test_entities_handles_non_string_items():
     assert "42" in result["entities"]
 
 
-def test_entities_llm_failure_returns_empty():
-    """LLM failure should return empty dict (no entities)."""
+def test_entities_llm_failure_returns_failed_status():
+    """LLM failure should return _status=failed (no entities)."""
     enricher = Enricher(ExplodingLLM())
     result = enricher.enrich("content")
 
-    assert result == {}
+    assert result == {"_status": "failed"}
