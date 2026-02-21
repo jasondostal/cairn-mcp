@@ -62,7 +62,7 @@ class OpenAICompatibleLLM(LLMInterface):
         last_error = None
         for attempt in range(3):
             try:
-                with urllib.request.urlopen(req, timeout=60) as resp:
+                with urllib.request.urlopen(req, timeout=120) as resp:
                     raw = resp.read()
                 try:
                     result = json.loads(raw)
@@ -73,7 +73,8 @@ class OpenAICompatibleLLM(LLMInterface):
                 choices = result.get("choices", [])
                 if not choices:
                     raise ValueError(f"API returned no choices: {list(result.keys())}")
-                content = choices[0].get("message", {}).get("content")
+                msg = choices[0].get("message", {})
+                content = msg.get("content") or msg.get("reasoning_content")
                 if content is None:
                     raise ValueError(f"Unexpected response structure: {choices[0].keys()}")
                 latency_ms = (time.monotonic() - t0) * 1000

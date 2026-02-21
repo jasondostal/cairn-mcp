@@ -39,7 +39,8 @@ person (e.g., "That was Caroline, not Melanie") → 1.0 if the underlying fact i
 the correct behavior is to decline, correct the attribution, or say nothing applies. \
 Score 1.0 if the assistant declines or corrects attribution.
 
-Respond with EXACTLY this format:
+You MUST start your response with the score line. No preamble, no thinking, no explanation before it.
+
 Score: <0.0|0.5|1.0>
 Reasoning: <one sentence>"""
 
@@ -64,7 +65,8 @@ Score the answer:
 - 0.5: The assistant expressed uncertainty but still attempted an answer.
 - 0.0: The assistant confidently gave an answer (which would be fabricated/hallucinated).
 
-Respond with EXACTLY this format (no other text):
+You MUST start your response with the score line. No preamble, no thinking, no explanation before it.
+
 Score: <0.0|0.5|1.0>
 Reasoning: <one sentence explanation>"""
 
@@ -101,7 +103,7 @@ def judge_answer(
     ]
 
     try:
-        response = llm.generate(messages, max_tokens=200)
+        response = llm.generate(messages, max_tokens=400)
         return _parse_judge_response(response)
     except Exception:
         logger.exception("Judge call failed")
@@ -109,9 +111,17 @@ def judge_answer(
 
 
 def _parse_judge_response(response: str) -> tuple[float, str]:
-    """Parse Score: and Reasoning: from judge response."""
+    """Parse Score: and Reasoning: from judge response.
+
+    Handles reasoning models that emit thinking text before the score.
+    Falls back to scanning for bare score patterns (e.g. "1.0", "0.5").
+    """
     score_match = re.search(r"Score:\s*([\d.]+)", response)
     reasoning_match = re.search(r"Reasoning:\s*(.+)", response, re.DOTALL)
+
+    # Fallback: some models output just the number or "score is 1.0"
+    if not score_match:
+        score_match = re.search(r"\b(1\.0|0\.5|0\.0)\b", response)
 
     if not score_match:
         logger.warning("Could not parse judge score from: %s", response[:200])

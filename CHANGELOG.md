@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.55.0] — 2026-02-21 "Show Your Work"
+
+### Added
+- **LoCoMo benchmark: 79.4%** — LLM-judged evaluation across 1,986 questions. Beats Mem0
+  (66.9%) and Letta (74.0%). Titan V2 embeddings, plain RRF search, Llama-3.3-70B judge.
+- **Ingest MCP tool** — `ingest()` accepts content or URL with project, hint, doc type,
+  title, and tags. Chunks flow through `store()` so extraction and events apply.
+- **Memory events on the event bus** — `store()` publishes `memory.created`, `modify()`
+  publishes `memory.updated`/`inactivated`/`reactivated`, search publishes
+  `search.executed`. Same bus that work items already use.
+- **Async memory enrichment** — `MemoryEnrichmentListener` handles enrichment via the event
+  bus dispatcher with retry/backoff. Inline enrichment preserved as fallback.
+- **Session synthesis listener** — `SessionSynthesisListener` subscribes to `session_end`,
+  runs synthesis, stores the narrative as a `session_summary` memory.
+- **CI pipeline** — GitHub Actions workflow on push/PR to main: Python 3.12, pytest, dead
+  import check.
+- **Config flag coverage tests** — parametrized tests ensuring every `LLMCapabilities` flag
+  has backing implementation and `active_list()` covers all flags. Prevents ghost flags.
+- **README benchmark section** — LoCoMo results and competitive comparison.
+
+### Fixed
+- **Query entity extraction** — `SearchV2._extract_query_entities()` was splitting queries
+  into every word and bigram, embedding each independently. Replaced with proper noun
+  extraction: capitalized words, adjacent capitalized phrases, stop-word filtering, full
+  query as final chunk.
+- **Per-memory F1 scoring** — benchmark scorer was concatenating all gold memories into one
+  blob before computing F1. Now computes F1 per gold memory and takes the max.
+- **Entity extraction threshold** — added cosine similarity threshold to graph entity search.
+  Previously returned top-N per chunk with no quality filter.
+- **BFS fan-out control** — graph traversal capped at 30 results per entity (hop 1) and 15
+  (hop 2). Previously uncapped.
+- **Blend interleaving** — `_blend_results()` now sorts by score so graph and RRF results
+  compete equally instead of graph filling all slots first.
+- **Clustering label fallback** — fills missing clusters with generic labels instead of
+  discarding all results on partial LLM parse failure.
+- **Lazy embedding imports** — deferred heavy imports so alternative embedding backends don't
+  crash on missing optional dependencies.
+- **Orient trail entity filtering** — graph trail query filters to Person, Organization,
+  Project, Task, Event. Excludes noisy types like Concept and Technology.
+- **Work item block events** — `work_item.blocked` and `work_item.unblocked` events now
+  include `work_item_id`.
+- **Broken clustering test import** — fixed import of `HDBSCAN_MIN_CLUSTER_SIZE`.
+- **OpenAI-compatible LLM** — request timeout increased for slower models; response parsing
+  now supports the `reasoning_content` field used by reasoning models.
+- **Bedrock reranker default** — changed from nonexistent `amazon.rerank-v1:0` to
+  `cohere.rerank-v3-5:0`.
+- **Settings UI** — removed references to deleted config flags.
+
+### Removed
+- **Ghost config flags** — `CAIRN_CAIRN_NARRATIVES` and `CAIRN_LLM_EVENT_DIGEST` deleted
+  (no implementation existed behind either flag).
+- **Query expansion** — `_expand_query()`, its config flag, and all related code deleted.
+  Benchmark showed it actively harmed search accuracy by expanding proper nouns into
+  unrelated entities.
+- **Dead Neo4j methods** — 7 methods with zero callers removed: `search_entities_fulltext()`,
+  `create_work_item()`, `update_work_item_status()`, `complete_work_item()`,
+  `assign_work_item()`, `update_work_item_gate()`, `resolve_work_item_gate()`. All replaced
+  by the `ensure_*` pattern or handled in Postgres.
+- **Deploy/release scripts** — moved out of repository to separate CI/CD tooling.
+- **Internal planning docs** — `refactor.md` and `migration.md` moved to Cairn memory.
+
 ## [0.54.0] — 2026-02-20 "Use The Graph, Luke"
 
 ### Added
@@ -187,9 +250,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Graph filter controls aligned** — project filter now uses the standard `PageFilters`
   component with `MultiSelect` (matching all other pages). Filters auto-apply on change
   instead of requiring a manual Apply button.
-- **Deploy script rewrite** — `scripts/deploy.sh` now builds locally, transfers images via
-  `docker save | scp | docker load` to the remote host, and restarts there. Eliminates the
-  GHCR round-trip for faster production deploys. Supports `--skip-build` flag.
 - **DB connection management hardened** — `@track_operation` decorator now unconditionally
   releases DB connections after every service method, serving as the primary defense against
   connection pool exhaustion. `release_if_held()` changed from conditional (only if in

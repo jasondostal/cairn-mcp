@@ -9,7 +9,7 @@ from cairn.core.reranker.interface import RerankerInterface
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "amazon.rerank-v1:0"
+DEFAULT_MODEL = "cohere.rerank-v3-5:0"
 # Bedrock rerank API caps at 1000 documents per request
 MAX_DOCS = 500
 # Truncate long documents to avoid token limits

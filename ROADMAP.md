@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.52.0** — "Event Horizon".
+Current: **v0.55.0** — "Show Your Work".
 
 ---
 

@@ -107,7 +107,7 @@ KEEPER_IDS = {
     466,  # Eval tests — 40 passing
     609,  # MCP server config across IDEs (research)
     616,  # Tool descriptions as agent UX
-    651,  # RedPlanetHQ/core architecture analysis
+    651,  # Competitor architecture analysis
 
     # ── Category 7: Key Project memories ──
     105,  # FDX thinking sequence (paused)

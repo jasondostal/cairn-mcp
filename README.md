@@ -89,7 +89,7 @@ Search for it later:
 
 > "What did we decide about the storage layer?"
 
-That's it. 14 tools available. The ones you'll use most:
+That's it. 15 tools available. The ones you'll use most:
 
 | Tool | What it does |
 |------|-------------|
@@ -101,7 +101,7 @@ That's it. 14 tools available. The ones you'll use most:
 | `work_items` | Create, claim, and complete tasks with dependencies and gates |
 | `projects` | Manage project docs (briefs, PRDs, plans) |
 
-The rest: `modify`, `insights`, `tasks`, `think`, `status`, `consolidate`, `drift_check`.
+The rest: `modify`, `insights`, `tasks`, `think`, `status`, `consolidate`, `drift_check`, `ingest`.
 
 ## What's in the box
 
@@ -173,6 +173,19 @@ MCP clients (Claude Code, Cursor, etc.)     REST clients (curl, web UI, hooks)
        v                                              v
   PostgreSQL 16 + pgvector                    Neo4j 5 (optional)
 ```
+
+## Benchmark
+
+Tested against [LoCoMo](https://github.com/snap-stanford/locomo), a long-conversation memory benchmark with 1,986 questions across five categories.
+
+| System | Score | LLM |
+|--------|-------|-----|
+| **Cairn** | **79.4%** | Llama-3.3-70B |
+| Human baseline | 87.9% | — |
+| Letta/MemGPT | 74.0% | GPT-4o-mini |
+| Mem0 | 66.9% | GPT-4o |
+
+Test configuration: Titan V2 embeddings (Bedrock, 1024-dim), plain RRF search (no optional features enabled), LLM-as-judge evaluation. Full results and methodology in [`eval/`](eval/).
 
 ## Development
 

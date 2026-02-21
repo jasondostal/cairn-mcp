@@ -85,7 +85,7 @@ class RerankerConfig:
     candidates: int = 50  # widen RRF pool when reranking is on
 
     # Bedrock settings (Rerank API)
-    bedrock_model: str = "amazon.rerank-v1:0"
+    bedrock_model: str = "cohere.rerank-v3-5:0"
     bedrock_region: str = "us-east-1"
 
 

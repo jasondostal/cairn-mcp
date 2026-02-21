@@ -290,6 +290,7 @@ def run_benchmark(
     workers: int = 1,
     conversation_filter: str | None = None,
     scorer: str = "llm",
+    judge_model: str | None = None,
 ) -> list[BenchmarkResult]:
     """Run a benchmark evaluation.
 
@@ -376,7 +377,22 @@ def run_benchmark(
 
             # Evaluate
             use_retrieval_scorer = scorer == "retrieval"
-            judge_llm = None if use_retrieval_scorer else llm
+            if use_retrieval_scorer:
+                judge_llm = None
+            elif judge_model:
+                from cairn.config import LLMConfig
+                from cairn.llm import get_llm as _get_judge_llm
+                import os as _judge_os
+                judge_config = LLMConfig(
+                    backend="openai",
+                    openai_base_url=_judge_os.getenv("CAIRN_OPENAI_BASE_URL", "https://api.openai.com"),
+                    openai_model=judge_model,
+                    openai_api_key=_judge_os.getenv("CAIRN_OPENAI_API_KEY", ""),
+                )
+                judge_llm = _get_judge_llm(judge_config)
+                logger.info("Separate judge LLM: %s", judge_model)
+            else:
+                judge_llm = llm
             effective_workers = min(workers, len(questions))
             parallel_note = f" ({effective_workers} workers)" if effective_workers > 1 else ""
             scorer_note = " [retrieval scorer — no LLM]" if use_retrieval_scorer else ""
@@ -549,6 +565,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Scoring mode: 'llm' (LLM-as-judge, expensive) or 'retrieval' (token F1, free)",
     )
     parser.add_argument(
+        "--judge-model",
+        default=None,
+        help="Separate model for LLM-as-judge (e.g. hf:meta-llama/Llama-3.3-70B-Instruct). Uses main LLM if not set.",
+    )
+    parser.add_argument(
         "--download",
         metavar="DATASET",
         help="Download a dataset (longmemeval or locomo)",
@@ -591,6 +612,7 @@ def main(argv: list[str] | None = None):
         search_limit=args.k,
         workers=args.workers,
         scorer=args.scorer,
+        judge_model=args.judge_model,
     )
 
 
