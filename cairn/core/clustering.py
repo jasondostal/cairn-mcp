@@ -173,7 +173,11 @@ class ClusterEngine:
             })
 
         # Get LLM summaries (skip if no clusters formed)
-        summaries = self._generate_summaries(cluster_data, rows) if cluster_data else {}
+        labeling_error = None
+        if cluster_data:
+            summaries, labeling_error = self._generate_summaries(cluster_data, rows)
+        else:
+            summaries = {}
 
         # Atomic DB write: delete old, insert new
         self._write_clusters(project_id, cluster_data, summaries)
@@ -188,12 +192,15 @@ class ClusterEngine:
             len(cluster_data), noise_count, memory_count, duration_ms,
         )
 
-        return {
+        result = {
             "cluster_count": len(cluster_data),
             "noise_count": noise_count,
             "memory_count": memory_count,
             "duration_ms": duration_ms,
         }
+        if labeling_error:
+            result["labeling_error"] = labeling_error
+        return result
 
     # ============================================================
     # Retrieval
@@ -467,14 +474,17 @@ class ClusterEngine:
     def _elapsed_ms(self, start: float) -> int:
         return int((time.monotonic() - start) * 1000)
 
-    def _generate_summaries(self, cluster_data: list[dict], rows: list[dict]) -> dict[int, dict]:
+    def _generate_summaries(
+        self, cluster_data: list[dict], rows: list[dict],
+    ) -> tuple[dict[int, dict], str | None]:
         """Call LLM to generate labels and summaries for clusters.
 
-        Returns mapping of label_id -> {"label": ..., "summary": ...}.
-        Falls back to generic labels on any failure.
+        Returns tuple of (mapping of label_id -> {"label": ..., "summary": ...}, error_message or None).
+        Falls back to generic labels on any failure, but surfaces the error.
         """
         if not self.llm:
-            return self._generic_summaries(cluster_data)
+            logger.error("Cluster labeling skipped: no LLM configured (enrichment disabled?)")
+            return self._generic_summaries(cluster_data), "No LLM configured — cluster labels are generic"
 
         # Build input for prompt: cluster_id -> list of member summary strings
         prompt_clusters: dict[int, list[str]] = {}
@@ -491,10 +501,11 @@ class ClusterEngine:
         try:
             messages = build_cluster_summary_messages(prompt_clusters)
             raw = self.llm.generate(messages, max_tokens=1024)
-            return self._parse_summaries(raw, cluster_data)
-        except Exception:
-            logger.warning("Cluster summary LLM call failed, using generic labels", exc_info=True)
-            return self._generic_summaries(cluster_data)
+            return self._parse_summaries(raw, cluster_data), None
+        except Exception as exc:
+            error_msg = f"Cluster labeling LLM failed: {type(exc).__name__}: {exc}"
+            logger.error(error_msg, exc_info=True)
+            return self._generic_summaries(cluster_data), error_msg
 
     def _parse_summaries(self, raw: str, cluster_data: list[dict]) -> dict[int, dict]:
         """Parse LLM response into summary mapping.

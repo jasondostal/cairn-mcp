@@ -270,7 +270,7 @@ def test_empty_project():
 # ============================================================
 
 def test_llm_failure_produces_generic_labels():
-    """When LLM fails, clusters should still form with generic labels."""
+    """When LLM fails, clusters should still form with generic labels and surface error."""
     engine = ClusterEngine(MagicMock(), MagicMock(), llm=ExplodingLLM())
 
     dim = 384
@@ -292,15 +292,41 @@ def test_llm_failure_produces_generic_labels():
 
     rows = make_mock_db_rows([1, 2, 3, 4, 5], cluster)
 
-    summaries = engine._generate_summaries(cluster_data, rows)
+    summaries, error = engine._generate_summaries(cluster_data, rows)
 
     assert 0 in summaries
     assert "Cluster" in summaries[0]["label"]
     assert "5" in summaries[0]["summary"]  # mentions member count
+    assert error is not None
+    assert "ConnectionError" in error
+
+
+def test_no_llm_produces_generic_labels_with_error():
+    """When no LLM configured, clusters get generic labels and error is surfaced."""
+    engine = ClusterEngine(MagicMock(), MagicMock(), llm=None)
+
+    cluster_data = [{
+        "label_id": 0,
+        "centroid": [0.0] * 384,
+        "member_indices": [0],
+        "member_ids": [1],
+        "distances": [0.01],
+        "avg_distance": 0.01,
+        "confidence": 0.9,
+    }]
+
+    rows = [{"id": 1, "embedding": "[" + ",".join(["0.0"] * 384) + "]",
+             "summary": "test", "tags": [], "auto_tags": []}]
+
+    summaries, error = engine._generate_summaries(cluster_data, rows)
+
+    assert "Cluster" in summaries[0]["label"]
+    assert error is not None
+    assert "No LLM configured" in error
 
 
 def test_llm_success_produces_real_labels():
-    """When LLM succeeds, we get real labels and summaries."""
+    """When LLM succeeds, we get real labels and summaries with no error."""
     response = json.dumps([
         {"cluster_id": 0, "label": "Docker Setup", "summary": "Memories about Docker configuration."}
     ])
@@ -322,10 +348,11 @@ def test_llm_success_produces_real_labels():
         for i in [1, 2, 3]
     ]
 
-    summaries = engine._generate_summaries(cluster_data, rows)
+    summaries, error = engine._generate_summaries(cluster_data, rows)
 
     assert summaries[0]["label"] == "Docker Setup"
     assert "Docker" in summaries[0]["summary"]
+    assert error is None
 
 
 # ============================================================

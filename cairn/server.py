@@ -599,9 +599,11 @@ def insights(
     try:
         # Check staleness and recluster if needed
         reclustered = False
+        labeling_error = None
         if cluster_engine.is_stale(project):
-            cluster_engine.run_clustering(project)
+            cluster_result = cluster_engine.run_clustering(project)
             reclustered = True
+            labeling_error = cluster_result.get("labeling_error")
 
         # Fetch clusters
         clusters = cluster_engine.get_clusters(
@@ -634,6 +636,8 @@ def insights(
             "clusters": clusters,
             "last_clustered_at": last_run["created_at"] if last_run else None,
         }
+        if labeling_error:
+            result["labeling_warning"] = labeling_error
         if overflow_msg:
             result["_overflow"] = overflow_msg
         return result
