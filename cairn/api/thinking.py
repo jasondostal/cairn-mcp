@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Query, Path, HTTPException
+from pydantic import BaseModel
 
 from cairn.api.utils import parse_multi
 from cairn.core.services import Services
+
+
+class AddThoughtRequest(BaseModel):
+    thought: str
+    thought_type: str = "general"
+    author: str | None = None
+    branch_name: str | None = None
 
 
 def register_routes(router: APIRouter, svc: Services, **kw):
@@ -28,3 +36,19 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             return thinking_engine.get_sequence(sequence_id)
         except ValueError:
             raise HTTPException(status_code=404, detail="Thinking sequence not found")
+
+    @router.post("/thinking/{sequence_id}/thoughts")
+    def api_add_thought(sequence_id: int = Path(...), body: AddThoughtRequest = ...):
+        try:
+            return thinking_engine.add_thought(
+                sequence_id, body.thought, body.thought_type, body.branch_name, body.author,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @router.post("/thinking/{sequence_id}/reopen")
+    def api_reopen_sequence(sequence_id: int = Path(...)):
+        try:
+            return thinking_engine.reopen(sequence_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))

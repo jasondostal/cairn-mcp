@@ -218,11 +218,13 @@ export interface ThinkingDetail {
   status: string;
   created_at: string;
   completed_at: string | null;
+  reopened_at: string | null;
   thoughts: Array<{
     id: number;
     type: string;
     content: string;
     branch: string | null;
+    author: string | null;
     created_at: string;
   }>;
 }
@@ -792,6 +794,13 @@ export const api = {
     get<Paginated<ThinkingSequence>>("/thinking", { ...(project ? { project } : {}), ...opts }),
 
   thinkingDetail: (id: number) => get<ThinkingDetail>(`/thinking/${id}`),
+
+  thinkingAddThought: (id: number, body: { thought: string; thought_type?: string; author?: string; branch_name?: string }) =>
+    post<{ thought_id: number; sequence_id: number; thought_type: string; author: string | null; created_at: string }>(
+      `/thinking/${id}/thoughts`, body,
+    ),
+
+  thinkingReopen: (id: number) => post<ThinkingDetail>(`/thinking/${id}/reopen`, {}),
 
   rules: (opts?: { project?: string; limit?: string; offset?: string }) =>
     get<Paginated<Rule>>("/rules", opts),

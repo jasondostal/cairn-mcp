@@ -21,7 +21,7 @@ Cairn is there.
 
 *"Where did I put that singularity again? Let me just spawn a couple..."*
 
-Sure, dedicated tools will probably beat a given Cairn feature when it's all they do. Cairn isn't built for single-purpose depth. It's built for the systems person. The curious. The t-shaped. The ones who need a memory that works the way they do, across everything, all at once.
+Sure, dedicated tools will probably beat a given Cairn feature when it's all they do. Cairn isn't built for single-purpose depth — but it still [scores 81.6% on LoCoMo](#benchmark). It's built for the systems person. The curious. The t-shaped. The ones who need a memory that works the way they do, across everything, all at once.
 
 It's a self-hosted memory and orchestration layer for AI agents and humans. Store something once, find it later, across sessions, across projects. Four containers. `docker compose up`. Done.
 
@@ -180,12 +180,12 @@ Tested against [LoCoMo](https://github.com/snap-stanford/locomo), a long-convers
 
 | System | Score | LLM |
 |--------|-------|-----|
-| **Cairn** | **79.4%** | Llama-3.3-70B |
+| **Cairn** | **81.6%** | Llama-3.3-70B |
 | Human baseline | 87.9% | — |
 | Letta/MemGPT | 74.0% | GPT-4o-mini |
 | Mem0 | 66.9% | GPT-4o |
 
-Test configuration: Titan V2 embeddings (Bedrock, 1024-dim), plain RRF search (no optional features enabled), LLM-as-judge evaluation. Full results and methodology in [`eval/`](eval/).
+Test configuration: Titan V2 embeddings (Bedrock, 1024-dim), episodic ingestion (raw turns + two-pass fact extraction), Search V2 with graph-primary retrieval, type routing, cross-encoder reranking, LLM-as-judge evaluation. Full results and methodology in [`eval/`](eval/).
 
 ## Development
 

@@ -199,7 +199,13 @@ mcp_kwargs = dict(
         "STORE THOUGHTFULLY: Ask — would losing this diminish a future session? "
         "If yes, store it. Consolidate when possible, but don't let consolidation prevent you "
         "from capturing high-signal moments (relationship milestones, key realizations, trust "
-        "events, paradigm shifts) just because a task isn't 'done' yet."
+        "events, paradigm shifts) just because a task isn't 'done' yet.\n"
+        "\n"
+        "BACKGROUND WORK — DISPATCH, DON'T SUBAGENT:\n"
+        "When you need to background a task, use dispatch() instead of native subagents. "
+        "dispatch() creates a tracked workspace session with a structured briefing — all in one call. "
+        "The job becomes visible in cairn-ui, heartbeats progress, supports gates for human input, "
+        "and survives session drops. Native subagents are invisible to cairn and vanish if the session dies."
     ),
     lifespan=lifespan,
 )
@@ -1034,7 +1040,74 @@ def work_items(
 
 
 # ============================================================
-# Tool 9: think
+# Tool 9: dispatch
+# ============================================================
+
+@mcp.tool()
+def dispatch(
+    work_item_id: int | str | None = None,
+    project: str | None = None,
+    title: str | None = None,
+    description: str | None = None,
+    backend: str | None = None,
+    risk_tier: int | None = None,
+    model: str | None = None,
+    agent: str | None = None,
+    assignee: str | None = None,
+) -> dict:
+    """Dispatch work to a background agent — tracked, briefed, heartbeating.
+
+    USE THIS instead of native subagents (Task tool) when:
+    - The work will take more than a few minutes
+    - You want the job tracked (visible in cairn-ui, queryable, resumable)
+    - You want to continue working on other things in parallel
+    - The task involves a different codebase or working directory
+    - You want heartbeat monitoring and gate support
+
+    DO NOT USE when:
+    - The task is quick (< 2 minutes) and you need the result immediately
+    - You're doing a simple lookup or computation
+
+    Two modes:
+    - Dispatch an existing work item: pass work_item_id
+    - Create + dispatch in one shot: pass project + title (+ optional description)
+
+    Internally: creates/resolves work item → claims it → generates briefing →
+    creates workspace session → sends briefing to agent. One call does it all.
+
+    The dispatched agent gets Cairn MCP access and will heartbeat progress
+    back. Check status via work_items(action='get', work_item_id=...).
+
+    Args:
+        work_item_id: Existing work item to dispatch (short_id like 'wi-002a' or numeric ID).
+        project: Project name (required if creating a new work item).
+        title: Work item title (required if creating a new work item).
+        description: Detailed description of the work to be done.
+        backend: Agent backend: 'claude_code' or 'opencode'. Auto-selects if omitted.
+        risk_tier: Permission level (0=full autonomy, 1=broad, 2=read-heavy, 3=research-only).
+        model: Model override for Claude Code (e.g. 'claude-sonnet-4-6').
+        agent: Agent definition to use (defaults to workspace config).
+        assignee: Name for the agent claim (auto-generated if omitted).
+    """
+    try:
+        return workspace_manager.dispatch(
+            work_item_id=work_item_id,
+            project=project,
+            title=title,
+            description=description,
+            backend=backend,
+            risk_tier=risk_tier,
+            model=model,
+            agent=agent,
+            assignee=assignee,
+        )
+    except Exception as e:
+        logger.exception("dispatch failed")
+        return {"error": f"Internal error: {e}"}
+
+
+# ============================================================
+# Tool 10: think
 # ============================================================
 
 @mcp.tool()
@@ -1046,8 +1119,9 @@ def think(
     thought: str | None = None,
     thought_type: str = "general",
     branch_name: str | None = None,
+    author: str | None = None,
 ) -> dict | list[dict]:
-    """Structured thinking sequences for complex reasoning.
+    """Structured thinking sequences for collaborative reasoning.
 
     TRIGGER: When a problem has multiple valid approaches or needs step-by-step analysis:
     - "think through", "analyze", "reason about", "let's consider"
@@ -1056,8 +1130,13 @@ def think(
     - Planning multi-step implementations
     - Any problem where the user wants to participate in the reasoning
 
+    This is a COLLABORATIVE tool — both humans and agents contribute thoughts.
+    Use author to attribute who contributed each thought. The exploration
+    itself becomes searchable knowledge.
+
     PATTERN: start (with goal) → add thoughts (observations, hypotheses, analysis) → conclude
     Use 'alternative' or 'branch' thought_type to explore divergent paths.
+    Use 'reopen' to resume a completed sequence across sessions.
 
     WHEN NOT TO USE: Simple questions (use search), straightforward tasks, quick lookups.
 
@@ -1065,18 +1144,21 @@ def think(
     - 'start': Begin a new thinking sequence with a goal.
     - 'add': Add a thought to an active sequence.
     - 'conclude': Finalize a sequence with a conclusion.
+    - 'reopen': Reopen a completed sequence for continued thinking.
     - 'get': Retrieve a full sequence with all thoughts.
     - 'list': List thinking sequences for a project.
 
     Args:
-        action: One of 'start', 'add', 'conclude', 'get', 'list'.
+        action: One of 'start', 'add', 'conclude', 'reopen', 'get', 'list'.
         project: Project name.
         goal: The problem or goal (required for start).
-        sequence_id: Sequence ID (required for add, conclude, get).
+        sequence_id: Sequence ID (required for add, conclude, reopen, get).
         thought: The thought content (required for add, conclude).
         thought_type: Type: observation, hypothesis, question, reasoning, conclusion,
-                      assumption, analysis, general, alternative, branch.
+                      assumption, analysis, general, alternative, branch,
+                      insight, realization, pattern, challenge, response.
         branch_name: Name for a branch when thought_type is alternative/branch.
+        author: Who contributed this thought (e.g., "human", "assistant", a name).
     """
     try:
         if action == "start":
@@ -1087,12 +1169,17 @@ def think(
         if action == "add":
             if not sequence_id or not thought:
                 return {"error": "sequence_id and thought are required for add"}
-            return thinking_engine.add_thought(sequence_id, thought, thought_type, branch_name)
+            return thinking_engine.add_thought(sequence_id, thought, thought_type, branch_name, author)
 
         if action == "conclude":
             if not sequence_id or not thought:
                 return {"error": "sequence_id and thought (conclusion) are required for conclude"}
-            return thinking_engine.conclude(sequence_id, thought)
+            return thinking_engine.conclude(sequence_id, thought, author)
+
+        if action == "reopen":
+            if not sequence_id:
+                return {"error": "sequence_id is required for reopen"}
+            return thinking_engine.reopen(sequence_id)
 
         if action == "get":
             if not sequence_id:

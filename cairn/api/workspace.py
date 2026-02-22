@@ -83,6 +83,23 @@ def register_routes(router: APIRouter, svc: Services, **kw):
     def api_workspace_agents():
         return workspace_manager.list_agents()
 
+    @router.post("/workspace/dispatch", status_code=201)
+    def api_workspace_dispatch(body: dict):
+        result = workspace_manager.dispatch(
+            work_item_id=body.get("work_item_id"),
+            project=body.get("project"),
+            title=body.get("title"),
+            description=body.get("description"),
+            backend=body.get("backend"),
+            risk_tier=body.get("risk_tier"),
+            model=body.get("model"),
+            agent=body.get("agent"),
+            assignee=body.get("assignee"),
+        )
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        return result
+
     @router.get("/workspace/context/{project}")
     def api_workspace_context(
         project: str = Path(...),

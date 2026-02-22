@@ -16,6 +16,7 @@ interface WorkItemRowProps {
   readyIds?: Set<number>;
   hasChildren?: boolean;
   isCollapsed?: boolean;
+  isActive?: boolean;
   onToggleCollapse?: (id: number) => void;
   onClick?: () => void;
   backends?: WorkspaceBackendInfo[];
@@ -30,6 +31,7 @@ export function WorkItemRow({
   readyIds,
   hasChildren = false,
   isCollapsed = false,
+  isActive = false,
   onToggleCollapse,
   onClick,
   backends,
@@ -49,6 +51,7 @@ export function WorkItemRow({
       className={cn(
         "flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer",
         (isDone || isCancelled) && "opacity-50",
+        isActive && "bg-accent/30",
       )}
       onClick={() => { if (!dispatchOpen) onClick?.(); }}
     >

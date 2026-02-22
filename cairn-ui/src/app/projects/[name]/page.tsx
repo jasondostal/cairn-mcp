@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api, type Paginated, type TimelineMemory, type WorkItem, type SessionInfo } from "@/lib/api";
@@ -19,6 +19,7 @@ import { MemoryTypeBadge } from "@/components/memory-type-badge";
 import { StatusDot } from "@/components/work-items/status-dot";
 import { Download, LayoutList, LayoutGrid, FileText, ArrowLeft, Radio } from "lucide-react";
 import { toast } from "sonner";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 interface ProjectDetail {
   name: string;
@@ -26,11 +27,48 @@ interface ProjectDetail {
   links: Array<Record<string, unknown>>;
 }
 
+function SectionHeader({
+  title,
+  count,
+  totalCount,
+  filter,
+  onFilterChange,
+  viewAllHref,
+}: {
+  title: string;
+  count: number;
+  totalCount?: number;
+  filter: string;
+  onFilterChange: (v: string) => void;
+  viewAllHref?: string;
+}) {
+  return (
+    <div className="mb-2 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-medium text-muted-foreground">
+          {title} ({count}{filter && totalCount !== undefined ? ` of ${totalCount}` : ""})
+        </h2>
+        {viewAllHref && (
+          <Link href={viewAllHref} className="text-xs text-primary hover:underline">
+            View all
+          </Link>
+        )}
+      </div>
+      <Input
+        placeholder="Filter…"
+        value={filter}
+        onChange={(e) => onFilterChange(e.target.value)}
+        className="h-7 w-40 text-xs"
+      />
+    </div>
+  );
+}
+
 function ProjectDocs({ docs }: { docs: Array<Record<string, unknown>> }) {
   const [dense, setDense] = useState(true);
   const [filter, setFilter] = useState("");
 
-  const filtered = docs.filter((doc) => {
+  const filtered = useMemo(() => docs.filter((doc) => {
     if (!filter) return true;
     const f = filter.toLowerCase();
     const title = (doc.title as string) || "";
@@ -41,20 +79,20 @@ function ProjectDocs({ docs }: { docs: Array<Record<string, unknown>> }) {
       type.toLowerCase().includes(f) ||
       content.toLowerCase().includes(f)
     );
-  });
+  }), [docs, filter]);
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between">
         <h2 className="text-sm font-medium text-muted-foreground">
           Documents ({filtered.length}{filter ? ` of ${docs.length}` : ""})
         </h2>
         <div className="flex items-center gap-2">
           <Input
-            placeholder="Filter..."
+            placeholder="Filter…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="h-7 w-32 text-xs"
+            className="h-7 w-40 text-xs"
           />
           <Button
             variant="ghost"
@@ -73,7 +111,7 @@ function ProjectDocs({ docs }: { docs: Array<Record<string, unknown>> }) {
           {docs.length === 0 ? "No documents yet." : "No documents match filter."}
         </p>
       ) : dense ? (
-        <div className="rounded-md border border-border divide-y divide-border">
+        <div className="rounded-md border border-border divide-y divide-border max-h-96 overflow-y-auto">
           {filtered.map((doc, i) => {
             const title = (doc.title as string) || (doc.content as string)?.match(/^#\s+(.+)$/m)?.[1] || `Untitled ${doc.doc_type}`;
             return (
@@ -95,7 +133,7 @@ function ProjectDocs({ docs }: { docs: Array<Record<string, unknown>> }) {
           })}
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3 max-h-[32rem] overflow-y-auto">
           {filtered.map((doc, i) => (
             <Card key={i}>
               <CardHeader className="p-4 pb-2">
@@ -199,17 +237,53 @@ export default function ProjectDetailPage() {
     [name]
   );
   const { data: memories } = useFetch<Paginated<TimelineMemory>>(
-    () => api.timeline({ project: name, limit: "10", days: "30" }),
+    () => api.timeline({ project: name, limit: "100" }),
     [name]
   );
   const { data: workItems } = useFetch<Paginated<WorkItem>>(
-    () => api.workItems({ project: name, limit: "10" }),
+    () => api.workItems({ project: name, limit: "50" }),
     [name]
   );
   const { data: sessionsData } = useFetch<{ count: number; items: SessionInfo[] }>(
-    () => api.sessions({ project: name, limit: "10" }),
+    () => api.sessions({ project: name, limit: "50" }),
     [name]
   );
+
+  // Section filters
+  const [memFilter, setMemFilter] = useState("");
+  const [wiFilter, setWiFilter] = useState("");
+  const [sessionFilter, setSessionFilter] = useState("");
+
+  const filteredMemories = useMemo(() => {
+    if (!memories?.items) return [];
+    if (!memFilter) return memories.items;
+    const f = memFilter.toLowerCase();
+    return memories.items.filter((m) =>
+      (m.summary || m.content).toLowerCase().includes(f) ||
+      m.memory_type.toLowerCase().includes(f)
+    );
+  }, [memories, memFilter]);
+
+  const filteredWorkItems = useMemo(() => {
+    if (!workItems?.items) return [];
+    if (!wiFilter) return workItems.items;
+    const f = wiFilter.toLowerCase();
+    return workItems.items.filter((wi) =>
+      wi.title.toLowerCase().includes(f) ||
+      wi.short_id.toLowerCase().includes(f) ||
+      wi.status.toLowerCase().includes(f) ||
+      wi.item_type.toLowerCase().includes(f)
+    );
+  }, [workItems, wiFilter]);
+
+  const filteredSessions = useMemo(() => {
+    if (!sessionsData?.items) return [];
+    if (!sessionFilter) return sessionsData.items;
+    const f = sessionFilter.toLowerCase();
+    return sessionsData.items.filter((s) =>
+      s.session_name.toLowerCase().includes(f)
+    );
+  }, [sessionsData, sessionFilter]);
 
   return (
     <PageLayout
@@ -237,39 +311,23 @@ export default function ProjectDetailPage() {
 
       {!loading && !error && project && (
         <div className="space-y-6 max-w-3xl">
-          <ProjectDocs docs={project.docs} />
-
-          {/* Work Items */}
-          {workItems && workItems.items.length > 0 && (
-            <div>
-              <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-                Work Items ({workItems.total})
-              </h2>
-              <div className="rounded-md border border-border divide-y divide-border">
-                {workItems.items.map((wi) => (
-                  <Link
-                    key={wi.id}
-                    href={`/work-items?id=${wi.id}`}
-                    className="flex items-center gap-3 px-3 py-2 hover:bg-accent/50 transition-colors text-sm"
-                  >
-                    <StatusDot status={wi.status} />
-                    <span className="font-mono text-xs text-muted-foreground shrink-0">{wi.short_id}</span>
-                    <span className="flex-1 truncate">{wi.title}</span>
-                    <Badge variant="outline" className="text-xs shrink-0">{wi.item_type}</Badge>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Recent Memories */}
-          {memories && memories.items.length > 0 && (
-            <div>
-              <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-                Recent Memories ({memories.total})
-              </h2>
-              <div className="rounded-md border border-border divide-y divide-border">
-                {memories.items.map((m) => (
+          <Breadcrumbs items={[
+            { label: "Projects", href: "/projects" },
+            { label: project.name },
+          ]} />
+          {/* Memories — first */}
+          <div>
+            <SectionHeader
+              title="Memories"
+              count={filteredMemories.length}
+              totalCount={memories?.items.length}
+              filter={memFilter}
+              onFilterChange={setMemFilter}
+              viewAllHref={`/timeline?project=${encodeURIComponent(name)}`}
+            />
+            {filteredMemories.length > 0 ? (
+              <div className="rounded-md border border-border divide-y divide-border max-h-96 overflow-y-auto">
+                {filteredMemories.map((m) => (
                   <Link
                     key={m.id}
                     href={`/memories/${m.id}`}
@@ -285,17 +343,61 @@ export default function ProjectDetailPage() {
                   </Link>
                 ))}
               </div>
-            </div>
-          )}
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {memFilter ? "No memories match filter." : "No memories yet."}
+              </p>
+            )}
+          </div>
+
+          {/* Documents */}
+          <ProjectDocs docs={project.docs} />
+
+          {/* Work Items */}
+          <div>
+            <SectionHeader
+              title="Work Items"
+              count={filteredWorkItems.length}
+              totalCount={workItems?.items.length}
+              filter={wiFilter}
+              onFilterChange={setWiFilter}
+              viewAllHref={`/work-items?project=${encodeURIComponent(name)}`}
+            />
+            {filteredWorkItems.length > 0 ? (
+              <div className="rounded-md border border-border divide-y divide-border max-h-96 overflow-y-auto">
+                {filteredWorkItems.map((wi) => (
+                  <Link
+                    key={wi.id}
+                    href={`/work-items?id=${wi.id}`}
+                    className="flex items-center gap-3 px-3 py-2 hover:bg-accent/50 transition-colors text-sm"
+                  >
+                    <StatusDot status={wi.status} />
+                    <span className="font-mono text-xs text-muted-foreground shrink-0">{wi.short_id}</span>
+                    <span className="flex-1 truncate">{wi.title}</span>
+                    <Badge variant="outline" className="text-xs shrink-0">{wi.item_type}</Badge>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {wiFilter ? "No work items match filter." : "No work items yet."}
+              </p>
+            )}
+          </div>
 
           {/* Sessions */}
-          {sessionsData && sessionsData.items.length > 0 && (
-            <div>
-              <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-                Sessions ({sessionsData.count})
-              </h2>
-              <div className="rounded-md border border-border divide-y divide-border">
-                {sessionsData.items.map((s) => (
+          <div>
+            <SectionHeader
+              title="Sessions"
+              count={filteredSessions.length}
+              totalCount={sessionsData?.items.length}
+              filter={sessionFilter}
+              onFilterChange={setSessionFilter}
+              viewAllHref={`/sessions?project=${encodeURIComponent(name)}`}
+            />
+            {filteredSessions.length > 0 ? (
+              <div className="rounded-md border border-border divide-y divide-border max-h-96 overflow-y-auto">
+                {filteredSessions.map((s) => (
                   <Link
                     key={s.id}
                     href={`/sessions?selected=${encodeURIComponent(s.session_name)}`}
@@ -314,8 +416,12 @@ export default function ProjectDetailPage() {
                   </Link>
                 ))}
               </div>
-            </div>
-          )}
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {sessionFilter ? "No sessions match filter." : "No sessions yet."}
+              </p>
+            )}
+          </div>
 
           {/* Links */}
           <div>

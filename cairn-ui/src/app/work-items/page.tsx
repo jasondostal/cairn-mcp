@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type WorkItem, type GatedItem, type WorkItemStatus, type WorkItemDetail, type WorkspaceBackendInfo } from "@/lib/api";
 import { usePageFilters } from "@/lib/use-page-filters";
 import { useLocalStorage } from "@/lib/use-local-storage";
+import { useKeyboardNav } from "@/lib/use-keyboard-nav";
 import { PageLayout } from "@/components/page-layout";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
@@ -12,7 +13,6 @@ import { MultiSelect } from "@/components/ui/multi-select";
 import { SingleSelect } from "@/components/ui/single-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { WorkItemRow } from "@/components/work-items/work-item-row";
 import { WorkItemSheet } from "@/components/work-items/work-item-sheet";
 import { CreateWorkItemDialog } from "@/components/work-items/create-dialog";
@@ -33,12 +33,19 @@ const typeOptions: { value: string; label: string }[] = [
   { value: "subtask", label: "subtask" },
 ];
 
-const viewOptions: { value: string; label: string }[] = [
+const filterOptions: { value: string; label: string }[] = [
   { value: "all", label: "All items" },
   { value: "active", label: "Active" },
-  { value: "active-recent", label: "Active + recent done" },
-  { value: "bottom", label: "Done to bottom" },
+  { value: "active-recent", label: "Active + recent" },
   { value: "ready", label: "Ready only" },
+];
+
+const sortOptions: { value: string; label: string }[] = [
+  { value: "default", label: "Default" },
+  { value: "priority", label: "Priority" },
+  { value: "updated", label: "Recently updated" },
+  { value: "created", label: "Recently created" },
+  { value: "done-bottom", label: "Done to bottom" },
 ];
 
 const TERMINAL_STATUSES = new Set(["done", "cancelled"]);
@@ -118,8 +125,8 @@ export default function WorkItemsPage() {
   const [items, setItems] = useState<WorkItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string[]>([]);
-  const [itemTypeFilter, setItemTypeFilter] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [itemTypeFilter, setItemTypeFilter] = useState("");
   const [assigneeFilter, setAssigneeFilter] = useState("");
   const [readyIds, setReadyIds] = useState<Set<number>>(new Set());
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
@@ -130,7 +137,8 @@ export default function WorkItemsPage() {
 
   // Persisted UI state
   const [collapsed, setCollapsed] = useLocalStorage<number[]>("cairn-wi-collapsed", []);
-  const [viewMode, setViewMode] = useLocalStorage<string>("cairn-wi-view", "all");
+  const [filterMode, setFilterMode] = useLocalStorage<string>("cairn-wi-filter", "all");
+  const [sortMode, setSortMode] = useLocalStorage<string>("cairn-wi-sort", "default");
 
   const collapsedSet = useMemo(() => new Set(collapsed), [collapsed]);
 
@@ -140,6 +148,7 @@ export default function WorkItemsPage() {
 
   // Inline quick create
   const [quickTitle, setQuickTitle] = useState("");
+  const [quickProject, setQuickProject] = useState("");
   const [quickCreating, setQuickCreating] = useState(false);
   const quickInputRef = useRef<HTMLInputElement>(null);
 
@@ -151,9 +160,8 @@ export default function WorkItemsPage() {
 
     const opts: Record<string, string> = {};
     if (projectParam) opts.project = projectParam;
-    if (statusFilter.length > 0) opts.status = statusFilter[0]; // API takes single status
-    if (itemTypeFilter.length > 0) opts.item_type = itemTypeFilter[0];
-    if (assigneeFilter.trim()) opts.assignee = assigneeFilter.trim();
+    if (statusFilter) opts.status = statusFilter;
+    if (itemTypeFilter) opts.item_type = itemTypeFilter;
     opts.include_children = "true";
     opts.limit = "100";
 
@@ -161,7 +169,7 @@ export default function WorkItemsPage() {
       .then((r) => setItems(r.items))
       .catch((err) => setError(err?.message || "Failed to load work items"))
       .finally(() => setLoading(false));
-  }, [projectParam, statusFilter, itemTypeFilter, assigneeFilter]);
+  }, [projectParam, statusFilter, itemTypeFilter]);
 
   // Fetch ready queue IDs for highlighting
   const fetchReady = useCallback(() => {
@@ -199,9 +207,8 @@ export default function WorkItemsPage() {
       Promise.all([
         api.workItems({
           ...(projectParam ? { project: projectParam } : {}),
-          ...(statusFilter.length > 0 ? { status: statusFilter[0] } : {}),
-          ...(itemTypeFilter.length > 0 ? { item_type: itemTypeFilter[0] } : {}),
-          ...(assigneeFilter.trim() ? { assignee: assigneeFilter.trim() } : {}),
+          ...(statusFilter ? { status: statusFilter } : {}),
+          ...(itemTypeFilter ? { item_type: itemTypeFilter } : {}),
           include_children: "true",
           limit: "100",
         }),
@@ -228,17 +235,28 @@ export default function WorkItemsPage() {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [projectParam, statusFilter, itemTypeFilter, assigneeFilter]);
+  }, [projectParam, statusFilter, itemTypeFilter]);
 
-  // Filter items based on view mode, build tree, flatten
+  // Derive assignee options from fetched items
+  const assigneeOptions = useMemo(() => {
+    const unique = new Set(items.map((i) => i.assignee).filter(Boolean) as string[]);
+    return Array.from(unique).sort().map((a) => ({ value: a, label: a }));
+  }, [items]);
+
+  // Filter items based on filter mode + assignee, build tree, sort, flatten
   const rows = useMemo(() => {
     let filtered = items;
     const now = Date.now();
 
-    if (viewMode === "active") {
-      filtered = items.filter((i) => !TERMINAL_STATUSES.has(i.status));
-    } else if (viewMode === "active-recent") {
-      filtered = items.filter((i) => {
+    // Assignee filter (client-side)
+    if (assigneeFilter) {
+      filtered = filtered.filter((i) => i.assignee === assigneeFilter);
+    }
+
+    if (filterMode === "active") {
+      filtered = filtered.filter((i) => !TERMINAL_STATUSES.has(i.status));
+    } else if (filterMode === "active-recent") {
+      filtered = filtered.filter((i) => {
         if (!TERMINAL_STATUSES.has(i.status)) return true;
         const completedAt = i.completed_at ? new Date(i.completed_at).getTime() : 0;
         return now - completedAt < SEVEN_DAYS_MS;
@@ -247,15 +265,26 @@ export default function WorkItemsPage() {
 
     let tree = buildTree(filtered);
 
-    if (viewMode === "bottom") {
+    // Apply sort at root level
+    if (sortMode === "done-bottom") {
       tree = sortCompletedToBottom(tree);
+    } else if (sortMode === "priority") {
+      tree = [...tree].sort((a, b) => b.item.priority - a.item.priority);
+    } else if (sortMode === "updated") {
+      tree = [...tree].sort((a, b) =>
+        new Date(b.item.updated_at).getTime() - new Date(a.item.updated_at).getTime()
+      );
+    } else if (sortMode === "created") {
+      tree = [...tree].sort((a, b) =>
+        new Date(b.item.created_at).getTime() - new Date(a.item.created_at).getTime()
+      );
     }
 
     return flattenTree(tree, collapsedSet);
-  }, [items, viewMode, collapsedSet]);
+  }, [items, filterMode, sortMode, assigneeFilter, collapsedSet]);
 
   // Filter for ready-only view mode
-  const displayRows = viewMode === "ready"
+  const displayRows = filterMode === "ready"
     ? rows.filter((r) => readyIds.has(r.item.id))
     : rows;
 
@@ -280,7 +309,7 @@ export default function WorkItemsPage() {
   async function handleQuickCreate() {
     const title = quickTitle.trim();
     if (!title) return;
-    const project = projectParam || filters.projectOptions[0]?.value;
+    const project = projectParam || quickProject;
     if (!project) return;
 
     setQuickCreating(true);
@@ -306,6 +335,13 @@ export default function WorkItemsPage() {
     return () => document.removeEventListener("keydown", handleKey);
   }, []);
 
+  // Keyboard navigation: j/k to move, Enter to open sheet
+  const { activeIndex } = useKeyboardNav({
+    itemCount: displayRows.length,
+    onSelect: (i) => openSheet(displayRows[i].item.id),
+    enabled: !sheetOpen && !createOpen,
+  });
+
   return (
     <PageLayout
       title="Work Items"
@@ -325,33 +361,35 @@ export default function WorkItemsPage() {
             searchPlaceholder="Search projects…"
             maxCount={2}
           />
-          <MultiSelect
+          <SingleSelect
             options={statusOptions}
             value={statusFilter}
             onValueChange={setStatusFilter}
             placeholder="All statuses"
-            searchPlaceholder="Filter status…"
-            maxCount={2}
           />
-          <MultiSelect
+          <SingleSelect
             options={typeOptions}
             value={itemTypeFilter}
             onValueChange={setItemTypeFilter}
             placeholder="All types"
-            searchPlaceholder="Filter type…"
-            maxCount={2}
-          />
-          <Input
-            placeholder="Assignee…"
-            value={assigneeFilter}
-            onChange={(e) => setAssigneeFilter(e.target.value)}
-            className="h-8 w-32 text-sm"
           />
           <SingleSelect
-            options={viewOptions}
-            value={viewMode}
-            onValueChange={setViewMode}
-            placeholder="View"
+            options={assigneeOptions}
+            value={assigneeFilter}
+            onValueChange={setAssigneeFilter}
+            placeholder="Assignee"
+          />
+          <SingleSelect
+            options={filterOptions}
+            value={filterMode}
+            onValueChange={setFilterMode}
+            placeholder="Filter"
+          />
+          <SingleSelect
+            options={sortOptions}
+            value={sortMode}
+            onValueChange={setSortMode}
+            placeholder="Sort"
           />
         </div>
       }
@@ -388,12 +426,21 @@ export default function WorkItemsPage() {
       {/* Quick capture — inline creation */}
       <div className="mb-3">
         <div className="flex gap-2">
+          {filters.showAllProjects && (
+            <SingleSelect
+              options={filters.projectOptions}
+              value={quickProject}
+              onValueChange={setQuickProject}
+              placeholder="Project"
+              className="w-40"
+            />
+          )}
           <Input
             ref={quickInputRef}
             value={quickTitle}
             onChange={(e) => setQuickTitle(e.target.value)}
             placeholder="Quick create — type title, press Enter (N to focus)"
-            className="h-8 text-sm"
+            className="h-8 text-sm flex-1"
             disabled={quickCreating}
             onKeyDown={(e) => {
               if (e.key === "Enter" && quickTitle.trim()) handleQuickCreate();
@@ -412,14 +459,14 @@ export default function WorkItemsPage() {
 
       {!loading && !filters.projectsLoading && !error && displayRows.length === 0 && (
         <EmptyState
-          message={viewMode === "ready" ? "No dispatch-ready items." : "No work items found."}
-          detail={viewMode === "ready" ? "All items are either assigned, blocked, or completed." : undefined}
+          message={filterMode === "ready" ? "No dispatch-ready items." : "No work items found."}
+          detail={filterMode === "ready" ? "All items are either assigned, blocked, or completed." : undefined}
         />
       )}
 
       {!loading && !filters.projectsLoading && !error && displayRows.length > 0 && (
         <div className="rounded-md border border-border divide-y divide-border">
-          {displayRows.map((row) => (
+          {displayRows.map((row, i) => (
             <WorkItemRow
               key={row.item.id}
               item={row.item}
@@ -427,6 +474,7 @@ export default function WorkItemsPage() {
               isLast={row.isLast}
               hasChildren={row.hasChildren}
               isCollapsed={row.isCollapsed}
+              isActive={i === activeIndex}
               onToggleCollapse={toggleCollapse}
               showProject={filters.showAllProjects}
               readyIds={readyIds}

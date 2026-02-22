@@ -138,34 +138,62 @@ function MemoryCard({ memory, onSelect, isActive }: { memory: Memory; onSelect?:
   );
 }
 
-function MemoryDenseRow({ memory, onSelect, isActive }: { memory: Memory; onSelect?: (id: number) => void; isActive?: boolean }) {
+function MemoryDenseRow({ memory, onSelect, isActive, expanded, onToggleExpand }: { memory: Memory; onSelect?: (id: number) => void; isActive?: boolean; expanded?: boolean; onToggleExpand?: (id: number) => void }) {
   const truncated = memory.summary || (memory.content.length > 120 ? memory.content.slice(0, 120) + "\u2026" : memory.content);
 
   return (
-    <div
-      className={`flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer ${isActive ? "bg-accent/30" : ""}`}
-      onClick={() => onSelect?.(memory.id)}
-    >
-      <span className="font-mono text-xs text-muted-foreground shrink-0">#{memory.id}</span>
-      <MemoryTypeBadge type={memory.memory_type} />
-      <span className="flex-1 truncate">{truncated}</span>
-      <span className="text-xs text-muted-foreground shrink-0">{memory.project}</span>
-      {memory.score !== undefined && (
-        <span className="font-mono text-xs text-muted-foreground shrink-0">
-          {(memory.score * 100).toFixed(0)}%
-        </span>
+    <div className={isActive ? "bg-accent/30" : ""}>
+      <div
+        className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer"
+        onClick={() => onToggleExpand?.(memory.id)}
+      >
+        <span className="font-mono text-xs text-muted-foreground shrink-0">#{memory.id}</span>
+        <MemoryTypeBadge type={memory.memory_type} />
+        <span className="flex-1 truncate">{truncated}</span>
+        <span className="text-xs text-muted-foreground shrink-0">{memory.project}</span>
+        {memory.score !== undefined && (
+          <span className="font-mono text-xs text-muted-foreground shrink-0">
+            {(memory.score * 100).toFixed(0)}%
+          </span>
+        )}
+        <span className="shrink-0"><ImportanceBadge importance={memory.importance} /></span>
+        <span className="text-xs text-muted-foreground shrink-0">{formatDate(memory.created_at)}</span>
+      </div>
+      {expanded && (
+        <div className="px-3 pb-2 border-t border-border/50">
+          <p className="whitespace-pre-wrap text-sm text-muted-foreground leading-relaxed py-2 font-mono">
+            {memory.content}
+          </p>
+          <div className="flex items-center gap-2 pt-1">
+            <TagList tags={memory.tags} />
+            <button
+              className="ml-auto text-xs text-primary hover:underline"
+              onClick={(e) => { e.stopPropagation(); onSelect?.(memory.id); }}
+            >
+              Open detail
+            </button>
+          </div>
+        </div>
       )}
-      <span className="shrink-0"><ImportanceBadge importance={memory.importance} /></span>
-      <span className="text-xs text-muted-foreground shrink-0">{formatDate(memory.created_at)}</span>
     </div>
   );
 }
 
 function ResultsList({ results, dense, onSelect }: { results: Memory[]; dense: boolean; onSelect: (id: number) => void }) {
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const { activeIndex } = useKeyboardNav({
     itemCount: results.length,
-    onSelect: (i) => onSelect(results[i].id),
+    onSelect: (i) => toggleExpand(results[i].id),
   });
+
+  function toggleExpand(id: number) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   if (dense) {
     return (
@@ -176,6 +204,8 @@ function ResultsList({ results, dense, onSelect }: { results: Memory[]; dense: b
             memory={m}
             onSelect={onSelect}
             isActive={i === activeIndex}
+            expanded={expandedIds.has(m.id)}
+            onToggleExpand={toggleExpand}
           />
         ))}
       </div>

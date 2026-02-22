@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api, type ThinkingDetail } from "@/lib/api";
@@ -26,7 +26,17 @@ import {
   TreeDeciduous,
   List,
   ArrowLeft,
+  Sparkles,
+  Zap,
+  Repeat,
+  ShieldQuestion,
+  Reply,
+  User,
+  Bot,
+  RotateCcw,
+  Send,
 } from "lucide-react";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 type Thought = ThinkingDetail["thoughts"][number];
 
@@ -38,6 +48,11 @@ const typeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   conclusion: Target,
   alternative: GitBranch,
   branch: GitBranch,
+  insight: Sparkles,
+  realization: Zap,
+  pattern: Repeat,
+  challenge: ShieldQuestion,
+  response: Reply,
 };
 
 const typeColors: Record<string, string> = {
@@ -50,8 +65,33 @@ const typeColors: Record<string, string> = {
   branch: "border-l-orange-500/50",
   assumption: "border-l-rose-500/50",
   analysis: "border-l-indigo-500/50",
+  insight: "border-l-yellow-500/50",
+  realization: "border-l-emerald-500/50",
+  pattern: "border-l-teal-500/50",
+  challenge: "border-l-red-500/50",
+  response: "border-l-slate-500/50",
   general: "border-l-border",
 };
+
+const thoughtTypeOptions = [
+  "observation", "hypothesis", "question", "reasoning",
+  "assumption", "analysis", "insight", "realization",
+  "pattern", "challenge", "response", "alternative", "general",
+];
+
+function AuthorBadge({ author }: { author: string | null }) {
+  if (!author) return null;
+  const isHuman = author === "human" || author === "user";
+  return (
+    <Badge
+      variant="outline"
+      className={`text-xs gap-1 ${isHuman ? "border-emerald-500/50 text-emerald-600 dark:text-emerald-400" : "border-muted-foreground/30"}`}
+    >
+      {isHuman ? <User className="h-2.5 w-2.5" /> : <Bot className="h-2.5 w-2.5" />}
+      {author}
+    </Badge>
+  );
+}
 
 // ── Tree data structure ────────────────────────────────────
 
@@ -174,6 +214,7 @@ function TreeThoughtNode({ node, isLast }: { node: TreeNode; isLast: boolean }) 
               <Badge variant="outline" className="text-xs">
                 {node.thought.type}
               </Badge>
+              <AuthorBadge author={node.thought.author} />
               {node.thought.branch && (
                 <Badge variant="secondary" className="text-xs">
                   {node.thought.branch}
@@ -258,6 +299,7 @@ function ThoughtCard({ thought }: { thought: Thought }) {
             <Badge variant="outline" className="text-xs">
               {thought.type}
             </Badge>
+            <AuthorBadge author={thought.author} />
             {thought.branch && (
               <Badge variant="secondary" className="text-xs">
                 {thought.branch}
@@ -276,18 +318,117 @@ function ThoughtCard({ thought }: { thought: Thought }) {
   );
 }
 
+// ── Thought input form ────────────────────────────────────
+
+function ThoughtInput({ sequenceId, onAdded }: { sequenceId: number; onAdded: () => void }) {
+  const [thought, setThought] = useState("");
+  const [thoughtType, setThoughtType] = useState("observation");
+  const [branchName, setBranchName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const isBranchType = thoughtType === "alternative" || thoughtType === "branch";
+  const TypeIcon = typeIcons[thoughtType] || MessageSquare;
+
+  const handleSubmit = async () => {
+    if (!thought.trim() || submitting) return;
+    setSubmitting(true);
+    try {
+      await api.thinkingAddThought(sequenceId, {
+        thought: thought.trim(),
+        thought_type: thoughtType,
+        author: "human",
+        ...(isBranchType && branchName ? { branch_name: branchName } : {}),
+      });
+      setThought("");
+      setBranchName("");
+      onAdded();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      handleSubmit();
+    }
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={thoughtType}
+            onChange={(e) => setThoughtType(e.target.value)}
+            className="text-xs bg-background border rounded px-2 py-1"
+          >
+            {thoughtTypeOptions.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+          <TypeIcon className="h-3.5 w-3.5 text-muted-foreground" />
+          {isBranchType && (
+            <input
+              type="text"
+              placeholder="Branch name..."
+              value={branchName}
+              onChange={(e) => setBranchName(e.target.value)}
+              className="text-xs bg-background border rounded px-2 py-1 w-40"
+            />
+          )}
+          <Badge variant="outline" className="text-xs gap-1 border-emerald-500/50 text-emerald-600 dark:text-emerald-400 ml-auto">
+            <User className="h-2.5 w-2.5" />
+            human
+          </Badge>
+        </div>
+        <textarea
+          value={thought}
+          onChange={(e) => setThought(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Add a thought..."
+          rows={3}
+          className="w-full bg-background border rounded px-3 py-2 text-sm resize-y min-h-[80px] focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">
+            Cmd+Enter to submit
+          </span>
+          <Button
+            size="sm"
+            onClick={handleSubmit}
+            disabled={!thought.trim() || submitting}
+          >
+            <Send className="h-3.5 w-3.5 mr-1" />
+            {submitting ? "Adding..." : "Add thought"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Page ────────────────────────────────────────────────────
 
 export default function ThinkingDetailPage() {
   const params = useParams();
   const id = Number(params.id);
   const [viewMode, setViewMode] = useState<"tree" | "linear">("tree");
+  const [refreshKey, setRefreshKey] = useState(0);
   const { data: detail, loading, error } = useFetch<ThinkingDetail>(
     () => api.thinkingDetail(id),
-    [id]
+    [id, refreshKey]
   );
 
   const hasBranches = detail?.thoughts.some((t) => t.branch) ?? false;
+  const isActive = detail?.status === "active";
+  const isCompleted = detail?.status === "completed";
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+
+  const handleReopen = async () => {
+    await api.thinkingReopen(id);
+    refresh();
+  };
 
   return (
     <PageLayout
@@ -313,6 +454,12 @@ export default function ThinkingDetailPage() {
             </Button>
           </div>
         )}
+        {isCompleted && (
+          <Button variant="outline" size="sm" onClick={handleReopen} className="gap-1.5">
+            <RotateCcw className="h-3.5 w-3.5" />
+            Reopen
+          </Button>
+        )}
         <Link href="/thinking">
           <Button variant="ghost" size="sm" className="gap-1.5">
             <ArrowLeft className="h-4 w-4" />
@@ -321,6 +468,14 @@ export default function ThinkingDetailPage() {
         </Link>
       </>}
     >
+      {detail && (
+        <Breadcrumbs items={[
+          { label: "Thinking", href: "/thinking" },
+          { label: detail.project, href: `/projects/${encodeURIComponent(detail.project)}` },
+          { label: detail.goal.length > 40 ? detail.goal.slice(0, 40) + "\u2026" : detail.goal },
+        ]} />
+      )}
+
       {loading && (
         <div className="space-y-4">
           <Skeleton className="h-8 w-64" />
@@ -340,6 +495,11 @@ export default function ThinkingDetailPage() {
             >
               {detail.status}
             </Badge>
+            {detail.reopened_at && (
+              <Badge variant="outline" className="text-xs">
+                reopened
+              </Badge>
+            )}
             <Link href={`/projects/${encodeURIComponent(detail.project)}`} className="text-primary hover:underline">{detail.project}</Link>
             <span>&middot;</span>
             <span>{detail.thoughts.length} thoughts</span>
@@ -355,6 +515,10 @@ export default function ThinkingDetailPage() {
                 <ThoughtCard key={t.id} thought={t} />
               ))}
             </div>
+          )}
+
+          {isActive && (
+            <ThoughtInput sequenceId={id} onAdded={refresh} />
           )}
         </div>
       )}

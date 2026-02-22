@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.56.0** — "Use It or Lose It".
+Current: **v0.57.0** — "Frictionless Dispatch".
 
 ---
 
@@ -8,7 +8,7 @@ Current: **v0.56.0** — "Use It or Lose It".
 
 ### Ongoing
 
-**Benchmark re-evaluation.** LoCoMo 81.7% was measured at v0.28. Re-run against current system. The graph neighbor signal, entity canonicalization, and contradiction scoping should affect scores. Publish updated numbers.
+**Benchmark re-evaluation.** LoCoMo 81.6% scored at v0.55 (full run, 1,986 questions across 5 categories). Re-run periodically as the system evolves. The graph neighbor signal, entity canonicalization, and contradiction scoping should affect scores.
 
 **Knowledge graph hardening.** Entity resolution precision, canonicalization quality, threshold tuning, temporal lifecycle management, graph search weight tuning. Measure, adjust, measure again.
 
@@ -23,6 +23,22 @@ Current: **v0.56.0** — "Use It or Lose It".
 ---
 
 ## Shipped
+
+### v0.57.0 — "Frictionless Dispatch" ✓
+
+Single-call agent dispatch, work items UI polish, breadcrumbs, expandable search, project detail overhaul.
+
+- [x] **`dispatch()` MCP tool + REST endpoint** — single-call agent backgrounding
+- [x] **Work items filter/sort split** — separate Filter and Sort controls
+- [x] **Status/type SingleSelect** — honest single-value filters matching API semantics
+- [x] **Assignee dropdown** — populated from fetched items' assignees
+- [x] **Keyboard navigation on work items** — j/k to move, Enter to open
+- [x] **Quick create project picker** — project dropdown when viewing all projects
+- [x] **Breadcrumbs** — memory, doc, thinking, project detail pages
+- [x] **Expandable search previews** — inline content expansion in dense mode
+- [x] **Project detail overhaul** — memories first, scrollable sections, per-section filters, "View all" links
+- [x] **LoCoMo benchmark: 81.6%** — up from 79.4%. Open-domain 86.2%, multi-hop 83.8%, adversarial 78.0%, temporal 74.5%, single-hop 73.4% (1,986 questions)
+- [x] **Collaborative thinking sequences** — multi-agent contribution to shared threads
 
 ### v0.56.0 — "Use It or Lose It" ✓
 

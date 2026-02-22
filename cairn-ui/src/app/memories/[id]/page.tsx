@@ -15,6 +15,7 @@ import { PageLayout } from "@/components/page-layout";
 import { MemoryTypeBadge } from "@/components/memory-type-badge";
 import { StatusDot } from "@/components/work-items/status-dot";
 import { Tag, FileText, Star, Clock, Network, ArrowLeft, ArrowRight, Download, Link2 } from "lucide-react";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 const RELATION_COLORS: Record<string, string> = {
   extends: "text-blue-400",
@@ -84,6 +85,14 @@ export default function MemoryDetail() {
         </Link>
       </>}
     >
+      {memory && (
+        <Breadcrumbs items={[
+          { label: "Timeline", href: "/timeline" },
+          { label: memory.project, href: `/projects/${encodeURIComponent(memory.project)}` },
+          { label: `Memory #${id}` },
+        ]} />
+      )}
+
       {loading && (
         <div className="space-y-4 max-w-3xl">
           <Skeleton className="h-8 w-48" />

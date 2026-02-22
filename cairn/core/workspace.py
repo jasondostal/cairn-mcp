@@ -16,6 +16,7 @@ from cairn.core.budget import estimate_tokens, truncate_to_budget
 from cairn.core.constants import (
     WORKSPACE_ALLOC_MEMORIES, WORKSPACE_ALLOC_RULES,
     WORKSPACE_ALLOC_TASKS, WORKSPACE_ALLOC_TRAIL,
+    ActivityType,
 )
 
 from cairn.core.utils import get_or_create_project, get_project
@@ -387,6 +388,111 @@ class WorkspaceManager:
         logger.info("Workspace session #%d created (backend=%s, session=%s, project=%s)",
                      row["id"], backend_name, session.id, project)
         return result
+
+    @track_operation("workspace.dispatch")
+    def dispatch(
+        self,
+        *,
+        work_item_id: int | str | None = None,
+        project: str | None = None,
+        title: str | None = None,
+        description: str | None = None,
+        backend: str | None = None,
+        risk_tier: int | None = None,
+        model: str | None = None,
+        agent: str | None = None,
+        assignee: str | None = None,
+    ) -> dict[str, Any]:
+        """Dispatch a work item to a background agent in a single call.
+
+        Two modes:
+        - Pass ``work_item_id`` to dispatch an existing work item.
+        - Pass ``project`` + ``title`` to create a new work item and dispatch it.
+
+        Internally: resolve/create → claim → create_session → log activity.
+        """
+        if not self._has_any_backend():
+            return {"error": "No workspace backend configured"}
+
+        if not self.work_item_manager:
+            return {"error": "Work item manager not available"}
+
+        # 1. Resolve or create the work item
+        if work_item_id:
+            try:
+                wi = self.work_item_manager.get(work_item_id)
+            except ValueError as e:
+                return {"error": str(e)}
+            wi_project = wi["project"]
+        elif project and title:
+            wi = self.work_item_manager.create(
+                project=project,
+                title=title,
+                description=description,
+                item_type="task",
+                risk_tier=risk_tier,
+            )
+            work_item_id = wi["id"]
+            wi_project = project
+        else:
+            return {"error": "Either work_item_id or (project + title) is required"}
+
+        # 2. Determine backend and assignee
+        backend_name = backend or self._default_backend
+        assignee_name = assignee or f"agent:{backend_name}"
+
+        # 3. Claim the work item
+        try:
+            self.work_item_manager.claim(wi["id"], assignee_name)
+        except ValueError as e:
+            return {"error": str(e)}
+
+        # 4. Create session (handles briefing + context + backend routing)
+        session_result = self.create_session(
+            project=wi_project,
+            work_item_id=wi["id"],
+            backend=backend,
+            risk_tier=risk_tier,
+            model=model,
+            agent=agent,
+            context_mode="focused",
+        )
+
+        if "error" in session_result:
+            return {"error": session_result["error"], "work_item": {
+                "id": wi["id"], "short_id": wi.get("short_id"), "title": wi.get("title"),
+            }}
+
+        # 5. Log dispatch activity
+        self.work_item_manager._log_activity(
+            wi["id"],
+            actor=assignee_name,
+            activity_type=ActivityType.DISPATCHED,
+            content=f"Dispatched to {session_result.get('backend', 'unknown')} "
+                    f"(session {session_result.get('session_id', '?')})",
+            metadata={
+                "session_id": session_result.get("session_id"),
+                "backend": session_result.get("backend"),
+                "risk_tier": risk_tier,
+            },
+        )
+        self.db.commit()
+
+        return {
+            "action": "dispatched",
+            "work_item": {
+                "id": wi["id"],
+                "short_id": wi.get("short_id"),
+                "title": wi.get("title"),
+                "status": "in_progress",
+                "assignee": assignee_name,
+            },
+            "session": {
+                "id": session_result.get("session_id"),
+                "backend": session_result.get("backend"),
+            },
+            "briefing_sent": session_result.get("task_sent", False),
+        }
 
     @track_operation("workspace.send_message")
     def send_message(

@@ -207,7 +207,8 @@ class ActivityType:
     NOTE = "note"
     CREATED = "created"
     PROMOTED = "promoted"
-    ALL = {STATUS_CHANGE, CLAIM, GATE_SET, GATE_RESOLVED, HEARTBEAT, CHECKPOINT, NOTE, CREATED, PROMOTED}
+    DISPATCHED = "dispatched"
+    ALL = {STATUS_CHANGE, CLAIM, GATE_SET, GATE_RESOLVED, HEARTBEAT, CHECKPOINT, NOTE, CREATED, PROMOTED, DISPATCHED}
 
 
 # ============================================================
@@ -222,6 +223,7 @@ class ThinkingStatus:
 VALID_THOUGHT_TYPES = [
     "observation", "hypothesis", "question", "reasoning", "conclusion",
     "assumption", "analysis", "general", "alternative", "branch",
+    "insight", "realization", "pattern", "challenge", "response",
 ]
 
 

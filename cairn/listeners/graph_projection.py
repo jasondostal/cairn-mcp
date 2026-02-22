@@ -261,6 +261,7 @@ class GraphProjectionListener:
             sequence_pg_id=seq_id,
             thought_type=row.get("thought_type") or "general",
             content=row.get("content") or "",
+            author=row.get("author"),
         )
 
         if not row.get("graph_uuid"):

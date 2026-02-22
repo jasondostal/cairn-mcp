@@ -125,6 +125,7 @@ class ThinkingEngine:
         thought: str,
         thought_type: str = "general",
         branch_name: str | None = None,
+        author: str | None = None,
     ) -> dict:
         """Add a thought to an active sequence."""
         # Verify sequence exists and is active
@@ -146,11 +147,11 @@ class ThinkingEngine:
 
         row = self.db.execute_one(
             """
-            INSERT INTO thoughts (sequence_id, thought_type, content, branch_name)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO thoughts (sequence_id, thought_type, content, branch_name, author)
+            VALUES (%s, %s, %s, %s, %s)
             RETURNING id, created_at
             """,
-            (sequence_id, thought_type, thought, branch_name if is_branch else None),
+            (sequence_id, thought_type, thought, branch_name if is_branch else None, author),
         )
         self.db.commit()
 
@@ -171,11 +172,12 @@ class ThinkingEngine:
             "sequence_id": sequence_id,
             "thought_type": thought_type,
             "branch_name": branch_name if is_branch else None,
+            "author": author,
             "created_at": row["created_at"].isoformat(),
         }
 
     @track_operation("think.conclude")
-    def conclude(self, sequence_id: int, conclusion: str) -> dict:
+    def conclude(self, sequence_id: int, conclusion: str, author: str | None = None) -> dict:
         """Conclude a thinking sequence. Adds final thought and marks complete."""
         # Guard: check sequence exists and is still active
         seq = self.db.execute_one(
@@ -188,7 +190,7 @@ class ThinkingEngine:
             raise ValueError(f"Thinking sequence {sequence_id} is already {seq['status']}")
 
         # Add the conclusion thought
-        self.add_thought(sequence_id, conclusion, thought_type="conclusion")
+        self.add_thought(sequence_id, conclusion, thought_type="conclusion", author=author)
 
         # Mark sequence as completed
         self.db.execute(
@@ -216,13 +218,40 @@ class ThinkingEngine:
         # Return the full sequence
         return self.get_sequence(sequence_id)
 
+    @track_operation("think.reopen")
+    def reopen(self, sequence_id: int) -> dict:
+        """Reopen a completed thinking sequence for continued collaboration."""
+        seq = self.db.execute_one(
+            "SELECT id, status, project_id FROM thinking_sequences WHERE id = %s",
+            (sequence_id,),
+        )
+        if not seq:
+            raise ValueError(f"Thinking sequence {sequence_id} not found")
+        if seq["status"] != ThinkingStatus.COMPLETED:
+            raise ValueError(f"Thinking sequence {sequence_id} is {seq['status']}, not completed")
+
+        self.db.execute(
+            """
+            UPDATE thinking_sequences
+            SET status = 'active', reopened_at = NOW()
+            WHERE id = %s
+            """,
+            (sequence_id,),
+        )
+        self.db.commit()
+
+        self._publish("thinking.sequence_reopened", project_id=seq["project_id"], sequence_id=sequence_id)
+
+        logger.info("Reopened thinking sequence #%d", sequence_id)
+        return self.get_sequence(sequence_id)
+
     @track_operation("think.get")
     def get_sequence(self, sequence_id: int) -> dict:
         """Get a full thinking sequence with all thoughts."""
         seq = self.db.execute_one(
             """
             SELECT ts.id, ts.goal, ts.status, ts.created_at, ts.completed_at,
-                   p.name as project
+                   ts.reopened_at, p.name as project
             FROM thinking_sequences ts
             LEFT JOIN projects p ON ts.project_id = p.id
             WHERE ts.id = %s
@@ -234,7 +263,7 @@ class ThinkingEngine:
 
         thoughts = self.db.execute(
             """
-            SELECT id, thought_type, content, branch_name, created_at
+            SELECT id, thought_type, content, branch_name, author, created_at
             FROM thoughts
             WHERE sequence_id = %s
             ORDER BY created_at
@@ -249,12 +278,14 @@ class ThinkingEngine:
             "status": seq["status"],
             "created_at": seq["created_at"].isoformat(),
             "completed_at": seq["completed_at"].isoformat() if seq["completed_at"] else None,
+            "reopened_at": seq["reopened_at"].isoformat() if seq["reopened_at"] else None,
             "thoughts": [
                 {
                     "id": t["id"],
                     "type": t["thought_type"],
                     "content": t["content"],
                     "branch": t["branch_name"],
+                    "author": t["author"],
                     "created_at": t["created_at"].isoformat(),
                 }
                 for t in thoughts

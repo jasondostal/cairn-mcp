@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.57.0] — 2026-02-21 "Frictionless Dispatch"
+
+### Added
+- **`dispatch()` MCP tool** — single-call agent dispatch replacing the 3-4 step
+  manual sequence of create work item + claim + create session + send briefing.
+  Accepts either an existing `work_item_id` or `project` + `title` to create-and-dispatch
+  in one shot. Includes `DISPATCHED` activity type for audit trail.
+- **`POST /workspace/dispatch` REST endpoint** — mirrors the MCP tool for HTTP clients.
+- **Breadcrumbs** — hierarchical navigation on memory detail, doc detail, thinking
+  sequence detail, and project detail pages. New reusable `<Breadcrumbs>` component.
+- **Keyboard navigation on work items** — j/k to move, Enter to open detail sheet.
+  Reuses the existing `useKeyboardNav` hook from search.
+- **Expandable preview on search results** — click a dense row to expand full memory
+  content inline with tags and an "Open detail" link. Enter key also toggles expansion.
+- **Project detail "View all" links** — each section header links to its filtered
+  list page (timeline, work items, sessions).
+- **Quick create project picker** — when viewing all projects, a project dropdown
+  appears next to the quick create input instead of silently picking the first project.
+
+### Changed
+- **Server instructions** — added "BACKGROUND WORK — DISPATCH, DON'T SUBAGENT"
+  guidance directing agents to prefer `dispatch()` over native subagents.
+- **LoCoMo benchmark: 81.6%** — up from 79.4%. Episodic ingestion, Search V2,
+  type routing, cross-encoder reranking.
+- **Work items filter/sort split** — the single "view mode" dropdown is now two
+  separate controls: Filter (All/Active/Active+recent/Ready) and Sort
+  (Default/Priority/Recently updated/Recently created/Done to bottom).
+- **Status and type filters** — changed from MultiSelect to SingleSelect to match
+  the API's single-value semantics.
+- **Assignee filter** — changed from free-text input to a SingleSelect dropdown
+  populated from the fetched items' assignees.
+- **Project detail page** — memories shown first, all sections always visible with
+  empty states, scrollable containers with per-section filter inputs, bumped fetch
+  limits (100 memories, 50 work items/sessions).
+
 ## [0.56.0] — 2026-02-21 "Use It or Lose It"
 
 ### Added

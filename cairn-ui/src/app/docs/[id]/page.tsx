@@ -16,6 +16,7 @@ import { DocTypeBadge } from "@/components/doc-type-badge";
 import { DownloadMenu } from "@/components/download-menu";
 import { triggerDownload, sanitizeFilename } from "@/lib/download";
 import { ArrowLeft } from "lucide-react";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 function extractTitle(doc: Document): string {
   if (doc.title) return doc.title;
@@ -102,6 +103,14 @@ export default function DocDetailPage() {
         </Link>
       </>}
     >
+      {doc && (
+        <Breadcrumbs items={[
+          { label: "Docs", href: "/docs" },
+          { label: doc.project, href: `/projects/${encodeURIComponent(doc.project)}` },
+          { label: title },
+        ]} />
+      )}
+
       {loading && (
         <div className="space-y-4 animate-pulse">
           <div className="h-6 w-48 bg-muted rounded" />
