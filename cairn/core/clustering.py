@@ -500,7 +500,9 @@ class ClusterEngine:
 
         try:
             messages = build_cluster_summary_messages(prompt_clusters)
-            raw = self.llm.generate(messages, max_tokens=1024)
+            # Scale output budget: ~80 tokens per cluster label+summary
+            max_tok = max(1024, len(cluster_data) * 80)
+            raw = self.llm.generate(messages, max_tokens=max_tok)
             return self._parse_summaries(raw, cluster_data), None
         except Exception as exc:
             error_msg = f"Cluster labeling LLM failed: {type(exc).__name__}: {exc}"

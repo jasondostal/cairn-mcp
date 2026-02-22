@@ -11,11 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Cluster labeling silent failure** — when the LLM call for cluster labels failed,
   all clusters silently received generic names ("Cluster 1", "Cluster 2") with no
   error surfaced. Now logs at ERROR level and returns a `labeling_warning` in the
-  insights response so the failure is visible to callers.
+  insights response so the failure is visible to callers. Also scaled `max_tokens`
+  with cluster count to prevent truncated responses on large cluster sets.
 - **OpenAI env vars missing from docker-compose.yml** — `CAIRN_OPENAI_BASE_URL`,
-  `CAIRN_OPENAI_MODEL`, and `CAIRN_OPENAI_API_KEY` were never passed through to
-  the container, so any OpenAI-compatible backend (Synthetic.new, Groq, etc.)
-  silently fell back to defaults.
+  `CAIRN_OPENAI_MODEL`, and `CAIRN_OPENAI_API_KEY` were not passed through to
+  the container, causing OpenAI-compatible backends to silently fall back to defaults.
 
 ## [0.57.0] — 2026-02-21 "Frictionless Dispatch"
 
