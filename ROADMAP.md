@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.58.0** — "Code Intelligence".
+Current: **v0.58.1** — Code Intelligence hardening.
 
 ---
 
@@ -22,19 +22,22 @@ Current: **v0.58.0** — "Code Intelligence".
 
 ## Shipped
 
-### v0.58.0 — "Code Intelligence" ✓
+### v0.58.x — "Code Intelligence" ✓
 
 Per-project code understanding. Parse source files with tree-sitter, build a code graph in Neo4j, enforce architecture boundaries, search code by natural language, analyze cross-project dependencies — all through MCP.
 
 - [x] **Architecture boundary rules** — YAML rule engine with `from`/`deny`/`allow` glob patterns, validated against Python imports via stdlib `ast`
 - [x] **`code_index` MCP tool** — tree-sitter parsing with pluggable language modules (Python + TypeScript/TSX), content-hash incremental indexing, `CodeFile`/`CodeSymbol` nodes with `CONTAINS`/`IMPORTS` edges in Neo4j
-- [x] **`code_query` MCP tool** — 10 actions: `dependents`, `dependencies`, `structure`, `impact`, `search`, `hotspots`, `entities`, `code_for_entity`, `cross_search`, `shared_deps`
+- [x] **`.gitignore` support** — respects all `.gitignore` files in the tree (root + nested) via `pathspec` gitwildmatch. No hardcoded exclude lists.
+- [x] **`code_query` MCP tool** — 11 actions: `dependents`, `dependencies`, `structure`, `impact`, `search`, `hotspots`, `entities`, `code_for_entity`, `cross_search`, `shared_deps`, `bridge`
 - [x] **`code_describe` MCP tool** — LLM-generated natural language descriptions per symbol, embedded for semantic code search
 - [x] **`arch_check` MCP tool** — boundary validation from YAML config or project docs, source-based or graph-backed evaluation, integration contracts
 - [x] **TypeScript language module** — functions, classes, interfaces, enums, React components/hooks, ES6 imports, JSDoc extraction, TSX dialect support
 - [x] **PageRank hotspot analysis** — identify structurally important files via NetworkX client-side PageRank
-- [x] **Knowledge ↔ Code bridging** — `REFERENCED_IN` edges linking knowledge entities to code files/symbols
+- [x] **Knowledge ↔ Code bridging** — `REFERENCED_IN` edges linking knowledge entities to code files/symbols, auto-wired after index and enrichment
 - [x] **Cross-project analysis** — search symbols and find shared dependencies across all indexed projects
+- [x] **Chunked Neo4j transactions** — batch upsert splits into 50-file chunks to stay within transaction memory limits
+- [x] **Async MCP tools** — `insights`, `dispatch`, `consolidate`, `ingest`, `code_query`, `arch_check` use `asyncio.to_thread` to avoid blocking the event loop
 - [x] **`architecture.yaml`** — 9 boundary rules for Cairn's own codebase (dogfood), 0 violations
 - [x] **29 code intelligence tests** — parser, indexer, query, cross-project, arch rules, TypeScript
 

@@ -1317,149 +1317,164 @@ class Neo4jGraphProvider(GraphProvider):
         files: list[dict],
         import_edges: list[tuple[str, str]],
         stale_file_uuids: list[str],
+        chunk_size: int = 50,
     ) -> dict[str, str]:
-        """Batch-upsert files, symbols, and edges in a single transaction."""
+        """Batch-upsert files, symbols, and edges in chunked transactions.
+
+        Splits work into chunks of `chunk_size` files per transaction to avoid
+        blowing Neo4j's transaction memory limit on large codebases.
+        """
         now = datetime.now(timezone.utc).isoformat()
         path_to_uuid: dict[str, str] = {}
 
         with self._session() as session:
-            with session.begin_transaction() as tx:
-                # 1) Delete stale files (no longer on disk)
-                if stale_file_uuids:
-                    tx.run(
-                        """
-                        UNWIND $uuids AS uid
-                        MATCH (cf:CodeFile {uuid: uid})
-                        OPTIONAL MATCH (cf)-[:CONTAINS]->(cs:CodeSymbol)
-                        DETACH DELETE cs, cf
-                        """,
-                        uuids=stale_file_uuids,
-                    )
+            # 1) Delete stale files (separate transaction)
+            if stale_file_uuids:
+                for i in range(0, len(stale_file_uuids), chunk_size):
+                    chunk = stale_file_uuids[i : i + chunk_size]
+                    with session.begin_transaction() as tx:
+                        tx.run(
+                            """
+                            UNWIND $uuids AS uid
+                            MATCH (cf:CodeFile {uuid: uid})
+                            OPTIONAL MATCH (cf)-[:CONTAINS]->(cs:CodeSymbol)
+                            DETACH DELETE cs, cf
+                            """,
+                            uuids=chunk,
+                        )
+                        tx.commit()
 
-                # 2) Upsert files and collect UUIDs
-                file_rows = []
-                for f in files:
-                    file_uuid = str(uuid.uuid4())
-                    file_rows.append({
-                        "path": f["path"],
-                        "lang": f["language"],
-                        "hash": f["content_hash"],
-                        "uuid": file_uuid,
-                    })
-                result = tx.run(
-                    """
-                    UNWIND $rows AS r
-                    MERGE (cf:CodeFile {path: r.path, project_id: $pid})
-                    ON CREATE SET cf.uuid = r.uuid, cf.language = r.lang,
-                                  cf.content_hash = r.hash,
-                                  cf.created_at = $now, cf.last_indexed = $now
-                    ON MATCH SET  cf.language = r.lang, cf.content_hash = r.hash,
-                                  cf.last_indexed = $now
-                    RETURN cf.path AS path, cf.uuid AS uuid
-                    """,
-                    rows=file_rows,
-                    pid=project_id,
-                    now=now,
-                )
-                for record in result:
-                    path_to_uuid[record["path"]] = record["uuid"]
-
-                # 3) For changed files, delete old symbols before re-creating
-                changed_paths = [f["path"] for f in files]
-                tx.run(
-                    """
-                    UNWIND $paths AS p
-                    MATCH (cf:CodeFile {path: p, project_id: $pid})-[:CONTAINS]->(cs:CodeSymbol)
-                    DETACH DELETE cs
-                    """,
-                    paths=changed_paths,
-                    pid=project_id,
-                )
-
-                # 4) Batch-create all symbols
-                sym_rows = []
-                for f in files:
-                    for sym in f.get("symbols", []):
-                        props = {
-                            "name": sym["name"],
-                            "kind": sym["kind"],
-                            "file_path": f["path"],
-                            "start_line": sym["start_line"],
-                            "end_line": sym["end_line"],
-                            "signature": sym.get("signature", ""),
-                            "updated_at": now,
-                        }
-                        if sym.get("docstring") is not None:
-                            props["docstring"] = sym["docstring"]
-                        if sym.get("parent_name") is not None:
-                            props["parent_name"] = sym["parent_name"]
-                        sym_rows.append({
-                            "qname": sym["qualified_name"],
-                            "fpath": f["path"],
+            # 2-5) Upsert files + symbols in chunks
+            for i in range(0, len(files), chunk_size):
+                file_chunk = files[i : i + chunk_size]
+                with session.begin_transaction() as tx:
+                    # Upsert files
+                    file_rows = []
+                    for f in file_chunk:
+                        file_rows.append({
+                            "path": f["path"],
+                            "lang": f["language"],
+                            "hash": f["content_hash"],
                             "uuid": str(uuid.uuid4()),
-                            "props": props,
                         })
-
-                if sym_rows:
-                    tx.run(
+                    result = tx.run(
                         """
                         UNWIND $rows AS r
-                        CREATE (cs:CodeSymbol {
-                            qualified_name: r.qname,
-                            file_path: r.fpath,
-                            project_id: $pid,
-                            uuid: r.uuid,
-                            created_at: $now
-                        })
-                        SET cs += r.props
-                        WITH cs
-                        MATCH (cf:CodeFile {path: cs.file_path, project_id: $pid})
-                        MERGE (cf)-[:CONTAINS]->(cs)
+                        MERGE (cf:CodeFile {path: r.path, project_id: $pid})
+                        ON CREATE SET cf.uuid = r.uuid, cf.language = r.lang,
+                                      cf.content_hash = r.hash,
+                                      cf.created_at = $now, cf.last_indexed = $now
+                        ON MATCH SET  cf.language = r.lang, cf.content_hash = r.hash,
+                                      cf.last_indexed = $now
+                        RETURN cf.path AS path, cf.uuid AS uuid
                         """,
-                        rows=sym_rows,
+                        rows=file_rows,
                         pid=project_id,
                         now=now,
                     )
+                    for record in result:
+                        path_to_uuid[record["path"]] = record["uuid"]
 
-                    # 5) Link parent->child symbols (class->method)
-                    parent_edges = []
-                    for f in files:
-                        for sym in f.get("symbols", []):
-                            if sym.get("parent_name"):
-                                parent_edges.append({
-                                    "parent_qname": sym["parent_name"],
-                                    "child_qname": sym["qualified_name"],
-                                    "fpath": f["path"],
-                                })
-                    if parent_edges:
-                        tx.run(
-                            """
-                            UNWIND $edges AS e
-                            MATCH (parent:CodeSymbol {qualified_name: e.parent_qname,
-                                                       file_path: e.fpath, project_id: $pid})
-                            MATCH (child:CodeSymbol {qualified_name: e.child_qname,
-                                                      file_path: e.fpath, project_id: $pid})
-                            MERGE (parent)-[:CONTAINS]->(child)
-                            """,
-                            edges=parent_edges,
-                            pid=project_id,
-                        )
-
-                # 6) Link file-level imports
-                if import_edges:
-                    edge_rows = [{"src": src, "dst": dst} for src, dst in import_edges]
+                    # Delete old symbols for changed files
+                    changed_paths = [f["path"] for f in file_chunk]
                     tx.run(
                         """
-                        UNWIND $edges AS e
-                        MATCH (a:CodeFile {path: e.src, project_id: $pid})
-                        MATCH (b:CodeFile {path: e.dst, project_id: $pid})
-                        MERGE (a)-[:IMPORTS]->(b)
+                        UNWIND $paths AS p
+                        MATCH (cf:CodeFile {path: p, project_id: $pid})-[:CONTAINS]->(cs:CodeSymbol)
+                        DETACH DELETE cs
                         """,
-                        edges=edge_rows,
+                        paths=changed_paths,
                         pid=project_id,
                     )
 
-                tx.commit()
+                    # Create symbols
+                    sym_rows = []
+                    for f in file_chunk:
+                        for sym in f.get("symbols", []):
+                            props = {
+                                "name": sym["name"],
+                                "kind": sym["kind"],
+                                "file_path": f["path"],
+                                "start_line": sym["start_line"],
+                                "end_line": sym["end_line"],
+                                "signature": sym.get("signature", ""),
+                                "updated_at": now,
+                            }
+                            if sym.get("docstring") is not None:
+                                props["docstring"] = sym["docstring"]
+                            if sym.get("parent_name") is not None:
+                                props["parent_name"] = sym["parent_name"]
+                            sym_rows.append({
+                                "qname": sym["qualified_name"],
+                                "fpath": f["path"],
+                                "uuid": str(uuid.uuid4()),
+                                "props": props,
+                            })
+
+                    if sym_rows:
+                        tx.run(
+                            """
+                            UNWIND $rows AS r
+                            CREATE (cs:CodeSymbol {
+                                qualified_name: r.qname,
+                                file_path: r.fpath,
+                                project_id: $pid,
+                                uuid: r.uuid,
+                                created_at: $now
+                            })
+                            SET cs += r.props
+                            WITH cs
+                            MATCH (cf:CodeFile {path: cs.file_path, project_id: $pid})
+                            MERGE (cf)-[:CONTAINS]->(cs)
+                            """,
+                            rows=sym_rows,
+                            pid=project_id,
+                            now=now,
+                        )
+
+                        # Link parent->child symbols
+                        parent_edges = []
+                        for f in file_chunk:
+                            for sym in f.get("symbols", []):
+                                if sym.get("parent_name"):
+                                    parent_edges.append({
+                                        "parent_qname": sym["parent_name"],
+                                        "child_qname": sym["qualified_name"],
+                                        "fpath": f["path"],
+                                    })
+                        if parent_edges:
+                            tx.run(
+                                """
+                                UNWIND $edges AS e
+                                MATCH (parent:CodeSymbol {qualified_name: e.parent_qname,
+                                                           file_path: e.fpath, project_id: $pid})
+                                MATCH (child:CodeSymbol {qualified_name: e.child_qname,
+                                                          file_path: e.fpath, project_id: $pid})
+                                MERGE (parent)-[:CONTAINS]->(child)
+                                """,
+                                edges=parent_edges,
+                                pid=project_id,
+                            )
+
+                    tx.commit()
+
+            # 6) Link file-level imports (separate chunked transactions)
+            if import_edges:
+                edge_rows = [{"src": src, "dst": dst} for src, dst in import_edges]
+                for i in range(0, len(edge_rows), chunk_size * 4):
+                    chunk = edge_rows[i : i + chunk_size * 4]
+                    with session.begin_transaction() as tx:
+                        tx.run(
+                            """
+                            UNWIND $edges AS e
+                            MATCH (a:CodeFile {path: e.src, project_id: $pid})
+                            MATCH (b:CodeFile {path: e.dst, project_id: $pid})
+                            MERGE (a)-[:IMPORTS]->(b)
+                            """,
+                            edges=chunk,
+                            pid=project_id,
+                        )
+                        tx.commit()
 
         return path_to_uuid
 
@@ -1668,6 +1683,67 @@ class Neo4jGraphProvider(GraphProvider):
                 pid=project_id,
             )
             return [dict(r) for r in result]
+
+    # -- Code intelligence: REFERENCED_IN bridging (v0.58.1) --
+
+    def bridge_entities_to_symbols_batch(self, project_id: int) -> int:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (e:Entity {project_id: $pid}), (cs:CodeSymbol {project_id: $pid})
+                WHERE toLower(e.name) = toLower(cs.name)
+                MERGE (e)-[:REFERENCED_IN]->(cs)
+                RETURN count(*) AS cnt
+                """,
+                pid=project_id,
+            )
+            return result.single()["cnt"]
+
+    def bridge_entities_to_files_batch(self, project_id: int) -> int:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (e:Entity {project_id: $pid}), (cf:CodeFile {project_id: $pid})
+                WHERE e.name CONTAINS '.' AND cf.path ENDS WITH ('/' + e.name)
+                MERGE (e)-[:REFERENCED_IN]->(cf)
+                RETURN count(*) AS cnt
+                """,
+                pid=project_id,
+            )
+            return result.single()["cnt"]
+
+    def bridge_entity_names_to_symbols(self, names: list[str], project_id: int) -> int:
+        if not names:
+            return 0
+        lower_names = [n.lower() for n in names]
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (e:Entity {project_id: $pid}), (cs:CodeSymbol {project_id: $pid})
+                WHERE toLower(e.name) IN $names AND toLower(e.name) = toLower(cs.name)
+                MERGE (e)-[:REFERENCED_IN]->(cs)
+                RETURN count(*) AS cnt
+                """,
+                pid=project_id,
+                names=lower_names,
+            )
+            return result.single()["cnt"]
+
+    def bridge_entity_names_to_files(self, names: list[str], project_id: int) -> int:
+        if not names:
+            return 0
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (e:Entity {project_id: $pid}), (cf:CodeFile {project_id: $pid})
+                WHERE e.name IN $names AND e.name CONTAINS '.' AND cf.path ENDS WITH ('/' + e.name)
+                MERGE (e)-[:REFERENCED_IN]->(cf)
+                RETURN count(*) AS cnt
+                """,
+                pid=project_id,
+                names=names,
+            )
+            return result.single()["cnt"]
 
     # -- Code intelligence: cross-project (v0.58.0 Phase 7) --
 

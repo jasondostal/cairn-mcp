@@ -372,6 +372,22 @@ class MemoryStore:
                     except Exception:
                         logger.debug("Dangling object resolution failed (non-blocking)", exc_info=True)
 
+                    # Bridge entities to code (non-blocking, best-effort)
+                    try:
+                        if (
+                            self.capabilities is not None
+                            and self.capabilities.code_intelligence
+                            and extraction_result.entities
+                        ):
+                            from cairn.code.bridge import CodeBridgeService
+                            bridge_svc = CodeBridgeService(self.knowledge_extractor.graph)
+                            entity_names = [e.name for e in extraction_result.entities]
+                            bridge_stats = bridge_svc.bridge_entity_names(entity_names, project_id)
+                            if bridge_stats["total"] > 0:
+                                graph_stats["code_bridge"] = bridge_stats
+                    except Exception:
+                        logger.debug("Code bridge after enrichment failed (non-blocking)", exc_info=True)
+
                 except Exception:
                     logger.warning("Graph persist failed (non-blocking)", exc_info=True)
 

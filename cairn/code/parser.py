@@ -144,16 +144,42 @@ class CodeParser:
     ) -> list[ParseResult]:
         """Parse all supported files under a directory.
 
+        Respects all .gitignore files in the tree (root and nested). The .git
+        directory is always excluded regardless of .gitignore contents.
+
         Args:
             root: Directory to scan.
-            exclude: Directory names to skip.
+            exclude: Additional directory names to skip (on top of .gitignore).
 
         Returns:
             List of ParseResult, one per supported file found.
         """
         from cairn.code.languages import supported_extensions
+        import pathspec
 
-        exclude = exclude or {"__pycache__", ".venv", "node_modules", ".git", ".tox"}
+        exclude = exclude or set()
+        # .git is always excluded — it's not source code
+        exclude.add(".git")
+
+        # Collect all .gitignore files: (directory, PathSpec) pairs
+        gitignore_specs: list[tuple[Path, pathspec.PathSpec]] = []
+        for gi_path in root.rglob(".gitignore"):
+            if any(part in exclude for part in gi_path.parts):
+                continue
+            with open(gi_path) as f:
+                spec = pathspec.PathSpec.from_lines("gitwildmatch", f)
+            gitignore_specs.append((gi_path.parent, spec))
+
+        def _is_ignored(filepath: Path) -> bool:
+            for gi_dir, spec in gitignore_specs:
+                try:
+                    rel = filepath.relative_to(gi_dir)
+                except ValueError:
+                    continue
+                if spec.match_file(str(rel)):
+                    return True
+            return False
+
         exts = supported_extensions()
         results: list[ParseResult] = []
 
@@ -163,6 +189,8 @@ class CodeParser:
             if filepath.suffix not in exts:
                 continue
             if any(part in exclude for part in filepath.parts):
+                continue
+            if _is_ignored(filepath):
                 continue
 
             result = self.parse_file(filepath)

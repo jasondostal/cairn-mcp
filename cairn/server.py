@@ -570,7 +570,7 @@ def rules(project: str | None = None) -> list[dict]:
 # ============================================================
 
 @mcp.tool()
-def insights(
+async def insights(
     project: str | None = None,
     topic: str | None = None,
     min_confidence: float = 0.5,
@@ -596,51 +596,56 @@ def insights(
         min_confidence: Minimum cluster confidence score (0.0-1.0, default 0.5).
         limit: Maximum clusters to return (default 10).
     """
+    import asyncio
+
     try:
-        # Check staleness and recluster if needed
-        reclustered = False
-        labeling_error = None
-        if cluster_engine.is_stale(project):
-            cluster_result = cluster_engine.run_clustering(project)
-            reclustered = True
-            labeling_error = cluster_result.get("labeling_error")
+        def _do_insights():
+            # Check staleness and recluster if needed
+            reclustered = False
+            labeling_error = None
+            if cluster_engine.is_stale(project):
+                cluster_result = cluster_engine.run_clustering(project)
+                reclustered = True
+                labeling_error = cluster_result.get("labeling_error")
 
-        # Fetch clusters
-        clusters = cluster_engine.get_clusters(
-            project=project,
-            topic=topic,
-            min_confidence=min_confidence,
-            limit=limit,
-        )
-
-        last_run = cluster_engine.get_last_run(project)
-
-        # Apply budget cap to cluster summaries
-        budget = config.budget.insights
-        overflow_msg = ""
-        if budget > 0 and clusters:
-            clusters, meta = apply_list_budget(
-                clusters, budget, "summary",
-                per_item_max=BUDGET_INSIGHTS_PER_ITEM,
-                overflow_message=(
-                    "...{omitted} clusters omitted. "
-                    "Use a topic filter or increase limit for targeted results."
-                ),
+            # Fetch clusters
+            clusters = cluster_engine.get_clusters(
+                project=project,
+                topic=topic,
+                min_confidence=min_confidence,
+                limit=limit,
             )
-            if meta["omitted"] > 0:
-                overflow_msg = meta["overflow_message"]
 
-        result = {
-            "status": "reclustered" if reclustered else "cached",
-            "cluster_count": len(clusters),
-            "clusters": clusters,
-            "last_clustered_at": last_run["created_at"] if last_run else None,
-        }
-        if labeling_error:
-            result["labeling_warning"] = labeling_error
-        if overflow_msg:
-            result["_overflow"] = overflow_msg
-        return result
+            last_run = cluster_engine.get_last_run(project)
+
+            # Apply budget cap to cluster summaries
+            budget = config.budget.insights
+            overflow_msg = ""
+            if budget > 0 and clusters:
+                clusters, meta = apply_list_budget(
+                    clusters, budget, "summary",
+                    per_item_max=BUDGET_INSIGHTS_PER_ITEM,
+                    overflow_message=(
+                        "...{omitted} clusters omitted. "
+                        "Use a topic filter or increase limit for targeted results."
+                    ),
+                )
+                if meta["omitted"] > 0:
+                    overflow_msg = meta["overflow_message"]
+
+            result = {
+                "status": "reclustered" if reclustered else "cached",
+                "cluster_count": len(clusters),
+                "clusters": clusters,
+                "last_clustered_at": last_run["created_at"] if last_run else None,
+            }
+            if labeling_error:
+                result["labeling_warning"] = labeling_error
+            if overflow_msg:
+                result["_overflow"] = overflow_msg
+            return result
+
+        return await asyncio.to_thread(_do_insights)
     except Exception as e:
         logger.exception("insights failed")
         return {"error": f"Internal error: {e}"}
@@ -1048,7 +1053,7 @@ def work_items(
 # ============================================================
 
 @mcp.tool()
-def dispatch(
+async def dispatch(
     work_item_id: int | str | None = None,
     project: str | None = None,
     title: str | None = None,
@@ -1093,8 +1098,11 @@ def dispatch(
         agent: Agent definition to use (defaults to workspace config).
         assignee: Name for the agent claim (auto-generated if omitted).
     """
+    import asyncio
+
     try:
-        return workspace_manager.dispatch(
+        return await asyncio.to_thread(
+            workspace_manager.dispatch,
             work_item_id=work_item_id,
             project=project,
             title=title,
@@ -1222,7 +1230,7 @@ def status() -> dict:
 # ============================================================
 
 @mcp.tool()
-def consolidate(
+async def consolidate(
     project: str,
     dry_run: bool = True,
 ) -> dict:
@@ -1240,10 +1248,14 @@ def consolidate(
         project: Project name to consolidate.
         dry_run: If True (default), only recommend. If False, apply changes.
     """
+    import asyncio
+
     try:
         if not project or not project.strip():
             return {"error": "project is required"}
-        return consolidation_engine.consolidate(project, dry_run=dry_run)
+        return await asyncio.to_thread(
+            consolidation_engine.consolidate, project, dry_run=dry_run,
+        )
     except Exception as e:
         logger.exception("consolidate failed")
         return {"error": f"Internal error: {e}"}
@@ -1580,7 +1592,7 @@ def drift_check(
 # ============================================================
 
 @mcp.tool()
-def ingest(
+async def ingest(
     content: str | None = None,
     project: str | None = None,
     url: str | None = None,
@@ -1617,6 +1629,8 @@ def ingest(
         session_name: Optional session grouping for memories.
         memory_type: Override memory type for chunks (default: 'note').
     """
+    import asyncio
+
     try:
         if not content and not url:
             return {"error": "content or url is required"}
@@ -1625,19 +1639,21 @@ def ingest(
         if hint not in ("auto", "doc", "memory", "both"):
             return {"error": "hint must be one of: auto, doc, memory, both"}
 
-        result = ingest_pipeline.ingest(
-            content=content,
-            project=project,
-            url=url,
-            hint=hint,
-            doc_type=doc_type,
-            title=title,
-            source=source,
-            tags=tags,
-            session_name=session_name,
-            memory_type=memory_type,
-        )
-        return result
+        def _do_ingest():
+            return ingest_pipeline.ingest(
+                content=content,
+                project=project,
+                url=url,
+                hint=hint,
+                doc_type=doc_type,
+                title=title,
+                source=source,
+                tags=tags,
+                session_name=session_name,
+                memory_type=memory_type,
+            )
+
+        return await asyncio.to_thread(_do_ingest)
     except ValueError as e:
         return {"error": str(e)}
     except Exception as e:
@@ -1709,7 +1725,21 @@ async def code_index(
 
         result = await asyncio.to_thread(_do_index)
 
-        return {
+        # Bridge entities to code (non-blocking, best-effort)
+        bridge_stats = None
+        if result.files_indexed > 0:
+            def _do_bridge():
+                from cairn.code.bridge import CodeBridgeService
+                from cairn.core.utils import get_or_create_project
+                pid = get_or_create_project(db, project)
+                bridge_svc = CodeBridgeService(graph_provider)
+                return bridge_svc.bridge_all(pid)
+            try:
+                bridge_stats = await asyncio.to_thread(_do_bridge)
+            except Exception:
+                logger.warning("Code bridge after index failed (non-blocking)", exc_info=True)
+
+        resp = {
             "project": result.project,
             "files_scanned": result.files_scanned,
             "files_indexed": result.files_indexed,
@@ -1720,13 +1750,16 @@ async def code_index(
             "errors": result.errors if result.errors else None,
             "summary": result.summary(),
         }
+        if bridge_stats:
+            resp["bridge"] = bridge_stats
+        return resp
     except Exception as e:
         logger.exception("code_index failed")
         return {"error": f"Internal error: {e}"}
 
 
 @mcp.tool()
-def code_query(
+async def code_query(
     action: str,
     project: str,
     target: str = "",
@@ -1763,6 +1796,7 @@ def code_query(
     - ``code_for_entity``: Code files/symbols linked to a knowledge entity.
     - ``cross_search``: Search symbols across all indexed projects.
     - ``shared_deps``: Files that appear in multiple indexed projects.
+    - ``bridge``: Create REFERENCED_IN edges between knowledge entities and code.
 
     Args:
         action: One of the actions listed above.
@@ -1774,6 +1808,8 @@ def code_query(
         limit: Max results (default 20).
         mode: Search mode: "fulltext" (default) or "semantic" (NL descriptions).
     """
+    import asyncio
+
     try:
         if not action:
             return {"error": "action is required"}
@@ -1786,93 +1822,101 @@ def code_query(
         if not config.capabilities.code_intelligence:
             return {"error": "Code intelligence is disabled. Set CAIRN_CODE_INTELLIGENCE=true."}
 
-        from cairn.code.query import (
-            query_dependents,
-            query_dependencies,
-            query_impact,
-            query_search,
-            query_structure,
-        )
-        from cairn.core.utils import get_or_create_project
-
-        project_id = get_or_create_project(db, project)
-
-        if action == "dependents":
-            if not target:
-                return {"error": "target is required for dependents"}
-            return query_dependents(graph_provider, target, project_id)
-
-        if action == "dependencies":
-            if not target:
-                return {"error": "target is required for dependencies"}
-            return query_dependencies(graph_provider, target, project_id)
-
-        if action == "structure":
-            if not target:
-                return {"error": "target is required for structure"}
-            return query_structure(graph_provider, target, project_id)
-
-        if action == "impact":
-            if not target:
-                return {"error": "target is required for impact"}
-            return query_impact(graph_provider, target, project_id, max_depth=depth)
-
-        if action == "search":
-            if not query:
-                return {"error": "query is required for search"}
-            return query_search(
-                graph_provider, query, project_id,
-                kind=kind or None, limit=limit, mode=mode,
-                embedding_engine=_svc.embedding if mode == "semantic" else None,
+        def _do_query():
+            from cairn.code.query import (
+                query_dependents,
+                query_dependencies,
+                query_impact,
+                query_search,
+                query_structure,
             )
+            from cairn.core.utils import get_or_create_project
 
-        if action == "hotspots":
-            from cairn.code.query import query_hotspots
-            return query_hotspots(graph_provider, project_id, limit=limit)
+            project_id = get_or_create_project(db, project)
 
-        if action == "entities":
-            if not target:
-                return {"error": "target is required for entities"}
-            entities = graph_provider.get_entities_for_code(target, project_id)
-            return {"target": target, "entities": entities}
+            if action == "dependents":
+                if not target:
+                    return {"error": "target is required for dependents"}
+                return query_dependents(graph_provider, target, project_id)
 
-        if action == "code_for_entity":
-            if not target:
-                return {"error": "target (entity name) is required for code_for_entity"}
-            # Look up entity by name
-            from cairn.graph.interface import Entity
-            known = graph_provider.get_known_entities(project_id, limit=500)
-            entity_uuid = None
-            for e in known:
-                if e["name"].lower() == target.lower():
-                    # Need to find the actual uuid — search by embedding
-                    emb = _svc.embedding.embed(target)
-                    matches = graph_provider.search_entities_by_embedding(emb, project_id, limit=1)
-                    if matches:
-                        entity_uuid = matches[0].uuid
-                    break
-            if not entity_uuid:
-                return {"target": target, "code": [], "error": f"Entity not found: {target}"}
-            code = graph_provider.get_code_for_entity(entity_uuid)
-            return {"target": target, "code": code}
+            if action == "dependencies":
+                if not target:
+                    return {"error": "target is required for dependencies"}
+                return query_dependencies(graph_provider, target, project_id)
 
-        if action == "cross_search":
-            if not query:
-                return {"error": "query is required for cross_search"}
-            from cairn.code.query import query_cross_search
-            # Get all indexed project IDs
-            all_files = graph_provider.get_code_files(project_id)
-            # For cross-project, get all projects that have code files
-            from cairn.core.utils import get_or_create_project as _gop
-            all_project_ids = _get_all_code_project_ids()
-            return query_cross_search(graph_provider, query, all_project_ids, kind=kind or None, limit=limit)
+            if action == "structure":
+                if not target:
+                    return {"error": "target is required for structure"}
+                return query_structure(graph_provider, target, project_id)
 
-        if action == "shared_deps":
-            from cairn.code.query import query_shared_dependencies
-            all_project_ids = _get_all_code_project_ids()
-            return query_shared_dependencies(graph_provider, all_project_ids)
+            if action == "impact":
+                if not target:
+                    return {"error": "target is required for impact"}
+                return query_impact(graph_provider, target, project_id, max_depth=depth)
 
-        return {"error": f"Unknown action: {action}. Valid: dependents, dependencies, structure, impact, search, hotspots, entities, code_for_entity, cross_search, shared_deps"}
+            if action == "search":
+                if not query:
+                    return {"error": "query is required for search"}
+                return query_search(
+                    graph_provider, query, project_id,
+                    kind=kind or None, limit=limit, mode=mode,
+                    embedding_engine=_svc.embedding if mode == "semantic" else None,
+                )
+
+            if action == "hotspots":
+                from cairn.code.query import query_hotspots
+                return query_hotspots(graph_provider, project_id, limit=limit)
+
+            if action == "entities":
+                if not target:
+                    return {"error": "target is required for entities"}
+                entities = graph_provider.get_entities_for_code(target, project_id)
+                return {"target": target, "entities": entities}
+
+            if action == "code_for_entity":
+                if not target:
+                    return {"error": "target (entity name) is required for code_for_entity"}
+                # Look up entity by name
+                from cairn.graph.interface import Entity
+                known = graph_provider.get_known_entities(project_id, limit=500)
+                entity_uuid = None
+                for e in known:
+                    if e["name"].lower() == target.lower():
+                        # Need to find the actual uuid — search by embedding
+                        emb = _svc.embedding.embed(target)
+                        matches = graph_provider.search_entities_by_embedding(emb, project_id, limit=1)
+                        if matches:
+                            entity_uuid = matches[0].uuid
+                        break
+                if not entity_uuid:
+                    return {"target": target, "code": [], "error": f"Entity not found: {target}"}
+                code = graph_provider.get_code_for_entity(entity_uuid)
+                return {"target": target, "code": code}
+
+            if action == "cross_search":
+                if not query:
+                    return {"error": "query is required for cross_search"}
+                from cairn.code.query import query_cross_search
+                # Get all indexed project IDs
+                all_files = graph_provider.get_code_files(project_id)
+                # For cross-project, get all projects that have code files
+                from cairn.core.utils import get_or_create_project as _gop
+                all_project_ids = _get_all_code_project_ids()
+                return query_cross_search(graph_provider, query, all_project_ids, kind=kind or None, limit=limit)
+
+            if action == "shared_deps":
+                from cairn.code.query import query_shared_dependencies
+                all_project_ids = _get_all_code_project_ids()
+                return query_shared_dependencies(graph_provider, all_project_ids)
+
+            if action == "bridge":
+                from cairn.code.bridge import CodeBridgeService
+                bridge_svc = CodeBridgeService(graph_provider)
+                return bridge_svc.bridge_all(project_id)
+
+            return {"error": f"Unknown action: {action}. Valid: dependents, dependencies, structure, impact, search, hotspots, entities, code_for_entity, cross_search, shared_deps, bridge"}
+
+        return await asyncio.to_thread(_do_query)
 
     except Exception as e:
         logger.exception("code_query failed")
@@ -1999,7 +2043,7 @@ async def code_describe(
 
 
 @mcp.tool()
-def arch_check(
+async def arch_check(
     project: str,
     path: str = "",
     config_path: str = "",
@@ -2033,6 +2077,8 @@ def arch_check(
         config_path: Explicit path to architecture YAML (overrides project doc).
         use_graph: Use Neo4j IMPORTS edges instead of re-parsing source (default: False).
     """
+    import asyncio
+
     try:
         if not project:
             return {"error": "project is required"}
@@ -2043,77 +2089,80 @@ def arch_check(
         if not config.capabilities.code_intelligence:
             return {"error": "Code intelligence is disabled. Set CAIRN_CODE_INTELLIGENCE=true."}
 
-        from pathlib import Path as P
-        from cairn.code.arch_rules import (
-            load_config as load_arch_config,
-            load_config_from_string,
-            check as arch_check_source,
-            check_graph as arch_check_graph,
-        )
-        from cairn.core.utils import get_or_create_project
+        def _do_arch_check():
+            from pathlib import Path as P
+            from cairn.code.arch_rules import (
+                load_config as load_arch_config,
+                load_config_from_string,
+                check as arch_check_source,
+                check_graph as arch_check_graph,
+            )
+            from cairn.core.utils import get_or_create_project
 
-        # 1. Load rules: explicit config_path > project doc > error
-        arch_config = None
-        if config_path:
-            cp = P(config_path)
-            if not cp.is_file():
-                return {"error": f"Config file not found: {config_path}"}
-            arch_config = load_arch_config(cp)
-        else:
-            # Try loading from project doc
-            docs = project_manager.get_docs(project, doc_type="architecture")
-            if docs:
-                arch_config = load_config_from_string(docs[0]["content"])
+            # 1. Load rules: explicit config_path > project doc > error
+            arch_config = None
+            if config_path:
+                cp = P(config_path)
+                if not cp.is_file():
+                    return {"error": f"Config file not found: {config_path}"}
+                arch_config = load_arch_config(cp)
             else:
-                return {"error": f"No architecture rules found. Provide config_path or store rules as a project doc (doc_type='architecture')."}
+                # Try loading from project doc
+                docs = project_manager.get_docs(project, doc_type="architecture")
+                if docs:
+                    arch_config = load_config_from_string(docs[0]["content"])
+                else:
+                    return {"error": f"No architecture rules found. Provide config_path or store rules as a project doc (doc_type='architecture')."}
 
-        project_id = get_or_create_project(db, project)
+            project_id = get_or_create_project(db, project)
 
-        # 2. Run evaluation
-        if use_graph:
-            report = arch_check_graph(arch_config, graph_provider, project_id)
-            evaluation_mode = "graph"
-        else:
-            if not path:
-                return {"error": "path is required for source-based evaluation (or set use_graph=True)"}
-            root = P(path)
-            if not root.is_dir():
-                return {"error": f"Not a directory: {path}"}
-            report = arch_check_source(arch_config, root)
-            evaluation_mode = "source"
+            # 2. Run evaluation
+            if use_graph:
+                report = arch_check_graph(arch_config, graph_provider, project_id)
+                evaluation_mode = "graph"
+            else:
+                if not path:
+                    return {"error": "path is required for source-based evaluation (or set use_graph=True)"}
+                root = P(path)
+                if not root.is_dir():
+                    return {"error": f"Not a directory: {path}"}
+                report = arch_check_source(arch_config, root)
+                evaluation_mode = "source"
 
-        # 3. Build response
-        violations = [
-            {
-                "rule_name": v.rule_name,
-                "file_path": str(v.file_path),
-                "imported_module": v.imported_module,
-                "lineno": v.lineno,
-                "description": v.description,
+            # 3. Build response
+            violations = [
+                {
+                    "rule_name": v.rule_name,
+                    "file_path": str(v.file_path),
+                    "imported_module": v.imported_module,
+                    "lineno": v.lineno,
+                    "description": v.description,
+                }
+                for v in report.violations
+            ]
+
+            contract_violations = [
+                {
+                    "rule_module": cv.rule_module,
+                    "consumer_file": cv.consumer_file,
+                    "imported_name": cv.imported_name,
+                    "lineno": cv.lineno,
+                }
+                for cv in report.contract_violations
+            ]
+
+            return {
+                "project": project,
+                "clean": report.clean,
+                "violations": violations,
+                "contract_violations": contract_violations,
+                "files_checked": report.files_checked,
+                "rules_evaluated": report.rules_evaluated,
+                "evaluation_mode": evaluation_mode,
+                "summary": report.summary(),
             }
-            for v in report.violations
-        ]
 
-        contract_violations = [
-            {
-                "rule_module": cv.rule_module,
-                "consumer_file": cv.consumer_file,
-                "imported_name": cv.imported_name,
-                "lineno": cv.lineno,
-            }
-            for cv in report.contract_violations
-        ]
-
-        return {
-            "project": project,
-            "clean": report.clean,
-            "violations": violations,
-            "contract_violations": contract_violations,
-            "files_checked": report.files_checked,
-            "rules_evaluated": report.rules_evaluated,
-            "evaluation_mode": evaluation_mode,
-            "summary": report.summary(),
-        }
+        return await asyncio.to_thread(_do_arch_check)
 
     except Exception as e:
         logger.exception("arch_check failed")

@@ -67,17 +67,24 @@ export default function DocDetailPage() {
         htmlEl.style.color = "#111";
       });
 
+      // Use lower scale for large documents to avoid browser OOM/freeze
+      const contentLength = doc.content.length;
+      const scale = contentLength > 50_000 ? 1 : contentLength > 20_000 ? 1.5 : 2;
+
       const filename = `${sanitizeFilename(title)}.pdf`;
       await html2pdf()
         .set({
           margin: [12, 12, 12, 12],
           filename,
-          image: { type: "jpeg", quality: 0.95 },
-          html2canvas: { scale: 2, useCORS: true },
+          image: { type: "jpeg", quality: 0.85 },
+          html2canvas: { scale, useCORS: true, logging: false },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
         })
         .from(clone)
         .save();
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      alert("PDF generation failed — the document may be too large. Try downloading as Markdown instead.");
     } finally {
       setPdfBusy(false);
     }

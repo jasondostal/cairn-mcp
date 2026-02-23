@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.58.1] — 2026-02-23
+
+### Added
+- **REFERENCED_IN bridge** — automatically links knowledge entities to matching
+  code symbols and files. Runs after `code_index` and after memory enrichment
+  when code intelligence is enabled. New `bridge` action on `code_query` for
+  manual triggering.
+- **`.gitignore` support in `code_index`** — respects all `.gitignore` files in
+  the tree (root and nested). No more indexing `venv/`, `node_modules/`, or
+  build artifacts. Replaced hardcoded exclude set with `pathspec` library using
+  `gitwildmatch` pattern matching — the same spec git uses.
+
+### Fixed
+- **Neo4j transaction memory OOM** — `batch_upsert_code_graph` now chunks files
+  into batches of 50 per transaction instead of a single monolithic transaction
+  that could exceed Neo4j's 2.7 GiB transaction memory limit.
+- **Event loop blocking** — `insights`, `dispatch`, `consolidate`, `ingest`,
+  `code_query`, and `arch_check` converted to async with `asyncio.to_thread`
+  to prevent blocking the MCP server event loop.
+- **PDF export** — adaptive scale for large documents to avoid browser OOM,
+  with error handling and user-facing fallback message.
+
 ## [0.58.0] — 2026-02-23 "Code Intelligence"
 
 Per-project code understanding. Parse source files with tree-sitter, build a code

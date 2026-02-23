@@ -573,6 +573,41 @@ class GraphProvider(ABC):
         Returns [{uuid, name, entity_type}].
         """
 
+    # -- Code intelligence: REFERENCED_IN bridging (v0.58.1) --
+
+    @abstractmethod
+    def bridge_entities_to_symbols_batch(self, project_id: int) -> int:
+        """Batch-create REFERENCED_IN edges from entities to code symbols with matching names.
+
+        Matches: toLower(Entity.name) = toLower(CodeSymbol.name) within same project.
+        Uses MERGE (idempotent). Returns count of edges created/matched.
+        """
+
+    @abstractmethod
+    def bridge_entities_to_files_batch(self, project_id: int) -> int:
+        """Batch-create REFERENCED_IN edges from entities to code files with matching names.
+
+        Matches entities whose name contains '.' (looks like a filename) where
+        CodeFile.path ENDS WITH '/' + Entity.name. Uses MERGE (idempotent).
+        Returns count of edges created/matched.
+        """
+
+    @abstractmethod
+    def bridge_entity_names_to_symbols(self, names: list[str], project_id: int) -> int:
+        """Create REFERENCED_IN edges for specific entity names to matching code symbols.
+
+        Used after memory enrichment to bridge newly created entities.
+        Returns count of edges created/matched.
+        """
+
+    @abstractmethod
+    def bridge_entity_names_to_files(self, names: list[str], project_id: int) -> int:
+        """Create REFERENCED_IN edges for specific entity names to matching code files.
+
+        Used after memory enrichment to bridge newly created entities.
+        Returns count of edges created/matched.
+        """
+
     # -- Code intelligence: cross-project (v0.58.0 Phase 7) --
 
     @abstractmethod

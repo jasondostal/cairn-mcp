@@ -111,9 +111,9 @@ class CodeIndexer:
     ) -> IndexResult:
         """Index all supported files under a directory.
 
-        Phase 1: Parse all files (CPU-only, no I/O to Neo4j).
-        Phase 2: Diff against existing graph to find changed files.
-        Phase 3: Batch-upsert everything in a single Neo4j transaction.
+        Respects .gitignore if present. Phase 1: Parse all files (CPU-only,
+        no I/O to Neo4j). Phase 2: Diff against existing graph to find
+        changed files. Phase 3: Batch-upsert in chunked Neo4j transactions.
         """
         result = IndexResult(project=project, project_id=project_id)
 
