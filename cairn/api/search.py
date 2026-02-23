@@ -1,13 +1,44 @@
-"""Search and timeline endpoints."""
+"""Search, timeline, and memory CRUD endpoints."""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
 
-from fastapi import APIRouter, Query, Path, HTTPException
+from fastapi import APIRouter, Body, Query, Path, HTTPException
+from pydantic import BaseModel
 
 from cairn.api.utils import parse_multi
 from cairn.core.services import Services
+
+
+class StoreMemoryBody(BaseModel):
+    content: str
+    project: str
+    memory_type: str = "note"
+    importance: float = 0.5
+    tags: list[str] | None = None
+    session_name: str | None = None
+    related_files: list[str] | None = None
+    related_ids: list[int] | None = None
+    file_hashes: dict[str, str] | None = None
+    author: str | None = None
+
+
+class UpdateMemoryBody(BaseModel):
+    content: str | None = None
+    memory_type: str | None = None
+    importance: float | None = None
+    tags: list[str] | None = None
+    project: str | None = None
+    author: str | None = None
+
+
+class InactivateBody(BaseModel):
+    reason: str
+
+
+class RecallBody(BaseModel):
+    ids: list[int]
 
 
 def register_routes(router: APIRouter, svc: Services, **kw):
@@ -148,3 +179,49 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 for r in rows
             ],
         }
+
+    # --- Memory CRUD ---
+
+    @router.post("/memories", status_code=201)
+    def api_store_memory(body: StoreMemoryBody = Body(...)):
+        return memory_store.store(
+            content=body.content,
+            project=body.project,
+            memory_type=body.memory_type,
+            importance=body.importance,
+            tags=body.tags,
+            session_name=body.session_name,
+            related_files=body.related_files,
+            related_ids=body.related_ids,
+            file_hashes=body.file_hashes,
+            author=body.author,
+        )
+
+    @router.patch("/memories/{memory_id}")
+    def api_update_memory(memory_id: int = Path(...), body: UpdateMemoryBody = Body(...)):
+        fields = body.model_dump(exclude_none=True)
+        if not fields:
+            return {"id": memory_id, "action": "no_changes"}
+        return memory_store.modify(
+            memory_id, "update",
+            content=body.content,
+            memory_type=body.memory_type,
+            importance=body.importance,
+            tags=body.tags,
+            project=body.project,
+            author=body.author,
+        )
+
+    @router.post("/memories/{memory_id}/inactivate")
+    def api_inactivate_memory(memory_id: int = Path(...), body: InactivateBody = Body(...)):
+        return memory_store.modify(memory_id, "inactivate", reason=body.reason)
+
+    @router.post("/memories/{memory_id}/reactivate")
+    def api_reactivate_memory(memory_id: int = Path(...)):
+        return memory_store.modify(memory_id, "reactivate")
+
+    @router.post("/memories/recall")
+    def api_recall_memories(body: RecallBody = Body(...)):
+        if len(body.ids) > 10:
+            raise HTTPException(status_code=400, detail="Maximum 10 IDs per recall request")
+        return memory_store.recall(body.ids)

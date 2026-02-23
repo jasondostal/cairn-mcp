@@ -558,6 +558,161 @@ export interface IngestResponse {
   existing?: { id: number; source: string; target_type: string; created_at: string };
 }
 
+// --- Memory CRUD types ---
+
+export interface StoreMemoryRequest {
+  content: string;
+  project: string;
+  memory_type?: string;
+  importance?: number;
+  tags?: string[];
+  session_name?: string;
+  related_files?: string[];
+  related_ids?: number[];
+  file_hashes?: Record<string, string>;
+  author?: string;
+}
+
+export interface UpdateMemoryRequest {
+  content?: string;
+  memory_type?: string;
+  importance?: number;
+  tags?: string[];
+  project?: string;
+  author?: string;
+}
+
+// --- Code Intelligence types ---
+
+export interface CodeIndexRequest {
+  project: string;
+  path: string;
+  force?: boolean;
+}
+
+export interface CodeIndexResult {
+  project: string;
+  files_scanned: number;
+  files_indexed: number;
+  files_skipped: number;
+  files_deleted: number;
+  symbols_created: number;
+  imports_created: number;
+  errors: string[] | null;
+  summary: string;
+  bridge?: Record<string, unknown>;
+  error?: string;
+}
+
+export interface CodeQueryRequest {
+  action: string;
+  project: string;
+  target?: string;
+  query?: string;
+  kind?: string;
+  depth?: number;
+  limit?: number;
+  mode?: "fulltext" | "semantic";
+}
+
+export interface CodeDescribeRequest {
+  project: string;
+  target?: string;
+  kind?: string;
+  limit?: number;
+}
+
+export interface CodeDescribeResult {
+  project: string;
+  described: number;
+  symbols?: Array<{ qualified_name: string; description: string }>;
+  message?: string;
+  error?: string;
+}
+
+export interface ArchCheckRequest {
+  project: string;
+  path?: string;
+  config_path?: string;
+  use_graph?: boolean;
+}
+
+export interface ArchCheckResult {
+  project: string;
+  clean: boolean;
+  violations: Array<{
+    rule_name: string;
+    file_path: string;
+    imported_module: string;
+    lineno: number;
+    description: string;
+  }>;
+  contract_violations: Array<{
+    rule_module: string;
+    consumer_file: string;
+    imported_name: string;
+    lineno: number;
+  }>;
+  files_checked: number;
+  rules_evaluated: number;
+  evaluation_mode: "source" | "graph";
+  summary: string;
+  error?: string;
+}
+
+// --- Dispatch types ---
+
+export interface DispatchRequest {
+  work_item_id?: number | string;
+  project?: string;
+  title?: string;
+  description?: string;
+  backend?: string;
+  risk_tier?: number;
+  model?: string;
+  agent?: string;
+  assignee?: string;
+}
+
+export interface DispatchResult {
+  action: string;
+  work_item: {
+    id: number;
+    short_id: string;
+    title: string;
+    status: string;
+    assignee: string;
+  };
+  session: {
+    id: string;
+    backend: string;
+  };
+  briefing_sent: boolean;
+  error?: string;
+}
+
+// --- Orient types ---
+
+export interface OrientResult {
+  project: string | null;
+  rules: Array<Record<string, unknown>>;
+  trail: Record<string, unknown>;
+  learnings: Array<Record<string, unknown>>;
+  work_items: Array<Record<string, unknown>>;
+  _budget: { total: number; used: number };
+}
+
+// --- Consolidate types ---
+
+export interface ConsolidateResult {
+  project: string;
+  memory_count: number;
+  candidates: Array<Record<string, unknown>>;
+  recommendations: Array<Record<string, unknown>>;
+  applied: boolean;
+  applied_count?: number;
+}
+
 // --- Analytics types ---
 
 export interface KpiMetric {
@@ -1000,6 +1155,58 @@ export const api = {
 
   sessionWorkItems: (sessionName: string) =>
     get<WorkItemSessionLink[]>(`/sessions/${encodeURIComponent(sessionName)}/work-items`),
+
+  // --- Memory CRUD ---
+
+  storeMemory: (body: StoreMemoryRequest) =>
+    post<Memory>("/memories", body),
+
+  updateMemory: (id: number, body: UpdateMemoryRequest) =>
+    patch<Memory>(`/memories/${id}`, body),
+
+  inactivateMemory: (id: number, reason: string) =>
+    post<Record<string, unknown>>(`/memories/${id}/inactivate`, { reason }),
+
+  reactivateMemory: (id: number) =>
+    post<Record<string, unknown>>(`/memories/${id}/reactivate`, {}),
+
+  recallMemories: (ids: number[]) =>
+    post<Memory[]>("/memories/recall", { ids }),
+
+  // --- Analysis ---
+
+  consolidate: (project: string, dryRun?: boolean) =>
+    post<ConsolidateResult>("/consolidate", { project, dry_run: dryRun ?? true }),
+
+  orient: (project?: string) =>
+    post<OrientResult>("/orient", { project }),
+
+  // --- Project mutations ---
+
+  linkProjects: (source: string, target: string, linkType?: string) =>
+    post<Record<string, unknown>>(`/projects/${encodeURIComponent(source)}/links`, { target, link_type: linkType ?? "related" }),
+
+  updateDoc: (docId: number, body: { content: string; title?: string }) =>
+    patch<Document>(`/docs/${docId}`, body),
+
+  // --- Code Intelligence ---
+
+  codeIndex: (body: CodeIndexRequest) =>
+    post<CodeIndexResult>("/code/index", body),
+
+  codeQuery: (body: CodeQueryRequest) =>
+    post<Record<string, unknown>>("/code/query", body),
+
+  codeDescribe: (body: CodeDescribeRequest) =>
+    post<CodeDescribeResult>("/code/describe", body),
+
+  archCheck: (body: ArchCheckRequest) =>
+    post<ArchCheckResult>("/code/arch-check", body),
+
+  // --- Dispatch ---
+
+  dispatch: (body: DispatchRequest) =>
+    post<DispatchResult>("/dispatch", body),
 
   // --- Conversations ---
 

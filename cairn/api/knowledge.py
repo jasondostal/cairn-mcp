@@ -1,14 +1,37 @@
-"""Knowledge endpoints — projects, docs, clusters, rules, graph."""
+"""Knowledge endpoints — projects, docs, clusters, rules, graph, analysis."""
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Query, Path, HTTPException
+from fastapi import APIRouter, Body, Query, Path, HTTPException
+from pydantic import BaseModel
 
 from cairn.api.utils import parse_multi
 from cairn.core.services import Services
 from cairn.core.utils import get_project
+
+logger = logging.getLogger(__name__)
+
+
+class ConsolidateBody(BaseModel):
+    project: str
+    dry_run: bool = True
+
+
+class OrientBody(BaseModel):
+    project: str | None = None
+
+
+class LinkProjectBody(BaseModel):
+    target: str
+    link_type: str = "related"
+
+
+class UpdateDocBody(BaseModel):
+    content: str
+    title: str | None = None
 
 
 def register_routes(router: APIRouter, svc: Services, **kw):
@@ -243,3 +266,45 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             entity_types=entity_types,
             limit=limit,
         )
+
+    # --- Analysis ---
+
+    @router.post("/consolidate")
+    def api_consolidate(body: ConsolidateBody = Body(...)):
+        consolidation_engine = svc.consolidation_engine
+        return consolidation_engine.consolidate(body.project, dry_run=body.dry_run)
+
+    @router.post("/orient")
+    def api_orient(body: OrientBody = Body(...)):
+        from cairn.core.orient import run_orient
+
+        try:
+            return run_orient(
+                project=body.project,
+                config=svc.config,
+                db=db,
+                memory_store=memory_store,
+                search_engine=svc.search_engine,
+                work_item_manager=svc.work_item_manager,
+                task_manager=svc.task_manager,
+                graph_provider=graph_provider,
+            )
+        except Exception as e:
+            logger.exception("orient failed")
+            raise HTTPException(status_code=500, detail=f"Orient failed: {e}")
+
+    # --- Project mutations ---
+
+    @router.post("/projects/{name}/links")
+    def api_link_project(name: str = Path(...), body: LinkProjectBody = Body(...)):
+        try:
+            return project_manager.link(name, body.target, body.link_type)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @router.patch("/docs/{doc_id}")
+    def api_update_doc(doc_id: int = Path(...), body: UpdateDocBody = Body(...)):
+        doc = project_manager.get_doc(doc_id)
+        if doc is None:
+            raise HTTPException(status_code=404, detail="Document not found")
+        return project_manager.update_doc(doc_id, body.content, title=body.title)

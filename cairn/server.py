@@ -1262,7 +1262,7 @@ async def consolidate(
 
 
 # ============================================================
-# Trail helper (shared by trail() and orient())
+# Trail helper — delegates to shared orient module
 # ============================================================
 
 def _fetch_trail_data(
@@ -1270,132 +1270,12 @@ def _fetch_trail_data(
     since: str | None = None,
     limit: int = 20,
 ) -> dict:
-    """Fetch recent activity trail data. Used by both trail() and orient().
-
-    Merges two data sources following the HA philosophy:
-    - PG (always): source of truth for what memories exist
-    - Graph (when available): enriches with entity types and facts
-    Neither source can suppress the other.
-    """
-    from datetime import datetime, timedelta, timezone
-
-    if not since:
-        since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
-
-    project_id = None
-    if project:
-        from cairn.core.utils import get_project
-        project_id = get_project(db, project)
-
-    # --- PRIMARY: PG-based trail (always runs) ---
-    rows = db.execute(
-        """
-        SELECT m.id, m.session_name, m.memory_type, m.importance,
-               m.summary, m.entities, m.created_at, p.name AS project
-        FROM memories m
-        LEFT JOIN projects p ON m.project_id = p.id
-        WHERE m.is_active = true AND m.created_at > %s
-        """
-        + (" AND m.project_id = %s" if project_id else "")
-        + " ORDER BY m.created_at DESC LIMIT %s",
-        (since,) + ((project_id,) if project_id else ()) + (limit,),
+    """Fetch recent activity trail data. Used by trail() tool."""
+    from cairn.core.orient import fetch_trail_data
+    return fetch_trail_data(
+        db=db, graph_provider=graph_provider,
+        project=project, since=since, limit=limit,
     )
-
-    sessions: dict[str, dict] = {}
-    for r in rows:
-        sn = r["session_name"] or "no-session"
-        if sn not in sessions:
-            ts = r["created_at"].isoformat() if hasattr(r["created_at"], "isoformat") else str(r["created_at"])
-            sessions[sn] = {
-                "session_name": sn,
-                "entities_touched": set(),
-                "key_facts": [],
-                "time_range": {"earliest": ts, "latest": ts},
-            }
-        s = sessions[sn]
-        for entity in (r.get("entities") or []):
-            s["entities_touched"].add(entity)
-        if len(s["key_facts"]) < 5:
-            summary = r.get("summary") or ""
-            if summary:
-                s["key_facts"].append(summary)
-        ts = r["created_at"].isoformat() if hasattr(r["created_at"], "isoformat") else str(r["created_at"])
-        if ts < s["time_range"]["earliest"]:
-            s["time_range"]["earliest"] = ts
-        if ts > s["time_range"]["latest"]:
-            s["time_range"]["latest"] = ts
-
-    # Convert sets to sorted lists for JSON serialization
-    for s in sessions.values():
-        s["entities_touched"] = sorted(s["entities_touched"])
-
-    source = "memory"
-
-    # --- ENRICHMENT: Graph data when available (non-blocking) ---
-    if graph_provider:
-        try:
-            activity = graph_provider.recent_activity(
-                project_id=project_id, since=since, limit=limit,
-            )
-            if activity:
-                # Map episode_ids to session_names for merging
-                episode_ids = list({a["episode_id"] for a in activity if a.get("episode_id")})
-                ep_session_map = {}
-                if episode_ids:
-                    placeholders = ",".join(["%s"] * len(episode_ids))
-                    ep_rows = db.execute(
-                        f"SELECT id, session_name FROM memories WHERE id IN ({placeholders})",
-                        tuple(episode_ids),
-                    )
-                    ep_session_map = {r["id"]: r["session_name"] for r in ep_rows}
-
-                for a in activity:
-                    sn = ep_session_map.get(a.get("episode_id"), "unknown")
-                    if sn in sessions:
-                        s = sessions[sn]
-                        if a.get("subject_name"):
-                            s["entities_touched"].add(a["subject_name"])
-                        if a.get("object_name"):
-                            s["entities_touched"].add(a["object_name"])
-                        if a.get("fact") and len(s["key_facts"]) < 5:
-                            s["key_facts"].append(a["fact"])
-
-                # Re-sort entities after merge
-                for s in sessions.values():
-                    if isinstance(s["entities_touched"], set):
-                        s["entities_touched"] = sorted(s["entities_touched"])
-
-                source = "memory+graph"
-        except Exception:
-            logger.debug("Graph trail enrichment failed (non-blocking)", exc_info=True)
-
-    result = {
-        "source": source,
-        "since": since,
-        "sessions": list(sessions.values())[:10],
-    }
-
-    # --- ENRICHMENT: Thinking activity from graph (non-blocking) ---
-    if graph_provider:
-        try:
-            thinking_activity = graph_provider.recent_thinking_activity(
-                project_id=project_id, since=since, limit=10,
-            )
-            if thinking_activity:
-                result["thinking"] = [
-                    {
-                        "type": "thinking",
-                        "goal": t.get("goal", ""),
-                        "status": t.get("status", ""),
-                        "thought_count": t.get("thought_count", 0),
-                        "created_at": t.get("created_at", ""),
-                    }
-                    for t in thinking_activity
-                ]
-        except Exception:
-            logger.debug("Thinking trail failed", exc_info=True)
-
-    return result
 
 
 # ============================================================
@@ -1415,141 +1295,19 @@ def orient(project: str | None = None) -> dict:
     Args:
         project: Project name for scoped rules and work items. Omit for global-only boot.
     """
-    from cairn.core.budget import apply_list_budget, estimate_tokens_for_dict
+    from cairn.core.orient import run_orient
 
     try:
-        total_budget = config.budget.orient
-        budget_rules = int(total_budget * ORIENT_ALLOC_RULES)
-        budget_learnings = int(total_budget * ORIENT_ALLOC_LEARNINGS)
-        budget_trail = int(total_budget * ORIENT_ALLOC_TRAIL)
-        budget_work_items = int(total_budget * ORIENT_ALLOC_WORK_ITEMS)
-
-        tokens_used = 0
-
-        # --- Section 1: Rules (30%) ---
-        rules_data = []
-        try:
-            result = memory_store.get_rules(project)
-            rules_items = result.get("items", [])
-            if rules_items:
-                rules_data, rules_meta = apply_list_budget(
-                    rules_items, budget_rules, "content",
-                    per_item_max=BUDGET_RULES_PER_ITEM,
-                    overflow_message="...{omitted} more rules omitted.",
-                )
-                if rules_meta["omitted"] > 0:
-                    rules_data.append({"_overflow": rules_meta["overflow_message"]})
-                rules_tokens = estimate_tokens_for_dict(rules_data)
-                tokens_used += rules_tokens
-                surplus = max(0, budget_rules - rules_tokens)
-            else:
-                surplus = budget_rules
-            budget_learnings += surplus
-        except Exception:
-            logger.debug("orient: rules section failed", exc_info=True)
-            budget_learnings += budget_rules
-
-        # --- Section 2: Learnings (25% + surplus) ---
-        learnings_data = []
-        try:
-            learnings_results = search_engine.search(
-                query="learning",
-                project=project,
-                memory_type="learning",
-                search_mode="semantic",
-                limit=5,
-                include_full=True,
-            )
-            if learnings_results:
-                learnings_data, learnings_meta = apply_list_budget(
-                    learnings_results, budget_learnings, "content",
-                    per_item_max=BUDGET_SEARCH_PER_ITEM,
-                    overflow_message="...{omitted} more learnings omitted.",
-                )
-                if learnings_meta["omitted"] > 0:
-                    learnings_data.append({"_overflow": learnings_meta["overflow_message"]})
-                learnings_tokens = estimate_tokens_for_dict(learnings_data)
-                tokens_used += learnings_tokens
-                surplus = max(0, budget_learnings - learnings_tokens)
-            else:
-                surplus = budget_learnings
-            budget_trail += surplus
-        except Exception:
-            logger.debug("orient: learnings section failed", exc_info=True)
-            budget_trail += budget_learnings
-
-        # --- Section 3: Trail (25% + surplus) ---
-        trail_data = {}
-        try:
-            trail_data = _fetch_trail_data(project=project, limit=20)
-            trail_tokens = estimate_tokens_for_dict(trail_data)
-            # Trim if over budget
-            if budget_trail > 0 and trail_tokens > budget_trail:
-                for s in trail_data.get("sessions", []):
-                    if "key_facts" in s:
-                        s["key_facts"] = s["key_facts"][:3]
-                trail_data["sessions"] = trail_data.get("sessions", [])[:5]
-                trail_tokens = estimate_tokens_for_dict(trail_data)
-            tokens_used += trail_tokens
-            surplus = max(0, budget_trail - trail_tokens)
-            budget_work_items += surplus
-        except Exception:
-            logger.debug("orient: trail section failed", exc_info=True)
-            budget_work_items += budget_trail
-
-        # --- Section 4: Work Items (20% + surplus) ---
-        # Try work items first; fall back to flat tasks if none exist
-        work_items_data = []
-        try:
-            if project:
-                # Work items: ready queue + active (in_progress) items
-                wi_ready = work_item_manager.ready_queue(project, limit=10)
-                wi_active = work_item_manager.list_items(
-                    project=project, status="in_progress", limit=10,
-                )
-                wi_items = []
-                for item in wi_ready.get("items", []):
-                    wi_items.append({
-                        "short_id": item.get("short_id", ""),
-                        "title": item.get("title", ""),
-                        "priority": item.get("priority", 0),
-                        "item_type": item.get("item_type", "task"),
-                        "status": "ready",
-                    })
-                for item in wi_active.get("items", []):
-                    wi_items.append({
-                        "short_id": item.get("short_id", ""),
-                        "title": item.get("title", ""),
-                        "assignee": item.get("assignee"),
-                        "item_type": item.get("item_type", "task"),
-                        "status": "in_progress",
-                    })
-                if wi_items:
-                    work_items_data = wi_items
-                else:
-                    # Fall back to flat tasks
-                    tasks_result = task_manager.list_tasks(project, include_completed=False)
-                    work_items_data = tasks_result.get("items", [])
-            if work_items_data:
-                content_key = "title" if work_items_data and "title" in work_items_data[0] else "description"
-                work_items_data, wi_meta = apply_list_budget(
-                    work_items_data, budget_work_items, content_key,
-                    overflow_message="...{omitted} more work items omitted.",
-                )
-                if wi_meta["omitted"] > 0:
-                    work_items_data.append({"_overflow": wi_meta["overflow_message"]})
-                tokens_used += estimate_tokens_for_dict(work_items_data)
-        except Exception:
-            logger.debug("orient: work items section failed", exc_info=True)
-
-        return {
-            "project": project,
-            "rules": rules_data,
-            "trail": trail_data,
-            "learnings": learnings_data,
-            "work_items": work_items_data,
-            "_budget": {"total": total_budget, "used": tokens_used},
-        }
+        return run_orient(
+            project=project,
+            config=config,
+            db=db,
+            memory_store=memory_store,
+            search_engine=search_engine,
+            work_item_manager=work_item_manager,
+            task_manager=task_manager,
+            graph_provider=graph_provider,
+        )
     except Exception as e:
         logger.exception("orient failed")
         return {"error": f"Internal error: {e}"}
@@ -1689,70 +1447,14 @@ async def code_index(
         force: Re-index all files even if unchanged (default: False).
     """
     import asyncio
+    from cairn.core.code_ops import run_code_index
 
     try:
-        if not project:
-            return {"error": "project is required"}
-        if not path:
-            return {"error": "path is required"}
-
-        from pathlib import Path as P
-        root = P(path)
-        if not root.is_dir():
-            return {"error": f"Not a directory: {path}"}
-
-        if not graph_provider:
-            return {"error": "Code intelligence requires Neo4j. Set CAIRN_GRAPH_BACKEND=neo4j."}
-
-        if not config.capabilities.code_intelligence:
-            return {"error": "Code intelligence is disabled. Set CAIRN_CODE_INTELLIGENCE=true."}
-
-        def _do_index():
-            from cairn.code.parser import CodeParser
-            from cairn.code.indexer import CodeIndexer
-            from cairn.core.utils import get_or_create_project
-
-            project_id = get_or_create_project(db, project)
-            parser = CodeParser()
-            indexer = CodeIndexer(parser, graph_provider)
-
-            return indexer.index_directory(
-                root=root,
-                project=project,
-                project_id=project_id,
-                force=force,
-            )
-
-        result = await asyncio.to_thread(_do_index)
-
-        # Bridge entities to code (non-blocking, best-effort)
-        bridge_stats = None
-        if result.files_indexed > 0:
-            def _do_bridge():
-                from cairn.code.bridge import CodeBridgeService
-                from cairn.core.utils import get_or_create_project
-                pid = get_or_create_project(db, project)
-                bridge_svc = CodeBridgeService(graph_provider)
-                return bridge_svc.bridge_all(pid)
-            try:
-                bridge_stats = await asyncio.to_thread(_do_bridge)
-            except Exception:
-                logger.warning("Code bridge after index failed (non-blocking)", exc_info=True)
-
-        resp = {
-            "project": result.project,
-            "files_scanned": result.files_scanned,
-            "files_indexed": result.files_indexed,
-            "files_skipped": result.files_skipped,
-            "files_deleted": result.files_deleted,
-            "symbols_created": result.symbols_created,
-            "imports_created": result.imports_created,
-            "errors": result.errors if result.errors else None,
-            "summary": result.summary(),
-        }
-        if bridge_stats:
-            resp["bridge"] = bridge_stats
-        return resp
+        return await asyncio.to_thread(
+            run_code_index,
+            project=project, path=path, force=force,
+            graph_provider=graph_provider, db=db, config=config,
+        )
     except Exception as e:
         logger.exception("code_index failed")
         return {"error": f"Internal error: {e}"}
@@ -1809,135 +1511,19 @@ async def code_query(
         mode: Search mode: "fulltext" (default) or "semantic" (NL descriptions).
     """
     import asyncio
+    from cairn.core.code_ops import run_code_query
 
     try:
-        if not action:
-            return {"error": "action is required"}
-        if not project:
-            return {"error": "project is required"}
-
-        if not graph_provider:
-            return {"error": "Code queries require Neo4j. Set CAIRN_GRAPH_BACKEND=neo4j."}
-
-        if not config.capabilities.code_intelligence:
-            return {"error": "Code intelligence is disabled. Set CAIRN_CODE_INTELLIGENCE=true."}
-
-        def _do_query():
-            from cairn.code.query import (
-                query_dependents,
-                query_dependencies,
-                query_impact,
-                query_search,
-                query_structure,
-            )
-            from cairn.core.utils import get_or_create_project
-
-            project_id = get_or_create_project(db, project)
-
-            if action == "dependents":
-                if not target:
-                    return {"error": "target is required for dependents"}
-                return query_dependents(graph_provider, target, project_id)
-
-            if action == "dependencies":
-                if not target:
-                    return {"error": "target is required for dependencies"}
-                return query_dependencies(graph_provider, target, project_id)
-
-            if action == "structure":
-                if not target:
-                    return {"error": "target is required for structure"}
-                return query_structure(graph_provider, target, project_id)
-
-            if action == "impact":
-                if not target:
-                    return {"error": "target is required for impact"}
-                return query_impact(graph_provider, target, project_id, max_depth=depth)
-
-            if action == "search":
-                if not query:
-                    return {"error": "query is required for search"}
-                return query_search(
-                    graph_provider, query, project_id,
-                    kind=kind or None, limit=limit, mode=mode,
-                    embedding_engine=_svc.embedding if mode == "semantic" else None,
-                )
-
-            if action == "hotspots":
-                from cairn.code.query import query_hotspots
-                return query_hotspots(graph_provider, project_id, limit=limit)
-
-            if action == "entities":
-                if not target:
-                    return {"error": "target is required for entities"}
-                entities = graph_provider.get_entities_for_code(target, project_id)
-                return {"target": target, "entities": entities}
-
-            if action == "code_for_entity":
-                if not target:
-                    return {"error": "target (entity name) is required for code_for_entity"}
-                # Look up entity by name
-                from cairn.graph.interface import Entity
-                known = graph_provider.get_known_entities(project_id, limit=500)
-                entity_uuid = None
-                for e in known:
-                    if e["name"].lower() == target.lower():
-                        # Need to find the actual uuid — search by embedding
-                        emb = _svc.embedding.embed(target)
-                        matches = graph_provider.search_entities_by_embedding(emb, project_id, limit=1)
-                        if matches:
-                            entity_uuid = matches[0].uuid
-                        break
-                if not entity_uuid:
-                    return {"target": target, "code": [], "error": f"Entity not found: {target}"}
-                code = graph_provider.get_code_for_entity(entity_uuid)
-                return {"target": target, "code": code}
-
-            if action == "cross_search":
-                if not query:
-                    return {"error": "query is required for cross_search"}
-                from cairn.code.query import query_cross_search
-                # Get all indexed project IDs
-                all_files = graph_provider.get_code_files(project_id)
-                # For cross-project, get all projects that have code files
-                from cairn.core.utils import get_or_create_project as _gop
-                all_project_ids = _get_all_code_project_ids()
-                return query_cross_search(graph_provider, query, all_project_ids, kind=kind or None, limit=limit)
-
-            if action == "shared_deps":
-                from cairn.code.query import query_shared_dependencies
-                all_project_ids = _get_all_code_project_ids()
-                return query_shared_dependencies(graph_provider, all_project_ids)
-
-            if action == "bridge":
-                from cairn.code.bridge import CodeBridgeService
-                bridge_svc = CodeBridgeService(graph_provider)
-                return bridge_svc.bridge_all(project_id)
-
-            return {"error": f"Unknown action: {action}. Valid: dependents, dependencies, structure, impact, search, hotspots, entities, code_for_entity, cross_search, shared_deps, bridge"}
-
-        return await asyncio.to_thread(_do_query)
-
+        return await asyncio.to_thread(
+            run_code_query,
+            action=action, project=project, target=target, query=query,
+            kind=kind, depth=depth, limit=limit, mode=mode,
+            graph_provider=graph_provider, db=db, config=config,
+            embedding_engine=_svc.embedding,
+        )
     except Exception as e:
         logger.exception("code_query failed")
         return {"error": f"Internal error: {e}"}
-
-
-def _get_all_code_project_ids() -> list[int]:
-    """Get all project IDs that have indexed code files."""
-    try:
-        rows = db.execute_many(
-            "SELECT DISTINCT id FROM projects WHERE id IN "
-            "(SELECT DISTINCT project_id FROM projects)",
-            (),
-        )
-        # Fallback: query the graph for all distinct project_ids on CodeFile nodes
-        # Since we can't easily get this from PG, get from current project context
-        # For now, get all project IDs from the projects table
-        rows = db.execute_many("SELECT id FROM projects", ())
-        return [r["id"] for r in rows] if rows else []
-    except Exception:
-        return []
 
 
 @mcp.tool()
@@ -1965,78 +1551,15 @@ async def code_describe(
         limit: Max symbols to describe (default 50).
     """
     import asyncio
+    from cairn.core.code_ops import run_code_describe
 
     try:
-        if not project:
-            return {"error": "project is required"}
-
-        if not graph_provider:
-            return {"error": "Code describe requires Neo4j. Set CAIRN_GRAPH_BACKEND=neo4j."}
-
-        if not config.capabilities.code_intelligence:
-            return {"error": "Code intelligence is disabled. Set CAIRN_CODE_INTELLIGENCE=true."}
-
-        if not _svc.llm:
-            return {"error": "Code describe requires LLM. Enable enrichment."}
-
-        def _do_describe():
-            from cairn.code.summarizer import CodeSummarizer
-            from cairn.core.utils import get_or_create_project
-
-            project_id = get_or_create_project(db, project)
-            summarizer = CodeSummarizer(_svc.llm, _svc.embedding)
-
-            # Gather symbols to describe
-            if target:
-                symbols = graph_provider.get_code_symbols(target, project_id)
-            else:
-                files = graph_provider.get_code_files(project_id)
-                symbols = []
-                for f in files:
-                    file_syms = graph_provider.get_code_symbols(f["path"], project_id)
-                    symbols.extend(file_syms)
-
-            # Filter by kind if specified
-            filtered = symbols
-            if kind:
-                filtered = [s for s in filtered if s.get("kind") == kind]
-
-            # Filter to undescribed symbols only
-            filtered = [s for s in filtered if not s.get("description")]
-            filtered = filtered[:limit]
-
-            if not filtered:
-                return {"project": project, "described": 0, "message": "No undescribed symbols found"}
-
-            # Generate descriptions and embeddings
-            described = summarizer.batch_describe(filtered, project_id)
-
-            # Store in graph
-            stored = 0
-            for item in described:
-                try:
-                    graph_provider.update_code_symbol_description(
-                        qualified_name=item["qualified_name"],
-                        project_id=project_id,
-                        file_path=item["file_path"],
-                        description=item["description"],
-                        description_embedding=item["embedding"],
-                    )
-                    stored += 1
-                except Exception:
-                    logger.warning("Failed to store description for %s", item["qualified_name"], exc_info=True)
-
-            return {
-                "project": project,
-                "described": stored,
-                "symbols": [
-                    {"qualified_name": d["qualified_name"], "description": d["description"]}
-                    for d in described[:10]
-                ],
-            }
-
-        return await asyncio.to_thread(_do_describe)
-
+        return await asyncio.to_thread(
+            run_code_describe,
+            project=project, target=target, kind=kind, limit=limit,
+            graph_provider=graph_provider, db=db, config=config,
+            llm=_svc.llm, embedding_engine=_svc.embedding,
+        )
     except Exception as e:
         logger.exception("code_describe failed")
         return {"error": f"Internal error: {e}"}
@@ -2078,92 +1601,16 @@ async def arch_check(
         use_graph: Use Neo4j IMPORTS edges instead of re-parsing source (default: False).
     """
     import asyncio
+    from cairn.core.code_ops import run_arch_check
 
     try:
-        if not project:
-            return {"error": "project is required"}
-
-        if not graph_provider:
-            return {"error": "Architecture checks require Neo4j. Set CAIRN_GRAPH_BACKEND=neo4j."}
-
-        if not config.capabilities.code_intelligence:
-            return {"error": "Code intelligence is disabled. Set CAIRN_CODE_INTELLIGENCE=true."}
-
-        def _do_arch_check():
-            from pathlib import Path as P
-            from cairn.code.arch_rules import (
-                load_config as load_arch_config,
-                load_config_from_string,
-                check as arch_check_source,
-                check_graph as arch_check_graph,
-            )
-            from cairn.core.utils import get_or_create_project
-
-            # 1. Load rules: explicit config_path > project doc > error
-            arch_config = None
-            if config_path:
-                cp = P(config_path)
-                if not cp.is_file():
-                    return {"error": f"Config file not found: {config_path}"}
-                arch_config = load_arch_config(cp)
-            else:
-                # Try loading from project doc
-                docs = project_manager.get_docs(project, doc_type="architecture")
-                if docs:
-                    arch_config = load_config_from_string(docs[0]["content"])
-                else:
-                    return {"error": f"No architecture rules found. Provide config_path or store rules as a project doc (doc_type='architecture')."}
-
-            project_id = get_or_create_project(db, project)
-
-            # 2. Run evaluation
-            if use_graph:
-                report = arch_check_graph(arch_config, graph_provider, project_id)
-                evaluation_mode = "graph"
-            else:
-                if not path:
-                    return {"error": "path is required for source-based evaluation (or set use_graph=True)"}
-                root = P(path)
-                if not root.is_dir():
-                    return {"error": f"Not a directory: {path}"}
-                report = arch_check_source(arch_config, root)
-                evaluation_mode = "source"
-
-            # 3. Build response
-            violations = [
-                {
-                    "rule_name": v.rule_name,
-                    "file_path": str(v.file_path),
-                    "imported_module": v.imported_module,
-                    "lineno": v.lineno,
-                    "description": v.description,
-                }
-                for v in report.violations
-            ]
-
-            contract_violations = [
-                {
-                    "rule_module": cv.rule_module,
-                    "consumer_file": cv.consumer_file,
-                    "imported_name": cv.imported_name,
-                    "lineno": cv.lineno,
-                }
-                for cv in report.contract_violations
-            ]
-
-            return {
-                "project": project,
-                "clean": report.clean,
-                "violations": violations,
-                "contract_violations": contract_violations,
-                "files_checked": report.files_checked,
-                "rules_evaluated": report.rules_evaluated,
-                "evaluation_mode": evaluation_mode,
-                "summary": report.summary(),
-            }
-
-        return await asyncio.to_thread(_do_arch_check)
-
+        return await asyncio.to_thread(
+            run_arch_check,
+            project=project, path=path, config_path=config_path,
+            use_graph=use_graph,
+            graph_provider=graph_provider, db=db, config=config,
+            project_manager=project_manager,
+        )
     except Exception as e:
         logger.exception("arch_check failed")
         return {"error": f"Internal error: {e}"}
