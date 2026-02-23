@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 
 from cairn.core.analytics import track_operation
 from cairn.core.constants import (
-    SHORT_ID_PREFIX,
     ActivityType,
     AgentState,
     GateType,
@@ -19,7 +18,7 @@ from cairn.core.constants import (
     WorkItemStatus,
     WorkItemType,
 )
-from cairn.core.utils import get_or_create_project, get_project
+from cairn.core.utils import get_or_create_project, get_project, make_display_id, parse_display_id
 from cairn.storage.database import Database
 
 if TYPE_CHECKING:
@@ -76,35 +75,30 @@ class WorkItemManager:
         except Exception:
             logger.warning("Failed to publish %s for work_item %s", event_type, work_item_id, exc_info=True)
 
-    def _generate_short_id(self, pg_id: int, parent_id: int | None = None) -> str:
-        """Generate a hierarchical short ID.
-
-        Root items: wi-{hex} (e.g. wi-002a)
-        Children: parent_short_id.N (e.g. wi-002a.1, wi-002a.1.2)
-        """
-        if parent_id is None:
-            return f"{SHORT_ID_PREFIX}{pg_id:04x}"
-
-        parent = self.db.execute_one(
-            "SELECT short_id FROM work_items WHERE id = %s", (parent_id,),
+    def _allocate_seq_num(self, project_id: int) -> int:
+        """Atomically allocate the next sequence number for a project."""
+        row = self.db.execute_one(
+            """UPDATE projects
+               SET work_item_next_seq = work_item_next_seq + 1
+               WHERE id = %s
+               RETURNING work_item_next_seq - 1 AS seq_num""",
+            (project_id,),
         )
-        if not parent:
-            return f"{SHORT_ID_PREFIX}{pg_id:04x}"
+        return row["seq_num"]
 
-        # Find max existing child ordinal (survives deletions without collision)
-        # Filter to dotted short_ids only — root-style children (e.g. wi-0021)
-        # don't follow the ordinal scheme and would crash the CAST.
-        max_row = self.db.execute_one(
-            """SELECT MAX(
-                CAST(SPLIT_PART(short_id, '.', array_length(string_to_array(short_id, '.'), 1)) AS INTEGER)
-            ) AS max_ord
-            FROM work_items
-            WHERE parent_id = %s AND short_id IS NOT NULL
-              AND position('.' in short_id) > 0""",
-            (parent_id,),
+    def _display_id(self, item: dict) -> str:
+        """Compute display_id for a work item row by fetching project prefix."""
+        row = self.db.execute_one(
+            "SELECT work_item_prefix FROM projects WHERE id = %s",
+            (item["project_id"],),
         )
-        ordinal = (max_row["max_ord"] + 1) if max_row and max_row["max_ord"] is not None else 1
-        return f"{parent['short_id']}.{ordinal}"
+        prefix = row["work_item_prefix"] if row and row["work_item_prefix"] else "wi"
+        return make_display_id(prefix, item["seq_num"])
+
+    def _display_id_from_row(self, r: dict) -> str:
+        """Compute display_id from a query row that already has work_item_prefix."""
+        prefix = r.get("work_item_prefix") or "wi"
+        return make_display_id(prefix, r["seq_num"])
 
     def _embed_content(self, title: str, description: str | None) -> list[float] | None:
         """Generate embedding for title + description."""
@@ -117,15 +111,23 @@ class WorkItemManager:
             logger.warning("Failed to embed work item content", exc_info=True)
             return None
 
-    def _resolve_id(self, id_or_short_id: int | str) -> dict | None:
-        """Resolve a work item by numeric ID or short_id string."""
-        if isinstance(id_or_short_id, int) or (isinstance(id_or_short_id, str) and id_or_short_id.isdigit()):
+    def _resolve_id(self, id_or_display_id: int | str) -> dict | None:
+        """Resolve a work item by numeric ID or display ID string (e.g. 'ca-42')."""
+        if isinstance(id_or_display_id, int) or (isinstance(id_or_display_id, str) and id_or_display_id.isdigit()):
             return self.db.execute_one(
-                "SELECT * FROM work_items WHERE id = %s", (int(id_or_short_id),),
+                "SELECT * FROM work_items WHERE id = %s", (int(id_or_display_id),),
             )
-        return self.db.execute_one(
-            "SELECT * FROM work_items WHERE short_id = %s", (id_or_short_id,),
-        )
+        # Try parsing as display_id (e.g. 'ca-42')
+        parsed = parse_display_id(str(id_or_display_id))
+        if parsed:
+            prefix, seq_num = parsed
+            return self.db.execute_one(
+                """SELECT wi.* FROM work_items wi
+                   JOIN projects p ON wi.project_id = p.id
+                   WHERE p.work_item_prefix = %s AND wi.seq_num = %s""",
+                (prefix, seq_num),
+            )
+        return None
 
     def _log_activity(
         self,
@@ -190,29 +192,32 @@ class WorkItemManager:
         project_id = get_or_create_project(self.db, project)
         content_embedding = self._embed_content(title, description)
 
+        # Allocate sequential number
+        seq_num = self._allocate_seq_num(project_id)
+
         row = self.db.execute_one(
             """
             INSERT INTO work_items
                 (project_id, title, description, acceptance_criteria, item_type,
                  priority, parent_id, session_name, embedding, metadata,
-                 constraints, risk_tier)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s)
+                 constraints, risk_tier, seq_num)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s)
             RETURNING id, created_at
             """,
             (
                 project_id, title, description, acceptance_criteria, item_type,
                 priority, parent_id, session_name,
                 content_embedding, _json_dumps(metadata),
-                _json_dumps(constraints), risk_tier or 0,
+                _json_dumps(constraints), risk_tier or 0, seq_num,
             ),
         )
 
-        # Generate and set short_id
-        short_id = self._generate_short_id(row["id"], parent_id)
-        self.db.execute(
-            "UPDATE work_items SET short_id = %s WHERE id = %s",
-            (short_id, row["id"]),
+        # Compute display_id
+        prefix_row = self.db.execute_one(
+            "SELECT work_item_prefix FROM projects WHERE id = %s", (project_id,),
         )
+        prefix = prefix_row["work_item_prefix"] if prefix_row and prefix_row["work_item_prefix"] else "wi"
+        display_id = make_display_id(prefix, seq_num)
 
         # Log creation activity
         self._log_activity(
@@ -237,13 +242,13 @@ class WorkItemManager:
         self._publish(
             "work_item.created", work_item_id=row["id"],
             project_id=project_id, session_name=session_name,
-            short_id=short_id,
+            short_id=display_id,
         )
 
-        logger.info("Created work item %s (#%d) for project %s", short_id, row["id"], project)
+        logger.info("Created work item %s (#%d) for project %s", display_id, row["id"], project)
         return {
             "id": row["id"],
-            "short_id": short_id,
+            "display_id": display_id,
             "project": project,
             "title": title,
             "item_type": item_type,
@@ -255,13 +260,15 @@ class WorkItemManager:
         }
 
     @track_operation("work_items.update")
-    def update(self, id_or_short_id: int | str, **fields) -> dict:
+    def update(self, id_or_display_id: int | str, **fields) -> dict:
         """Update work item fields. Validates status transitions."""
         calling_session = fields.pop("_calling_session", None)
 
-        item = self._resolve_id(id_or_short_id)
+        item = self._resolve_id(id_or_display_id)
         if not item:
-            raise ValueError(f"Work item {id_or_short_id} not found")
+            raise ValueError(f"Work item {id_or_display_id} not found")
+
+        display_id = self._display_id(item)
 
         # Status transition validation
         new_status = fields.get("status")
@@ -305,7 +312,7 @@ class WorkItemManager:
             sets.append("cancelled_at = NOW()")
 
         if len(sets) <= 1:
-            return {"id": item["id"], "short_id": item["short_id"], "action": "no_changes"}
+            return {"id": item["id"], "display_id": display_id, "action": "no_changes"}
 
         params.append(item["id"])
         self.db.execute(
@@ -349,7 +356,7 @@ class WorkItemManager:
                 fields_changed=list(fields.keys()),
             )
 
-        return {"id": item["id"], "short_id": item["short_id"], "action": "updated"}
+        return {"id": item["id"], "display_id": display_id, "action": "updated"}
 
     @track_operation("work_items.claim")
     def claim(self, work_item_id: int | str, assignee: str, session_name: str | None = None) -> dict:
@@ -358,18 +365,20 @@ class WorkItemManager:
         if not item:
             raise ValueError(f"Work item {work_item_id} not found")
 
+        display_id = self._display_id(item)
+
         row = self.db.execute_one(
             """
             UPDATE work_items
             SET status = 'in_progress', assignee = %s, claimed_at = NOW(), updated_at = NOW()
             WHERE id = %s AND status IN ('open', 'ready')
-            RETURNING id, short_id
+            RETURNING id
             """,
             (assignee, item["id"]),
         )
         if not row:
             raise ValueError(
-                f"Cannot claim work item {item['short_id']} — "
+                f"Cannot claim work item {display_id} — "
                 f"status is '{item['status']}' (must be open or ready)"
             )
 
@@ -390,7 +399,7 @@ class WorkItemManager:
 
         return {
             "id": row["id"],
-            "short_id": row["short_id"],
+            "display_id": display_id,
             "assignee": assignee,
             "status": WorkItemStatus.IN_PROGRESS,
             "action": "claimed",
@@ -403,8 +412,10 @@ class WorkItemManager:
         if not item:
             raise ValueError(f"Work item {work_item_id} not found")
 
+        display_id = self._display_id(item)
+
         if item["status"] in WorkItemStatus.TERMINAL:
-            raise ValueError(f"Work item {item['short_id']} is already {item['status']}")
+            raise ValueError(f"Work item {display_id} is already {item['status']}")
 
         self.db.execute(
             """
@@ -461,7 +472,7 @@ class WorkItemManager:
             old_status=item["status"],
         )
 
-        return {"id": item["id"], "short_id": item["short_id"], "action": "completed"}
+        return {"id": item["id"], "display_id": display_id, "action": "completed"}
 
     @track_operation("work_items.add_child")
     def add_child(
@@ -546,8 +557,8 @@ class WorkItemManager:
         )
 
         return {
-            "blocker": {"id": blocker["id"], "short_id": blocker["short_id"]},
-            "blocked": {"id": blocked["id"], "short_id": blocked["short_id"]},
+            "blocker": {"id": blocker["id"], "display_id": self._display_id(blocker)},
+            "blocked": {"id": blocked["id"], "display_id": self._display_id(blocked)},
             "action": "blocked",
         }
 
@@ -592,8 +603,8 @@ class WorkItemManager:
         )
 
         return {
-            "blocker": {"id": blocker["id"], "short_id": blocker["short_id"]},
-            "blocked": {"id": blocked["id"], "short_id": blocked["short_id"]},
+            "blocker": {"id": blocker["id"], "display_id": self._display_id(blocker)},
+            "blocked": {"id": blocked["id"], "display_id": self._display_id(blocked)},
             "action": "unblocked",
         }
 
@@ -634,7 +645,6 @@ class WorkItemManager:
 
         if parent_id is not None:
             if include_children:
-                # Separate query for recursive subtree (CTE can't nest in IN(...))
                 subtree_rows = self.db.execute(
                     """
                     WITH RECURSIVE subtree AS (
@@ -666,11 +676,11 @@ class WorkItemManager:
         total = count_row["total"]
 
         query = f"""
-            SELECT wi.id, wi.short_id, wi.title, wi.item_type, wi.priority,
+            SELECT wi.id, wi.seq_num, wi.title, wi.item_type, wi.priority,
                    wi.status, wi.assignee, wi.parent_id, wi.session_name,
                    wi.risk_tier, wi.gate_type, wi.agent_state,
                    wi.created_at, wi.updated_at, wi.completed_at, wi.cancelled_at,
-                   p.name AS project,
+                   p.name AS project, p.work_item_prefix,
                    (SELECT COUNT(*) FROM work_items c WHERE c.parent_id = wi.id) AS children_count
             FROM work_items wi
             LEFT JOIN projects p ON wi.project_id = p.id
@@ -684,7 +694,7 @@ class WorkItemManager:
         items = [
             {
                 "id": r["id"],
-                "short_id": r["short_id"],
+                "display_id": self._display_id_from_row(r),
                 "title": r["title"],
                 "item_type": r["item_type"],
                 "priority": r["priority"],
@@ -727,8 +737,10 @@ class WorkItemManager:
         # Postgres fallback
         rows = self.db.execute(
             """
-            SELECT wi.id, wi.title, wi.priority, wi.short_id, wi.item_type
+            SELECT wi.id, wi.title, wi.priority, wi.seq_num, wi.item_type,
+                   p.work_item_prefix
             FROM work_items wi
+            LEFT JOIN projects p ON wi.project_id = p.id
             WHERE wi.project_id = %s
               AND wi.status IN ('open', 'ready')
               AND wi.assignee IS NULL
@@ -745,16 +757,27 @@ class WorkItemManager:
         )
         return {
             "project": project,
-            "items": [dict(r) for r in rows],
+            "items": [
+                {
+                    "id": r["id"],
+                    "display_id": self._display_id_from_row(r),
+                    "title": r["title"],
+                    "priority": r["priority"],
+                    "item_type": r["item_type"],
+                }
+                for r in rows
+            ],
             "source": "postgres",
         }
 
     @track_operation("work_items.get")
-    def get(self, id_or_short_id: int | str) -> dict:
+    def get(self, id_or_display_id: int | str) -> dict:
         """Full detail for a single work item."""
-        item = self._resolve_id(id_or_short_id)
+        item = self._resolve_id(id_or_display_id)
         if not item:
-            raise ValueError(f"Work item {id_or_short_id} not found")
+            raise ValueError(f"Work item {id_or_display_id} not found")
+
+        display_id = self._display_id(item)
 
         # Project name
         proj = self.db.execute_one(
@@ -765,11 +788,18 @@ class WorkItemManager:
         parent_info = None
         if item["parent_id"]:
             parent = self.db.execute_one(
-                "SELECT id, short_id, title FROM work_items WHERE id = %s",
+                """SELECT wi.id, wi.seq_num, wi.title, p.work_item_prefix
+                   FROM work_items wi
+                   JOIN projects p ON wi.project_id = p.id
+                   WHERE wi.id = %s""",
                 (item["parent_id"],),
             )
             if parent:
-                parent_info = {"id": parent["id"], "short_id": parent["short_id"], "title": parent["title"]}
+                parent_info = {
+                    "id": parent["id"],
+                    "display_id": self._display_id_from_row(parent),
+                    "title": parent["title"],
+                }
 
         # Children count
         children = self.db.execute_one(
@@ -780,9 +810,10 @@ class WorkItemManager:
         # Blockers
         blockers = self.db.execute(
             """
-            SELECT wi.id, wi.short_id, wi.title, wi.status
+            SELECT wi.id, wi.seq_num, wi.title, wi.status, p.work_item_prefix
             FROM work_item_blocks wb
             JOIN work_items wi ON wi.id = wb.blocker_id
+            JOIN projects p ON wi.project_id = p.id
             WHERE wb.blocked_id = %s
             """,
             (item["id"],),
@@ -791,9 +822,10 @@ class WorkItemManager:
         # Blocking (items this blocks)
         blocking = self.db.execute(
             """
-            SELECT wi.id, wi.short_id, wi.title, wi.status
+            SELECT wi.id, wi.seq_num, wi.title, wi.status, p.work_item_prefix
             FROM work_item_blocks wb
             JOIN work_items wi ON wi.id = wb.blocked_id
+            JOIN projects p ON wi.project_id = p.id
             WHERE wb.blocker_id = %s
             """,
             (item["id"],),
@@ -815,7 +847,7 @@ class WorkItemManager:
 
         return {
             "id": item["id"],
-            "short_id": item["short_id"],
+            "display_id": display_id,
             "project": proj["name"] if proj else None,
             "title": item["title"],
             "description": item["description"],
@@ -826,8 +858,14 @@ class WorkItemManager:
             "assignee": item["assignee"],
             "parent": parent_info,
             "children_count": children["cnt"] if children else 0,
-            "blockers": [dict(b) for b in blockers],
-            "blocking": [dict(b) for b in blocking],
+            "blockers": [
+                {"id": b["id"], "display_id": self._display_id_from_row(b), "title": b["title"], "status": b["status"]}
+                for b in blockers
+            ],
+            "blocking": [
+                {"id": b["id"], "display_id": self._display_id_from_row(b), "title": b["title"], "status": b["status"]}
+                for b in blocking
+            ],
             "linked_memories": [dict(m) for m in linked],
             "linked_sessions": linked_sessions,
             "metadata": item["metadata"],
@@ -872,7 +910,7 @@ class WorkItemManager:
 
         return {
             "work_item_id": item["id"],
-            "short_id": item["short_id"],
+            "display_id": self._display_id(item),
             "linked": memory_ids,
         }
 
@@ -958,9 +996,9 @@ class WorkItemManager:
         """Return work items linked to a session, newest first."""
         rows = self.db.execute(
             """
-            SELECT wi.id, wi.short_id, wi.title, wi.status, wi.item_type,
+            SELECT wi.id, wi.seq_num, wi.title, wi.status, wi.item_type,
                    wi.priority, wi.assignee,
-                   p.name AS project,
+                   p.name AS project, p.work_item_prefix,
                    swi.role, swi.first_seen, swi.last_seen, swi.touch_count
             FROM session_work_items swi
             JOIN work_items wi ON wi.id = swi.work_item_id
@@ -973,7 +1011,7 @@ class WorkItemManager:
         return [
             {
                 "id": r["id"],
-                "short_id": r["short_id"],
+                "display_id": self._display_id_from_row(r),
                 "title": r["title"],
                 "status": r["status"],
                 "item_type": r["item_type"],
@@ -1033,7 +1071,7 @@ class WorkItemManager:
 
         return {
             "id": item["id"],
-            "short_id": item["short_id"],
+            "display_id": self._display_id(item),
             "gate_type": gate_type,
             "status": WorkItemStatus.BLOCKED,
             "action": "gate_set",
@@ -1051,10 +1089,12 @@ class WorkItemManager:
         if not item:
             raise ValueError(f"Work item {work_item_id} not found")
 
+        display_id = self._display_id(item)
+
         if not item.get("gate_type"):
-            raise ValueError(f"Work item {item['short_id']} has no active gate")
+            raise ValueError(f"Work item {display_id} has no active gate")
         if item.get("gate_resolved_at"):
-            raise ValueError(f"Gate on {item['short_id']} is already resolved")
+            raise ValueError(f"Gate on {display_id} is already resolved")
 
         self.db.execute(
             """UPDATE work_items
@@ -1095,7 +1135,7 @@ class WorkItemManager:
 
         return {
             "id": item["id"],
-            "short_id": item["short_id"],
+            "display_id": display_id,
             "gate_type": item["gate_type"],
             "status": new_status,
             "action": "gate_resolved",
@@ -1140,7 +1180,7 @@ class WorkItemManager:
         self.db.commit()
         return {
             "id": item["id"],
-            "short_id": item["short_id"],
+            "display_id": self._display_id(item),
             "agent_state": state,
             "action": "heartbeat",
         }
@@ -1177,7 +1217,7 @@ class WorkItemManager:
 
         return {
             "work_item_id": item["id"],
-            "short_id": item["short_id"],
+            "display_id": self._display_id(item),
             "total": count_row["total"] if count_row else 0,
             "limit": limit,
             "offset": offset,
@@ -1214,19 +1254,22 @@ class WorkItemManager:
         while pid and pid not in seen:
             seen.add(pid)
             p = self.db.execute_one(
-                "SELECT id, short_id, title, parent_id FROM work_items WHERE id = %s",
+                """SELECT wi.id, wi.seq_num, wi.title, wi.parent_id, p.work_item_prefix
+                   FROM work_items wi
+                   JOIN projects p ON wi.project_id = p.id
+                   WHERE wi.id = %s""",
                 (pid,),
             )
             if not p:
                 break
-            parent_chain.append({"short_id": p["short_id"], "title": p["title"]})
+            parent_chain.append({"display_id": self._display_id_from_row(p), "title": p["title"]})
             pid = p.get("parent_id")
         parent_chain.reverse()
 
         return {
             "work_item": {
                 "id": item_detail["id"],
-                "short_id": item_detail["short_id"],
+                "display_id": item_detail["display_id"],
                 "title": item_detail["title"],
                 "description": item_detail.get("description"),
                 "acceptance_criteria": item_detail.get("acceptance_criteria"),
@@ -1280,9 +1323,9 @@ class WorkItemManager:
 
         params.append(limit)
         rows = self.db.execute(
-            f"""SELECT wi.id, wi.short_id, wi.title, wi.item_type, wi.priority,
+            f"""SELECT wi.id, wi.seq_num, wi.title, wi.item_type, wi.priority,
                        wi.status, wi.gate_type, wi.gate_data, wi.risk_tier,
-                       p.name AS project
+                       p.name AS project, p.work_item_prefix
                 FROM work_items wi
                 LEFT JOIN projects p ON wi.project_id = p.id
                 WHERE {where}
@@ -1296,7 +1339,7 @@ class WorkItemManager:
             "items": [
                 {
                     "id": r["id"],
-                    "short_id": r["short_id"],
+                    "display_id": self._display_id_from_row(r),
                     "title": r["title"],
                     "item_type": r["item_type"],
                     "priority": r["priority"],

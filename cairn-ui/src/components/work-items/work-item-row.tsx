@@ -94,7 +94,7 @@ export function WorkItemRow({
       <StatusDot status={effectiveStatus} />
 
       <span className="font-mono text-xs text-muted-foreground shrink-0">
-        {item.short_id}
+        {item.display_id}
       </span>
 
       {item.item_type === "epic" && (

@@ -259,7 +259,7 @@ def run_orient(
             wi_items = []
             for item in wi_ready.get("items", []):
                 wi_items.append({
-                    "short_id": item.get("short_id", ""),
+                    "display_id": item.get("display_id", ""),
                     "title": item.get("title", ""),
                     "priority": item.get("priority", 0),
                     "item_type": item.get("item_type", "task"),
@@ -267,7 +267,7 @@ def run_orient(
                 })
             for item in wi_active.get("items", []):
                 wi_items.append({
-                    "short_id": item.get("short_id", ""),
+                    "display_id": item.get("display_id", ""),
                     "title": item.get("title", ""),
                     "assignee": item.get("assignee"),
                     "item_type": item.get("item_type", "task"),

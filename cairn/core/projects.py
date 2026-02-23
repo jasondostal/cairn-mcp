@@ -5,7 +5,9 @@ from __future__ import annotations
 import logging
 
 from cairn.core.analytics import track_operation
-from cairn.core.constants import VALID_DOC_TYPES, VALID_LINK_TYPES
+from cairn.core.constants import (
+    MAX_PREFIX_LENGTH, MIN_PREFIX_LENGTH, VALID_DOC_TYPES, VALID_LINK_TYPES,
+)
 from cairn.core.utils import get_or_create_project, get_project
 from cairn.storage.database import Database
 
@@ -28,7 +30,7 @@ class ProjectManager:
         total = count_row["total"]
 
         query = """
-            SELECT p.id, p.name, p.created_at,
+            SELECT p.id, p.name, p.work_item_prefix, p.created_at,
                    COUNT(DISTINCT m.id) FILTER (WHERE m.is_active = true) AS memory_count,
                    COUNT(DISTINCT d.id) AS doc_count,
                    COUNT(DISTINCT wi.id) AS work_item_count,
@@ -37,7 +39,7 @@ class ProjectManager:
             LEFT JOIN memories m ON m.project_id = p.id
             LEFT JOIN project_documents d ON d.project_id = p.id
             LEFT JOIN work_items wi ON wi.project_id = p.id
-            GROUP BY p.id, p.name, p.created_at
+            GROUP BY p.id, p.name, p.created_at, p.work_item_prefix
             ORDER BY last_activity DESC NULLS LAST, p.name
         """
         params: list = []
@@ -52,6 +54,7 @@ class ProjectManager:
             {
                 "id": r["id"],
                 "name": r["name"],
+                "work_item_prefix": r["work_item_prefix"],
                 "memory_count": r["memory_count"],
                 "doc_count": r["doc_count"],
                 "work_item_count": r["work_item_count"],
@@ -61,6 +64,41 @@ class ProjectManager:
             for r in rows
         ]
         return {"total": total, "limit": limit, "offset": offset, "items": items}
+
+    @track_operation("projects.update_prefix")
+    def update_prefix(self, project: str, new_prefix: str) -> dict:
+        """Update a project's work_item_prefix with collision check."""
+        new_prefix = new_prefix.strip().lower()
+        if not new_prefix:
+            raise ValueError("prefix cannot be empty")
+        if len(new_prefix) < MIN_PREFIX_LENGTH or len(new_prefix) > MAX_PREFIX_LENGTH:
+            raise ValueError(
+                f"prefix must be between {MIN_PREFIX_LENGTH} and {MAX_PREFIX_LENGTH} characters"
+            )
+        if not new_prefix.isalnum():
+            raise ValueError("prefix must be alphanumeric")
+
+        project_id = get_project(self.db, project)
+        if project_id is None:
+            raise ValueError(f"project not found: {project}")
+
+        # Check for collision
+        collision = self.db.execute_one(
+            "SELECT name FROM projects WHERE work_item_prefix = %s AND id != %s",
+            (new_prefix, project_id),
+        )
+        if collision:
+            raise ValueError(
+                f"prefix '{new_prefix}' is already used by project '{collision['name']}'"
+            )
+
+        self.db.execute(
+            "UPDATE projects SET work_item_prefix = %s WHERE id = %s",
+            (new_prefix, project_id),
+        )
+        self.db.commit()
+        logger.info("Updated prefix for project %s to '%s'", project, new_prefix)
+        return {"project": project, "work_item_prefix": new_prefix}
 
     @track_operation("projects.create_doc")
     def create_doc(self, project: str, doc_type: str, content: str, title: str | None = None) -> dict:

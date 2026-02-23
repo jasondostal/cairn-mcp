@@ -433,7 +433,7 @@ export type WorkItemType = "epic" | "task" | "subtask";
 
 export interface WorkItem {
   id: number;
-  short_id: string;
+  display_id: string;
   title: string;
   item_type: WorkItemType;
   priority: number;
@@ -462,7 +462,7 @@ export interface SessionWorkItemLink {
 
 export interface WorkItemSessionLink {
   id: number;
-  short_id: string;
+  display_id: string;
   title: string;
   status: WorkItemStatus;
   item_type: WorkItemType;
@@ -477,7 +477,7 @@ export interface WorkItemSessionLink {
 
 export interface WorkItemDetail {
   id: number;
-  short_id: string;
+  display_id: string;
   project: string;
   title: string;
   description: string | null;
@@ -486,10 +486,10 @@ export interface WorkItemDetail {
   priority: number;
   status: WorkItemStatus;
   assignee: string | null;
-  parent: { id: number; short_id: string; title: string } | null;
+  parent: { id: number; display_id: string; title: string } | null;
   children_count: number;
-  blockers: Array<{ id: number; short_id: string; title: string; status: string }>;
-  blocking: Array<{ id: number; short_id: string; title: string; status: string }>;
+  blockers: Array<{ id: number; display_id: string; title: string; status: string }>;
+  blocking: Array<{ id: number; display_id: string; title: string; status: string }>;
   linked_memories: Array<{ id: number; summary: string; memory_type: string }>;
   linked_sessions: SessionWorkItemLink[];
   metadata: Record<string, unknown>;
@@ -519,7 +519,7 @@ export interface WorkItemActivity {
 
 export interface GatedItem {
   id: number;
-  short_id: string;
+  display_id: string;
   title: string;
   item_type: string;
   priority: number;
@@ -532,7 +532,7 @@ export interface GatedItem {
 
 export interface ReadyQueue {
   project: string;
-  items: Array<{ id: number; short_id: string; title: string; priority: number; item_type: string }>;
+  items: Array<{ id: number; display_id: string; title: string; priority: number; item_type: string }>;
   source?: string;
 }
 
@@ -678,7 +678,7 @@ export interface DispatchResult {
   action: string;
   work_item: {
     id: number;
-    short_id: string;
+    display_id: string;
     title: string;
     status: string;
     assignee: string;
@@ -917,7 +917,7 @@ export const api = {
   memory: (id: number) => get<Memory>(`/memories/${id}`),
 
   memoryWorkItems: (id: number) =>
-    get<{ memory_id: number; work_items: Array<{ id: number; short_id: string; title: string; status: string; item_type: string; project: string }> }>(
+    get<{ memory_id: number; work_items: Array<{ id: number; display_id: string; title: string; status: string; item_type: string; project: string }> }>(
       `/memories/${id}/work-items`
     ),
 
@@ -941,7 +941,7 @@ export const api = {
   taskComplete: (id: number) => post<{ status: string }>(`/tasks/${id}/complete`, {}),
 
   taskPromote: (id: number) =>
-    post<{ action: string; task_id: number; work_item: { id: number; short_id: string; title: string; status: string } }>(
+    post<{ action: string; task_id: number; work_item: { id: number; display_id: string; title: string; status: string } }>(
       `/tasks/${id}/promote`, {},
     ),
 
@@ -1091,7 +1091,7 @@ export const api = {
   workItems: (opts?: { project?: string; status?: string; item_type?: string; assignee?: string; include_children?: string; limit?: string; offset?: string }) =>
     get<Paginated<WorkItem>>("/work-items", opts),
 
-  workItem: (id: number) => get<WorkItemDetail>(`/work-items/${id}`),
+  workItem: (id: number | string) => get<WorkItemDetail>(`/work-items/${id}`),
 
   workItemReady: (project: string, limit?: number) =>
     get<ReadyQueue>("/work-items/ready", { project, ...(limit ? { limit: String(limit) } : {}) }),
@@ -1102,47 +1102,47 @@ export const api = {
     metadata?: Record<string, unknown>; acceptance_criteria?: string;
   }) => post<WorkItemDetail>("/work-items", body),
 
-  workItemUpdate: (id: number, body: {
+  workItemUpdate: (id: number | string, body: {
     title?: string; description?: string; status?: string; priority?: number;
     assignee?: string; item_type?: string; parent_id?: number | null;
     session_name?: string; metadata?: Record<string, unknown>; acceptance_criteria?: string;
   }) => patch<WorkItemDetail>(`/work-items/${id}`, body),
 
-  workItemClaim: (id: number, assignee: string) =>
+  workItemClaim: (id: number | string, assignee: string) =>
     post<WorkItemDetail>(`/work-items/${id}/claim`, { assignee }),
 
-  workItemComplete: (id: number) =>
+  workItemComplete: (id: number | string) =>
     post<WorkItemDetail>(`/work-items/${id}/complete`, {}),
 
-  workItemAddChild: (parentId: number, body: {
+  workItemAddChild: (parentId: number | string, body: {
     title: string; description?: string; priority?: number;
     session_name?: string; metadata?: Record<string, unknown>; acceptance_criteria?: string;
   }) => post<WorkItemDetail>(`/work-items/${parentId}/children`, body),
 
-  workItemBlock: (blockerId: number, blockedId: number) =>
+  workItemBlock: (blockerId: number | string, blockedId: number | string) =>
     post<{ action: string }>("/work-items/block", { blocker_id: blockerId, blocked_id: blockedId }),
 
-  workItemUnblock: (blockerId: number, blockedId: number) =>
+  workItemUnblock: (blockerId: number | string, blockedId: number | string) =>
     delWithBody<{ action: string }>("/work-items/block", { blocker_id: blockerId, blocked_id: blockedId }),
 
-  workItemLinkMemories: (id: number, memoryIds: number[]) =>
+  workItemLinkMemories: (id: number | string, memoryIds: number[]) =>
     post<{ action: string }>(`/work-items/${id}/link-memories`, { memory_ids: memoryIds }),
 
-  workItemSetGate: (id: number, gateType: string, gateData?: Record<string, unknown>, actor?: string) =>
+  workItemSetGate: (id: number | string, gateType: string, gateData?: Record<string, unknown>, actor?: string) =>
     post<{ action: string }>(`/work-items/${id}/gate`, { gate_type: gateType, gate_data: gateData, actor }),
 
-  workItemResolveGate: (id: number, response?: Record<string, unknown>, actor?: string) =>
+  workItemResolveGate: (id: number | string, response?: Record<string, unknown>, actor?: string) =>
     post<{ action: string }>(`/work-items/${id}/gate/resolve`, { response, actor }),
 
-  workItemHeartbeat: (id: number, agentName: string, state?: string, note?: string) =>
+  workItemHeartbeat: (id: number | string, agentName: string, state?: string, note?: string) =>
     post<{ action: string }>(`/work-items/${id}/heartbeat`, { agent_name: agentName, state, note }),
 
-  workItemActivity: (id: number, opts?: { limit?: string; offset?: string }) =>
-    get<{ work_item_id: number; short_id: string; total: number; activities: WorkItemActivity[] }>(
+  workItemActivity: (id: number | string, opts?: { limit?: string; offset?: string }) =>
+    get<{ work_item_id: number; display_id: string; total: number; activities: WorkItemActivity[] }>(
       `/work-items/${id}/activity`, opts
     ),
 
-  workItemBriefing: (id: number) =>
+  workItemBriefing: (id: number | string) =>
     get<{ work_item: Record<string, unknown>; constraints: Record<string, unknown>; context: Array<Record<string, unknown>>; parent_chain: Array<Record<string, unknown>> }>(
       `/work-items/${id}/briefing`
     ),
@@ -1150,7 +1150,7 @@ export const api = {
   workItemsGated: (opts?: { project?: string; gate_type?: string; limit?: string }) =>
     get<{ total: number; items: GatedItem[] }>("/work-items/gated", opts),
 
-  workItemSessions: (id: number) =>
+  workItemSessions: (id: number | string) =>
     get<SessionWorkItemLink[]>(`/work-items/${id}/sessions`),
 
   sessionWorkItems: (sessionName: string) =>

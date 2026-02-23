@@ -42,22 +42,27 @@ def reconcile_graph(db: Database, graph: GraphProvider) -> dict:
 
 def _reconcile_work_items(db: Database, graph: GraphProvider) -> dict:
     """Reconcile all work items that are active or exist in Neo4j (PG wins)."""
+    from cairn.core.utils import make_display_id
+
     stats = {"checked": 0, "fixed": 0, "backfilled": 0}
 
     rows = db.execute(
         """
-        SELECT id, project_id, title, description, item_type, priority,
-               status, short_id, risk_tier, gate_type, assignee,
-               completed_at, graph_uuid
-        FROM work_items
-        WHERE status NOT IN ('done', 'cancelled')
-           OR graph_uuid IS NOT NULL
+        SELECT wi.id, wi.project_id, wi.title, wi.description, wi.item_type,
+               wi.priority, wi.status, wi.seq_num, wi.risk_tier, wi.gate_type,
+               wi.assignee, wi.completed_at, wi.graph_uuid,
+               p.work_item_prefix
+        FROM work_items wi
+        JOIN projects p ON wi.project_id = p.id
+        WHERE wi.status NOT IN ('done', 'cancelled')
+           OR wi.graph_uuid IS NOT NULL
         """,
     )
 
     for row in rows:
         stats["checked"] += 1
         try:
+            display_id = make_display_id(row["work_item_prefix"], row["seq_num"])
             graph_uuid = graph.ensure_work_item(
                 pg_id=row["id"],
                 project_id=row["project_id"],
@@ -66,7 +71,7 @@ def _reconcile_work_items(db: Database, graph: GraphProvider) -> dict:
                 item_type=row["item_type"],
                 priority=row["priority"],
                 status=row["status"],
-                short_id=row["short_id"],
+                short_id=display_id,
                 risk_tier=row.get("risk_tier", 0),
                 gate_type=row.get("gate_type"),
                 assignee=row.get("assignee"),

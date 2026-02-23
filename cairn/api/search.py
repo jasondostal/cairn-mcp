@@ -153,10 +153,12 @@ def register_routes(router: APIRouter, svc: Services, **kw):
 
     @router.get("/memories/{memory_id}/work-items")
     def api_memory_work_items(memory_id: int = Path(...)):
+        from cairn.core.utils import make_display_id
+
         rows = db.execute(
             """
-            SELECT wi.id, wi.short_id, wi.title, wi.status, wi.item_type,
-                   p.name as project
+            SELECT wi.id, wi.seq_num, wi.title, wi.status, wi.item_type,
+                   p.name as project, p.work_item_prefix
             FROM work_item_memory_links wml
             JOIN work_items wi ON wi.id = wml.work_item_id
             LEFT JOIN projects p ON wi.project_id = p.id
@@ -170,7 +172,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             "work_items": [
                 {
                     "id": r["id"],
-                    "short_id": r["short_id"],
+                    "display_id": make_display_id(r["work_item_prefix"], r["seq_num"]),
                     "title": r["title"],
                     "status": r["status"],
                     "item_type": r["item_type"],

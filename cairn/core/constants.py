@@ -172,7 +172,9 @@ class WorkItemType:
     }
 
 
-SHORT_ID_PREFIX = "wi-"
+DEFAULT_PREFIX_LENGTH = 2
+MIN_PREFIX_LENGTH = 1
+MAX_PREFIX_LENGTH = 10
 
 
 class GateType:

@@ -218,7 +218,7 @@ class ChatToolExecutor:
                 )
                 sections["open_work_items"] = [
                     {
-                        "short_id": i["short_id"],
+                        "display_id": i["display_id"],
                         "title": i["title"],
                         "status": i["status"],
                         "item_type": i["item_type"],
@@ -352,7 +352,7 @@ class ChatToolExecutor:
             "items": [
                 {
                     "id": i["id"],
-                    "short_id": i["short_id"],
+                    "display_id": i["display_id"],
                     "title": i["title"],
                     "item_type": i["item_type"],
                     "priority": i["priority"],
@@ -376,7 +376,7 @@ class ChatToolExecutor:
         return {
             "created": True,
             "id": result["id"],
-            "short_id": result["short_id"],
+            "display_id": result["display_id"],
             "project": project,
             "title": title,
         }

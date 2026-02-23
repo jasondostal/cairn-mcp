@@ -54,8 +54,8 @@ class AddChildBody(BaseModel):
 
 
 class BlockBody(BaseModel):
-    blocker_id: int
-    blocked_id: int
+    blocker_id: int | str
+    blocked_id: int | str
 
 
 class LinkMemoriesBody(BaseModel):
@@ -120,7 +120,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         return wim.gated_items(project=project, gate_type=gate_type, limit=limit)
 
     @router.get("/work-items/{item_id}")
-    def api_get_work_item(item_id: int = Path(...)):
+    def api_get_work_item(item_id: str = Path(...)):
         return wim.get(item_id)
 
     @router.post("/work-items")
@@ -134,22 +134,22 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         )
 
     @router.patch("/work-items/{item_id}")
-    def api_update_work_item(item_id: int = Path(...), body: UpdateWorkItemBody = Body(...)):
+    def api_update_work_item(item_id: str = Path(...), body: UpdateWorkItemBody = Body(...)):
         fields = body.model_dump(exclude_none=True)
         if not fields:
             return {"id": item_id, "action": "no_changes"}
         return wim.update(item_id, **fields)
 
     @router.post("/work-items/{item_id}/claim")
-    def api_claim_work_item(item_id: int = Path(...), body: ClaimBody = Body(...)):
+    def api_claim_work_item(item_id: str = Path(...), body: ClaimBody = Body(...)):
         return wim.claim(item_id, body.assignee, session_name=body.session_name)
 
     @router.post("/work-items/{item_id}/complete")
-    def api_complete_work_item(item_id: int = Path(...), body: CompleteBody = Body(CompleteBody())):
+    def api_complete_work_item(item_id: str = Path(...), body: CompleteBody = Body(CompleteBody())):
         return wim.complete(item_id, session_name=body.session_name)
 
     @router.post("/work-items/{item_id}/children")
-    def api_add_child(item_id: int = Path(...), body: AddChildBody = Body(...)):
+    def api_add_child(item_id: str = Path(...), body: AddChildBody = Body(...)):
         return wim.add_child(
             parent_id=item_id, title=body.title, description=body.description,
             priority=body.priority, session_name=body.session_name,
@@ -166,33 +166,33 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         return wim.unblock(body.blocker_id, body.blocked_id)
 
     @router.post("/work-items/{item_id}/link-memories")
-    def api_link_memories(item_id: int = Path(...), body: LinkMemoriesBody = Body(...)):
+    def api_link_memories(item_id: str = Path(...), body: LinkMemoriesBody = Body(...)):
         return wim.link_memories(item_id, body.memory_ids)
 
     @router.post("/work-items/{item_id}/gate")
-    def api_set_gate(item_id: int = Path(...), body: SetGateBody = Body(...)):
+    def api_set_gate(item_id: str = Path(...), body: SetGateBody = Body(...)):
         return wim.set_gate(item_id, body.gate_type, gate_data=body.gate_data, actor=body.actor)
 
     @router.post("/work-items/{item_id}/gate/resolve")
-    def api_resolve_gate(item_id: int = Path(...), body: ResolveGateBody = Body(...)):
+    def api_resolve_gate(item_id: str = Path(...), body: ResolveGateBody = Body(...)):
         return wim.resolve_gate(item_id, response=body.response, actor=body.actor)
 
     @router.post("/work-items/{item_id}/heartbeat")
-    def api_heartbeat(item_id: int = Path(...), body: HeartbeatBody = Body(...)):
+    def api_heartbeat(item_id: str = Path(...), body: HeartbeatBody = Body(...)):
         return wim.heartbeat(item_id, body.agent_name, state=body.state, note=body.note, session_name=body.session_name)
 
     @router.get("/work-items/{item_id}/activity")
     def api_activity(
-        item_id: int = Path(...),
+        item_id: str = Path(...),
         limit: int = Query(50, ge=1, le=200),
         offset: int = Query(0, ge=0),
     ):
         return wim.get_activity(item_id, limit=limit, offset=offset)
 
     @router.get("/work-items/{item_id}/sessions")
-    def api_work_item_sessions(item_id: int = Path(...)):
+    def api_work_item_sessions(item_id: str = Path(...)):
         return wim.sessions_for_work_item(item_id)
 
     @router.get("/work-items/{item_id}/briefing")
-    def api_briefing(item_id: int = Path(...)):
+    def api_briefing(item_id: str = Path(...)):
         return wim.generate_briefing(item_id)

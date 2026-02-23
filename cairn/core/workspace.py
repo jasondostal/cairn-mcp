@@ -460,7 +460,7 @@ class WorkspaceManager:
 
         if "error" in session_result:
             return {"error": session_result["error"], "work_item": {
-                "id": wi["id"], "short_id": wi.get("short_id"), "title": wi.get("title"),
+                "id": wi["id"], "display_id": wi.get("display_id"), "title": wi.get("title"),
             }}
 
         # 5. Log dispatch activity
@@ -482,7 +482,7 @@ class WorkspaceManager:
             "action": "dispatched",
             "work_item": {
                 "id": wi["id"],
-                "short_id": wi.get("short_id"),
+                "display_id": wi.get("display_id"),
                 "title": wi.get("title"),
                 "status": "in_progress",
                 "assignee": assignee_name,
@@ -750,7 +750,7 @@ class WorkspaceManager:
         sections: list[str] = []
 
         sections.append("[DISPATCH BRIEFING]")
-        sections.append(f"You are assigned to work item **{wi.get('short_id', '?')}**: {wi.get('title', 'Untitled')}")
+        sections.append(f"You are assigned to work item **{wi.get('display_id', '?')}**: {wi.get('title', 'Untitled')}")
         sections.append(f"Risk tier: {wi.get('risk_tier', 0)} ({wi.get('risk_label', 'patrol')})")
 
         if wi.get("description"):
@@ -762,8 +762,8 @@ class WorkspaceManager:
         # Parent chain for hierarchy context
         parent_chain = briefing.get("parent_chain", [])
         if parent_chain:
-            chain_str = " → ".join(f"{p['short_id']}: {p['title']}" for p in parent_chain)
-            sections.append(f"\n## Parent Context\n{chain_str} → **{wi.get('short_id', '?')}** (you are here)")
+            chain_str = " → ".join(f"{p['display_id']}: {p['title']}" for p in parent_chain)
+            sections.append(f"\n## Parent Context\n{chain_str} → **{wi.get('display_id', '?')}** (you are here)")
 
         # Cascaded constraints
         constraints = briefing.get("constraints", {})

@@ -7,7 +7,7 @@ import { ListChecks, Loader2, Plus, CheckCircle2 } from "lucide-react";
 
 interface WorkItemSummary {
   id: number;
-  short_id: string;
+  display_id: string;
   title: string;
   item_type: string;
   priority: number;
@@ -72,7 +72,7 @@ export function ListWorkItemsToolUI({
               <span
                 className={`text-[10px] font-mono ${statusColors[item.status] ?? "text-muted-foreground"}`}
               >
-                {item.short_id}
+                {item.display_id}
               </span>
               <span className="rounded bg-muted px-1 py-0.5 text-[9px]">
                 {item.item_type}
@@ -98,7 +98,7 @@ export function ListWorkItemsToolUI({
 interface CreateOutput {
   created: boolean;
   id: number;
-  short_id: string;
+  display_id: string;
   project: string;
   title: string;
 }
@@ -133,7 +133,7 @@ export function CreateWorkItemToolUI({
         {result?.created && (
           <div className="ml-auto flex items-center gap-1 text-[10px] text-green-400">
             <CheckCircle2 className="h-3 w-3" />
-            <span>{result.short_id}</span>
+            <span>{result.display_id}</span>
           </div>
         )}
       </div>

@@ -164,6 +164,11 @@ class WorkspaceConfig:
 
 
 @dataclass(frozen=True)
+class WorkItemsConfig:
+    default_prefix_length: int = 2
+
+
+@dataclass(frozen=True)
 class BudgetConfig:
     rules: int = 3000           # Token budget for rules() responses
     search: int = 4000          # Token budget for search() responses
@@ -226,6 +231,7 @@ class Config:
     reranker: RerankerConfig = field(default_factory=RerankerConfig)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
     budget: BudgetConfig = field(default_factory=BudgetConfig)
+    work_items: WorkItemsConfig = field(default_factory=WorkItemsConfig)
     clustering: ClusteringConfig = field(default_factory=ClusteringConfig)
     enrichment_enabled: bool = True
     profile: str = ""  # Active CAIRN_PROFILE name (empty = no profile)
@@ -296,6 +302,8 @@ EDITABLE_KEYS: set[str] = {
     "clustering.min_cluster_size", "clustering.min_samples",
     "clustering.selection_method", "clustering.staleness_hours",
     "clustering.staleness_growth_pct", "clustering.tsne_max_samples",
+    # Work Items
+    "work_items.default_prefix_length",
     # Top-level
     "enrichment_enabled",
     "ingest_chunk_size", "ingest_chunk_overlap", "decay_lambda",
@@ -314,6 +322,7 @@ _SECTION_CLASSES = {
     "neo4j": Neo4jConfig,
     "workspace": WorkspaceConfig,
     "budget": BudgetConfig,
+    "work_items": WorkItemsConfig,
     "clustering": ClusteringConfig,
     "decay": DecayConfig,
 }
@@ -560,6 +569,7 @@ _ENV_MAP: dict[str, str] = {
     "clustering.staleness_hours": "CAIRN_CLUSTER_STALENESS_HOURS",
     "clustering.staleness_growth_pct": "CAIRN_CLUSTER_STALENESS_GROWTH_PCT",
     "clustering.tsne_max_samples": "CAIRN_CLUSTER_TSNE_MAX_SAMPLES",
+    "work_items.default_prefix_length": "CAIRN_WORK_ITEMS_PREFIX_LENGTH",
     "enrichment_enabled": "CAIRN_ENRICHMENT_ENABLED",
     "profile": "CAIRN_PROFILE",
     "transport": "CAIRN_TRANSPORT",
@@ -720,6 +730,9 @@ def load_config() -> Config:
             insights=int(os.getenv("CAIRN_BUDGET_INSIGHTS", "4000")),
             workspace=int(os.getenv("CAIRN_BUDGET_WORKSPACE", "6000")),
         orient=int(os.getenv("CAIRN_BUDGET_ORIENT", "6000")),
+        ),
+        work_items=WorkItemsConfig(
+            default_prefix_length=int(os.getenv("CAIRN_WORK_ITEMS_PREFIX_LENGTH", "2")),
         ),
         clustering=ClusteringConfig(
             min_cluster_size=int(os.getenv("CAIRN_CLUSTER_MIN_SIZE", "3")),

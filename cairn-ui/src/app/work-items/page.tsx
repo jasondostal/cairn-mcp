@@ -409,7 +409,7 @@ export default function WorkItemsPage() {
                 onClick={() => openSheet(g.id)}
               >
                 <Hand className="h-3 w-3 text-[oklch(0.627_0.265_304)] shrink-0" />
-                <span className="font-mono text-xs text-muted-foreground shrink-0">{g.short_id}</span>
+                <span className="font-mono text-xs text-muted-foreground shrink-0">{g.display_id}</span>
                 <span className="flex-1 truncate">{g.title}</span>
                 {typeof g.gate_data?.question === "string" && (
                   <span className="text-xs text-muted-foreground truncate max-w-48">

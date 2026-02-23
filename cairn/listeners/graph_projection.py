@@ -9,7 +9,6 @@ graph_uuid in PG if it was missing.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -68,17 +67,25 @@ class GraphProjectionListener:
 
     def _wi_ensure(self, event: dict) -> None:
         """Ensure work item node exists and matches PG state."""
+        from cairn.core.utils import make_display_id
+
         wi_id = event.get("work_item_id") or event["payload"].get("work_item_id")
         if not wi_id:
             logger.warning("GraphProjection: work_item event missing work_item_id")
             return
 
-        row = self.db.execute_one("SELECT * FROM work_items WHERE id = %s", (wi_id,))
+        row = self.db.execute_one(
+            """SELECT wi.*, p.work_item_prefix
+               FROM work_items wi
+               JOIN projects p ON wi.project_id = p.id
+               WHERE wi.id = %s""",
+            (wi_id,),
+        )
         if not row:
             logger.warning("GraphProjection: work_item %d not found in PG", wi_id)
             return
 
-        now = datetime.now(timezone.utc).isoformat()
+        display_id = make_display_id(row["work_item_prefix"], row["seq_num"])
         graph_uuid = self.graph.ensure_work_item(
             pg_id=row["id"],
             project_id=row["project_id"],
@@ -87,7 +94,7 @@ class GraphProjectionListener:
             item_type=row["item_type"],
             priority=row["priority"],
             status=row["status"],
-            short_id=row["short_id"],
+            short_id=display_id,
             risk_tier=row.get("risk_tier", 0),
             gate_type=row.get("gate_type"),
             assignee=row.get("assignee"),

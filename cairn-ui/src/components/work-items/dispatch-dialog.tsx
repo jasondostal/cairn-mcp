@@ -65,7 +65,7 @@ export function DispatchDialog({
             Dispatch to Agent
           </DialogTitle>
           <DialogDescription>
-            <span className="font-mono">{item.short_id}</span> — {item.title}
+            <span className="font-mono">{item.display_id}</span> — {item.title}
           </DialogDescription>
         </DialogHeader>
 

@@ -243,7 +243,7 @@ function SessionDetail({
             {workItems.map((wi) => (
               <Link
                 key={wi.id}
-                href={`/workspace?wi=${wi.short_id}`}
+                href={`/workspace?wi=${wi.display_id}`}
                 className="flex items-center gap-3 px-3 py-2 hover:bg-accent/50 transition-colors text-xs"
               >
                 <span className={cn(
@@ -254,7 +254,7 @@ function SessionDetail({
                   wi.status === "cancelled" ? "bg-muted-foreground/30" :
                   "bg-[oklch(0.7_0.15_80)]"
                 )} />
-                <span className="font-mono text-muted-foreground shrink-0">{wi.short_id}</span>
+                <span className="font-mono text-muted-foreground shrink-0">{wi.display_id}</span>
                 <span className="flex-1 truncate">{wi.title}</span>
                 <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">
                   {wi.role}

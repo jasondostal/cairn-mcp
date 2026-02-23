@@ -56,6 +56,77 @@ def validate_search(query, limit):
         raise ValidationError(f"limit cannot exceed {MAX_LIMIT}")
 
 
+def make_display_id(prefix: str, seq_num: int) -> str:
+    """Build a display ID from prefix and sequence number: e.g. 'ca-42'."""
+    return f"{prefix}-{seq_num}"
+
+
+def parse_display_id(display_id: str) -> tuple[str, int] | None:
+    """Parse a display ID like 'ca-42' into (prefix, seq_num).
+
+    Splits on the last '-' to handle prefixes that contain hyphens.
+    Returns None if parsing fails.
+    """
+    idx = display_id.rfind("-")
+    if idx < 1:
+        return None
+    prefix = display_id[:idx]
+    try:
+        seq = int(display_id[idx + 1:])
+    except ValueError:
+        return None
+    return (prefix, seq)
+
+
+def _generate_prefix(db: Database, project_name: str) -> str:
+    """Generate a unique work_item_prefix for a project.
+
+    Reads default length from config (via app_settings), tries progressively
+    longer substrings on collision, numeric suffix fallback.
+    """
+    from cairn.core.constants import DEFAULT_PREFIX_LENGTH
+
+    # Try to read configured default from app_settings
+    default_len = DEFAULT_PREFIX_LENGTH
+    try:
+        from cairn.storage import settings_store
+        val = settings_store.load_one(db, "work_items.default_prefix_length")
+        if val is not None:
+            default_len = int(val)
+    except Exception:
+        pass
+
+    # Special-case __global__
+    if project_name == "__global__":
+        base = "gl"
+    else:
+        base = re.sub(r"[^a-z0-9]", "", project_name.lower())
+        if not base:
+            base = "p"
+
+    # Try progressively longer prefixes
+    for length in range(default_len, len(base) + 1):
+        candidate = base[:length]
+        row = db.execute_one(
+            "SELECT 1 FROM projects WHERE work_item_prefix = %s",
+            (candidate,),
+        )
+        if not row:
+            return candidate
+
+    # Numeric suffix fallback
+    suffix = 1
+    while True:
+        candidate = f"{base[:default_len]}{suffix}"
+        row = db.execute_one(
+            "SELECT 1 FROM projects WHERE work_item_prefix = %s",
+            (candidate,),
+        )
+        if not row:
+            return candidate
+        suffix += 1
+
+
 def get_project(db: Database, project_name: str) -> int | None:
     """Resolve project name to ID. Returns project ID or None if not found."""
     row = db.execute_one(
@@ -69,16 +140,19 @@ def get_or_create_project(db: Database, project_name: str) -> int:
 
     Use this only on write paths (store, create, set). For read paths,
     use get_project() to avoid creating phantom projects from typos.
+
+    Auto-generates a work_item_prefix on INSERT (collision-safe).
     """
     project_id = get_project(db, project_name)
     if project_id is not None:
         return project_id
 
+    prefix = _generate_prefix(db, project_name)
     row = db.execute_one(
-        "INSERT INTO projects (name) VALUES (%s) "
+        "INSERT INTO projects (name, work_item_prefix) VALUES (%s, %s) "
         "ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name "
         "RETURNING id",
-        (project_name,),
+        (project_name, prefix),
     )
     db.commit()
     return row["id"]

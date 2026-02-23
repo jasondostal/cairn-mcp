@@ -276,7 +276,7 @@ export default function MemoryDetail() {
                     className="flex items-center gap-2 text-sm hover:bg-accent/50 rounded-md p-1.5 -mx-1.5 transition-colors"
                   >
                     <StatusDot status={wi.status as "open" | "ready" | "in_progress" | "blocked" | "done" | "cancelled"} />
-                    <span className="font-mono text-xs text-muted-foreground">{wi.short_id}</span>
+                    <span className="font-mono text-xs text-muted-foreground">{wi.display_id}</span>
                     <span className="truncate">{wi.title}</span>
                   </Link>
                 ))}

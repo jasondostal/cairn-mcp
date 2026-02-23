@@ -198,7 +198,7 @@ export function WorkItemSheet({
                 <RiskTierBadge tier={detail.risk_tier} />
               </div>
               <SheetTitle className="font-mono text-lg">
-                {detail.short_id}
+                {detail.display_id}
               </SheetTitle>
               <SheetDescription className="text-sm text-foreground">
                 {detail.title}
@@ -348,7 +348,7 @@ export function WorkItemSheet({
                           { value: "", label: "No parent" },
                           ...parentOptions.map((wi) => ({
                             value: String(wi.id),
-                            label: `${wi.short_id} ${wi.title}`,
+                            label: `${wi.display_id} ${wi.title}`,
                           })),
                         ]}
                         value={detail.parent ? String(detail.parent.id) : ""}
@@ -375,7 +375,7 @@ export function WorkItemSheet({
                             onClick={() => navigateTo(detail.parent!.id)}
                             className="text-sm text-primary hover:underline font-mono"
                           >
-                            {detail.parent.short_id}
+                            {detail.parent.display_id}
                           </button>
                           <span className="text-sm text-muted-foreground ml-1 truncate">{detail.parent.title}</span>
                           {!isTerminal && (
@@ -435,7 +435,7 @@ export function WorkItemSheet({
                                 onClick={() => navigateTo(b.id)}
                                 className="font-mono text-xs text-primary hover:underline"
                               >
-                                {b.short_id}
+                                {b.display_id}
                               </button>
                               <span className="truncate text-muted-foreground">{b.title}</span>
                             </div>
@@ -454,7 +454,7 @@ export function WorkItemSheet({
                                 onClick={() => navigateTo(b.id)}
                                 className="font-mono text-xs text-primary hover:underline"
                               >
-                                {b.short_id}
+                                {b.display_id}
                               </button>
                               <span className="truncate text-muted-foreground">{b.title}</span>
                             </div>
@@ -650,7 +650,7 @@ export function WorkItemSheet({
               {/* Footer info */}
               <Separator />
               <div className="space-y-1 text-xs text-muted-foreground">
-                <p>ID: {detail.id} ({detail.short_id})</p>
+                <p>ID: {detail.id} ({detail.display_id})</p>
                 <p>Created: {formatDateTime(detail.created_at)}</p>
                 {detail.updated_at && <p>Updated: {formatDateTime(detail.updated_at)}</p>}
                 {detail.completed_at && <p>Completed: {formatDateTime(detail.completed_at)}</p>}

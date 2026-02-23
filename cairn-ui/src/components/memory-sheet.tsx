@@ -37,7 +37,7 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
   const [memory, setMemory] = useState<Memory | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [linkedWorkItems, setLinkedWorkItems] = useState<Array<{ id: number; short_id: string; title: string; status: string; item_type: string; project: string }>>([]);
+  const [linkedWorkItems, setLinkedWorkItems] = useState<Array<{ id: number; display_id: string; title: string; status: string; item_type: string; project: string }>>([]);
 
   useEffect(() => {
     if (!memoryId || !open) return;
@@ -241,7 +241,7 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
                           className="flex items-center gap-2 text-sm hover:bg-accent/50 rounded-md p-1 -mx-1 transition-colors"
                         >
                           <StatusDot status={wi.status as "open" | "ready" | "in_progress" | "blocked" | "done" | "cancelled"} />
-                          <span className="font-mono text-xs text-muted-foreground">{wi.short_id}</span>
+                          <span className="font-mono text-xs text-muted-foreground">{wi.display_id}</span>
                           <span className="truncate text-xs">{wi.title}</span>
                         </Link>
                       ))}

@@ -29,6 +29,10 @@ class LinkProjectBody(BaseModel):
     link_type: str = "related"
 
 
+class UpdatePrefixBody(BaseModel):
+    prefix: str
+
+
 class UpdateDocBody(BaseModel):
     content: str
     title: str | None = None
@@ -299,6 +303,13 @@ def register_routes(router: APIRouter, svc: Services, **kw):
     def api_link_project(name: str = Path(...), body: LinkProjectBody = Body(...)):
         try:
             return project_manager.link(name, body.target, body.link_type)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @router.patch("/projects/{name}/prefix")
+    def api_update_prefix(name: str = Path(...), body: UpdatePrefixBody = Body(...)):
+        try:
+            return project_manager.update_prefix(name, body.prefix)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 

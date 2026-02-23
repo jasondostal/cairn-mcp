@@ -1088,7 +1088,7 @@ async def dispatch(
     back. Check status via work_items(action='get', work_item_id=...).
 
     Args:
-        work_item_id: Existing work item to dispatch (short_id like 'wi-002a' or numeric ID).
+        work_item_id: Existing work item to dispatch (display_id like 'ca-42' or numeric ID).
         project: Project name (required if creating a new work item).
         title: Work item title (required if creating a new work item).
         description: Detailed description of the work to be done.

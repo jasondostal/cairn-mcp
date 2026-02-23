@@ -270,7 +270,7 @@ export default function ProjectDetailPage() {
     const f = wiFilter.toLowerCase();
     return workItems.items.filter((wi) =>
       wi.title.toLowerCase().includes(f) ||
-      wi.short_id.toLowerCase().includes(f) ||
+      wi.display_id.toLowerCase().includes(f) ||
       wi.status.toLowerCase().includes(f) ||
       wi.item_type.toLowerCase().includes(f)
     );
@@ -372,7 +372,7 @@ export default function ProjectDetailPage() {
                     className="flex items-center gap-3 px-3 py-2 hover:bg-accent/50 transition-colors text-sm"
                   >
                     <StatusDot status={wi.status} />
-                    <span className="font-mono text-xs text-muted-foreground shrink-0">{wi.short_id}</span>
+                    <span className="font-mono text-xs text-muted-foreground shrink-0">{wi.display_id}</span>
                     <span className="flex-1 truncate">{wi.title}</span>
                     <Badge variant="outline" className="text-xs shrink-0">{wi.item_type}</Badge>
                   </Link>
