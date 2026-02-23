@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.59.0] — 2026-02-23
+
+### Added
+- **Jira-style display IDs** — work items now use project-scoped sequential IDs
+  (e.g., `ca-42`) instead of hex-encoded `wi-XXXX` identifiers. Each project gets
+  an auto-generated prefix with collision detection. New
+  `PATCH /projects/{name}/prefix` endpoint to customize prefixes.
+- **REST API parity** — full REST coverage for all MCP tool functionality.
+  Extracted shared business logic from `server.py` into `cairn/core/orient.py` and
+  `cairn/core/code_ops.py` so both MCP tools and REST endpoints call identical
+  code. New endpoints for memory CRUD, code intelligence, dispatch, consolidate,
+  orient, project links, and document updates. cairn-ui gains matching TypeScript
+  types and API client methods.
+
+### Changed
+- **`work_items` tool** — `work_item_id` parameter now accepts both numeric IDs
+  and display ID strings (e.g., `42` or `"ca-42"`). All responses return
+  `display_id` instead of `short_id`.
+- **`dispatch` tool** — `work_item_id` accepts display ID strings.
+- **`server.py` slimmed** — 600+ lines of inline business logic moved to dedicated
+  core modules.
+
+### Removed
+- **`short_id` column** — migration 032 drops the hex-based `short_id` from
+  `work_items` after backfilling sequential `seq_num` values.
+
 ## [0.58.1] — 2026-02-23
 
 ### Added
@@ -2018,7 +2044,10 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.56.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.59.0...HEAD
+[0.59.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.58.1...v0.59.0
+[0.58.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.58.0...v0.58.1
+[0.58.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.56.0...v0.58.0
 [0.56.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.55.0...v0.56.0
 [0.55.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.52.0...v0.55.0
 [0.52.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.51.0...v0.52.0

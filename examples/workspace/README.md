@@ -212,7 +212,7 @@ When you dispatch from a work item (`work_item_id` parameter), Cairn assembles a
 
 ```
 [DISPATCH BRIEFING]
-You are assigned to work item **wi-xxxx**: <title>
+You are assigned to work item **ca-42**: <title>
 Risk tier: 1 (caution)
 
 ## Description
@@ -222,7 +222,7 @@ Risk tier: 1 (caution)
 <definition of done>
 
 ## Parent Context
-epic wi-0040: Semantic code indexing → **wi-0040.1** (you are here)
+epic ca-40: Semantic code indexing → **ca-41** (you are here)
 
 ## Constraints
 - **language**: python, typescript

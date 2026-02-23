@@ -89,7 +89,7 @@ Search for it later:
 
 > "What did we decide about the storage layer?"
 
-That's it. 19 tools available. The ones you'll use most:
+That's it. 20 tools available. The ones you'll use most:
 
 | Tool | What it does |
 |------|-------------|

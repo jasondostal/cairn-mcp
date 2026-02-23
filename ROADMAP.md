@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.58.1** — Code Intelligence hardening.
+Current: **v0.59.0** — Display IDs + REST API parity.
 
 ---
 
@@ -21,6 +21,18 @@ Current: **v0.58.1** — Code Intelligence hardening.
 ---
 
 ## Shipped
+
+### v0.59.0 — "Display IDs + REST API Parity" ✓
+
+Jira-style work item IDs. Full REST coverage matching every MCP tool.
+
+- [x] **Jira-style display IDs** — project-scoped sequential IDs (`ca-42`) replace hex-encoded `wi-XXXX` identifiers. Auto-generated prefixes with collision detection. Atomic `seq_num` allocation via `UPDATE...RETURNING`.
+- [x] **`_resolve_id()` accepts both formats** — numeric IDs and display ID strings work everywhere (`work_item_id=42` or `work_item_id="ca-42"`)
+- [x] **`PATCH /projects/{name}/prefix`** — customize project work item prefixes
+- [x] **REST API parity** — full REST coverage for all MCP tool functionality. Extracted shared business logic from `server.py` into `cairn/core/orient.py` and `cairn/core/code_ops.py`. New endpoints for memory CRUD, code intelligence, dispatch, consolidate, orient, project links, and document updates.
+- [x] **cairn-ui API client update** — TypeScript types and API client methods for all new endpoints, `short_id` → `display_id` across 9 component files
+- [x] **`server.py` slimmed** — 600+ lines of inline business logic moved to dedicated core modules
+- [x] Migration 032 (display IDs: `seq_num` on work_items, `work_item_prefix`/`work_item_next_seq` on projects, backfill, `short_id` column dropped)
 
 ### v0.58.x — "Code Intelligence" ✓
 
@@ -173,7 +185,7 @@ Gate primitives, risk tiers, agent heartbeat, activity logging, cascading constr
 
 Graph-native work items. Hierarchical decomposition. Agent-ready dispatch.
 
-- [x] **WorkItem Neo4j nodes** — type, status, priority, Beads-style hierarchical IDs (wi-a3f8, .1, .1.1)
+- [x] **WorkItem Neo4j nodes** — type, status, priority, hierarchical decomposition (replaced by Jira-style display IDs in v0.59.0)
 - [x] **Graph edges** — PARENT_OF, BLOCKS, ASSIGNED_TO, RELATES_TO
 - [x] **`ready` semantics** — Cypher: unblocked items as dispatch primitive
 - [x] **Atomic claiming** — status + assignee in one operation
