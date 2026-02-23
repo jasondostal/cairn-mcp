@@ -75,6 +75,15 @@ class Neo4jGraphProvider(GraphProvider):
             "CREATE INDEX work_item_pg_id IF NOT EXISTS FOR (wi:WorkItem) ON (wi.pg_id)",
             "CREATE INDEX work_item_status IF NOT EXISTS FOR (wi:WorkItem) ON (wi.status)",
             "CREATE INDEX work_item_short_id IF NOT EXISTS FOR (wi:WorkItem) ON (wi.short_id)",
+            # CodeFile constraints + indexes (v0.58.0)
+            "CREATE CONSTRAINT code_file_uuid IF NOT EXISTS FOR (cf:CodeFile) REQUIRE cf.uuid IS UNIQUE",
+            "CREATE INDEX code_file_project IF NOT EXISTS FOR (cf:CodeFile) ON (cf.project_id)",
+            "CREATE INDEX code_file_path IF NOT EXISTS FOR (cf:CodeFile) ON (cf.path)",
+            # CodeSymbol constraints + indexes (v0.58.0)
+            "CREATE CONSTRAINT code_symbol_uuid IF NOT EXISTS FOR (cs:CodeSymbol) REQUIRE cs.uuid IS UNIQUE",
+            "CREATE INDEX code_symbol_project IF NOT EXISTS FOR (cs:CodeSymbol) ON (cs.project_id)",
+            "CREATE INDEX code_symbol_kind IF NOT EXISTS FOR (cs:CodeSymbol) ON (cs.kind)",
+            "CREATE INDEX code_symbol_file IF NOT EXISTS FOR (cs:CodeSymbol) ON (cs.file_path)",
         ]
 
         # Vector indexes need separate handling — they use different syntax
@@ -93,6 +102,10 @@ class Neo4jGraphProvider(GraphProvider):
             """CREATE VECTOR INDEX work_item_content_vec IF NOT EXISTS
                FOR (wi:WorkItem) ON (wi.content_embedding)
                OPTIONS {indexConfig: {`vector.dimensions`: 1024, `vector.similarity_function`: 'cosine'}}""",
+            # CodeSymbol description vector index (v0.58.0 Phase 6)
+            """CREATE VECTOR INDEX code_symbol_desc_vec IF NOT EXISTS
+               FOR (cs:CodeSymbol) ON (cs.description_embedding)
+               OPTIONS {indexConfig: {`vector.dimensions`: 1024, `vector.similarity_function`: 'cosine'}}""",
         ]
 
         # Fulltext indexes
@@ -101,6 +114,8 @@ class Neo4jGraphProvider(GraphProvider):
             "CREATE FULLTEXT INDEX statement_fact_ft IF NOT EXISTS FOR (s:Statement) ON EACH [s.fact]",
             # WorkItem title fulltext (v0.47.0)
             "CREATE FULLTEXT INDEX work_item_title_ft IF NOT EXISTS FOR (wi:WorkItem) ON EACH [wi.title]",
+            # CodeSymbol name fulltext (v0.58.0)
+            "CREATE FULLTEXT INDEX code_symbol_name_ft IF NOT EXISTS FOR (cs:CodeSymbol) ON EACH [cs.name, cs.qualified_name]",
         ]
 
         with self._session() as session:
@@ -1142,3 +1157,558 @@ class Neo4jGraphProvider(GraphProvider):
                     "entity_types": type_counts,
                 },
             }
+
+    # -- Code intelligence (v0.58.0) --
+
+    def ensure_code_file(
+        self,
+        path: str,
+        project_id: int,
+        language: str,
+        content_hash: str,
+    ) -> str:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._session() as session:
+            result = session.run(
+                """
+                MERGE (cf:CodeFile {path: $path, project_id: $pid})
+                ON CREATE SET cf.uuid = $uuid, cf.language = $lang,
+                              cf.content_hash = $hash,
+                              cf.created_at = $now, cf.last_indexed = $now
+                ON MATCH SET  cf.language = $lang, cf.content_hash = $hash,
+                              cf.last_indexed = $now
+                RETURN cf.uuid AS uuid
+                """,
+                path=path,
+                pid=project_id,
+                uuid=str(uuid.uuid4()),
+                lang=language,
+                hash=content_hash,
+                now=now,
+            )
+            return result.single()["uuid"]
+
+    def ensure_code_symbol(
+        self,
+        qualified_name: str,
+        project_id: int,
+        name: str,
+        kind: str,
+        file_path: str,
+        start_line: int,
+        end_line: int,
+        signature: str = "",
+        docstring: str | None = None,
+        parent_name: str | None = None,
+    ) -> str:
+        now = datetime.now(timezone.utc).isoformat()
+        props = {
+            "name": name,
+            "kind": kind,
+            "file_path": file_path,
+            "start_line": start_line,
+            "end_line": end_line,
+            "signature": signature,
+            "updated_at": now,
+        }
+        if docstring is not None:
+            props["docstring"] = docstring
+        if parent_name is not None:
+            props["parent_name"] = parent_name
+
+        with self._session() as session:
+            result = session.run(
+                """
+                MERGE (cs:CodeSymbol {qualified_name: $qname, file_path: $fpath, project_id: $pid})
+                ON CREATE SET cs.uuid = $uuid, cs.created_at = $now, cs += $props
+                ON MATCH SET  cs += $props
+                RETURN cs.uuid AS uuid
+                """,
+                qname=qualified_name,
+                fpath=file_path,
+                pid=project_id,
+                uuid=str(uuid.uuid4()),
+                now=now,
+                props=props,
+            )
+            return result.single()["uuid"]
+
+    def link_file_contains_symbol(self, file_uuid: str, symbol_uuid: str) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (cf:CodeFile {uuid: $file_uuid})
+                MATCH (cs:CodeSymbol {uuid: $symbol_uuid})
+                MERGE (cf)-[:CONTAINS]->(cs)
+                """,
+                file_uuid=file_uuid,
+                symbol_uuid=symbol_uuid,
+            )
+
+    def link_symbol_contains_symbol(self, parent_uuid: str, child_uuid: str) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (parent:CodeSymbol {uuid: $parent_uuid})
+                MATCH (child:CodeSymbol {uuid: $child_uuid})
+                MERGE (parent)-[:CONTAINS]->(child)
+                """,
+                parent_uuid=parent_uuid,
+                child_uuid=child_uuid,
+            )
+
+    def link_file_imports_file(self, importer_uuid: str, imported_uuid: str) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (a:CodeFile {uuid: $importer})
+                MATCH (b:CodeFile {uuid: $imported})
+                MERGE (a)-[:IMPORTS]->(b)
+                """,
+                importer=importer_uuid,
+                imported=imported_uuid,
+            )
+
+    def delete_code_file(self, file_uuid: str) -> int:
+        """Delete a CodeFile and detach-delete all its CodeSymbol children."""
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (cf:CodeFile {uuid: $uuid})
+                OPTIONAL MATCH (cf)-[:CONTAINS]->(cs:CodeSymbol)
+                DETACH DELETE cs, cf
+                RETURN count(cs) + 1 AS deleted_count
+                """,
+                uuid=file_uuid,
+            )
+            row = result.single()
+            return row["deleted_count"] if row else 0
+
+    def get_code_file(self, path: str, project_id: int) -> dict | None:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (cf:CodeFile {path: $path, project_id: $pid})
+                RETURN cf.uuid AS uuid, cf.path AS path, cf.language AS language,
+                       cf.content_hash AS content_hash, cf.last_indexed AS last_indexed
+                """,
+                path=path,
+                pid=project_id,
+            )
+            row = result.single()
+            return dict(row) if row else None
+
+    def get_code_files(self, project_id: int) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (cf:CodeFile {project_id: $pid})
+                RETURN cf.uuid AS uuid, cf.path AS path, cf.language AS language,
+                       cf.content_hash AS content_hash, cf.last_indexed AS last_indexed
+                ORDER BY cf.path
+                """,
+                pid=project_id,
+            )
+            return [dict(r) for r in result]
+
+    def batch_upsert_code_graph(
+        self,
+        project_id: int,
+        files: list[dict],
+        import_edges: list[tuple[str, str]],
+        stale_file_uuids: list[str],
+    ) -> dict[str, str]:
+        """Batch-upsert files, symbols, and edges in a single transaction."""
+        now = datetime.now(timezone.utc).isoformat()
+        path_to_uuid: dict[str, str] = {}
+
+        with self._session() as session:
+            with session.begin_transaction() as tx:
+                # 1) Delete stale files (no longer on disk)
+                if stale_file_uuids:
+                    tx.run(
+                        """
+                        UNWIND $uuids AS uid
+                        MATCH (cf:CodeFile {uuid: uid})
+                        OPTIONAL MATCH (cf)-[:CONTAINS]->(cs:CodeSymbol)
+                        DETACH DELETE cs, cf
+                        """,
+                        uuids=stale_file_uuids,
+                    )
+
+                # 2) Upsert files and collect UUIDs
+                file_rows = []
+                for f in files:
+                    file_uuid = str(uuid.uuid4())
+                    file_rows.append({
+                        "path": f["path"],
+                        "lang": f["language"],
+                        "hash": f["content_hash"],
+                        "uuid": file_uuid,
+                    })
+                result = tx.run(
+                    """
+                    UNWIND $rows AS r
+                    MERGE (cf:CodeFile {path: r.path, project_id: $pid})
+                    ON CREATE SET cf.uuid = r.uuid, cf.language = r.lang,
+                                  cf.content_hash = r.hash,
+                                  cf.created_at = $now, cf.last_indexed = $now
+                    ON MATCH SET  cf.language = r.lang, cf.content_hash = r.hash,
+                                  cf.last_indexed = $now
+                    RETURN cf.path AS path, cf.uuid AS uuid
+                    """,
+                    rows=file_rows,
+                    pid=project_id,
+                    now=now,
+                )
+                for record in result:
+                    path_to_uuid[record["path"]] = record["uuid"]
+
+                # 3) For changed files, delete old symbols before re-creating
+                changed_paths = [f["path"] for f in files]
+                tx.run(
+                    """
+                    UNWIND $paths AS p
+                    MATCH (cf:CodeFile {path: p, project_id: $pid})-[:CONTAINS]->(cs:CodeSymbol)
+                    DETACH DELETE cs
+                    """,
+                    paths=changed_paths,
+                    pid=project_id,
+                )
+
+                # 4) Batch-create all symbols
+                sym_rows = []
+                for f in files:
+                    for sym in f.get("symbols", []):
+                        props = {
+                            "name": sym["name"],
+                            "kind": sym["kind"],
+                            "file_path": f["path"],
+                            "start_line": sym["start_line"],
+                            "end_line": sym["end_line"],
+                            "signature": sym.get("signature", ""),
+                            "updated_at": now,
+                        }
+                        if sym.get("docstring") is not None:
+                            props["docstring"] = sym["docstring"]
+                        if sym.get("parent_name") is not None:
+                            props["parent_name"] = sym["parent_name"]
+                        sym_rows.append({
+                            "qname": sym["qualified_name"],
+                            "fpath": f["path"],
+                            "uuid": str(uuid.uuid4()),
+                            "props": props,
+                        })
+
+                if sym_rows:
+                    tx.run(
+                        """
+                        UNWIND $rows AS r
+                        CREATE (cs:CodeSymbol {
+                            qualified_name: r.qname,
+                            file_path: r.fpath,
+                            project_id: $pid,
+                            uuid: r.uuid,
+                            created_at: $now
+                        })
+                        SET cs += r.props
+                        WITH cs
+                        MATCH (cf:CodeFile {path: cs.file_path, project_id: $pid})
+                        MERGE (cf)-[:CONTAINS]->(cs)
+                        """,
+                        rows=sym_rows,
+                        pid=project_id,
+                        now=now,
+                    )
+
+                    # 5) Link parent->child symbols (class->method)
+                    parent_edges = []
+                    for f in files:
+                        for sym in f.get("symbols", []):
+                            if sym.get("parent_name"):
+                                parent_edges.append({
+                                    "parent_qname": sym["parent_name"],
+                                    "child_qname": sym["qualified_name"],
+                                    "fpath": f["path"],
+                                })
+                    if parent_edges:
+                        tx.run(
+                            """
+                            UNWIND $edges AS e
+                            MATCH (parent:CodeSymbol {qualified_name: e.parent_qname,
+                                                       file_path: e.fpath, project_id: $pid})
+                            MATCH (child:CodeSymbol {qualified_name: e.child_qname,
+                                                      file_path: e.fpath, project_id: $pid})
+                            MERGE (parent)-[:CONTAINS]->(child)
+                            """,
+                            edges=parent_edges,
+                            pid=project_id,
+                        )
+
+                # 6) Link file-level imports
+                if import_edges:
+                    edge_rows = [{"src": src, "dst": dst} for src, dst in import_edges]
+                    tx.run(
+                        """
+                        UNWIND $edges AS e
+                        MATCH (a:CodeFile {path: e.src, project_id: $pid})
+                        MATCH (b:CodeFile {path: e.dst, project_id: $pid})
+                        MERGE (a)-[:IMPORTS]->(b)
+                        """,
+                        edges=edge_rows,
+                        pid=project_id,
+                    )
+
+                tx.commit()
+
+        return path_to_uuid
+
+    def get_code_symbols(self, file_path: str, project_id: int) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (cs:CodeSymbol {file_path: $fpath, project_id: $pid})
+                RETURN cs.uuid AS uuid, cs.name AS name, cs.qualified_name AS qualified_name,
+                       cs.kind AS kind, cs.start_line AS start_line, cs.end_line AS end_line,
+                       cs.signature AS signature, cs.docstring AS docstring,
+                       cs.parent_name AS parent_name
+                ORDER BY cs.start_line
+                """,
+                fpath=file_path,
+                pid=project_id,
+            )
+            return [dict(r) for r in result]
+
+    # -- Code intelligence queries (v0.58.0 Phase 3) --
+
+    def get_file_dependents(self, path: str, project_id: int) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (dep:CodeFile)-[:IMPORTS]->(target:CodeFile {path: $path, project_id: $pid})
+                RETURN dep.path AS path, dep.language AS language
+                ORDER BY dep.path
+                """,
+                path=path,
+                pid=project_id,
+            )
+            return [dict(r) for r in result]
+
+    def get_file_dependencies(self, path: str, project_id: int) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (source:CodeFile {path: $path, project_id: $pid})-[:IMPORTS]->(dep:CodeFile)
+                RETURN dep.path AS path, dep.language AS language
+                ORDER BY dep.path
+                """,
+                path=path,
+                pid=project_id,
+            )
+            return [dict(r) for r in result]
+
+    def get_file_structure(self, path: str, project_id: int) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (cf:CodeFile {path: $path, project_id: $pid})-[:CONTAINS]->(cs:CodeSymbol)
+                RETURN cs.name AS name, cs.qualified_name AS qualified_name,
+                       cs.kind AS kind, cs.start_line AS start_line,
+                       cs.end_line AS end_line, cs.signature AS signature,
+                       cs.docstring AS docstring, cs.parent_name AS parent_name
+                ORDER BY cs.start_line
+                """,
+                path=path,
+                pid=project_id,
+            )
+            return [dict(r) for r in result]
+
+    def get_impact_graph(
+        self, path: str, project_id: int, max_depth: int = 3
+    ) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH p = (affected:CodeFile)-[:IMPORTS*1..%(depth)s]->(target:CodeFile {path: $path, project_id: $pid})
+                WHERE affected.project_id = $pid AND affected <> target
+                WITH affected, min(length(p)) AS depth
+                RETURN affected.path AS path, affected.language AS language, depth
+                ORDER BY depth, affected.path
+                """
+                % {"depth": int(max_depth)},
+                path=path,
+                pid=project_id,
+            )
+            return [dict(r) for r in result]
+
+    def search_code_symbols(
+        self,
+        query: str,
+        project_id: int,
+        kind: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        kind_clause = "AND node.kind = $kind" if kind else ""
+        with self._session() as session:
+            result = session.run(
+                f"""
+                CALL db.index.fulltext.queryNodes('code_symbol_name_ft', $q)
+                YIELD node, score
+                WHERE node.project_id = $pid {kind_clause}
+                RETURN node.qualified_name AS qualified_name, node.name AS name,
+                       node.kind AS kind, node.file_path AS file_path,
+                       node.signature AS signature, score
+                ORDER BY score DESC
+                LIMIT $lim
+                """,
+                q=query,
+                pid=project_id,
+                kind=kind,
+                lim=limit,
+            )
+            return [dict(r) for r in result]
+
+    # -- Code intelligence: NL descriptions (v0.58.0 Phase 6) --
+
+    def update_code_symbol_description(
+        self,
+        qualified_name: str,
+        project_id: int,
+        file_path: str,
+        description: str,
+        description_embedding: list[float],
+    ) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (cs:CodeSymbol {qualified_name: $qn, file_path: $fp, project_id: $pid})
+                SET cs.description = $desc, cs.description_embedding = $emb
+                """,
+                qn=qualified_name,
+                fp=file_path,
+                pid=project_id,
+                desc=description,
+                emb=description_embedding,
+            )
+
+    def search_code_symbols_by_description(
+        self,
+        embedding: list[float],
+        project_id: int,
+        kind: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        kind_clause = "AND node.kind = $kind" if kind else ""
+        with self._session() as session:
+            result = session.run(
+                f"""
+                CALL db.index.vector.queryNodes('code_symbol_desc_vec', $limit, $embedding)
+                YIELD node, score
+                WHERE node.project_id = $pid {kind_clause}
+                RETURN node.qualified_name AS qualified_name, node.name AS name,
+                       node.kind AS kind, node.file_path AS file_path,
+                       node.signature AS signature, node.description AS description, score
+                ORDER BY score DESC
+                """,
+                embedding=embedding,
+                pid=project_id,
+                kind=kind,
+                limit=limit,
+            )
+            return [dict(r) for r in result]
+
+    # -- Code intelligence: knowledge-code bridging (v0.58.0 Phase 7) --
+
+    def link_entity_to_code_file(self, entity_uuid: str, file_uuid: str) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (e:Entity {uuid: $entity_uuid}), (cf:CodeFile {uuid: $file_uuid})
+                MERGE (e)-[:REFERENCED_IN]->(cf)
+                """,
+                entity_uuid=entity_uuid,
+                file_uuid=file_uuid,
+            )
+
+    def link_entity_to_code_symbol(self, entity_uuid: str, symbol_uuid: str) -> None:
+        with self._session() as session:
+            session.run(
+                """
+                MATCH (e:Entity {uuid: $entity_uuid}), (cs:CodeSymbol {uuid: $symbol_uuid})
+                MERGE (e)-[:REFERENCED_IN]->(cs)
+                """,
+                entity_uuid=entity_uuid,
+                symbol_uuid=symbol_uuid,
+            )
+
+    def get_code_for_entity(self, entity_uuid: str) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (e:Entity {uuid: $entity_uuid})-[:REFERENCED_IN]->(target)
+                WHERE target:CodeFile OR target:CodeSymbol
+                RETURN labels(target)[0] AS type, target.path AS path,
+                       target.qualified_name AS qualified_name, target.name AS name
+                """,
+                entity_uuid=entity_uuid,
+            )
+            return [dict(r) for r in result]
+
+    def get_entities_for_code(self, file_path: str, project_id: int) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (e:Entity)-[:REFERENCED_IN]->(cf:CodeFile {path: $path, project_id: $pid})
+                RETURN e.uuid AS uuid, e.name AS name, e.entity_type AS entity_type
+                UNION
+                MATCH (e:Entity)-[:REFERENCED_IN]->(cs:CodeSymbol {file_path: $path, project_id: $pid})
+                RETURN e.uuid AS uuid, e.name AS name, e.entity_type AS entity_type
+                """,
+                path=file_path,
+                pid=project_id,
+            )
+            return [dict(r) for r in result]
+
+    # -- Code intelligence: cross-project (v0.58.0 Phase 7) --
+
+    def search_code_symbols_cross_project(
+        self,
+        query: str,
+        project_ids: list[int],
+        kind: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        kind_clause = "AND node.kind = $kind" if kind else ""
+        with self._session() as session:
+            result = session.run(
+                f"""
+                CALL db.index.fulltext.queryNodes('code_symbol_name_ft', $q)
+                YIELD node, score
+                WHERE node.project_id IN $pids {kind_clause}
+                RETURN node.qualified_name AS qualified_name, node.name AS name,
+                       node.kind AS kind, node.file_path AS file_path,
+                       node.signature AS signature, node.project_id AS project_id, score
+                ORDER BY score DESC
+                LIMIT $lim
+                """,
+                q=query,
+                pids=project_ids,
+                kind=kind,
+                lim=limit,
+            )
+            return [dict(r) for r in result]
+
+    def get_shared_dependencies(self, project_ids: list[int]) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (cf:CodeFile)
+                WHERE cf.project_id IN $pids
+                WITH cf.path AS path, collect(DISTINCT cf.project_id) AS pids
+                WHERE size(pids) > 1
+                RETURN path, pids AS project_ids, size(pids) AS count
+                ORDER BY count DESC
+                """,
+                pids=project_ids,
+            )
+            return [dict(r) for r in result]

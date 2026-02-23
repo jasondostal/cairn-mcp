@@ -1,75 +1,10 @@
 # Roadmap
 
-Current: **v0.57.0** — "Frictionless Dispatch".
+Current: **v0.58.0** — "Code Intelligence".
 
 ---
 
-## Next Up
-
-### v0.58.0 — "Code Intelligence"
-
-Per-project code understanding. Cairn already gives agents persistent memory, structured work tracking, and project documentation. Code intelligence adds the missing dimension: **understanding the code itself** — structure, boundaries, dependencies, impact — as a first-class project feature.
-
-Just like every project has docs, work items, and memories, every project becomes indexable. Parse source files, build a per-project code graph, enforce architecture rules, and answer structural queries — all through MCP.
-
-#### Phase 1: Architecture Boundary Rules ✅
-
-Generic rule engine using Python's stdlib `ast` module. Define boundary rules in YAML, validate them against any codebase. Zero external dependencies beyond PyYAML.
-
-- [x] **Import extraction** — parse Python files, extract all `import` and `from X import Y` statements with line numbers
-- [x] **Rule engine** — load YAML rules, evaluate against imports, report violations with `from`/`deny`/`allow` glob patterns
-- [x] **`architecture.yaml`** — 9 boundary rules for Cairn's own codebase (dogfood). 0 violations across 103 files
-- [x] **CI-enforced tests** — 29 tests: 26 unit tests for the engine + 3 integration tests against Cairn's live codebase
-
-#### Phase 2: tree-sitter Parsing + Code Graph
-
-Parse source files with [tree-sitter](https://tree-sitter.github.io/tree-sitter/) for language-agnostic AST extraction. Build a per-project code knowledge graph in Neo4j with `CodeFile` and `CodeSymbol` nodes. Content-hash dedup so unchanged files are never re-parsed.
-
-- [ ] **Language-agnostic parser** — tree-sitter abstraction with pluggable language modules (Python first)
-- [ ] **Code indexer** — `code_index(project, path)` MCP tool. Parse-to-graph pipeline with content-hash change detection
-- [ ] **Neo4j schema** — `CodeFile`, `CodeSymbol` nodes with `CONTAINS` and `IMPORTS` edges, all project-scoped
-- [ ] **Incremental indexing** — only re-parse files whose content hash has changed
-
-#### Phase 3: Structural Queries via MCP
-
-Agents ask structural questions about any indexed project: "What depends on this class?", "What's the blast radius if I change this file?"
-
-- [ ] **`code_query` MCP tool** — actions: `dependents`, `dependencies`, `structure`, `impact`
-- [ ] **Graph traversal engine** — project-scoped queries over `IMPORTS`/`CONTAINS` edges
-- [ ] **Search integration** — code query handler registered in the search pipeline
-
-#### Phase 4: Architecture Rules via MCP + Per-Project Config
-
-Make architecture rules a per-project MCP feature. Optionally upgrade to graph-backed evaluation. Add integration contracts (declared module exports, validated consumers).
-
-- [ ] **`arch_check` MCP tool** — run boundary checks on any indexed project
-- [ ] **Per-project rules** — architecture rules stored as project docs or referenced by path
-- [ ] **Graph-backed evaluation** — query Neo4j `IMPORTS` edges instead of re-parsing source
-- [ ] **Integration contracts** — declare stable module exports, validate consumers against declared API surfaces
-
-#### Phase 5: Multi-Language Support + Incremental Indexing
-
-TypeScript/React parsing via tree-sitter. Event-driven re-indexing for changed files. Adding a new language = one module in `cairn/code/languages/`.
-
-- [ ] **TypeScript language module** — functions, classes, interfaces, ES6 imports, React components
-- [ ] **Event-driven re-indexing** — `CodeIndexListener` on file change events
-- [ ] **Language registry** — auto-detect language from file extension, pluggable language modules
-
-#### Phase 6: Natural Language Code Search
-
-Generate natural language descriptions of code symbols, embed them for semantic search. Enables "find the function that handles authentication" without knowing the function name.
-
-- [ ] **Code summarizer** — LLM-generated 1-2 sentence descriptions per function/class/module
-- [ ] **Code embeddings** — `description_embedding` vector index on `CodeSymbol` nodes
-- [ ] **Semantic code search** — `code_query(action="search", query="...")` over NL descriptions
-
-#### Phase 7 (Future): Cross-Project Analysis
-
-- [ ] **PageRank** — identify hub files/functions per project by structural importance
-- [ ] **Knowledge ↔ Code bridging** — connect entity graph to code graph (e.g., entity "Neo4j" linked to files that use it)
-- [ ] **Cross-project queries** — "which projects use this pattern?", "what dependencies are shared?"
-
-### Ongoing
+## Ongoing
 
 **Benchmark re-evaluation.** LoCoMo 81.6% scored at v0.55 (full run, 1,986 questions across 5 categories). Re-run periodically as the system evolves. The graph neighbor signal, entity canonicalization, and contradiction scoping should affect scores.
 
@@ -86,6 +21,22 @@ Generate natural language descriptions of code symbols, embed them for semantic 
 ---
 
 ## Shipped
+
+### v0.58.0 — "Code Intelligence" ✓
+
+Per-project code understanding. Parse source files with tree-sitter, build a code graph in Neo4j, enforce architecture boundaries, search code by natural language, analyze cross-project dependencies — all through MCP.
+
+- [x] **Architecture boundary rules** — YAML rule engine with `from`/`deny`/`allow` glob patterns, validated against Python imports via stdlib `ast`
+- [x] **`code_index` MCP tool** — tree-sitter parsing with pluggable language modules (Python + TypeScript/TSX), content-hash incremental indexing, `CodeFile`/`CodeSymbol` nodes with `CONTAINS`/`IMPORTS` edges in Neo4j
+- [x] **`code_query` MCP tool** — 10 actions: `dependents`, `dependencies`, `structure`, `impact`, `search`, `hotspots`, `entities`, `code_for_entity`, `cross_search`, `shared_deps`
+- [x] **`code_describe` MCP tool** — LLM-generated natural language descriptions per symbol, embedded for semantic code search
+- [x] **`arch_check` MCP tool** — boundary validation from YAML config or project docs, source-based or graph-backed evaluation, integration contracts
+- [x] **TypeScript language module** — functions, classes, interfaces, enums, React components/hooks, ES6 imports, JSDoc extraction, TSX dialect support
+- [x] **PageRank hotspot analysis** — identify structurally important files via NetworkX client-side PageRank
+- [x] **Knowledge ↔ Code bridging** — `REFERENCED_IN` edges linking knowledge entities to code files/symbols
+- [x] **Cross-project analysis** — search symbols and find shared dependencies across all indexed projects
+- [x] **`architecture.yaml`** — 9 boundary rules for Cairn's own codebase (dogfood), 0 violations
+- [x] **29 code intelligence tests** — parser, indexer, query, cross-project, arch rules, TypeScript
 
 ### v0.57.0 — "Frictionless Dispatch" ✓
 

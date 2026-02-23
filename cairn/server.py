@@ -1646,6 +1646,481 @@ def ingest(
 
 
 # ============================================================
+# Code Intelligence (v0.58.0)
+# ============================================================
+
+
+@mcp.tool()
+async def code_index(
+    project: str,
+    path: str,
+    force: bool = False,
+) -> dict:
+    """Index a codebase for structural analysis. Parses source files with
+    tree-sitter and stores the code graph (files, symbols, imports) in Neo4j.
+
+    Per-project: each project gets its own code graph. Unchanged files are
+    skipped via content-hash comparison. Safe to run repeatedly.
+
+    WHEN TO USE:
+    - First time analyzing a codebase: index the whole repo
+    - After significant changes: re-index to update the code graph
+    - Before running code_query or arch_check on a project
+
+    Args:
+        project: Project name to index under.
+        path: Root directory to scan (absolute path).
+        force: Re-index all files even if unchanged (default: False).
+    """
+    import asyncio
+
+    try:
+        if not project:
+            return {"error": "project is required"}
+        if not path:
+            return {"error": "path is required"}
+
+        from pathlib import Path as P
+        root = P(path)
+        if not root.is_dir():
+            return {"error": f"Not a directory: {path}"}
+
+        if not graph_provider:
+            return {"error": "Code intelligence requires Neo4j. Set CAIRN_GRAPH_BACKEND=neo4j."}
+
+        if not config.capabilities.code_intelligence:
+            return {"error": "Code intelligence is disabled. Set CAIRN_CODE_INTELLIGENCE=true."}
+
+        def _do_index():
+            from cairn.code.parser import CodeParser
+            from cairn.code.indexer import CodeIndexer
+            from cairn.core.utils import get_or_create_project
+
+            project_id = get_or_create_project(db, project)
+            parser = CodeParser()
+            indexer = CodeIndexer(parser, graph_provider)
+
+            return indexer.index_directory(
+                root=root,
+                project=project,
+                project_id=project_id,
+                force=force,
+            )
+
+        result = await asyncio.to_thread(_do_index)
+
+        return {
+            "project": result.project,
+            "files_scanned": result.files_scanned,
+            "files_indexed": result.files_indexed,
+            "files_skipped": result.files_skipped,
+            "files_deleted": result.files_deleted,
+            "symbols_created": result.symbols_created,
+            "imports_created": result.imports_created,
+            "errors": result.errors if result.errors else None,
+            "summary": result.summary(),
+        }
+    except Exception as e:
+        logger.exception("code_index failed")
+        return {"error": f"Internal error: {e}"}
+
+
+@mcp.tool()
+def code_query(
+    action: str,
+    project: str,
+    target: str = "",
+    query: str = "",
+    kind: str = "",
+    depth: int = 3,
+    limit: int = 20,
+    mode: str = "fulltext",
+) -> dict:
+    """Query the code graph for structural information about an indexed project.
+
+    Answers questions like "What depends on this file?", "What's the blast
+    radius if I change this module?", and "What symbols are defined here?"
+
+    Requires a prior ``code_index`` run to populate the graph.
+
+    WHEN TO USE:
+    - Understanding dependencies before making changes
+    - Estimating impact/blast radius of a refactor
+    - Exploring the structure of a file or module
+    - Finding symbols by name across a project
+    - Finding structurally important files (hotspots)
+    - Discovering entity-code relationships
+    - Searching across all indexed projects
+
+    Actions:
+    - ``dependents``: Files that import the target. "Who depends on me?"
+    - ``dependencies``: Files the target imports. "What do I depend on?"
+    - ``structure``: Symbols in the target file, hierarchically organized.
+    - ``impact``: Transitive dependents — full blast radius up to *depth* hops.
+    - ``search``: Search over symbol names (fulltext) or descriptions (semantic).
+    - ``hotspots``: Top files by PageRank structural importance.
+    - ``entities``: Knowledge entities linked to a code file.
+    - ``code_for_entity``: Code files/symbols linked to a knowledge entity.
+    - ``cross_search``: Search symbols across all indexed projects.
+    - ``shared_deps``: Files that appear in multiple indexed projects.
+
+    Args:
+        action: One of the actions listed above.
+        project: Project name (must be indexed).
+        target: File path or qualified symbol name (required for some actions).
+        query: Search term (required for search/cross_search).
+        kind: Filter symbols by kind: function, method, class, etc. (search only).
+        depth: Max traversal depth for impact (default 3).
+        limit: Max results (default 20).
+        mode: Search mode: "fulltext" (default) or "semantic" (NL descriptions).
+    """
+    try:
+        if not action:
+            return {"error": "action is required"}
+        if not project:
+            return {"error": "project is required"}
+
+        if not graph_provider:
+            return {"error": "Code queries require Neo4j. Set CAIRN_GRAPH_BACKEND=neo4j."}
+
+        if not config.capabilities.code_intelligence:
+            return {"error": "Code intelligence is disabled. Set CAIRN_CODE_INTELLIGENCE=true."}
+
+        from cairn.code.query import (
+            query_dependents,
+            query_dependencies,
+            query_impact,
+            query_search,
+            query_structure,
+        )
+        from cairn.core.utils import get_or_create_project
+
+        project_id = get_or_create_project(db, project)
+
+        if action == "dependents":
+            if not target:
+                return {"error": "target is required for dependents"}
+            return query_dependents(graph_provider, target, project_id)
+
+        if action == "dependencies":
+            if not target:
+                return {"error": "target is required for dependencies"}
+            return query_dependencies(graph_provider, target, project_id)
+
+        if action == "structure":
+            if not target:
+                return {"error": "target is required for structure"}
+            return query_structure(graph_provider, target, project_id)
+
+        if action == "impact":
+            if not target:
+                return {"error": "target is required for impact"}
+            return query_impact(graph_provider, target, project_id, max_depth=depth)
+
+        if action == "search":
+            if not query:
+                return {"error": "query is required for search"}
+            return query_search(
+                graph_provider, query, project_id,
+                kind=kind or None, limit=limit, mode=mode,
+                embedding_engine=_svc.embedding if mode == "semantic" else None,
+            )
+
+        if action == "hotspots":
+            from cairn.code.query import query_hotspots
+            return query_hotspots(graph_provider, project_id, limit=limit)
+
+        if action == "entities":
+            if not target:
+                return {"error": "target is required for entities"}
+            entities = graph_provider.get_entities_for_code(target, project_id)
+            return {"target": target, "entities": entities}
+
+        if action == "code_for_entity":
+            if not target:
+                return {"error": "target (entity name) is required for code_for_entity"}
+            # Look up entity by name
+            from cairn.graph.interface import Entity
+            known = graph_provider.get_known_entities(project_id, limit=500)
+            entity_uuid = None
+            for e in known:
+                if e["name"].lower() == target.lower():
+                    # Need to find the actual uuid — search by embedding
+                    emb = _svc.embedding.embed(target)
+                    matches = graph_provider.search_entities_by_embedding(emb, project_id, limit=1)
+                    if matches:
+                        entity_uuid = matches[0].uuid
+                    break
+            if not entity_uuid:
+                return {"target": target, "code": [], "error": f"Entity not found: {target}"}
+            code = graph_provider.get_code_for_entity(entity_uuid)
+            return {"target": target, "code": code}
+
+        if action == "cross_search":
+            if not query:
+                return {"error": "query is required for cross_search"}
+            from cairn.code.query import query_cross_search
+            # Get all indexed project IDs
+            all_files = graph_provider.get_code_files(project_id)
+            # For cross-project, get all projects that have code files
+            from cairn.core.utils import get_or_create_project as _gop
+            all_project_ids = _get_all_code_project_ids()
+            return query_cross_search(graph_provider, query, all_project_ids, kind=kind or None, limit=limit)
+
+        if action == "shared_deps":
+            from cairn.code.query import query_shared_dependencies
+            all_project_ids = _get_all_code_project_ids()
+            return query_shared_dependencies(graph_provider, all_project_ids)
+
+        return {"error": f"Unknown action: {action}. Valid: dependents, dependencies, structure, impact, search, hotspots, entities, code_for_entity, cross_search, shared_deps"}
+
+    except Exception as e:
+        logger.exception("code_query failed")
+        return {"error": f"Internal error: {e}"}
+
+
+def _get_all_code_project_ids() -> list[int]:
+    """Get all project IDs that have indexed code files."""
+    try:
+        rows = db.execute_many(
+            "SELECT DISTINCT id FROM projects WHERE id IN "
+            "(SELECT DISTINCT project_id FROM projects)",
+            (),
+        )
+        # Fallback: query the graph for all distinct project_ids on CodeFile nodes
+        # Since we can't easily get this from PG, get from current project context
+        # For now, get all project IDs from the projects table
+        rows = db.execute_many("SELECT id FROM projects", ())
+        return [r["id"] for r in rows] if rows else []
+    except Exception:
+        return []
+
+
+@mcp.tool()
+async def code_describe(
+    project: str,
+    target: str = "",
+    kind: str = "",
+    limit: int = 50,
+) -> dict:
+    """Generate natural language descriptions for code symbols using LLM.
+
+    Produces human-readable descriptions of what each symbol does, then
+    embeds them for semantic search. Run this after ``code_index`` to enable
+    ``code_query(action='search', mode='semantic')``.
+
+    WHEN TO USE:
+    - After indexing a codebase for the first time
+    - After re-indexing to describe new/changed symbols
+    - To enable natural language code search
+
+    Args:
+        project: Project name (must be indexed).
+        target: File path to describe symbols in (describes all files if empty).
+        kind: Filter by symbol kind (function, class, method, etc.).
+        limit: Max symbols to describe (default 50).
+    """
+    import asyncio
+
+    try:
+        if not project:
+            return {"error": "project is required"}
+
+        if not graph_provider:
+            return {"error": "Code describe requires Neo4j. Set CAIRN_GRAPH_BACKEND=neo4j."}
+
+        if not config.capabilities.code_intelligence:
+            return {"error": "Code intelligence is disabled. Set CAIRN_CODE_INTELLIGENCE=true."}
+
+        if not _svc.llm:
+            return {"error": "Code describe requires LLM. Enable enrichment."}
+
+        def _do_describe():
+            from cairn.code.summarizer import CodeSummarizer
+            from cairn.core.utils import get_or_create_project
+
+            project_id = get_or_create_project(db, project)
+            summarizer = CodeSummarizer(_svc.llm, _svc.embedding)
+
+            # Gather symbols to describe
+            if target:
+                symbols = graph_provider.get_code_symbols(target, project_id)
+            else:
+                files = graph_provider.get_code_files(project_id)
+                symbols = []
+                for f in files:
+                    file_syms = graph_provider.get_code_symbols(f["path"], project_id)
+                    symbols.extend(file_syms)
+
+            # Filter by kind if specified
+            filtered = symbols
+            if kind:
+                filtered = [s for s in filtered if s.get("kind") == kind]
+
+            # Filter to undescribed symbols only
+            filtered = [s for s in filtered if not s.get("description")]
+            filtered = filtered[:limit]
+
+            if not filtered:
+                return {"project": project, "described": 0, "message": "No undescribed symbols found"}
+
+            # Generate descriptions and embeddings
+            described = summarizer.batch_describe(filtered, project_id)
+
+            # Store in graph
+            stored = 0
+            for item in described:
+                try:
+                    graph_provider.update_code_symbol_description(
+                        qualified_name=item["qualified_name"],
+                        project_id=project_id,
+                        file_path=item["file_path"],
+                        description=item["description"],
+                        description_embedding=item["embedding"],
+                    )
+                    stored += 1
+                except Exception:
+                    logger.warning("Failed to store description for %s", item["qualified_name"], exc_info=True)
+
+            return {
+                "project": project,
+                "described": stored,
+                "symbols": [
+                    {"qualified_name": d["qualified_name"], "description": d["description"]}
+                    for d in described[:10]
+                ],
+            }
+
+        return await asyncio.to_thread(_do_describe)
+
+    except Exception as e:
+        logger.exception("code_describe failed")
+        return {"error": f"Internal error: {e}"}
+
+
+@mcp.tool()
+def arch_check(
+    project: str,
+    path: str = "",
+    config_path: str = "",
+    use_graph: bool = False,
+) -> dict:
+    """Check architecture boundary rules and integration contracts.
+
+    Loads rules from a YAML file, a project doc (doc_type='architecture'),
+    or the Neo4j code graph. Reports boundary violations and contract breaches.
+
+    Rule sources (checked in order):
+    1. ``config_path`` — explicit path to a YAML file
+    2. Project doc — architecture doc stored via ``projects(action='create_doc', doc_type='architecture')``
+    3. Error if neither is available
+
+    Evaluation modes:
+    - **Source** (default): re-parses Python files under ``path`` using stdlib ast.
+      Supports both boundary rules and integration contracts.
+    - **Graph** (``use_graph=True``): queries Neo4j IMPORTS edges. Faster for
+      large codebases, but only evaluates boundary rules (contracts need
+      name-level import info unavailable in file-level graph edges).
+
+    WHEN TO USE:
+    - Verify architecture boundaries before or after refactoring
+    - CI-style checks on a project's codebase
+    - Validate that modules only import declared public APIs (contracts)
+
+    Args:
+        project: Project name (for loading project-doc rules and graph queries).
+        path: Source root directory (required for source-based evaluation).
+        config_path: Explicit path to architecture YAML (overrides project doc).
+        use_graph: Use Neo4j IMPORTS edges instead of re-parsing source (default: False).
+    """
+    try:
+        if not project:
+            return {"error": "project is required"}
+
+        if not graph_provider:
+            return {"error": "Architecture checks require Neo4j. Set CAIRN_GRAPH_BACKEND=neo4j."}
+
+        if not config.capabilities.code_intelligence:
+            return {"error": "Code intelligence is disabled. Set CAIRN_CODE_INTELLIGENCE=true."}
+
+        from pathlib import Path as P
+        from cairn.code.arch_rules import (
+            load_config as load_arch_config,
+            load_config_from_string,
+            check as arch_check_source,
+            check_graph as arch_check_graph,
+        )
+        from cairn.core.utils import get_or_create_project
+
+        # 1. Load rules: explicit config_path > project doc > error
+        arch_config = None
+        if config_path:
+            cp = P(config_path)
+            if not cp.is_file():
+                return {"error": f"Config file not found: {config_path}"}
+            arch_config = load_arch_config(cp)
+        else:
+            # Try loading from project doc
+            docs = project_manager.get_docs(project, doc_type="architecture")
+            if docs:
+                arch_config = load_config_from_string(docs[0]["content"])
+            else:
+                return {"error": f"No architecture rules found. Provide config_path or store rules as a project doc (doc_type='architecture')."}
+
+        project_id = get_or_create_project(db, project)
+
+        # 2. Run evaluation
+        if use_graph:
+            report = arch_check_graph(arch_config, graph_provider, project_id)
+            evaluation_mode = "graph"
+        else:
+            if not path:
+                return {"error": "path is required for source-based evaluation (or set use_graph=True)"}
+            root = P(path)
+            if not root.is_dir():
+                return {"error": f"Not a directory: {path}"}
+            report = arch_check_source(arch_config, root)
+            evaluation_mode = "source"
+
+        # 3. Build response
+        violations = [
+            {
+                "rule_name": v.rule_name,
+                "file_path": str(v.file_path),
+                "imported_module": v.imported_module,
+                "lineno": v.lineno,
+                "description": v.description,
+            }
+            for v in report.violations
+        ]
+
+        contract_violations = [
+            {
+                "rule_module": cv.rule_module,
+                "consumer_file": cv.consumer_file,
+                "imported_name": cv.imported_name,
+                "lineno": cv.lineno,
+            }
+            for cv in report.contract_violations
+        ]
+
+        return {
+            "project": project,
+            "clean": report.clean,
+            "violations": violations,
+            "contract_violations": contract_violations,
+            "files_checked": report.files_checked,
+            "rules_evaluated": report.rules_evaluated,
+            "evaluation_mode": evaluation_mode,
+            "summary": report.summary(),
+        }
+
+    except Exception as e:
+        logger.exception("arch_check failed")
+        return {"error": f"Internal error: {e}"}
+
+
+# ============================================================
 # Entry point
 # ============================================================
 

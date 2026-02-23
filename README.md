@@ -89,7 +89,7 @@ Search for it later:
 
 > "What did we decide about the storage layer?"
 
-That's it. 15 tools available. The ones you'll use most:
+That's it. 19 tools available. The ones you'll use most:
 
 | Tool | What it does |
 |------|-------------|
@@ -100,8 +100,12 @@ That's it. 15 tools available. The ones you'll use most:
 | `rules` | Load behavioral guardrails (global or per-project) |
 | `work_items` | Create, claim, and complete tasks with dependencies and gates |
 | `projects` | Manage project docs (briefs, PRDs, plans) |
+| `code_index` | Parse a codebase with tree-sitter, build a code graph in Neo4j |
+| `code_query` | Structural queries: dependents, impact, hotspots, cross-project search |
+| `code_describe` | Generate NL descriptions of code symbols for semantic search |
+| `arch_check` | Validate architecture boundary rules against imports |
 
-The rest: `modify`, `insights`, `tasks`, `think`, `status`, `consolidate`, `drift_check`, `ingest`.
+The rest: `modify`, `insights`, `tasks`, `think`, `status`, `consolidate`, `drift_check`, `ingest`, `dispatch`.
 
 ## What's in the box
 
@@ -120,6 +124,8 @@ The rest: `modify`, `insights`, `tasks`, `think`, `status`, `consolidate`, `drif
   <br>
   <sub>Memory growth by type, token usage tracking, and the full nav.</sub>
 </p>
+
+**Code intelligence.** Index any codebase with tree-sitter (Python, TypeScript/TSX). Ask structural questions — "what depends on this file?", "what's the blast radius?" — and get answers from the code graph. Enforce architecture boundaries with YAML rules. Search code by natural language description. Works across projects.
 
 **Session capture.** IDE hooks (Claude Code, Cursor, Cline, Windsurf) log every tool call. Next session boots warm. See [`examples/hooks/README.md`](examples/hooks/README.md).
 
@@ -163,9 +169,9 @@ MCP clients (Claude Code, Cursor, etc.)     REST clients (curl, web UI, hooks)
 |  cairn.server (MCP tools)     cairn.api (FastAPI endpoints) |
 |                                                             |
 |  core: memory, search, enrichment, extraction, clustering   |
-|        work items, projects, tasks, thinking                |
+|        work items, projects, tasks, thinking, code intel    |
 |                                                             |
-|  graph: Neo4j (entities, statements, triples)               |
+|  graph: Neo4j (entities, statements, triples, code graph)   |
 |  embedding: local (MiniLM) or Bedrock (Titan V2)            |
 |  llm: Ollama, Bedrock, Gemini, OpenAI-compatible            |
 +------+----------------------------------------------+-------+

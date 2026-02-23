@@ -1,0 +1,67 @@
+# Cairn Architecture Boundary Rules
+#
+# Enforced by cairn.code.arch_rules — run via:
+#   pytest tests/test_architecture.py
+#
+# Pattern syntax:
+#   cairn.core.**   → matches cairn.core and anything nested under it
+#   cairn.core.*    → matches direct children only (cairn.core.X, not cairn.core.X.Y)
+#   neo4j           → exact match
+#
+# Each rule: files matching "from" must NOT import anything matching "deny",
+# unless the importing file matches "allow".
+
+boundaries:
+
+  # ── Layer boundaries ─────────────────────────────────────────
+
+  - name: core-no-server
+    description: Core must not depend on the MCP server layer
+    from: "cairn.core.**"
+    deny: "cairn.server"
+
+  - name: core-no-api
+    description: Core must not depend on the API/HTTP layer
+    from: "cairn.core.**"
+    deny: "cairn.api.**"
+
+  - name: api-no-direct-storage
+    description: API should access storage through core.services, not directly
+    from: "cairn.api.**"
+    deny: "cairn.storage.**"
+    allow: "cairn.api.core"  # settings endpoint needs direct access
+
+  # ── Isolation boundaries ─────────────────────────────────────
+
+  - name: listeners-isolated
+    description: Listeners must not import from each other
+    from: "cairn.listeners.*"
+    deny: "cairn.listeners.*"
+    allow: "cairn.listeners.__init__"
+
+  - name: neo4j-isolated
+    description: Neo4j driver must only be used inside the graph module
+    deny: "neo4j"
+    allow: "cairn.graph.**"
+
+  # ── Dependency direction ─────────────────────────────────────
+
+  - name: storage-no-core
+    description: Storage layer must not depend on core (it's a lower layer)
+    from: "cairn.storage.**"
+    deny: "cairn.core.**"
+
+  - name: storage-no-api
+    description: Storage layer must not depend on API
+    from: "cairn.storage.**"
+    deny: "cairn.api.**"
+
+  - name: graph-no-core
+    description: Graph abstraction must not depend on core logic
+    from: "cairn.graph.**"
+    deny: "cairn.core.**"
+
+  - name: graph-no-api
+    description: Graph abstraction must not depend on API
+    from: "cairn.graph.**"
+    deny: "cairn.api.**"

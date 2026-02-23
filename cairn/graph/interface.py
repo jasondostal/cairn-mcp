@@ -398,3 +398,199 @@ class GraphProvider(ABC):
     @abstractmethod
     def ensure_thought(self, pg_id: int, sequence_pg_id: int, **fields) -> str:
         """MERGE a Thought node by pg_id, link to parent sequence. Returns uuid."""
+
+    # -- Code intelligence graph nodes (v0.58.0) --
+
+    @abstractmethod
+    def ensure_code_file(
+        self,
+        path: str,
+        project_id: int,
+        language: str,
+        content_hash: str,
+    ) -> str:
+        """MERGE a CodeFile node by (path, project_id). Returns uuid.
+
+        If content_hash matches existing node, returns uuid without updating.
+        If content_hash differs, updates the node and returns uuid.
+        """
+
+    @abstractmethod
+    def ensure_code_symbol(
+        self,
+        qualified_name: str,
+        project_id: int,
+        name: str,
+        kind: str,
+        file_path: str,
+        start_line: int,
+        end_line: int,
+        signature: str = "",
+        docstring: str | None = None,
+        parent_name: str | None = None,
+    ) -> str:
+        """MERGE a CodeSymbol node by (qualified_name, file_path, project_id). Returns uuid."""
+
+    @abstractmethod
+    def link_file_contains_symbol(self, file_uuid: str, symbol_uuid: str) -> None:
+        """Create (CodeFile)-[:CONTAINS]->(CodeSymbol) edge."""
+
+    @abstractmethod
+    def link_symbol_contains_symbol(self, parent_uuid: str, child_uuid: str) -> None:
+        """Create (CodeSymbol)-[:CONTAINS]->(CodeSymbol) for class→method."""
+
+    @abstractmethod
+    def link_file_imports_file(self, importer_uuid: str, imported_uuid: str) -> None:
+        """Create (CodeFile)-[:IMPORTS]->(CodeFile) edge."""
+
+    @abstractmethod
+    def delete_code_file(self, file_uuid: str) -> int:
+        """Delete a CodeFile and all its CodeSymbol children. Returns count of deleted nodes."""
+
+    @abstractmethod
+    def get_code_file(self, path: str, project_id: int) -> dict | None:
+        """Get a CodeFile node by path and project. Returns {uuid, path, content_hash, ...} or None."""
+
+    @abstractmethod
+    def get_code_files(self, project_id: int) -> list[dict]:
+        """Get all CodeFile nodes for a project."""
+
+    @abstractmethod
+    def get_code_symbols(self, file_path: str, project_id: int) -> list[dict]:
+        """Get all CodeSymbol nodes for a file in a project."""
+
+    def batch_upsert_code_graph(
+        self,
+        project_id: int,
+        files: list[dict],
+        import_edges: list[tuple[str, str]],
+        stale_file_uuids: list[str],
+    ) -> dict[str, str]:
+        """Batch-upsert an entire code graph in a single transaction.
+
+        This replaces per-file calls to ensure_code_file / ensure_code_symbol /
+        link_* with one bulk operation, drastically reducing Neo4j round-trips.
+
+        Args:
+            project_id: Numeric project ID.
+            files: List of dicts, each with keys:
+                path, language, content_hash, symbols (list of symbol dicts)
+            import_edges: List of (importer_path, imported_path) tuples.
+            stale_file_uuids: UUIDs of CodeFile nodes to delete (no longer on disk).
+
+        Returns:
+            Mapping of file path -> uuid for all upserted files.
+        """
+        raise NotImplementedError("Subclass should override for batch performance")
+
+    # -- Code intelligence queries (v0.58.0 Phase 3) --
+
+    @abstractmethod
+    def get_file_dependents(self, path: str, project_id: int) -> list[dict]:
+        """Get files that IMPORT the given file. Returns [{path, language}]."""
+
+    @abstractmethod
+    def get_file_dependencies(self, path: str, project_id: int) -> list[dict]:
+        """Get files that the given file IMPORTS. Returns [{path, language}]."""
+
+    @abstractmethod
+    def get_file_structure(self, path: str, project_id: int) -> list[dict]:
+        """Get symbols in a file with parent/child hierarchy.
+
+        Returns [{name, qualified_name, kind, start_line, end_line, signature,
+                  docstring, parent_name}] ordered by start_line.
+        """
+
+    @abstractmethod
+    def get_impact_graph(
+        self, path: str, project_id: int, max_depth: int = 3
+    ) -> list[dict]:
+        """Transitive reverse IMPORTS: files affected if this file changes.
+
+        Returns [{path, language, depth}] where depth is the hop count from target.
+        """
+
+    @abstractmethod
+    def search_code_symbols(
+        self,
+        query: str,
+        project_id: int,
+        kind: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Fulltext search over CodeSymbol names.
+
+        Returns [{qualified_name, name, kind, file_path, signature, score}].
+        """
+
+    # -- Code intelligence: NL descriptions (v0.58.0 Phase 6) --
+
+    @abstractmethod
+    def update_code_symbol_description(
+        self,
+        qualified_name: str,
+        project_id: int,
+        file_path: str,
+        description: str,
+        description_embedding: list[float],
+    ) -> None:
+        """Set NL description + embedding on a CodeSymbol node."""
+
+    @abstractmethod
+    def search_code_symbols_by_description(
+        self,
+        embedding: list[float],
+        project_id: int,
+        kind: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Vector search over CodeSymbol description embeddings.
+
+        Returns [{qualified_name, name, kind, file_path, signature, description, score}].
+        """
+
+    # -- Code intelligence: knowledge-code bridging (v0.58.0 Phase 7) --
+
+    @abstractmethod
+    def link_entity_to_code_file(self, entity_uuid: str, file_uuid: str) -> None:
+        """Create (Entity)-[:REFERENCED_IN]->(CodeFile) edge."""
+
+    @abstractmethod
+    def link_entity_to_code_symbol(self, entity_uuid: str, symbol_uuid: str) -> None:
+        """Create (Entity)-[:REFERENCED_IN]->(CodeSymbol) edge."""
+
+    @abstractmethod
+    def get_code_for_entity(self, entity_uuid: str) -> list[dict]:
+        """Get CodeFile/CodeSymbol nodes linked to an entity.
+
+        Returns [{type, path, qualified_name, name}].
+        """
+
+    @abstractmethod
+    def get_entities_for_code(self, file_path: str, project_id: int) -> list[dict]:
+        """Get Entity nodes linked to a code file.
+
+        Returns [{uuid, name, entity_type}].
+        """
+
+    # -- Code intelligence: cross-project (v0.58.0 Phase 7) --
+
+    @abstractmethod
+    def search_code_symbols_cross_project(
+        self,
+        query: str,
+        project_ids: list[int],
+        kind: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Fulltext search across multiple projects.
+
+        Returns [{qualified_name, name, kind, file_path, signature, project_id, score}].
+        """
+
+    @abstractmethod
+    def get_shared_dependencies(self, project_ids: list[int]) -> list[dict]:
+        """Find CodeFile paths that appear in multiple projects.
+
+        Returns [{path, project_ids, count}].
+        """

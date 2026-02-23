@@ -214,15 +214,11 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     _memory_listener.register(event_bus)
     logger.info("MemoryEnrichmentListener registered with EventBus")
 
-    # Register session synthesis listener (auto-summarize on session close)
-    from cairn.listeners.session_synthesis import SessionSynthesisListener
-    _synthesis_listener = SessionSynthesisListener(
-        synthesizer=SessionSynthesizer(db, llm=llm_fast, capabilities=capabilities),
-        memory_store=memory_store,
-        db=db,
-    )
-    _synthesis_listener.register(event_bus)
-    logger.info("SessionSynthesisListener registered with EventBus")
+    # NOTE: SessionSynthesisListener removed (v0.58.0). The v0.50.0 architecture
+    # decision (memory #256) killed LLM synthesis — organic memories from agents
+    # are the high-signal path, orient() trail provides session context via the
+    # knowledge graph. The listener was a regression that produced low-value
+    # duplicate summaries.
 
     # Register graph projection listener if graph is available
     if graph_provider:
@@ -236,6 +232,13 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     _access_listener = MemoryAccessListener(db)
     _access_listener.register(event_bus)
     logger.info("MemoryAccessListener registered with EventBus")
+
+    # Register code index listener for event-driven re-indexing
+    if graph_provider and capabilities.code_intelligence:
+        from cairn.listeners.code_index_listener import CodeIndexListener
+        _code_listener = CodeIndexListener(graph_provider, db)
+        _code_listener.register(event_bus)
+        logger.info("CodeIndexListener registered with EventBus")
 
     # Event dispatcher — background delivery worker (started in _start_workers)
     event_dispatcher = EventDispatcher(db, event_bus)

@@ -231,7 +231,7 @@ VALID_THOUGHT_TYPES = [
 # Projects
 # ============================================================
 
-VALID_DOC_TYPES = ["brief", "prd", "plan", "primer", "writeup", "guide"]
+VALID_DOC_TYPES = ["brief", "prd", "plan", "primer", "writeup", "guide", "architecture"]
 VALID_LINK_TYPES = ["related", "parent", "child", "dependency", "fork", "template"]
 
 

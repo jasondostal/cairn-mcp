@@ -15,8 +15,8 @@
           mappings:
             - field: memories
               label: Memories
-            - field: cairns
-              label: Cairns
+            - field: clusters
+              label: Clusters
             - field: projects
               label: Projects
             - field: status

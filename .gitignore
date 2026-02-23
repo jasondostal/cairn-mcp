@@ -52,6 +52,10 @@ V2_PROGRESS.md
 EVAL_STATE.md
 migration.md
 *.jpg
+primer/
+benchmark_run.log
+syn.env
+benchmark.env
 
 # One-off scripts (contain hardcoded dev values)
 judge_comparison.py

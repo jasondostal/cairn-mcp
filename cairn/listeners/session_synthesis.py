@@ -49,6 +49,18 @@ class SessionSynthesisListener:
             return
         project = row["name"]
 
+        # Dedup: skip if a session_summary already exists for this session
+        existing = self.db.execute_one(
+            "SELECT id FROM memories WHERE session_name = %s AND memory_type = 'session_summary' AND is_active = true LIMIT 1",
+            (session_name,),
+        )
+        if existing:
+            logger.debug(
+                "SessionSynthesis: summary already exists for session %s (memory %d), skipping",
+                session_name, existing["id"],
+            )
+            return
+
         result = self.synthesizer.synthesize(project, session_name)
         narrative = result.get("narrative")
         memory_count = result.get("memory_count", 0)

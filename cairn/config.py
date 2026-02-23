@@ -99,6 +99,7 @@ class LLMCapabilities:
     reranking: bool = False             # cross-encoder reranking (requires model download)
     knowledge_extraction: bool = False  # Neo4j graph extraction (requires Neo4j)
     search_v2: bool = False             # intent-routed search with token budgets
+    code_intelligence: bool = False     # tree-sitter code parsing + Neo4j code graph (requires Neo4j)
 
     # --- Experimental capabilities ---
     # These work but have unproven benefit/cost ratios or high resource demands.
@@ -119,6 +120,7 @@ class LLMCapabilities:
                 "relationship_extract", "rule_conflict_check",
                 "session_synthesis", "consolidation",
                 "reranking", "knowledge_extraction", "search_v2",
+                "code_intelligence",
                 "confidence_gating", "type_routing",
                 "spreading_activation", "mca_gate", "access_frequency",
             )
@@ -519,6 +521,7 @@ _ENV_MAP: dict[str, str] = {
     "capabilities.mca_gate": "CAIRN_MCA_GATE",
     "capabilities.access_frequency": "CAIRN_ACCESS_FREQUENCY",
     "capabilities.knowledge_extraction": "CAIRN_KNOWLEDGE_EXTRACTION",
+    "capabilities.code_intelligence": "CAIRN_CODE_INTELLIGENCE",
     "capabilities.search_v2": "CAIRN_SEARCH_V2",
     "capabilities.thought_extraction": "CAIRN_THOUGHT_EXTRACTION",
     "terminal.backend": "CAIRN_TERMINAL_BACKEND",
@@ -642,6 +645,7 @@ def load_config() -> Config:
             mca_gate=os.getenv("CAIRN_MCA_GATE", "false").lower() in ("true", "1", "yes"),
             access_frequency=os.getenv("CAIRN_ACCESS_FREQUENCY", "false").lower() in ("true", "1", "yes"),
             knowledge_extraction=os.getenv("CAIRN_KNOWLEDGE_EXTRACTION", "false").lower() in ("true", "1", "yes"),
+            code_intelligence=os.getenv("CAIRN_CODE_INTELLIGENCE", "false").lower() in ("true", "1", "yes"),
             search_v2=os.getenv("CAIRN_SEARCH_V2", "false").lower() in ("true", "1", "yes"),
             thought_extraction=os.getenv("CAIRN_THOUGHT_EXTRACTION", "off").lower().strip(),
         ),

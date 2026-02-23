@@ -7,15 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.58.0] — 2026-02-23 "Code Intelligence"
+
+Per-project code understanding. Parse source files with tree-sitter, build a code
+graph in Neo4j, enforce architecture boundaries, search code by natural language,
+analyze cross-project dependencies — all through MCP. Four new tools, two language
+modules, and Cairn's own codebase is the first dogfood project.
+
+### Added
+- **`code_index` MCP tool** — index a codebase into Neo4j. Tree-sitter parsing
+  with pluggable language modules (Python + TypeScript/TSX). Content-hash dedup
+  skips unchanged files. Produces `CodeFile` and `CodeSymbol` nodes with
+  `CONTAINS` and `IMPORTS` edges, all project-scoped.
+- **`code_query` MCP tool** — 10 structural query actions: `dependents` (who
+  imports me?), `dependencies` (what do I import?), `structure` (symbols in a
+  file), `impact` (transitive blast radius), `search` (fulltext or semantic),
+  `hotspots` (PageRank importance), `entities` (knowledge linked to code),
+  `code_for_entity` (code linked to knowledge), `cross_search` (across all
+  projects), `shared_deps` (files appearing in multiple projects).
+- **`code_describe` MCP tool** — LLM-generated natural language descriptions per
+  symbol. Descriptions are embedded into a Neo4j vector index
+  (`code_symbol_desc_vec`) enabling semantic code search — "find the function
+  that handles authentication" without knowing the function name.
+- **`arch_check` MCP tool** — validate architecture boundary rules. Rules loaded
+  from YAML config, project docs (`doc_type='architecture'`), or inline. Two
+  evaluation modes: source-based (re-parses with stdlib `ast`) and graph-backed
+  (queries Neo4j `IMPORTS` edges). Integration contracts validate consumers
+  against declared module exports.
+- **Architecture boundary rule engine** — `from`/`deny`/`allow` glob patterns,
+  line-level violation reporting. `architecture.yaml` ships with 9 rules for
+  Cairn's own codebase (0 violations).
+- **Python language module** — tree-sitter extraction of functions, classes,
+  methods, decorators, docstrings, imports with line numbers.
+- **TypeScript language module** — functions, classes, methods, interfaces, type
+  aliases, enums, ES6 imports, React components (JSX detection), React hooks
+  (`use*` convention), arrow functions, exported definitions, JSDoc extraction,
+  TSX dialect support.
+- **Event-driven re-indexing** — `CodeIndexListener` subscribes to
+  `code.file_changed` events for incremental updates.
+- **PageRank hotspot analysis** — identify structurally important files via
+  NetworkX client-side PageRank over the `IMPORTS` graph.
+- **Knowledge ↔ Code bridging** — `REFERENCED_IN` edges between Entity and
+  CodeFile/CodeSymbol nodes. Query in both directions.
+- **Cross-project analysis** — search symbols and find shared dependencies across
+  all indexed projects.
+- **`CAIRN_CODE_INTELLIGENCE` capability flag** — gates the feature; default on.
+- **29 code intelligence tests** — parser, indexer, query, cross-project, arch
+  rules, TypeScript extraction.
+
+### Removed
+- **`SessionSynthesisListener`** — re-introduced in v0.55.0 but violated the
+  v0.50.0 architecture decision to kill LLM synthesis. Produced duplicate
+  low-signal summaries that added nothing beyond organic agent memories.
+  `orient()` trail via the knowledge graph is the session context mechanism.
+
 ### Fixed
-- **Cluster labeling silent failure** — when the LLM call for cluster labels failed,
-  all clusters silently received generic names ("Cluster 1", "Cluster 2") with no
-  error surfaced. Now logs at ERROR level and returns a `labeling_warning` in the
-  insights response so the failure is visible to callers. Also scaled `max_tokens`
-  with cluster count to prevent truncated responses on large cluster sets.
+- **`code_query` search parameter collision** — Neo4j driver's `session.run()`
+  first positional arg is named `query`, colliding with the `$query` Cypher
+  parameter passed as a keyword arg. Renamed to `$q`. Affected `search` and
+  `cross_search` actions.
+- **`code_query` target resolution** — file paths stored as absolute in Neo4j
+  but callers typically pass relative paths. Added suffix matching fallback so
+  relative targets resolve correctly against absolute graph paths.
+- **Code intelligence event loop blocking** — `code_index` and `code_describe`
+  converted to `async def` with `batch_upsert_code_graph` on the graph provider,
+  preventing MCP server hangs during large indexing runs.
+- **Cluster labeling silent failure** — when the LLM call for cluster labels
+  failed, all clusters silently received generic names. Now logs at ERROR level
+  and returns a `labeling_warning` in the insights response. Scaled `max_tokens`
+  with cluster count to prevent truncated responses.
 - **OpenAI env vars missing from docker-compose.yml** — `CAIRN_OPENAI_BASE_URL`,
   `CAIRN_OPENAI_MODEL`, and `CAIRN_OPENAI_API_KEY` were not passed through to
-  the container, causing OpenAI-compatible backends to silently fall back to defaults.
+  the container.
+- **Homepage widget field** — example `services.yaml` referenced `cairns` (removed
+  in v0.37.0); updated to `clusters`.
 
 ## [0.57.0] — 2026-02-21 "Frictionless Dispatch"
 
