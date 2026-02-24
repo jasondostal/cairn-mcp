@@ -6,6 +6,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
+from cairn.core.code_ops import run_arch_check, run_code_query
 from cairn.core.status import get_status
 
 if TYPE_CHECKING:
@@ -32,6 +33,14 @@ or for general context. Don't just list projects — show what's actually going 
 - Use recall_memory when you need full content — search returns summaries.
 - When storing memories, pick the right memory_type: note, decision, rule, code-snippet, \
 learning, research, discussion, progress, task, debug, design.
+- Use modify_memory to fix, update, or remove memories. Always search → recall → modify.
+- Use discover_patterns when asked about patterns, trends, recurring themes, or what can be learned.
+- Use think for collaborative reasoning — architecture decisions, debugging, multi-step analysis. \
+Start a sequence, add thoughts, conclude when done.
+- Use consolidate_memories when asked to clean up or deduplicate. Always dry_run first.
+- Use ingest_content when the user wants to import content or a URL into the knowledge base.
+- Use query_code and check_architecture for code structure questions — dependencies, hotspots, \
+architecture validation. These require a project that has been indexed with code_index.
 - Present results naturally. Summarize, don't dump.
 """
 
@@ -163,6 +172,121 @@ CHAT_TOOLS: list[dict] = [
                 "priority": {"type": "integer", "description": "Priority (higher = more urgent, default 0)"},
             },
             "required": ["project", "title"],
+        },
+    },
+    {
+        "name": "modify_memory",
+        "description": "Update, soft-delete, or reactivate a memory. Use search → recall → modify pattern: find the memory first, verify it, then modify.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer", "description": "Memory ID to modify"},
+                "action": {"type": "string", "description": "Action: update, inactivate, or reactivate"},
+                "content": {"type": "string", "description": "New content (update only, triggers re-embedding)"},
+                "memory_type": {"type": "string", "description": "New type classification (update only)"},
+                "importance": {"type": "number", "description": "New importance 0.0-1.0 (update only)"},
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "New tags — replaces existing (update only)",
+                },
+                "reason": {"type": "string", "description": "Reason for inactivation (required for inactivate)"},
+            },
+            "required": ["id", "action"],
+        },
+    },
+    {
+        "name": "discover_patterns",
+        "description": "Discover patterns across stored memories using semantic clustering. Use when asked about patterns, trends, recurring themes, common topics, or what can be learned from the memory base.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Filter to a specific project (optional, omit for cross-project)"},
+                "topic": {"type": "string", "description": "Optional topic to filter clusters by relevance"},
+                "limit": {"type": "integer", "description": "Max clusters to return (default 10)"},
+            },
+        },
+    },
+    {
+        "name": "think",
+        "description": "Structured thinking sequences for collaborative reasoning. Use for architecture decisions, debugging, multi-step analysis, or any problem that benefits from step-by-step reasoning. Actions: start (new sequence with a goal), add (add a thought), conclude (finalize), reopen (resume completed), get (retrieve full sequence), list (list sequences for project).",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "description": "Action: start, add, conclude, reopen, get, list"},
+                "project": {"type": "string", "description": "Project name"},
+                "goal": {"type": "string", "description": "Problem or goal (required for start)"},
+                "sequence_id": {"type": "integer", "description": "Sequence ID (required for add, conclude, reopen, get)"},
+                "thought": {"type": "string", "description": "Thought content (required for add, conclude)"},
+                "thought_type": {
+                    "type": "string",
+                    "description": "Type: observation, hypothesis, question, reasoning, conclusion, analysis, alternative, branch, insight, general",
+                },
+                "author": {"type": "string", "description": "Who contributed: human, assistant, or a name"},
+            },
+            "required": ["action", "project"],
+        },
+    },
+    {
+        "name": "consolidate_memories",
+        "description": "Find duplicate or overlapping memories and recommend consolidation. Always runs as dry_run first to preview recommendations before applying changes.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project to consolidate"},
+                "dry_run": {"type": "boolean", "description": "If true (default), only recommend. If false, apply changes."},
+            },
+            "required": ["project"],
+        },
+    },
+    {
+        "name": "ingest_content",
+        "description": "Ingest content or a URL into the knowledge base. Handles dedup, classification, chunking, and storage. Use for importing documents, articles, or web pages. For quick notes, use store_memory instead.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project to ingest into"},
+                "content": {"type": "string", "description": "Text content to ingest (required unless url provided)"},
+                "url": {"type": "string", "description": "URL to fetch and ingest"},
+                "title": {"type": "string", "description": "Optional title for the document"},
+                "hint": {"type": "string", "description": "Classification: auto (default), doc, memory, or both"},
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional tags for memories created from chunks",
+                },
+            },
+            "required": ["project"],
+        },
+    },
+    {
+        "name": "query_code",
+        "description": "Query the code graph for structural information about an indexed project. Actions: dependents (who depends on target), dependencies (what target depends on), structure (symbols in file), impact (blast radius), search (find symbols by name or description), hotspots (structurally important files), entities (knowledge entities linked to code), cross_search (search across all projects).",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "description": "Action: dependents, dependencies, structure, impact, search, hotspots, entities, code_for_entity, cross_search, shared_deps, bridge"},
+                "project": {"type": "string", "description": "Project name (must be indexed)"},
+                "target": {"type": "string", "description": "File path or symbol name (required for dependents, dependencies, structure, impact, entities)"},
+                "query": {"type": "string", "description": "Search term (required for search, cross_search)"},
+                "depth": {"type": "integer", "description": "Max traversal depth for impact (default 3)"},
+                "limit": {"type": "integer", "description": "Max results (default 20)"},
+                "mode": {"type": "string", "description": "Search mode: fulltext (default) or semantic"},
+            },
+            "required": ["action", "project"],
+        },
+    },
+    {
+        "name": "check_architecture",
+        "description": "Check architecture boundary rules and integration contracts for an indexed project. Reports violations where modules import things they shouldn't. Requires an architecture doc stored for the project or a source path to scan.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project name (must be indexed)"},
+                "path": {"type": "string", "description": "Source root directory to scan (for source-based evaluation)"},
+                "use_graph": {"type": "boolean", "description": "Use Neo4j graph instead of re-parsing source (default false)"},
+            },
+            "required": ["project"],
         },
     },
 ]
@@ -380,3 +504,114 @@ class ChatToolExecutor:
             "project": project,
             "title": title,
         }
+
+    def _tool_modify_memory(
+        self, id: int, action: str, content: str | None = None,
+        memory_type: str | None = None, importance: float | None = None,
+        tags: list[str] | None = None, reason: str | None = None,
+    ) -> dict:
+        if action not in ("update", "inactivate", "reactivate"):
+            return {"error": f"invalid action: {action}. Must be: update, inactivate, reactivate"}
+        result = self.svc.memory_store.modify(
+            memory_id=id, action=action, content=content,
+            memory_type=memory_type, importance=importance,
+            tags=tags, reason=reason, author="assistant",
+        )
+        self.svc.db.commit()
+        return result
+
+    def _tool_discover_patterns(
+        self, project: str | None = None, topic: str | None = None,
+        limit: int = 10,
+    ) -> dict:
+        ce = self.svc.cluster_engine
+        reclustered = False
+        if ce.is_stale(project):
+            ce.run_clustering(project)
+            reclustered = True
+        clusters = ce.get_clusters(
+            project=project, topic=topic,
+            min_confidence=0.5, limit=min(limit, 20),
+        )
+        last_run = ce.get_last_run(project)
+        return {
+            "status": "reclustered" if reclustered else "cached",
+            "cluster_count": len(clusters),
+            "clusters": clusters,
+            "last_clustered_at": last_run["created_at"] if last_run else None,
+        }
+
+    def _tool_think(
+        self, action: str, project: str, goal: str | None = None,
+        sequence_id: int | None = None, thought: str | None = None,
+        thought_type: str = "general", author: str | None = None,
+    ) -> dict | list:
+        te = self.svc.thinking_engine
+        if action == "start":
+            if not goal:
+                return {"error": "goal is required for start"}
+            return te.start(project, goal)
+        if action == "add":
+            if not sequence_id or not thought:
+                return {"error": "sequence_id and thought are required for add"}
+            return te.add_thought(sequence_id, thought, thought_type, None, author)
+        if action == "conclude":
+            if not sequence_id or not thought:
+                return {"error": "sequence_id and thought are required for conclude"}
+            return te.conclude(sequence_id, thought, author)
+        if action == "reopen":
+            if not sequence_id:
+                return {"error": "sequence_id is required for reopen"}
+            return te.reopen(sequence_id)
+        if action == "get":
+            if not sequence_id:
+                return {"error": "sequence_id is required for get"}
+            return te.get_sequence(sequence_id)
+        if action == "list":
+            return te.list_sequences(project)["items"]
+        return {"error": f"Unknown action: {action}"}
+
+    def _tool_consolidate_memories(
+        self, project: str, dry_run: bool = True,
+    ) -> dict:
+        return self.svc.consolidation_engine.consolidate(project, dry_run=dry_run)
+
+    def _tool_ingest_content(
+        self, project: str, content: str | None = None,
+        url: str | None = None, title: str | None = None,
+        hint: str = "auto", tags: list[str] | None = None,
+    ) -> dict:
+        if not content and not url:
+            return {"error": "content or url is required"}
+        if hint not in ("auto", "doc", "memory", "both"):
+            return {"error": "hint must be one of: auto, doc, memory, both"}
+        return self.svc.ingest_pipeline.ingest(
+            content=content, project=project, url=url,
+            hint=hint, title=title, tags=tags,
+        )
+
+    def _tool_query_code(
+        self, action: str, project: str, target: str = "",
+        query: str = "", depth: int = 3, limit: int = 20,
+        mode: str = "fulltext",
+    ) -> dict:
+        if not self.svc.graph_provider:
+            return {"error": "Code intelligence requires Neo4j — not configured"}
+        return run_code_query(
+            action=action, project=project, target=target,
+            query=query, kind="", depth=depth, limit=limit, mode=mode,
+            graph_provider=self.svc.graph_provider, db=self.svc.db,
+            config=self.svc.config, embedding_engine=self.svc.embedding,
+        )
+
+    def _tool_check_architecture(
+        self, project: str, path: str = "", use_graph: bool = False,
+    ) -> dict:
+        if not self.svc.graph_provider:
+            return {"error": "Code intelligence requires Neo4j — not configured"}
+        return run_arch_check(
+            project=project, path=path, config_path="",
+            use_graph=use_graph, graph_provider=self.svc.graph_provider,
+            db=self.svc.db, config=self.svc.config,
+            project_manager=self.svc.project_manager,
+        )

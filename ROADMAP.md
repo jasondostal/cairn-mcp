@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.59.0** — Display IDs + REST API parity.
+Current: **v0.59.2** — Chat LLM tool surface expansion.
 
 ---
 
@@ -21,6 +21,19 @@ Current: **v0.59.0** — Display IDs + REST API parity.
 ---
 
 ## Shipped
+
+### v0.59.x — "Chat Intelligence + UI Performance" ✓
+
+Chat LLM tool surface expansion. UI responsiveness overhaul.
+
+- [x] **Chat LLM: 10 → 17 tools** — added `modify_memory`, `discover_patterns`, `think`, `consolidate_memories`, `ingest_content`, `query_code`, `check_architecture`. The chat assistant can now edit memories, discover patterns, do structured reasoning, run code analysis, and ingest content — all conversationally.
+- [x] **SQL query optimization** — LATERAL subqueries replace cartesian JOINs on projects and work items pages, window functions eliminate separate COUNT queries
+- [x] **DB pool tuning** — min 2→4, max 10→15 for concurrent MCP + REST + background load
+- [x] **Background clustering** — re-clustering runs in a thread instead of blocking requests
+- [x] **t-SNE caching** — O(n²) computation cached with clustering staleness TTL
+- [x] **Frontend API cache** — request deduplication, 30s stale-while-revalidate, mutation invalidation
+- [x] **`useFetch` SWR mode** — cached data served instantly while revalidating in background
+- [x] **Visibility-aware polling** — pauses when tab hidden, resumes on focus
 
 ### v0.59.0 — "Display IDs + REST API Parity" ✓
 

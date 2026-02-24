@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.59.2] — 2026-02-24
+
+### Added
+- **Chat LLM tool expansion** — 7 new tools for the built-in chat assistant,
+  bringing the total from 10 to 17. The chat LLM can now:
+  - **`modify_memory`** — edit, soft-delete, or reactivate memories
+  - **`discover_patterns`** — semantic clustering and pattern discovery
+  - **`think`** — structured collaborative reasoning sequences
+  - **`consolidate_memories`** — find and merge duplicate memories
+  - **`ingest_content`** — import text or URLs into the knowledge base
+  - **`query_code`** — code graph queries (dependents, impact, hotspots, search)
+  - **`check_architecture`** — architecture boundary validation
+- **Chat system prompt** — updated with guidance for all new tools, including
+  search→recall→modify patterns, dry-run-first consolidation, and code
+  intelligence prerequisites.
+
 ## [0.59.1] — 2026-02-24
 
 ### Changed
