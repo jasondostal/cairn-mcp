@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.59.3] — 2026-02-24
+
+### Fixed
+- **OpenAI-compatible tool calling** — `OpenAICompatibleLLM` now supports tool
+  use via the standard OpenAI function calling protocol. Previously,
+  `supports_tool_use()` returned `False`, causing the chat endpoint to skip
+  tools entirely. Adds `generate_with_tools()`, `generate_with_tools_stream()`,
+  and `_prepare_tool_messages()` with graceful degradation for models that
+  don't support tools. (ca-123)
+
 ## [0.59.2] — 2026-02-24
 
 ### Added
