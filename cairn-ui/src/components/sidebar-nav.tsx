@@ -10,33 +10,43 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
+function useVisibilityPolling(pollFn: () => void, intervalMs: number) {
+  useEffect(() => {
+    let active = true;
+    pollFn();
+    const id = setInterval(() => {
+      if (!document.hidden && active) pollFn();
+    }, intervalMs);
+    const onVisible = () => { if (!document.hidden && active) pollFn(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      active = false;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+}
+
 function useUnreadCount() {
   const [count, setCount] = useState(0);
   const [hasUrgent, setHasUrgent] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    const poll = () => {
-      fetch("/api/messages/unread-count")
-        .then((r) => r.json())
-        .then((d) => {
-          if (!active) return;
-          setCount(d.count ?? 0);
-        })
-        .catch(() => {});
-      fetch("/api/messages?limit=1&include_archived=false")
-        .then((r) => r.json())
-        .then((d) => {
-          if (!active) return;
-          const items = d.items ?? [];
-          setHasUrgent(items.some((m: { priority: string; is_read: boolean }) => m.priority === "urgent" && !m.is_read));
-        })
-        .catch(() => {});
-    };
-    poll();
-    const id = setInterval(poll, 30_000);
-    return () => { active = false; clearInterval(id); };
-  }, []);
+  useVisibilityPolling(() => {
+    fetch("/api/messages/unread-count")
+      .then((r) => r.json())
+      .then((d) => {
+        setCount(d.count ?? 0);
+      })
+      .catch(() => {});
+    fetch("/api/messages?limit=1&include_archived=false")
+      .then((r) => r.json())
+      .then((d) => {
+        const items = d.items ?? [];
+        setHasUrgent(items.some((m: { priority: string; is_read: boolean }) => m.priority === "urgent" && !m.is_read));
+      })
+      .catch(() => {});
+  }, 30_000);
 
   return { count, hasUrgent };
 }
@@ -44,21 +54,14 @@ function useUnreadCount() {
 function useAttentionCount() {
   const [count, setCount] = useState(0);
 
-  useEffect(() => {
-    let active = true;
-    const poll = () => {
-      fetch("/api/work-items/gated?limit=1")
-        .then((r) => r.json())
-        .then((d) => {
-          if (!active) return;
-          setCount(d.total ?? 0);
-        })
-        .catch(() => {});
-    };
-    poll();
-    const id = setInterval(poll, 30_000);
-    return () => { active = false; clearInterval(id); };
-  }, []);
+  useVisibilityPolling(() => {
+    fetch("/api/work-items/gated?limit=1")
+      .then((r) => r.json())
+      .then((d) => {
+        setCount(d.total ?? 0);
+      })
+      .catch(() => {});
+  }, 30_000);
 
   return count;
 }
@@ -116,7 +119,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function SidebarFooter() {
+function useSidebarMeta() {
   const [time, setTime] = useState("");
   const [version, setVersion] = useState("");
 
@@ -137,16 +140,12 @@ function SidebarFooter() {
       .catch(() => {});
   }, []);
 
-  return (
-    <div className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground/60 tabular-nums">
-      {version && <span>v{version}</span>}
-      {time && <span className="float-right">{time}</span>}
-    </div>
-  );
+  return { version, time };
 }
 
 export function SidebarNav() {
   const [open, setOpen] = useState(false);
+  const { version, time } = useSidebarMeta();
 
   return (
     <>
@@ -183,16 +182,19 @@ export function SidebarNav() {
 
       {/* Desktop sidebar */}
       <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-card md:flex">
-        <div className="flex h-14 items-center border-b border-border px-4">
+        <div className="flex h-14 items-center justify-between border-b border-border px-4">
           <Link href="/" className="flex items-center gap-2 rounded-md px-1 -mx-1 hover:bg-accent/30 transition-colors">
             <img src="/cairn-mark-trail.svg" alt="Cairn" className="h-5 w-5" />
             <span className="text-lg font-semibold tracking-tight">Cairn</span>
           </Link>
+          <div className="text-[10px] text-muted-foreground/50 tabular-nums text-right leading-tight">
+            {version && <div>v{version}</div>}
+            {time && <div>{time}</div>}
+          </div>
         </div>
         <nav className="flex flex-1 flex-col p-2 overflow-y-auto">
           <NavLinks />
         </nav>
-        <SidebarFooter />
       </aside>
     </>
   );

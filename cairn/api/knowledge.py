@@ -89,8 +89,14 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         min_confidence: float = Query(0.5, ge=0.0, le=1.0),
         limit: int = Query(10, ge=1, le=100),
     ):
-        if cluster_engine.is_stale(project):
-            cluster_engine.run_clustering(project)
+        stale = cluster_engine.is_stale(project)
+        refreshing = False
+        if stale:
+            # Kick off background re-clustering instead of blocking the request
+            refreshing = cluster_engine.run_clustering_background(project)
+            if not refreshing:
+                # Already running — just note it
+                refreshing = cluster_engine.is_clustering_in_progress(project)
 
         clusters = cluster_engine.get_clusters(
             project=project,
@@ -98,7 +104,11 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             min_confidence=min_confidence,
             limit=limit,
         )
-        return {"cluster_count": len(clusters), "clusters": clusters}
+        result = {"cluster_count": len(clusters), "clusters": clusters}
+        if stale:
+            result["stale"] = True
+            result["refreshing"] = refreshing
+        return result
 
     @router.get("/rules")
     def api_rules(

@@ -154,7 +154,8 @@ export default function WorkItemsPage() {
 
   const projectParam = filters.showAllProjects ? undefined : filters.projectFilter.join(",");
 
-  const fetchItems = useCallback(() => {
+  // Parallel fetch: items + ready + gated in a single round trip
+  const fetchAll = useCallback(() => {
     setLoading(true);
     setError(null);
 
@@ -165,30 +166,29 @@ export default function WorkItemsPage() {
     opts.include_children = "true";
     opts.limit = "100";
 
-    api.workItems(opts)
-      .then((r) => setItems(r.items))
+    const promises: [
+      Promise<{ items: WorkItem[] }>,
+      Promise<{ items: { id: number }[] } | null>,
+      Promise<{ items: GatedItem[] }>,
+    ] = [
+      api.workItems(opts),
+      projectParam
+        ? api.workItemReady(projectParam)
+        : Promise.resolve(null),
+      api.workItemsGated(projectParam ? { project: projectParam } : {}),
+    ];
+
+    Promise.all(promises)
+      .then(([itemsRes, readyRes, gatedRes]) => {
+        setItems(itemsRes.items);
+        if (readyRes) setReadyIds(new Set(readyRes.items.map((i) => i.id)));
+        setGatedItems(gatedRes.items);
+      })
       .catch((err) => setError(err?.message || "Failed to load work items"))
       .finally(() => setLoading(false));
   }, [projectParam, statusFilter, itemTypeFilter]);
 
-  // Fetch ready queue IDs for highlighting
-  const fetchReady = useCallback(() => {
-    if (!projectParam) return;
-    api.workItemReady(projectParam)
-      .then((r) => setReadyIds(new Set(r.items.map((i) => i.id))))
-      .catch(() => {});
-  }, [projectParam]);
-
-  // Fetch gated items
-  const fetchGated = useCallback(() => {
-    api.workItemsGated(projectParam ? { project: projectParam } : {})
-      .then((r) => setGatedItems(r.items))
-      .catch(() => setGatedItems([]));
-  }, [projectParam]);
-
-  useEffect(() => { fetchItems(); }, [fetchItems]);
-  useEffect(() => { fetchReady(); }, [fetchReady]);
-  useEffect(() => { fetchGated(); }, [fetchGated]);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   // Fetch workspace backends once on mount
   useEffect(() => {
@@ -197,38 +197,39 @@ export default function WorkItemsPage() {
       .catch(() => setBackends([]));
   }, []);
 
-  // Polling with visibility awareness
+  // Polling with visibility awareness — all three endpoints in parallel
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
     let backoff = POLL_INTERVAL;
 
     function poll() {
       if (document.hidden) return;
+      const opts: Record<string, string> = {
+        ...(projectParam ? { project: projectParam } : {}),
+        ...(statusFilter ? { status: statusFilter } : {}),
+        ...(itemTypeFilter ? { item_type: itemTypeFilter } : {}),
+        include_children: "true",
+        limit: "100",
+      };
       Promise.all([
-        api.workItems({
-          ...(projectParam ? { project: projectParam } : {}),
-          ...(statusFilter ? { status: statusFilter } : {}),
-          ...(itemTypeFilter ? { item_type: itemTypeFilter } : {}),
-          include_children: "true",
-          limit: "100",
-        }),
+        api.workItems(opts),
+        projectParam
+          ? api.workItemReady(projectParam)
+          : Promise.resolve(null),
         api.workItemsGated(projectParam ? { project: projectParam } : {}),
       ])
-        .then(([itemsRes, gatedRes]) => {
+        .then(([itemsRes, readyRes, gatedRes]) => {
           setItems(itemsRes.items);
+          if (readyRes) setReadyIds(new Set(readyRes.items.map((i) => i.id)));
           setGatedItems(gatedRes.items);
-          backoff = POLL_INTERVAL; // Reset on success
+          backoff = POLL_INTERVAL;
         })
         .catch(() => {
-          backoff = Math.min(backoff * 2, POLL_BACKOFF_MAX); // Exponential backoff
+          backoff = Math.min(backoff * 2, POLL_BACKOFF_MAX);
         });
     }
 
-    interval = setInterval(poll, POLL_INTERVAL);
-
-    function handleVisibility() {
-      if (!document.hidden) poll();
-    }
+    const interval = setInterval(poll, POLL_INTERVAL);
+    const handleVisibility = () => { if (!document.hidden) poll(); };
     document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
@@ -294,15 +295,11 @@ export default function WorkItemsPage() {
   }
 
   function handleCreated() {
-    fetchItems();
-    fetchReady();
-    fetchGated();
+    fetchAll();
   }
 
   function handleAction() {
-    fetchItems();
-    fetchReady();
-    fetchGated();
+    fetchAll();
   }
 
   // Quick create handler

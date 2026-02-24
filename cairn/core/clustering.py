@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
@@ -39,6 +40,14 @@ class ClusterEngine:
         self.embedding = embedding
         self.llm = llm
         self.config = config or ClusteringConfig()
+
+        # t-SNE visualization cache: keyed by project_id (None = global)
+        self._viz_cache: dict[int | None, dict] = {}
+        self._viz_timestamps: dict[int | None, float] = {}
+
+        # Background clustering lock — prevents concurrent re-cluster runs
+        self._clustering_lock = threading.Lock()
+        self._clustering_in_progress: set[int | None] = set()
 
     # ============================================================
     # Staleness Detection
@@ -79,6 +88,36 @@ class ClusterEngine:
             return True
 
         return False
+
+    def run_clustering_background(self, project: str | None = None) -> bool:
+        """Trigger re-clustering in a background thread. Returns True if started, False if already running."""
+        project_id = self._resolve_project_id(project) if project else None
+        with self._clustering_lock:
+            if project_id in self._clustering_in_progress:
+                return False
+            self._clustering_in_progress.add(project_id)
+
+        def _do_cluster():
+            try:
+                self.run_clustering(project)
+                # Invalidate viz cache so next request gets fresh data
+                self._viz_cache.pop(project_id, None)
+                self._viz_timestamps.pop(project_id, None)
+                logger.info("Background clustering complete for project=%s", project)
+            except Exception:
+                logger.exception("Background clustering failed for project=%s", project)
+            finally:
+                with self._clustering_lock:
+                    self._clustering_in_progress.discard(project_id)
+
+        thread = threading.Thread(target=_do_cluster, daemon=True, name=f"cluster-{project}")
+        thread.start()
+        return True
+
+    def is_clustering_in_progress(self, project: str | None = None) -> bool:
+        """Check if background clustering is currently running for a project."""
+        project_id = self._resolve_project_id(project) if project else None
+        return project_id in self._clustering_in_progress
 
     # ============================================================
     # Core Clustering
@@ -286,11 +325,19 @@ class ClusterEngine:
     # ============================================================
 
     def get_visualization(self, project: str | None = None) -> dict:
-        """Run t-SNE on memory embeddings to produce 2D coordinates for visualization.
+        """Return t-SNE 2D coordinates for visualization.
 
-        Returns dict with 'points' list and 'generated_at' timestamp.
+        Cached with same staleness logic as clustering. Returns cached result
+        instantly if fresh, otherwise recomputes.
         """
         project_id = self._resolve_project_id(project) if project else None
+
+        # Serve from cache if fresh (same TTL as clustering staleness)
+        cached = self._viz_cache.get(project_id)
+        cached_ts = self._viz_timestamps.get(project_id, 0)
+        cache_age_hours = (time.time() - cached_ts) / 3600
+        if cached and cache_age_hours < self.config.staleness_hours:
+            return cached
 
         # Fetch active memories with embeddings
         if project_id:
@@ -367,6 +414,10 @@ class ClusterEngine:
             result["sampled"] = True
             result["total_memories"] = total_available
             result["sampled_count"] = tsne_cap
+
+        # Cache the result
+        self._viz_cache[project_id] = result
+        self._viz_timestamps[project_id] = time.time()
         return result
 
     def get_last_run(self, project: str | None = None) -> dict | None:

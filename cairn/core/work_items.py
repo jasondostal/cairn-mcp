@@ -669,27 +669,26 @@ class WorkItemManager:
 
         where = " AND ".join(conditions)
 
-        count_row = self.db.execute_one(
-            f"SELECT COUNT(*) AS total FROM work_items wi WHERE {where}",
-            tuple(params),
-        )
-        total = count_row["total"]
-
         query = f"""
             SELECT wi.id, wi.seq_num, wi.title, wi.item_type, wi.priority,
                    wi.status, wi.assignee, wi.parent_id, wi.session_name,
                    wi.risk_tier, wi.gate_type, wi.agent_state,
                    wi.created_at, wi.updated_at, wi.completed_at, wi.cancelled_at,
                    p.name AS project, p.work_item_prefix,
-                   (SELECT COUNT(*) FROM work_items c WHERE c.parent_id = wi.id) AS children_count
+                   COALESCE(cc.cnt, 0) AS children_count,
+                   COUNT(*) OVER() AS _total
             FROM work_items wi
             LEFT JOIN projects p ON wi.project_id = p.id
+            LEFT JOIN LATERAL (
+                SELECT COUNT(*) AS cnt FROM work_items c WHERE c.parent_id = wi.id
+            ) cc ON true
             WHERE {where}
             ORDER BY wi.priority DESC, wi.created_at DESC
             LIMIT %s OFFSET %s
         """
         params.extend([limit, offset])
         rows = self.db.execute(query, tuple(params))
+        total = rows[0]["_total"] if rows else 0
 
         items = [
             {

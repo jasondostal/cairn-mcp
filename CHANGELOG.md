@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.59.1] — 2026-02-24
+
+### Changed
+- **Projects query** — replaced cartesian triple-JOIN with LATERAL subqueries.
+  Eliminates combinatorial explosion when projects have many memories, docs, and
+  work items (e.g., 500×10×20 = 100K intermediate rows → 3 cheap subqueries).
+- **Work items list query** — replaced correlated `children_count` subquery with
+  LATERAL JOIN; merged separate COUNT query into `COUNT(*) OVER()` window function
+  (2 queries → 1).
+- **DB connection pool** — bumped min 2→4, max 10→15 to reduce contention when
+  MCP tools, REST API, and background tasks run concurrently.
+- **Clusters endpoint** — re-clustering now runs in a background thread instead of
+  blocking the request handler (30–90 s → instant). Response includes `stale` and
+  `refreshing` flags so the UI can communicate status.
+- **t-SNE visualization** — results cached with same staleness TTL as clustering.
+  Previously recomputed O(n²) on every request.
+- **Work items page** — parallelized 3 sequential API calls (items, ready queue,
+  gated) into a single `Promise.all` round trip. Polling now includes ready queue.
+- **Sidebar polling** — pauses when browser tab is hidden; resumes immediately on
+  focus. Saves battery and bandwidth.
+
+### Added
+- **API GET cache** — request-level deduplication and 30 s stale-while-revalidate
+  cache in the frontend API client. Mutations auto-invalidate matching entries.
+- **`useFetch` SWR mode** — hook now serves cached data instantly while
+  revalidating in the background. New `isValidating` flag for UI indicators.
+- **`useVisibilityPolling` hook** — shared polling primitive with
+  `visibilitychange` awareness, used by sidebar badge counters.
+
 ## [0.59.0] — 2026-02-23
 
 ### Added

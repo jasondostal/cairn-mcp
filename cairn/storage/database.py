@@ -26,10 +26,10 @@ logger = logging.getLogger(__name__)
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
-# Pool sizing: min_size covers typical concurrent load (MCP + API + dashboard),
-# max_size caps runaway connections. Adjust via subclass if needed.
-POOL_MIN_SIZE = 2
-POOL_MAX_SIZE = 10
+# Pool sizing: min_size covers typical concurrent load (MCP + API + dashboard +
+# background clustering/enrichment), max_size caps runaway connections.
+POOL_MIN_SIZE = 4
+POOL_MAX_SIZE = 15
 
 
 class Database:

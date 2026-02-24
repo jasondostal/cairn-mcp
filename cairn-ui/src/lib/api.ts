@@ -1,6 +1,21 @@
 const BASE = "/api";
 
-async function get<T>(path: string, params?: Record<string, string | string[] | undefined>): Promise<T> {
+// ---------------------------------------------------------------------------
+// GET cache: deduplicates in-flight requests and caches responses with TTL.
+// Mutations (POST/PATCH/DELETE) invalidate matching cache entries.
+// ---------------------------------------------------------------------------
+
+interface CacheEntry {
+  data: unknown;
+  timestamp: number;
+}
+
+const DEFAULT_CACHE_TTL = 30_000; // 30s — serve stale while revalidating
+
+const _cache = new Map<string, CacheEntry>();
+const _inflight = new Map<string, Promise<unknown>>();
+
+function buildUrl(path: string, params?: Record<string, string | string[] | undefined>): string {
   const url = new URL(path, window.location.origin);
   url.pathname = `${BASE}${path}`;
   if (params) {
@@ -10,9 +25,52 @@ async function get<T>(path: string, params?: Record<string, string | string[] | 
       if (str !== "") url.searchParams.set(k, str);
     });
   }
-  const res = await fetch(url.toString());
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
+  return url.toString();
+}
+
+/** Invalidate cache entries whose key starts with the given path prefix. */
+export function invalidateCache(pathPrefix?: string) {
+  if (!pathPrefix) {
+    _cache.clear();
+    return;
+  }
+  const prefix = `${window.location.origin}${BASE}${pathPrefix}`;
+  for (const key of _cache.keys()) {
+    if (key.startsWith(prefix)) _cache.delete(key);
+  }
+}
+
+async function get<T>(path: string, params?: Record<string, string | string[] | undefined>): Promise<T> {
+  const key = buildUrl(path, params);
+
+  // Deduplicate in-flight requests for the same URL
+  const existing = _inflight.get(key);
+  if (existing) return existing as Promise<T>;
+
+  const doFetch = async (): Promise<T> => {
+    const res = await fetch(key);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const data = await res.json();
+    _cache.set(key, { data, timestamp: Date.now() });
+    return data;
+  };
+
+  const promise = doFetch().finally(() => _inflight.delete(key));
+  _inflight.set(key, promise);
+  return promise;
+}
+
+/** Read from cache if fresh, otherwise fetch. Used by useSWR hook. */
+export function getCached<T>(
+  path: string,
+  params?: Record<string, string | string[] | undefined>,
+  ttl: number = DEFAULT_CACHE_TTL,
+): { cached: T | null; fresh: boolean } {
+  const key = buildUrl(path, params);
+  const entry = _cache.get(key);
+  if (!entry) return { cached: null, fresh: false };
+  const age = Date.now() - entry.timestamp;
+  return { cached: entry.data as T, fresh: age < ttl };
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
@@ -25,6 +83,9 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || `${res.status} ${res.statusText}`);
   }
+  // Invalidate GET cache for this resource path
+  const basePath = path.replace(/\/[^/]*$/, "");
+  invalidateCache(basePath || path);
   return res.json();
 }
 
@@ -38,6 +99,8 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || `${res.status} ${res.statusText}`);
   }
+  const basePath = path.replace(/\/[^/]*$/, "");
+  invalidateCache(basePath || path);
   return res.json();
 }
 

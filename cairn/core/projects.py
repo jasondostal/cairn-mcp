@@ -31,15 +31,23 @@ class ProjectManager:
 
         query = """
             SELECT p.id, p.name, p.work_item_prefix, p.created_at,
-                   COUNT(DISTINCT m.id) FILTER (WHERE m.is_active = true) AS memory_count,
-                   COUNT(DISTINCT d.id) AS doc_count,
-                   COUNT(DISTINCT wi.id) AS work_item_count,
-                   GREATEST(MAX(m.updated_at), MAX(d.updated_at), MAX(wi.updated_at)) AS last_activity
+                   COALESCE(mc.cnt, 0) AS memory_count,
+                   COALESCE(dc.cnt, 0) AS doc_count,
+                   COALESCE(wc.cnt, 0) AS work_item_count,
+                   GREATEST(mc.latest, dc.latest, wc.latest) AS last_activity
             FROM projects p
-            LEFT JOIN memories m ON m.project_id = p.id
-            LEFT JOIN project_documents d ON d.project_id = p.id
-            LEFT JOIN work_items wi ON wi.project_id = p.id
-            GROUP BY p.id, p.name, p.created_at, p.work_item_prefix
+            LEFT JOIN LATERAL (
+                SELECT COUNT(*) AS cnt, MAX(updated_at) AS latest
+                FROM memories WHERE project_id = p.id AND is_active = true
+            ) mc ON true
+            LEFT JOIN LATERAL (
+                SELECT COUNT(*) AS cnt, MAX(updated_at) AS latest
+                FROM project_documents WHERE project_id = p.id
+            ) dc ON true
+            LEFT JOIN LATERAL (
+                SELECT COUNT(*) AS cnt, MAX(updated_at) AS latest
+                FROM work_items WHERE project_id = p.id
+            ) wc ON true
             ORDER BY last_activity DESC NULLS LAST, p.name
         """
         params: list = []
