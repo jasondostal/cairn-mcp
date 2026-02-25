@@ -13,7 +13,7 @@ from pathlib import Path
 
 import tree_sitter as ts
 
-from cairn.code.languages import get_language_module, language_for_extension
+from cairn.code.languages import get_language_module, language_for_extension, language_for_filename
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +123,8 @@ class CodeParser:
         ext = filepath.suffix
         language = language_for_extension(ext)
         if language is None:
+            language = language_for_filename(filepath.name)
+        if language is None:
             return None
 
         try:
@@ -180,13 +182,15 @@ class CodeParser:
                     return True
             return False
 
+        from cairn.code.languages import language_for_filename as _lang_for_name
+
         exts = supported_extensions()
         results: list[ParseResult] = []
 
         for filepath in sorted(root.rglob("*")):
             if not filepath.is_file():
                 continue
-            if filepath.suffix not in exts:
+            if filepath.suffix not in exts and _lang_for_name(filepath.name) is None:
                 continue
             if any(part in exclude for part in filepath.parts):
                 continue

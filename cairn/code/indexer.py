@@ -239,8 +239,17 @@ def _resolve_all_imports(
     edges: list[tuple[str, str]] = []
     seen: set[tuple[str, str]] = set()
 
+    # Build Go directory -> file paths mapping for package resolution.
+    # Go packages are directories — all .go files in a directory share a package.
+    go_dir_to_files: dict[str, list[str]] = {}
+    for parsed in parsed_files:
+        if parsed.language == "golang":
+            dir_path = str(Path(parsed.file_path).parent)
+            go_dir_to_files.setdefault(dir_path, []).append(parsed.file_path)
+
     for parsed in parsed_files:
         is_ts = parsed.language in ("typescript", "typescript_tsx")
+        is_go = parsed.language == "golang"
 
         for imp in parsed.imports:
             target_path = None
@@ -250,6 +259,10 @@ def _resolve_all_imports(
                 if import_source:
                     importer_dir = str(Path(parsed.file_path).parent)
                     target_path = resolve_ts_import(import_source, importer_dir, known_paths)
+            elif is_go:
+                target_path = _resolve_go_import(
+                    imp.name, parsed.file_path, go_dir_to_files, root_prefix,
+                )
             else:
                 imported_module = imp.name
                 if imported_module.startswith("from "):
@@ -297,4 +310,43 @@ def _extract_ts_import_source(import_text: str) -> str | None:
                 return import_text[start:end]
             except ValueError:
                 pass
+    return None
+
+
+def _resolve_go_import(
+    import_text: str,
+    importer_path: str,
+    go_dir_to_files: dict[str, list[str]],
+    root_prefix: str,
+) -> str | None:
+    """Resolve a Go import to a file in the project.
+
+    Go imports are quoted package paths like "fmt" or "github.com/user/repo/pkg".
+    We match the import path suffix against known directory paths within the project.
+    Returns the first .go file in the matched directory (representing the package).
+    """
+    # Strip quotes and optional alias prefix (e.g. `mypkg "github.com/..."`)
+    text = import_text.strip()
+    # Handle aliased imports: `alias "path/to/pkg"`
+    if " " in text:
+        text = text.split()[-1]
+    # Strip quotes
+    text = text.strip('"').strip("'")
+    if not text:
+        return None
+
+    # Try to match the import path suffix against known Go directories
+    for dir_path, files in go_dir_to_files.items():
+        rel_dir = dir_path
+        if root_prefix and dir_path.startswith(root_prefix):
+            rel_dir = dir_path[len(root_prefix):]
+
+        # Check if the directory path ends with the import path
+        # e.g. import "myproject/pkg/utils" matches dir ".../myproject/pkg/utils"
+        if rel_dir == text or rel_dir.endswith("/" + text):
+            # Don't resolve to files in the same directory (same package)
+            if dir_path == str(Path(importer_path).parent):
+                continue
+            return files[0] if files else None
+
     return None

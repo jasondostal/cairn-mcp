@@ -127,7 +127,7 @@ class TestCodeParser:
         assert len(result.symbols) == 0
 
     def test_unsupported_extension(self):
-        result = self.parser.parse_file(Path("test.rs"))
+        result = self.parser.parse_file(Path("test.xyz"))
         assert result is None
 
     def test_nonexistent_file(self):

@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.61.0] — 2026-02-25
+
+### Added
+- **21-language code intelligence** — expanded tree-sitter support from 2 to 21
+  languages across two sessions. Cairn can now index virtually any codebase.
+
+  *Programming languages:* Python, TypeScript/TSX, C, C++, Go, Java, PHP, Ruby,
+  Rust, Swift, Scala, Kotlin, C#
+
+  *Infrastructure & scripting:* Bash, SQL, HCL (Terraform), Dockerfile
+
+  *Data & markup formats:* JSON, YAML, TOML, Markdown
+
+  Each language has a dedicated parser module with symbol extraction (functions,
+  classes, methods, imports, etc.) tuned to language idioms — e.g., Go receiver
+  methods, Kotlin data classes, HCL resource blocks, Dockerfile build stages.
+
+- **Filename-based language detection** — `Dockerfile` (no extension) is now
+  recognised alongside `.dockerfile`. Registry supports both extension and
+  filename matching.
+
+- **375 parser tests** — 205 new tests across 12 languages, all passing.
+
 ## [0.60.0] — 2026-02-24
 
 ### Added

@@ -125,7 +125,7 @@ The rest: `modify`, `insights`, `tasks`, `think`, `status`, `consolidate`, `drif
   <sub>Memory growth by type, token usage tracking, and the full nav.</sub>
 </p>
 
-**Code intelligence.** Index any codebase with tree-sitter (Python, TypeScript/TSX). Ask structural questions — "what depends on this file?", "what's the blast radius?" — and get answers from the code graph. Enforce architecture boundaries with YAML rules. Search code by natural language description. Works across projects.
+**Code intelligence.** Index any codebase with tree-sitter — 21 languages supported: Python, TypeScript/TSX, C, C++, Go, Java, PHP, Ruby, Rust, Swift, Scala, Kotlin, C#, Bash, SQL, HCL (Terraform), Dockerfile, JSON, YAML, TOML, and Markdown. Ask structural questions — "what depends on this file?", "what's the blast radius?" — and get answers from the code graph. Enforce architecture boundaries with YAML rules. Search code by natural language description. Works across projects.
 
 **Session capture.** IDE hooks (Claude Code, Cursor, Cline, Windsurf) log every tool call. Next session boots warm. See [`examples/hooks/README.md`](examples/hooks/README.md).
 

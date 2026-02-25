@@ -263,7 +263,24 @@ class TestFileExtensions:
         assert language_for_extension(".ts") == "typescript"
         assert language_for_extension(".tsx") == "typescript_tsx"
         assert language_for_extension(".py") == "python"
-        assert language_for_extension(".rs") is None
+        assert language_for_extension(".rs") == "rust"
+        assert language_for_extension(".java") == "java"
+        assert language_for_extension(".go") == "golang"
+        assert language_for_extension(".c") == "c"
+        assert language_for_extension(".cpp") == "cpp"
+        assert language_for_extension(".php") == "php"
+        assert language_for_extension(".rb") == "ruby"
+        assert language_for_extension(".swift") == "swift"
+        assert language_for_extension(".kt") == "kotlin"
+        assert language_for_extension(".cs") == "csharp"
+        assert language_for_extension(".json") == "json"
+        assert language_for_extension(".yaml") == "yaml"
+        assert language_for_extension(".sh") == "bash"
+        assert language_for_extension(".sql") == "sql"
+        assert language_for_extension(".md") == "markdown"
+        assert language_for_extension(".tf") == "hcl"
+        assert language_for_extension(".toml") == "toml"
+        assert language_for_extension(".scala") == "scala"
 
 
 class TestPathToModuleTs:

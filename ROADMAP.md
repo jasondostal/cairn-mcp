@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.59.2** — Chat LLM tool surface expansion.
+Current: **v0.61.0** — 21-language code intelligence.
 
 ---
 
@@ -21,6 +21,21 @@ Current: **v0.59.2** — Chat LLM tool surface expansion.
 ---
 
 ## Shipped
+
+### v0.61.0 — "Polyglot" ✓
+
+21-language code intelligence. From 2 languages to 21 in two sessions.
+
+- [x] **12 new language parsers** — Swift, Scala, Kotlin, C#, Bash, SQL, HCL (Terraform), Dockerfile, JSON, YAML, TOML, Markdown. Each with language-specific symbol extraction tuned to idioms (Go receiver methods, Kotlin data classes, HCL resource blocks, Dockerfile build stages).
+- [x] **Filename-based detection** — `Dockerfile` (no extension) recognised alongside `.dockerfile`. Registry supports both extension and filename matching.
+- [x] **375 parser tests** — 205 new tests across 12 languages, all passing. Existing 170 tests unchanged.
+- [x] **Previous session** — C, C++, Go, Java, PHP, Ruby, Rust parsers (7 languages, from v0.60.0 branch).
+
+### v0.60.0 — "Drag Your Own Adventure" ✓
+
+Drag-and-drop dashboard. Customizable widget grid.
+
+- [x] **Drag-and-drop dashboard** — `react-grid-layout` v2, 11 widgets, edit mode, responsive breakpoints, localStorage persistence
 
 ### v0.59.x — "Chat Intelligence + UI Performance" ✓
 
@@ -52,7 +67,7 @@ Jira-style work item IDs. Full REST coverage matching every MCP tool.
 Per-project code understanding. Parse source files with tree-sitter, build a code graph in Neo4j, enforce architecture boundaries, search code by natural language, analyze cross-project dependencies — all through MCP.
 
 - [x] **Architecture boundary rules** — YAML rule engine with `from`/`deny`/`allow` glob patterns, validated against Python imports via stdlib `ast`
-- [x] **`code_index` MCP tool** — tree-sitter parsing with pluggable language modules (Python + TypeScript/TSX), content-hash incremental indexing, `CodeFile`/`CodeSymbol` nodes with `CONTAINS`/`IMPORTS` edges in Neo4j
+- [x] **`code_index` MCP tool** — tree-sitter parsing with pluggable language modules (21 languages), content-hash incremental indexing, `CodeFile`/`CodeSymbol` nodes with `CONTAINS`/`IMPORTS` edges in Neo4j
 - [x] **`.gitignore` support** — respects all `.gitignore` files in the tree (root + nested) via `pathspec` gitwildmatch. No hardcoded exclude lists.
 - [x] **`code_query` MCP tool** — 11 actions: `dependents`, `dependencies`, `structure`, `impact`, `search`, `hotspots`, `entities`, `code_for_entity`, `cross_search`, `shared_deps`, `bridge`
 - [x] **`code_describe` MCP tool** — LLM-generated natural language descriptions per symbol, embedded for semantic code search
