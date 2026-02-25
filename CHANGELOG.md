@@ -29,6 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **109 new parser tests** across 9 languages, all passing.
 
+### Fixed
+- **Docker lockfile cleanup** — `requirements.lock` was generated from host `pip freeze`,
+  leaking Ubuntu system packages (bcc, Brlapi, PyGObject) and CUDA dependencies
+  (nvidia-cublas, nvidia-cudnn, triton) into the container build. Now generated
+  from `pyproject.toml` via `pip-compile` with torch excluded (Dockerfile handles
+  CPU-only torch separately).
+
 ## [0.61.0] "Polyglot" — 2026-02-25
 
 ### Added
