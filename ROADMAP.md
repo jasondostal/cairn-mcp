@@ -62,10 +62,9 @@ Exploring, not committed.
 
 21-language code intelligence. From 2 languages to 21 in two sessions.
 
-- [x] **12 new language parsers** — Swift, Scala, Kotlin, C#, Bash, SQL, HCL (Terraform), Dockerfile, JSON, YAML, TOML, Markdown. Each with language-specific symbol extraction tuned to idioms (Go receiver methods, Kotlin data classes, HCL resource blocks, Dockerfile build stages).
+- [x] **19 new language parsers in two sessions** — C, C++, Go, Java, PHP, Ruby, Rust (session 1) + Swift, Scala, Kotlin, C#, Bash, SQL, HCL (Terraform), Dockerfile, JSON, YAML, TOML, Markdown (session 2). Each with language-specific symbol extraction tuned to idioms (Go receiver methods, Kotlin data classes, HCL resource blocks, Dockerfile build stages).
 - [x] **Filename-based detection** — `Dockerfile` (no extension) recognised alongside `.dockerfile`. Registry supports both extension and filename matching.
-- [x] **375 parser tests** — 205 new tests across 12 languages, all passing. Existing 170 tests unchanged.
-- [x] **Previous session** — C, C++, Go, Java, PHP, Ruby, Rust parsers (7 languages, from v0.60.0 branch).
+- [x] **375 parser tests** — 205 new tests across 19 languages, all passing. Existing 170 tests unchanged.
 
 ### v0.60.0 — "Drag Your Own Adventure" ✓
 
