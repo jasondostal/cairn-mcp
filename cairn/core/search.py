@@ -51,6 +51,7 @@ from cairn.storage.database import Database
 if TYPE_CHECKING:
     from cairn.config import LLMCapabilities
     from cairn.core.activation import ActivationEngine
+    from cairn.core.memory import MemoryStore
     from cairn.core.reranker.interface import RerankerInterface
     from cairn.graph.interface import GraphProvider
     from cairn.llm.interface import LLMInterface
@@ -83,6 +84,7 @@ class SearchEngine:
         activation_engine: ActivationEngine | None = None,
         graph_provider: GraphProvider | None = None,
         decay_lambda: float = 0.01,
+        memory_store: "MemoryStore | None" = None,
     ):
         self.db = db
         self.embedding = embedding
@@ -93,6 +95,7 @@ class SearchEngine:
         self.decay_lambda = decay_lambda
         self.activation_engine = activation_engine
         self.graph_provider = graph_provider
+        self._memory_store = memory_store
         self._mca_gate: MCAGate | None = None
         if capabilities is not None and capabilities.mca_gate:
             self._mca_gate = MCAGate()
@@ -174,6 +177,7 @@ class SearchEngine:
             f"""
             SELECT m.id, m.content, m.summary, m.memory_type, m.importance,
                    m.tags, m.auto_tags, m.author, m.created_at,
+                   m.enrichment_status,
                    p.name as project,
                    1 - (m.embedding <=> %s::vector) as score
             FROM memories m
@@ -206,6 +210,7 @@ class SearchEngine:
             f"""
             SELECT m.id, m.content, m.summary, m.memory_type, m.importance,
                    m.tags, m.auto_tags, m.author, m.created_at,
+                   m.enrichment_status,
                    p.name as project,
                    ts_rank(to_tsvector('english', m.content), plainto_tsquery('english', %s)) as score
             FROM memories m
@@ -566,6 +571,7 @@ class SearchEngine:
             f"""
             SELECT m.id, m.content, m.summary, m.memory_type, m.importance,
                    m.tags, m.auto_tags, m.created_at,
+                   m.enrichment_status,
                    p.name as project
             FROM memories m
             LEFT JOIN projects p ON m.project_id = p.id
@@ -715,6 +721,27 @@ class SearchEngine:
             for mid, score in scored.items()
         }
 
+    def _trigger_jit_enrichment(self, results: list[dict]) -> None:
+        """Background-enrich memories that lack enrichment."""
+        if self._memory_store is None or not self._memory_store.enricher:
+            return
+
+        unenriched_ids = []
+        for r in results[:5]:  # Only top 5 to limit cost
+            if r.get("enrichment_status") in ("none", "pending", "failed"):
+                unenriched_ids.append(r["id"])
+
+        if unenriched_ids:
+            import threading
+            def _enrich_batch():
+                for mid in unenriched_ids:
+                    try:
+                        self._memory_store.re_enrich(mid)
+                    except Exception:
+                        logger.debug("JIT enrichment failed for #%d", mid, exc_info=True)
+            threading.Thread(target=_enrich_batch, daemon=True).start()
+            logger.info("JIT enrichment triggered for %d memories", len(unenriched_ids))
+
     def _format_results(
         self, rows: list[dict], include_full: bool, prescored: bool = False,
     ) -> list[dict]:
@@ -741,6 +768,10 @@ class SearchEngine:
             if r.get("score_components"):
                 result["score_components"] = r["score_components"]
             results.append(result)
+
+        # JIT enrichment: queue background enrichment for unenriched top results
+        self._trigger_jit_enrichment(rows)
+
         return results
 
     def assess_confidence(self, query: str, results: list[dict]) -> dict | None:

@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.62.0] "The Editable Hulk" — 2026-02-25
+
+### Added
+- **Chat thinking indicator** (ca-122) — bouncing dots animation shown between
+  user message send and first assistant token. Backend emits `thinking` SSE
+  events before each LLM generation call and after tool execution. Frontend
+  renders a `ThinkingIndicator` component while the assistant message has no
+  content yet.
+
+- **Memory editing UI** (ca-110) — inline editing from the memory sheet. Edit
+  content (monospace textarea), memory type (SingleSelect), importance (number
+  input), and tags (comma-separated input). Inactivate with reason via
+  AlertDialog, reactivate with one click. Save triggers `api.updateMemory()`
+  with re-embedding on content change.
+
+- **Content size management** (ca-84) — memories over 8,000 characters
+  automatically use their enrichment summary for embedding instead of raw
+  content. This produces higher-quality vectors since embedding models have a
+  ~512 token sweet spot. When no summary is available, a truncated version is
+  used. No additional LLM cost — uses the summary enrichment already generates.
+
+- **JIT enrichment fallback** (ca-85) — unenriched memories surfaced by search
+  (status `none`, `pending`, or `failed`) are automatically re-enriched in a
+  background daemon thread. Limited to top 5 results per search to control
+  cost. Next search of the same memories benefits from the enrichment.
+  `enrichment_status` added to all search SELECT queries.
+
+- **Knowledge graph entity editing** (ca-109) — full CRUD for entities and
+  statements from the graph page. Edit entity name and type inline, create new
+  entities via dialog, delete with orphan statement cleanup, view and invalidate
+  statements. 8 new REST endpoints (`/entities` CRUD, `/entities/merge`,
+  `/entities/{uuid}/statements`, `/statements/{uuid}/invalidate`). Backend adds
+  `update_entity`, `delete_entity`, `get_entity`, `list_entities` to Neo4j
+  provider. New `graph_edit.py` API module (191 lines) + `EntityCreateDialog`
+  component.
+
+- **Chat conversation resume** (ca-121) — reopen and continue previous chat
+  conversations from the drawer. History toggle shows a `ConversationSidebar`
+  with project filtering, search, and delete confirmation via AlertDialog.
+  Selecting a conversation loads its messages and reconnects the adapter to that
+  conversation ID. Works in both the full chat page and the global chat drawer.
+
 ## [0.61.1] "Polyglot II" — 2026-02-25
 
 ### Added

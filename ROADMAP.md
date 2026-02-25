@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.61.1** — 30-language code intelligence.
+Current: **v0.62.0** — Memory editing, thinking indicator, content size management, JIT enrichment, KG entity editing, chat resume.
 
 ---
 
@@ -20,17 +20,7 @@ Continuous work with no fixed end state.
 
 Have work items, intent to build.
 
-**Graph entity management UI.** Visualize entity nodes, merge duplicates, correct types, browse relationships from the dashboard. (ca-109)
-
-**Memory editing UI.** Edit content, metadata, and lifecycle from cairn-ui. (ca-110)
-
-**Chat LLM thinking indicator.** Show animation while the model responds. (ca-122)
-
 **Async MCP observability.** Progress reporting for long-running tools (code_index, consolidate, ingest). (ca-107)
-
-**Content size management.** Auto-summarize oversized memories to keep context windows efficient. (ca-84)
-
-**JIT enrichment fallback.** On-demand enrichment for unenriched memories at search time. (ca-85)
 
 ---
 
@@ -49,6 +39,17 @@ Exploring, not committed.
 ---
 
 ## Shipped
+
+### v0.62.0 — "The Editable Hulk" ✓
+
+Four features deepening the core product after the Polyglot breadth releases.
+
+- [x] **Chat thinking indicator** (ca-122) — bouncing dots between user send and first token. Backend `thinking` SSE events + frontend `ThinkingIndicator` component.
+- [x] **Memory editing UI** (ca-110) — inline edit from memory sheet: content, type, importance, tags. Inactivate/reactivate with AlertDialog.
+- [x] **Content size management** (ca-84) — memories >8K chars embed using summary instead of raw content for better vector quality. Zero additional LLM cost.
+- [x] **JIT enrichment fallback** (ca-85) — unenriched search results auto-enriched in background daemon thread. Top 5 per search, non-blocking.
+- [x] **Knowledge graph entity editing** (ca-109) — full CRUD for entities and statements from the graph page. Edit, create, delete, merge entities. View and invalidate statements. 8 new REST endpoints + Neo4j provider methods.
+- [x] **Chat conversation resume** (ca-121) — reopen previous conversations from the chat drawer. History sidebar with project filtering, search, and delete confirmation.
 
 ### v0.61.1 — "Polyglot II" ✓
 

@@ -489,6 +489,30 @@ export interface ChatMessage {
   created_at: string;
 }
 
+// --- Knowledge Graph entity types ---
+
+export interface KGEntity {
+  uuid: string;
+  name: string;
+  entity_type: string;
+  project_id: number;
+  stmt_count?: number;
+}
+
+export interface KGStatement {
+  uuid: string;
+  fact: string;
+  aspect: string;
+  episode_id: number;
+  valid_at: string | null;
+  invalid_at: string | null;
+}
+
+export interface KGEntityDetail extends KGEntity {
+  attributes: Record<string, string>;
+  statements: KGStatement[];
+}
+
 // --- Work Item types ---
 
 export type WorkItemStatus = "open" | "ready" | "in_progress" | "blocked" | "done" | "cancelled";
@@ -1296,4 +1320,32 @@ export const api = {
     role: string; content?: string; tool_calls?: Array<Record<string, unknown>>;
     model?: string; token_count?: number;
   }) => post<ChatMessage>(`/chat/conversations/${id}/messages`, body),
+
+  // --- Knowledge Graph Entities ---
+
+  entities: (opts: { project: string; search?: string; entity_type?: string; limit?: string }) =>
+    get<{ items: KGEntity[]; total: number }>("/entities", opts),
+
+  entity: (uuid: string) =>
+    get<KGEntityDetail>(`/entities/${uuid}`),
+
+  createEntity: (body: { name: string; entity_type: string; project: string }) =>
+    post<KGEntity>("/entities", body),
+
+  updateEntity: (uuid: string, body: { name?: string; entity_type?: string }) =>
+    patch<KGEntity>(`/entities/${uuid}`, body),
+
+  deleteEntity: (uuid: string) =>
+    del<{ entity_deleted: boolean; orphaned_statements_deleted: number }>(`/entities/${uuid}`),
+
+  mergeEntities: (body: { canonical_id: string; duplicate_id: string }) =>
+    post<{ subject_edges_moved: number; object_edges_moved: number; duplicate_deleted: string }>(
+      "/entities/merge", body,
+    ),
+
+  entityStatements: (uuid: string, opts?: { aspects?: string }) =>
+    get<{ entity_uuid: string; statements: KGStatement[] }>(`/entities/${uuid}/statements`, opts),
+
+  invalidateStatement: (uuid: string, opts?: { invalidated_by?: string }) =>
+    post<{ invalidated: boolean; uuid: string }>(`/statements/${uuid}/invalidate`, opts),
 };

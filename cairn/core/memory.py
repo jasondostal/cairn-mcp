@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from cairn.core.analytics import track_operation
-from cairn.core.constants import CONTRADICTION_ESCALATION_THRESHOLD, MemoryAction
+from cairn.core.constants import AUTO_SUMMARIZE_EMBED_THRESHOLD, CONTRADICTION_ESCALATION_THRESHOLD, MemoryAction
 from cairn.core.utils import extract_json, get_or_create_project
 from cairn.embedding.interface import EmbeddingInterface
 from cairn.storage.database import Database
@@ -155,6 +155,17 @@ class MemoryStore:
 
         # Entities: from LLM enrichment
         entities = enrichment.get("entities", [])
+
+        # Content size management: re-embed using summary for large content
+        if len(content) > AUTO_SUMMARIZE_EMBED_THRESHOLD:
+            if summary:
+                vector = self.embedding.embed(summary)
+                logger.info("Large content (%d chars) — embedded summary instead", len(content))
+            else:
+                # No summary available (enrich=False, no enricher) — use truncated content
+                summary = content[:500].strip() + "..."
+                vector = self.embedding.embed(content[:2000])
+                logger.info("Large content (%d chars) — embedded truncated content", len(content))
 
         # Insert memory
         import json as _json

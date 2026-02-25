@@ -131,6 +131,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         all_tool_calls: list[dict] = []
 
         if not use_tools:
+            yield _sse_event("thinking", {"phase": "generating"})
             for event in llm.generate_stream(messages, max_tokens):
                 if event.type == "text_delta" and event.text:
                     all_text += event.text
@@ -156,6 +157,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         for _iteration in range(MAX_AGENT_ITERATIONS):
             result = None
             turn_text = ""  # Accumulate text from deltas for this iteration
+            yield _sse_event("thinking", {"phase": "generating"})
             for event in llm.generate_with_tools_stream(conversation, CHAT_TOOLS, max_tokens):
                 if event.type == "text_delta" and event.text:
                     turn_text += event.text
@@ -206,6 +208,8 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                     "content": output,
                     "status": "success",
                 })
+
+            yield _sse_event("thinking", {"phase": "tool_complete"})
 
             # Build conversation for next iteration
             assistant_msg: dict = {"role": "assistant"}

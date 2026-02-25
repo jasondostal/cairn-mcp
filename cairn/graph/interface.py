@@ -225,6 +225,37 @@ class GraphProvider(ABC):
         """
 
     @abstractmethod
+    def update_entity(
+        self,
+        entity_id: str,
+        name: str | None = None,
+        entity_type: str | None = None,
+        embedding: list[float] | None = None,
+    ) -> bool:
+        """Update entity fields. Re-embed if name changes. Returns True if found."""
+
+    @abstractmethod
+    def delete_entity(self, entity_id: str) -> dict:
+        """Delete entity and cascade-remove its SUBJECT/OBJECT edges and orphaned statements.
+
+        Returns dict with counts of removed items.
+        """
+
+    @abstractmethod
+    def get_entity(self, entity_id: str) -> Entity | None:
+        """Get a single entity by UUID. Returns None if not found."""
+
+    @abstractmethod
+    def list_entities(
+        self,
+        project_id: int,
+        search: str | None = None,
+        entity_type: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """List entities for a project, optionally filtered by name search or type."""
+
+    @abstractmethod
     def merge_entities(
         self,
         canonical_id: str,

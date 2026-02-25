@@ -205,6 +205,13 @@ async function* runStream(
             yield buildResult(textAccumulator, toolCalls, model);
             break;
           }
+          case "thinking": {
+            // Yield empty result to show in-progress indicator
+            if (!textAccumulator && toolCalls.size === 0) {
+              yield buildResult("", toolCalls, model);
+            }
+            break;
+          }
           case "done": {
             model = (parsed.model as string) ?? "";
             break;

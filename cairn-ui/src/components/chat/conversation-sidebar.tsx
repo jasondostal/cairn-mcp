@@ -4,6 +4,16 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { api, type Conversation } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   MessageSquarePlus,
   Trash2,
   MessageCircle,
@@ -17,6 +27,10 @@ interface ConversationSidebarProps {
   onSelect: (conv: Conversation) => void;
   onNew: () => void;
   refreshKey?: number;
+  /** Filter conversations to this project. Empty/undefined = all projects. */
+  project?: string;
+  /** Compact spacing for drawer context. */
+  compact?: boolean;
 }
 
 export function ConversationSidebar({
@@ -24,23 +38,29 @@ export function ConversationSidebar({
   onSelect,
   onNew,
   refreshKey,
+  project,
+  compact,
 }: ConversationSidebarProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<Conversation | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const result = await api.conversations({ limit: "50" });
+      const opts: Record<string, string> = { limit: "50" };
+      if (project) opts.project = project;
+      const result = await api.conversations(opts);
       setConversations(result.items);
     } catch {
       // silent
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [project]);
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [load, refreshKey]);
 
@@ -52,16 +72,18 @@ export function ConversationSidebar({
     }
   }, [activeId, load]);
 
-  const handleDelete = async (e: React.MouseEvent, id: number) => {
-    e.stopPropagation();
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await api.deleteConversation(id);
-      setConversations((prev) => prev.filter((c) => c.id !== id));
-      if (activeId === id) {
+      await api.deleteConversation(deleteTarget.id);
+      setConversations((prev) => prev.filter((c) => c.id !== deleteTarget.id));
+      if (activeId === deleteTarget.id) {
         onNew();
       }
     } catch {
       // silent
+    } finally {
+      setDeleteTarget(null);
     }
   };
 
@@ -72,6 +94,9 @@ export function ConversationSidebar({
       (c) => (c.title || "").toLowerCase().includes(q),
     );
   }, [conversations, searchQuery]);
+
+  // Show project labels when not filtering by a specific project
+  const showProjectLabels = !project;
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -136,7 +161,8 @@ export function ConversationSidebar({
                 key={conv.id}
                 onClick={() => onSelect(conv)}
                 className={cn(
-                  "group flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors",
+                  "group flex w-full items-start gap-2 px-3 text-left text-sm hover:bg-muted/50 transition-colors",
+                  compact ? "py-1.5" : "py-2",
                   activeId === conv.id && "bg-muted",
                 )}
               >
@@ -153,13 +179,22 @@ export function ConversationSidebar({
                         <span>{conv.message_count} msgs</span>
                       </>
                     )}
+                    {showProjectLabels && conv.project && (
+                      <>
+                        <span>&middot;</span>
+                        <span className="truncate max-w-[60px]">{conv.project}</span>
+                      </>
+                    )}
                   </div>
                 </div>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-5 w-5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={(e) => handleDelete(e, conv.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteTarget(conv);
+                  }}
                   title="Delete"
                 >
                   <Trash2 className="h-3 w-3 text-muted-foreground" />
@@ -169,6 +204,24 @@ export function ConversationSidebar({
           </div>
         )}
       </div>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              &ldquo;{deleteTarget?.title || "Untitled"}&rdquo; and all its messages will be permanently deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

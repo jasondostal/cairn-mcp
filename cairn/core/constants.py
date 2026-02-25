@@ -15,6 +15,9 @@ VALID_MEMORY_TYPES = [
 MEMORY_TYPE_DEFAULT = "note"
 IMPORTANCE_DEFAULT = 0.5
 
+# Content size management
+AUTO_SUMMARIZE_EMBED_THRESHOLD = 8000  # chars — use summary for embedding above this
+
 # Input limits
 MAX_CONTENT_SIZE = 100_000  # ~100KB
 MAX_NAME_LENGTH = 255  # project, session, branch names

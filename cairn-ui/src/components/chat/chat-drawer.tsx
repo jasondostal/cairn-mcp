@@ -8,8 +8,9 @@ import {
 } from "@assistant-ui/react";
 import { createChatAdapter, type ChatAdapterInstance } from "@/lib/chat-adapter";
 import { toThreadMessages } from "@/lib/chat-utils";
-import { api, type Project } from "@/lib/api";
+import { api, type Conversation, type Project } from "@/lib/api";
 import { ChatThread } from "@/components/chat/thread";
+import { ConversationSidebar } from "@/components/chat/conversation-sidebar";
 import { Button } from "@/components/ui/button";
 import { SingleSelect } from "@/components/ui/single-select";
 import {
@@ -19,7 +20,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { RotateCcw, MessageCircle, Bot, User, Wrench, SendHorizonal } from "lucide-react";
+import { RotateCcw, MessageCircle, Bot, User, Wrench, SendHorizonal, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ChatDrawerProps {
@@ -213,6 +214,8 @@ export function ChatDrawer({ open, onOpenChange, demo }: ChatDrawerProps) {
   >(undefined);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<string>("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
 
   // Load projects when drawer first opens
   useEffect(() => {
@@ -235,12 +238,32 @@ export function ChatDrawer({ open, onOpenChange, demo }: ChatDrawerProps) {
     chatAdapter.setConversationId(null);
     setInitialMessages(undefined);
     runtimeRef.current.switchToNewThread();
+    setSidebarRefreshKey((k) => k + 1);
   }, [chatAdapter]);
+
+  const handleSelectConversation = useCallback(
+    async (conv: Conversation) => {
+      try {
+        const result = await api.conversationMessages(conv.id);
+        const msgs = toThreadMessages(result.messages);
+        setActiveConvId(conv.id);
+        chatAdapter.setConversationId(conv.id);
+        setInitialMessages(msgs);
+        runtimeRef.current.switchToNewThread();
+        setHistoryOpen(false);
+      } catch {
+        // silent
+      }
+    },
+    [chatAdapter],
+  );
 
   // Wire adapter callbacks
   useEffect(() => {
     chatAdapter.setOnConversationCreated((id) => setActiveConvId(id));
-    chatAdapter.setOnStreamComplete(() => { /* no sidebar to refresh */ });
+    chatAdapter.setOnStreamComplete(() => {
+      setSidebarRefreshKey((k) => k + 1);
+    });
     return () => {
       chatAdapter.setOnConversationCreated(null);
       chatAdapter.setOnStreamComplete(null);
@@ -280,7 +303,15 @@ export function ChatDrawer({ open, onOpenChange, demo }: ChatDrawerProps) {
           <div className="shrink-0 border-b px-4 py-3 pr-12">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <MessageCircle className="h-4 w-4 text-muted-foreground" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn("h-7 w-7", historyOpen && "bg-muted")}
+                  onClick={() => setHistoryOpen(!historyOpen)}
+                  title={historyOpen ? "Hide history" : "Show history"}
+                >
+                  <History className="h-4 w-4" />
+                </Button>
                 <span className="text-sm font-semibold">Chat</span>
                 <SingleSelect
                   options={[
@@ -304,9 +335,26 @@ export function ChatDrawer({ open, onOpenChange, demo }: ChatDrawerProps) {
             </div>
           </div>
 
-          {/* Thread fills remaining height */}
-          <div className="flex-1 min-h-0">
-            <ChatThread />
+          {/* Content area: sidebar + thread */}
+          <div className="flex flex-1 min-h-0">
+            {/* Conversation history panel */}
+            {historyOpen && (
+              <div className="w-52 shrink-0 border-r">
+                <ConversationSidebar
+                  activeId={activeConvId}
+                  onSelect={handleSelectConversation}
+                  onNew={handleNewChat}
+                  refreshKey={sidebarRefreshKey}
+                  project={activeProject || undefined}
+                  compact
+                />
+              </div>
+            )}
+
+            {/* Thread fills remaining width */}
+            <div className="flex-1 min-h-0 min-w-0">
+              <ChatThread />
+            </div>
           </div>
         </AssistantRuntimeProvider>
       </SheetContent>

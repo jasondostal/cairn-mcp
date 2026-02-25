@@ -534,6 +534,115 @@ class Neo4jGraphProvider(GraphProvider):
                 for r in result
             ]
 
+    def update_entity(
+        self,
+        entity_id: str,
+        name: str | None = None,
+        entity_type: str | None = None,
+        embedding: list[float] | None = None,
+    ) -> bool:
+        with self._session() as session:
+            sets = []
+            params: dict = {"uuid": entity_id}
+            if name is not None:
+                sets.append("e.name = $name")
+                params["name"] = name
+            if entity_type is not None:
+                sets.append("e.entity_type = $entity_type")
+                params["entity_type"] = entity_type
+            if embedding is not None:
+                sets.append("e.name_embedding = $embedding")
+                params["embedding"] = embedding
+            if not sets:
+                return True
+            result = session.run(
+                f"MATCH (e:Entity {{uuid: $uuid}}) SET {', '.join(sets)} RETURN e.uuid AS uuid",
+                **params,
+            )
+            return result.single() is not None
+
+    def delete_entity(self, entity_id: str) -> dict:
+        with self._session() as session:
+            # Find statements where this entity is the ONLY subject/object
+            # and delete those orphaned statements
+            orphan_result = session.run(
+                """
+                MATCH (e:Entity {uuid: $uuid})-[:SUBJECT|OBJECT]->(s:Statement)
+                WITH s
+                WHERE size([(n)-[:SUBJECT|OBJECT]->(s) | n]) <= 1
+                DETACH DELETE s
+                RETURN count(s) AS deleted
+                """,
+                uuid=entity_id,
+            )
+            stmts_deleted = orphan_result.single()["deleted"]
+
+            # Detach delete the entity itself (removes remaining edges)
+            entity_result = session.run(
+                "MATCH (e:Entity {uuid: $uuid}) DETACH DELETE e RETURN count(e) AS deleted",
+                uuid=entity_id,
+            )
+            entity_deleted = entity_result.single()["deleted"]
+
+            return {
+                "entity_deleted": entity_deleted > 0,
+                "orphaned_statements_deleted": stmts_deleted,
+            }
+
+    def get_entity(self, entity_id: str) -> Entity | None:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (e:Entity {uuid: $uuid})
+                RETURN e.uuid AS uuid, e.name AS name, e.entity_type AS entity_type,
+                       e.project_id AS project_id, e.attributes AS attributes
+                """,
+                uuid=entity_id,
+            )
+            record = result.single()
+            if not record:
+                return None
+            return Entity(
+                uuid=record["uuid"],
+                name=record["name"],
+                entity_type=record["entity_type"],
+                project_id=record["project_id"],
+                attributes=json.loads(record["attributes"]) if record["attributes"] else {},
+            )
+
+    def list_entities(
+        self,
+        project_id: int,
+        search: str | None = None,
+        entity_type: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        with self._session() as session:
+            where = ["e.project_id = $pid"]
+            params: dict = {"pid": project_id, "limit": limit}
+            if entity_type:
+                where.append("e.entity_type = $etype")
+                params["etype"] = entity_type
+            if search:
+                where.append("toLower(e.name) CONTAINS toLower($search)")
+                params["search"] = search
+
+            result = session.run(
+                f"""
+                MATCH (e:Entity)
+                WHERE {' AND '.join(where)}
+                OPTIONAL MATCH (e)-[:SUBJECT|OBJECT]-(s:Statement)
+                WHERE s.invalid_at IS NULL
+                WITH e, count(DISTINCT s) AS stmt_count
+                RETURN e.uuid AS uuid, e.name AS name, e.entity_type AS entity_type,
+                       e.project_id AS project_id, stmt_count
+                ORDER BY stmt_count DESC
+                LIMIT $limit
+                """,
+                **params,
+            )
+            return [dict(r) for r in result]
+
     def merge_entities(
         self,
         canonical_id: str,

@@ -250,6 +250,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         activation_engine=activation_engine,
         graph_provider=graph_provider,
         decay_lambda=config.decay_lambda,
+        memory_store=memory_store,
     )
 
     # Unified search — always wraps SearchEngine

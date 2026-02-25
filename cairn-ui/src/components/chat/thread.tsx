@@ -112,11 +112,29 @@ function UserText({ text }: TextMessagePartProps) {
   return <div className="whitespace-pre-wrap">{text}</div>;
 }
 
+/* ---------- Thinking indicator ---------- */
+
+function ThinkingIndicator() {
+  return (
+    <div className="flex items-center gap-1.5 py-1">
+      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
+      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
+      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" />
+    </div>
+  );
+}
+
 /* ---------- Assistant message ---------- */
 
 function AssistantMessage() {
   const message = useMessage();
   const model = (message?.metadata?.custom as Record<string, unknown>)?.model as string | undefined;
+  const isRunning = message?.status?.type === "running";
+  const hasText = message?.content?.some(
+    (p) => p.type === "text" && (p as { type: "text"; text: string }).text.length > 0,
+  );
+  const hasToolCalls = message?.content?.some((p) => p.type === "tool-call");
+  const showThinking = isRunning && !hasText && !hasToolCalls;
 
   return (
     <MessagePrimitive.Root className="flex gap-3 justify-start">
@@ -125,22 +143,26 @@ function AssistantMessage() {
       </div>
       <div className="max-w-[80%]">
         <div className="rounded-lg px-3 py-2 text-sm bg-muted">
-          <MessagePrimitive.Content
-            components={{
-              Text: MarkdownText,
-              tools: {
-                by_name: {
-                  search_memories: SearchToolUI,
-                  recall_memory: RecallToolUI,
-                  store_memory: StoreToolUI,
-                  system_status: StatusToolUI,
-                  list_work_items: ListWorkItemsToolUI,
-                  create_work_item: CreateWorkItemToolUI,
+          {showThinking ? (
+            <ThinkingIndicator />
+          ) : (
+            <MessagePrimitive.Content
+              components={{
+                Text: MarkdownText,
+                tools: {
+                  by_name: {
+                    search_memories: SearchToolUI,
+                    recall_memory: RecallToolUI,
+                    store_memory: StoreToolUI,
+                    system_status: StatusToolUI,
+                    list_work_items: ListWorkItemsToolUI,
+                    create_work_item: CreateWorkItemToolUI,
+                  },
+                  Fallback: ToolCallFallback,
                 },
-                Fallback: ToolCallFallback,
-              },
-            }}
-          />
+              }}
+            />
+          )}
         </div>
         {model && (
           <div className="mt-0.5 px-1 text-[10px] text-muted-foreground/60 font-mono">

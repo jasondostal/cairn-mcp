@@ -14,17 +14,30 @@ import {
   api,
   type GraphResult,
   type KnowledgeGraphResult,
+  type KGStatement,
 } from "@/lib/api";
 import { useMemorySheet } from "@/lib/use-memory-sheet";
 import { usePageFilters } from "@/lib/use-page-filters";
 import { PageFilters } from "@/components/page-filters";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SingleSelect } from "@/components/ui/single-select";
 import { ErrorState } from "@/components/error-state";
 import { MemorySheet } from "@/components/memory-sheet";
 import { PageLayout } from "@/components/page-layout";
+import { EntityCreateDialog } from "@/components/graph/entity-create-dialog";
 
 // ────────────────────────────────────────────────────
 // Mode type
@@ -205,6 +218,15 @@ export default function GraphPage() {
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [selectedNode, setSelectedNode] = useState<SimNode | null>(null);
   const { sheetId, sheetOpen, setSheetOpen, openSheet } = useMemorySheet();
+
+  // --- Entity editing ---
+  const [editingEntity, setEditingEntity] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editType, setEditType] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [deleteConfirmEntity, setDeleteConfirmEntity] = useState<SimNode | null>(null);
+  const [entityStatements, setEntityStatements] = useState<KGStatement[]>([]);
+  const [statementsLoading, setStatementsLoading] = useState(false);
 
   // --- Zoom/pan ---
   const transformRef = useRef({ x: 0, y: 0, scale: 1 });
@@ -954,6 +976,80 @@ export default function GraphPage() {
           })
       : [];
 
+  // --- Entity editing handlers ---
+
+  function startEditEntity() {
+    if (!selectedNode || selectedNode.meta.kind !== "neo4j") return;
+    setEditName(selectedNode.label);
+    setEditType(selectedNode.meta.entity_type);
+    setEditingEntity(true);
+  }
+
+  async function saveEditEntity() {
+    if (!selectedNode || selectedNode.meta.kind !== "neo4j") return;
+    setEditSaving(true);
+    try {
+      await api.updateEntity(selectedNode.nodeId, {
+        name: editName.trim() || undefined,
+        entity_type: editType || undefined,
+      });
+      setEditingEntity(false);
+      setSelectedNode(null);
+      load();
+    } catch {
+      // silent
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  async function confirmDeleteEntity() {
+    if (!deleteConfirmEntity || deleteConfirmEntity.meta.kind !== "neo4j") return;
+    try {
+      await api.deleteEntity(deleteConfirmEntity.nodeId);
+      setDeleteConfirmEntity(null);
+      setSelectedNode(null);
+      load();
+    } catch {
+      // silent
+    }
+  }
+
+  async function loadEntityStatements(entityUuid: string) {
+    setStatementsLoading(true);
+    try {
+      const result = await api.entityStatements(entityUuid);
+      setEntityStatements(result.statements);
+    } catch {
+      setEntityStatements([]);
+    } finally {
+      setStatementsLoading(false);
+    }
+  }
+
+  async function handleInvalidateStatement(stmtUuid: string) {
+    try {
+      await api.invalidateStatement(stmtUuid);
+      // Reload statements for current entity
+      if (selectedNode) {
+        loadEntityStatements(selectedNode.nodeId);
+      }
+    } catch {
+      // silent
+    }
+  }
+
+  // Load statements when a Neo4j entity is selected
+  useEffect(() => {
+    if (selectedNode?.meta.kind === "neo4j") {
+      loadEntityStatements(selectedNode.nodeId);
+    } else {
+      setEntityStatements([]);
+    }
+    setEditingEntity(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNode?.nodeId]);
+
   // Empty state check
   const hasData = nodeCount > 0;
 
@@ -1012,6 +1108,15 @@ export default function GraphPage() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-48"
+                />
+              )}
+
+              {/* Neo4j: create entity */}
+              {mode === "neo4j" && (
+                <EntityCreateDialog
+                  projects={filters.projects}
+                  defaultProject={filters.projectFilter[0]}
+                  onCreated={load}
                 />
               )}
 
@@ -1242,32 +1347,74 @@ export default function GraphPage() {
 
           {/* Side panel — Neo4j entity details */}
           {selectedNode && selectedNode.meta.kind === "neo4j" && (
-            <div className="w-72 shrink-0 space-y-3 rounded-lg border border-border bg-card p-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <div
-                    className="h-3 w-3 rounded-full"
-                    style={{
-                      backgroundColor:
-                        ENTITY_COLORS[selectedNode.meta.entity_type] ||
-                        DEFAULT_NODE_COLOR,
-                    }}
+            <div className="w-80 shrink-0 space-y-3 rounded-lg border border-border bg-card p-4 overflow-y-auto max-h-[640px]">
+              {/* Header — view or edit mode */}
+              {editingEntity ? (
+                <div className="space-y-2">
+                  <Input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="text-sm font-semibold"
+                    autoFocus
+                    onKeyDown={(e) => e.key === "Enter" && saveEditEntity()}
                   />
-                  <h3 className="font-semibold text-sm">{selectedNode.label}</h3>
+                  <SingleSelect
+                    options={ENTITY_TYPES.filter((t) => t !== "all").map((t) => ({ value: t, label: t }))}
+                    value={editType}
+                    onValueChange={setEditType}
+                    className="w-full"
+                  />
+                  <div className="flex gap-1">
+                    <Button size="sm" onClick={saveEditEntity} disabled={editSaving} className="flex-1">
+                      {editSaving ? "Saving..." : "Save"}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setEditingEntity(false)} className="flex-1">
+                      Cancel
+                    </Button>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {selectedNode.meta.entity_type} &middot;{" "}
-                  {selectedNode.meta.stmt_count} statements &middot;{" "}
-                  {connectionCount(selectedNode.nodeId)} connections
-                </p>
-              </div>
+              ) : (
+                <div>
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="h-3 w-3 rounded-full shrink-0"
+                      style={{
+                        backgroundColor:
+                          ENTITY_COLORS[selectedNode.meta.entity_type] ||
+                          DEFAULT_NODE_COLOR,
+                      }}
+                    />
+                    <h3 className="font-semibold text-sm">{selectedNode.label}</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {selectedNode.meta.entity_type} &middot;{" "}
+                    {selectedNode.meta.stmt_count} statements &middot;{" "}
+                    {connectionCount(selectedNode.nodeId)} connections
+                  </p>
+                  {/* Action buttons */}
+                  <div className="flex gap-1 mt-2">
+                    <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={startEditEntity}>
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                      onClick={() => setDeleteConfirmEntity(selectedNode)}
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              )}
 
+              {/* Relationships */}
               {selectedConnections.length > 0 && (
                 <div>
                   <h4 className="text-xs font-medium text-muted-foreground mb-2">
                     Relationships ({selectedConnections.length})
                   </h4>
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto">
                     {selectedConnections.map((conn, i) => (
                       <div
                         key={i}
@@ -1305,6 +1452,40 @@ export default function GraphPage() {
                 </div>
               )}
 
+              {/* Statements */}
+              <div>
+                <h4 className="text-xs font-medium text-muted-foreground mb-2">
+                  Statements {statementsLoading ? "" : `(${entityStatements.length})`}
+                </h4>
+                {statementsLoading ? (
+                  <p className="text-xs text-muted-foreground">Loading...</p>
+                ) : entityStatements.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No statements</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+                    {entityStatements.map((stmt) => (
+                      <div
+                        key={stmt.uuid}
+                        className="group rounded border border-border/50 p-2 text-xs"
+                      >
+                        <p className="text-foreground/90">{stmt.fact}</p>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-muted-foreground">{stmt.aspect}</span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-5 px-1 text-[10px] opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive"
+                            onClick={() => handleInvalidateStatement(stmt.uuid)}
+                          >
+                            Invalidate
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <Button
                 variant="ghost"
                 size="sm"
@@ -1315,6 +1496,29 @@ export default function GraphPage() {
               </Button>
             </div>
           )}
+
+          {/* Delete entity confirmation */}
+          <AlertDialog open={!!deleteConfirmEntity} onOpenChange={(open) => !open && setDeleteConfirmEntity(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete entity?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  &ldquo;{deleteConfirmEntity?.label}&rdquo; and its orphaned statements will be permanently deleted.
+                  {deleteConfirmEntity && (
+                    <span className="block mt-1">
+                      {deleteConfirmEntity.meta.kind === "neo4j" && (
+                        <>{deleteConfirmEntity.meta.stmt_count} statements, {connectionCount(deleteConfirmEntity.nodeId)} connections</>
+                      )}
+                    </span>
+                  )}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={confirmDeleteEntity}>Delete</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
 

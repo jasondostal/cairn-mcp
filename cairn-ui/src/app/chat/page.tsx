@@ -120,6 +120,7 @@ export default function ChatPage() {
             onSelect={handleSelectConversation}
             onNew={handleNewChat}
             refreshKey={sidebarRefreshKey}
+            project={activeProject || undefined}
           />
         </div>
       )}

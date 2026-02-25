@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api, type Memory } from "@/lib/api";
+import { api, type Memory, type UpdateMemoryRequest } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import {
   Sheet,
@@ -14,6 +14,20 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { SingleSelect } from "@/components/ui/single-select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { MemoryTypeBadge } from "@/components/memory-type-badge";
 import { ImportanceBadge } from "@/components/importance-badge";
 
@@ -25,7 +39,29 @@ const RELATION_COLORS: Record<string, string> = {
   related: "text-muted-foreground",
 };
 import { StatusDot } from "@/components/work-items/status-dot";
-import { Tag, FileText, Network, ArrowRight, ArrowLeft, Link2 } from "lucide-react";
+import {
+  Tag,
+  FileText,
+  Network,
+  ArrowRight,
+  ArrowLeft,
+  Link2,
+  Pencil,
+  Save,
+  X,
+  Trash2,
+  RotateCcw,
+} from "lucide-react";
+
+const VALID_MEMORY_TYPES = [
+  "note", "decision", "rule", "code-snippet", "learning",
+  "research", "discussion", "progress", "task", "debug", "design",
+];
+
+const MEMORY_TYPE_OPTIONS = VALID_MEMORY_TYPES.map((t) => ({
+  value: t,
+  label: t,
+}));
 
 interface MemorySheetProps {
   memoryId: number | null;
@@ -39,20 +75,128 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
   const [error, setError] = useState<string | null>(null);
   const [linkedWorkItems, setLinkedWorkItems] = useState<Array<{ id: number; display_id: string; title: string; status: string; item_type: string; project: string }>>([]);
 
-  useEffect(() => {
-    if (!memoryId || !open) return;
+  // Edit mode state
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState<Partial<UpdateMemoryRequest>>({});
+
+  // Inactivate dialog state
+  const [inactivateReason, setInactivateReason] = useState("");
+
+  // Draft persistence — survive accidental refresh
+  const draftKey = memoryId ? `cairn-memory-draft-${memoryId}` : null;
+
+  const saveDraft = (data: Partial<UpdateMemoryRequest>) => {
+    if (draftKey) sessionStorage.setItem(draftKey, JSON.stringify(data));
+  };
+
+  const loadDraft = (): Partial<UpdateMemoryRequest> | null => {
+    if (!draftKey) return null;
+    try {
+      const raw = sessionStorage.getItem(draftKey);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  };
+
+  const clearDraft = () => {
+    if (draftKey) sessionStorage.removeItem(draftKey);
+  };
+
+  const fetchMemory = (id: number) => {
     setLoading(true);
     setError(null);
     api
-      .memory(memoryId)
+      .memory(id)
       .then(setMemory)
       .catch((err) => setError(err?.message || "Failed to load memory"))
       .finally(() => setLoading(false));
     api
-      .memoryWorkItems(memoryId)
+      .memoryWorkItems(id)
       .then((r) => setLinkedWorkItems(r.work_items))
       .catch(() => setLinkedWorkItems([]));
+  };
+
+  useEffect(() => {
+    if (!memoryId || !open) return;
+    // Check for a saved draft before resetting edit state
+    const draft = loadDraft();
+    if (draft) {
+      setFormData(draft);
+      setEditing(true);
+    } else {
+      setEditing(false);
+    }
+    fetchMemory(memoryId);
   }, [memoryId, open]);
+
+  const startEditing = () => {
+    if (!memory) return;
+    const initial = {
+      content: memory.content,
+      memory_type: memory.memory_type,
+      importance: memory.importance,
+      tags: memory.tags,
+    };
+    setFormData(initial);
+    saveDraft(initial);
+    setEditing(true);
+  };
+
+  const updateFormData = (updater: (prev: Partial<UpdateMemoryRequest>) => Partial<UpdateMemoryRequest>) => {
+    setFormData((prev) => {
+      const next = updater(prev);
+      saveDraft(next);
+      return next;
+    });
+  };
+
+  const cancelEditing = () => {
+    clearDraft();
+    setFormData({});
+    setEditing(false);
+  };
+
+  const handleSave = async () => {
+    if (!memoryId) return;
+    setSaving(true);
+    try {
+      await api.updateMemory(memoryId, formData);
+      clearDraft();
+      fetchMemory(memoryId);
+      setEditing(false);
+    } catch (err) {
+      setError((err as Error)?.message || "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleInactivate = async () => {
+    if (!memoryId) return;
+    setSaving(true);
+    try {
+      await api.inactivateMemory(memoryId, inactivateReason || "No reason provided");
+      setInactivateReason("");
+      fetchMemory(memoryId);
+    } catch (err) {
+      setError((err as Error)?.message || "Failed to inactivate");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReactivate = async () => {
+    if (!memoryId) return;
+    setSaving(true);
+    try {
+      await api.reactivateMemory(memoryId);
+      fetchMemory(memoryId);
+    } catch (err) {
+      setError((err as Error)?.message || "Failed to reactivate");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -84,6 +228,11 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
                 <span className="text-xs text-muted-foreground">
                   #{memory.id}
                 </span>
+                {!editing && (
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={startEditing} title="Edit">
+                    <Pencil className="h-3 w-3" />
+                  </Button>
+                )}
               </div>
               <SheetTitle className="text-base">
                 {memory.summary || "Memory #" + memory.id}
@@ -95,15 +244,56 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
             </SheetHeader>
 
             <div className="space-y-4 px-4 pb-4">
-              {/* Stats */}
+              {/* Edit mode: Save / Cancel bar */}
+              {editing && (
+                <div className="flex items-center gap-2">
+                  <Button size="sm" onClick={handleSave} disabled={saving}>
+                    <Save className="h-3.5 w-3.5 mr-1" />
+                    {saving ? "Saving..." : "Save"}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={cancelEditing} disabled={saving}>
+                    <X className="h-3.5 w-3.5 mr-1" />
+                    Cancel
+                  </Button>
+                </div>
+              )}
+
+              {/* Stats / Editable fields */}
               <div className="flex items-center gap-4 text-sm">
-                <ImportanceBadge importance={memory.importance} />
+                {editing ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Importance:</span>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="1"
+                      value={formData.importance ?? 0.5}
+                      onChange={(e) => updateFormData((f) => ({ ...f, importance: parseFloat(e.target.value) || 0 }))}
+                      className="h-7 w-20 text-xs"
+                    />
+                  </div>
+                ) : (
+                  <ImportanceBadge importance={memory.importance} />
+                )}
                 {!memory.is_active && (
                   <Badge variant="destructive" className="text-xs">
                     Inactive
                   </Badge>
                 )}
               </div>
+
+              {/* Memory type (editable) */}
+              {editing && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Type:</span>
+                  <SingleSelect
+                    options={MEMORY_TYPE_OPTIONS}
+                    value={formData.memory_type || memory.memory_type}
+                    onValueChange={(v) => updateFormData((f) => ({ ...f, memory_type: v }))}
+                  />
+                </div>
+              )}
 
               <Separator />
 
@@ -112,31 +302,63 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
                 <h3 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Content
                 </h3>
-                <p className="whitespace-pre-wrap text-sm font-mono leading-relaxed">
-                  {memory.content}
-                </p>
+                {editing ? (
+                  <textarea
+                    value={formData.content ?? ""}
+                    onChange={(e) => updateFormData((f) => ({ ...f, content: e.target.value }))}
+                    className="w-full min-h-[200px] rounded-md border bg-background px-3 py-2 text-sm font-mono leading-relaxed resize-y focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                ) : (
+                  <p className="whitespace-pre-wrap text-sm font-mono leading-relaxed">
+                    {memory.content}
+                  </p>
+                )}
               </div>
 
               {/* Tags */}
-              {(memory.tags.length > 0 || memory.auto_tags.length > 0) && (
+              {(editing || memory.tags.length > 0 || memory.auto_tags.length > 0) && (
                 <>
                   <Separator />
                   <div>
                     <h3 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                       <Tag className="h-3 w-3" /> Tags
                     </h3>
-                    <div className="flex flex-wrap gap-1.5">
-                      {memory.tags.map((t) => (
-                        <Badge key={t} variant="secondary" className="text-xs">
-                          {t}
-                        </Badge>
-                      ))}
-                      {memory.auto_tags.map((t) => (
-                        <Badge key={t} variant="outline" className="text-xs">
-                          {t}
-                        </Badge>
-                      ))}
-                    </div>
+                    {editing ? (
+                      <div className="space-y-2">
+                        <Input
+                          value={(formData.tags ?? []).join(", ")}
+                          onChange={(e) => {
+                            const tags = e.target.value.split(",").map((t) => t.trim()).filter(Boolean);
+                            updateFormData((f) => ({ ...f, tags }));
+                          }}
+                          placeholder="tag1, tag2, tag3"
+                          className="h-7 text-xs"
+                        />
+                        {memory.auto_tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            <span className="text-[10px] text-muted-foreground">Auto:</span>
+                            {memory.auto_tags.map((t) => (
+                              <Badge key={t} variant="outline" className="text-xs">
+                                {t}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {memory.tags.map((t) => (
+                          <Badge key={t} variant="secondary" className="text-xs">
+                            {t}
+                          </Badge>
+                        ))}
+                        {memory.auto_tags.map((t) => (
+                          <Badge key={t} variant="outline" className="text-xs">
+                            {t}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -262,6 +484,50 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
                   <p>Inactive reason: {memory.inactive_reason}</p>
                 )}
               </div>
+
+              {/* Action buttons */}
+              {!editing && (
+                <>
+                  <Separator />
+                  <div className="flex items-center gap-2">
+                    {memory.is_active ? (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="destructive" size="sm">
+                            <Trash2 className="h-3.5 w-3.5 mr-1" />
+                            Inactivate
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Inactivate Memory #{memory.id}</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will soft-delete the memory. It can be reactivated later.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <textarea
+                            value={inactivateReason}
+                            onChange={(e) => setInactivateReason(e.target.value)}
+                            placeholder="Reason for inactivation (optional)"
+                            className="w-full min-h-[80px] rounded-md border bg-background px-3 py-2 text-sm resize-y focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          />
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleInactivate}>
+                              Inactivate
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    ) : (
+                      <Button variant="outline" size="sm" onClick={handleReactivate} disabled={saving}>
+                        <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                        Reactivate
+                      </Button>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </>
         )}
