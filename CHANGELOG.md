@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.61.0] — 2026-02-25
+## [0.61.0] "Polyglot" — 2026-02-25
 
 ### Added
 - **21-language code intelligence** — expanded tree-sitter support from 2 to 21
@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **375 parser tests** — 205 new tests across 12 languages, all passing.
 
-## [0.60.0] — 2026-02-24
+## [0.60.0] "Drag Your Own Adventure" — 2026-02-24
 
 ### Added
 - **Drag-and-drop dashboard** — fully customizable dashboard grid powered by
@@ -41,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Widget picker sheet lets you toggle widgets on/off. Reset button restores
   defaults. (ca-124)
 
-## [0.59.3] — 2026-02-24
+## [0.59.3] "OpenAI Tool Calling" — 2026-02-24
 
 ### Fixed
 - **OpenAI-compatible tool calling** — `OpenAICompatibleLLM` now supports tool
@@ -51,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `_prepare_tool_messages()` with graceful degradation for models that
   don't support tools. (ca-123)
 
-## [0.59.2] — 2026-02-24
+## [0.59.2] "Chat Intelligence" — 2026-02-24
 
 ### Added
 - **Chat LLM tool expansion** — 7 new tools for the built-in chat assistant,
@@ -67,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   search→recall→modify patterns, dry-run-first consolidation, and code
   intelligence prerequisites.
 
-## [0.59.1] — 2026-02-24
+## [0.59.1] "UI Responsiveness" — 2026-02-24
 
 ### Changed
 - **Projects query** — replaced cartesian triple-JOIN with LATERAL subqueries.
@@ -96,7 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`useVisibilityPolling` hook** — shared polling primitive with
   `visibilitychange` awareness, used by sidebar badge counters.
 
-## [0.59.0] — 2026-02-23
+## [0.59.0] "Display IDs + REST API Parity" — 2026-02-23
 
 ### Added
 - **Jira-style display IDs** — work items now use project-scoped sequential IDs
@@ -122,7 +122,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`short_id` column** — migration 032 drops the hex-based `short_id` from
   `work_items` after backfilling sequential `seq_num` values.
 
-## [0.58.1] — 2026-02-23
+## [0.58.1] "Code Intelligence Expansion" — 2026-02-23
 
 ### Added
 - **REFERENCED_IN bridge** — automatically links knowledge entities to matching
@@ -144,7 +144,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **PDF export** — adaptive scale for large documents to avoid browser OOM,
   with error handling and user-facing fallback message.
 
-## [0.58.0] — 2026-02-23 "Code Intelligence"
+## [0.58.0] "Code Intelligence" — 2026-02-23
 
 Per-project code understanding. Parse source files with tree-sitter, build a code
 graph in Neo4j, enforce architecture boundaries, search code by natural language,
@@ -219,7 +219,7 @@ modules, and Cairn's own codebase is the first dogfood project.
 - **Homepage widget field** — example `services.yaml` referenced `cairns` (removed
   in v0.37.0); updated to `clusters`.
 
-## [0.57.0] — 2026-02-21 "Frictionless Dispatch"
+## [0.57.0] "Frictionless Dispatch" — 2026-02-21
 
 ### Added
 - **`dispatch()` MCP tool** — single-call agent dispatch replacing the 3-4 step
@@ -254,7 +254,7 @@ modules, and Cairn's own codebase is the first dogfood project.
   empty states, scrollable containers with per-section filter inputs, bumped fetch
   limits (100 memories, 50 work items/sessions).
 
-## [0.56.0] — 2026-02-21 "Use It or Lose It"
+## [0.56.0] "Use It or Lose It" — 2026-02-21
 
 ### Added
 - **Memory access tracking** — `access_count` and `last_accessed_at` columns on memories.
@@ -299,7 +299,7 @@ modules, and Cairn's own codebase is the first dogfood project.
 - **Neo4j configuration warning** — startup logs a warning when Neo4j is configured (non-default
   URI) but `knowledge_extraction` is disabled. Transparent nudge without auto-behavior change.
 
-## [0.55.0] — 2026-02-21 "Show Your Work"
+## [0.55.0] "Show Your Work" — 2026-02-21
 
 ### Added
 - **LoCoMo benchmark: 79.4%** — LLM-judged evaluation across 1,986 questions (Mem0: 66.9%,
@@ -360,7 +360,7 @@ modules, and Cairn's own codebase is the first dogfood project.
 - **Deploy/release scripts** — moved out of repository to separate CI/CD tooling.
 - **Internal planning docs** — `refactor.md` and `migration.md` moved to Cairn memory.
 
-## [0.54.0] — 2026-02-20 "Use The Graph, Luke"
+## [0.54.0] "Use The Graph, Luke" — 2026-02-20
 
 ### Added
 - **Graph-primary search** — `SearchV2._routed_search()` rewritten to use Neo4j entity
@@ -431,7 +431,7 @@ modules, and Cairn's own codebase is the first dogfood project.
 - **`handle_entity_lookup` signature** — accepts pre-resolved entities via
   `SearchContext.resolved_entities`, falling back to string-based hint resolution.
 
-## [0.53.0] — 2026-02-19 "Totally Not Skynet"
+## [0.53.0] "Totally Not Skynet" — 2026-02-19
 
 ### Added
 - **Multi-backend agent orchestration** — workspace system now supports multiple execution
@@ -493,7 +493,7 @@ modules, and Cairn's own codebase is the first dogfood project.
   built from config in `create_services()`. `WorkItemManager` shared between `Services`
   and `WorkspaceManager` via walrus operator (single instance).
 
-## [0.52.0] — 2026-02-19 "Event Horizon"
+## [0.52.0] "Event Horizon" — 2026-02-19
 
 ### Added
 - **Event-driven graph projection** — replaced 15 inline dual-write touchpoints across
