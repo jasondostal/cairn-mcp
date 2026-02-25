@@ -125,7 +125,23 @@ The rest: `modify`, `insights`, `tasks`, `think`, `status`, `consolidate`, `drif
   <sub>Memory growth by type, token usage tracking, and the full nav.</sub>
 </p>
 
-**Code intelligence.** Index any codebase with tree-sitter — 21 languages supported: Python, TypeScript/TSX, C, C++, Go, Java, PHP, Ruby, Rust, Swift, Scala, Kotlin, C#, Bash, SQL, HCL (Terraform), Dockerfile, JSON, YAML, TOML, and Markdown. Ask structural questions — "what depends on this file?", "what's the blast radius?" — and get answers from the code graph. Enforce architecture boundaries with YAML rules. Search code by natural language description. Works across projects.
+**Code intelligence.** Index any codebase with tree-sitter — 30 languages supported. Ask structural questions — "what depends on this file?", "what's the blast radius?" — and get answers from the code graph. Enforce architecture boundaries with YAML rules. Search code by natural language description. Works across projects.
+
+<details>
+<summary>Supported languages (30)</summary>
+
+| Category | Languages |
+|---|---|
+| Systems | C, C++, Rust, Go, Zig |
+| JVM | Java, Scala, Kotlin, Groovy |
+| .NET | C# |
+| Scripting | Python, Ruby, PHP, Lua, Bash |
+| Web | TypeScript/TSX, HTML, CSS |
+| Apple | Swift, Objective-C |
+| ML/Scientific | OCaml, MATLAB |
+| Config & Data | JSON, YAML, TOML, HCL (Terraform), Dockerfile, Makefile, SQL, Markdown |
+
+</details>
 
 **Session capture.** IDE hooks (Claude Code, Cursor, Cline, Windsurf) log every tool call. Next session boots warm. See [`examples/hooks/README.md`](examples/hooks/README.md).
 
