@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.61.1] "Polyglot II" — 2026-02-25
+
+### Added
+- **9 more languages for code intelligence** — expanded from 21 to 30 languages.
+
+  *New programming languages:* Lua, Groovy, Objective-C, Zig, OCaml, MATLAB
+
+  *New web & styling:* HTML, CSS
+
+  *New build systems:* Makefile (+ GNUmakefile)
+
+  Each language has a dedicated parser module with symbol extraction tuned to
+  language idioms — e.g., Lua `require()` imports and `M:method()` syntax,
+  CSS selectors and `@media`/`@keyframes`, Zig `@import()` and struct methods,
+  OCaml `let`/`type`/`module` bindings, Groovy classes for Jenkinsfile parsing,
+  Makefile targets and variables, ObjC protocols and `@property` declarations.
+
+- **Filename-based detection** — `Makefile`, `GNUmakefile`, `makefile`, and
+  `Jenkinsfile` are now recognised without extensions.
+
+- **109 new parser tests** across 9 languages, all passing.
+
 ## [0.61.0] "Polyglot" — 2026-02-25
 
 ### Added

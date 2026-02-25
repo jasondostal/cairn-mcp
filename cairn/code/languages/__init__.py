@@ -51,11 +51,27 @@ _EXTENSION_MAP: dict[str, str] = {
     ".hcl": "hcl",
     ".toml": "toml",
     ".dockerfile": "dockerfile",
+    ".html": "html",
+    ".htm": "html",
+    ".css": "css",
+    ".lua": "lua",
+    ".groovy": "groovy",
+    ".gradle": "groovy",
+    ".m": "objc",
+    ".mm": "objc",
+    ".zig": "zig",
+    ".ml": "ocaml",
+    ".mli": "ocaml",
+    ".mat": "matlab",
 }
 
 # Filename -> module name mapping (for files without useful extensions)
 _FILENAME_MAP: dict[str, str] = {
     "Dockerfile": "dockerfile",
+    "Makefile": "makefile",
+    "GNUmakefile": "makefile",
+    "makefile": "makefile",
+    "Jenkinsfile": "groovy",
 }
 
 # Cached language modules
@@ -129,6 +145,24 @@ def get_language_module(lang: str):
         from cairn.code.languages import toml as mod
     elif lang == "dockerfile":
         from cairn.code.languages import dockerfile as mod
+    elif lang == "html":
+        from cairn.code.languages import html as mod
+    elif lang == "css":
+        from cairn.code.languages import css as mod
+    elif lang == "lua":
+        from cairn.code.languages import lua as mod
+    elif lang == "groovy":
+        from cairn.code.languages import groovy as mod
+    elif lang == "makefile":
+        from cairn.code.languages import makefile as mod
+    elif lang == "objc":
+        from cairn.code.languages import objc as mod
+    elif lang == "zig":
+        from cairn.code.languages import zig as mod
+    elif lang == "ocaml":
+        from cairn.code.languages import ocaml as mod
+    elif lang == "matlab":
+        from cairn.code.languages import matlab as mod
     else:
         raise ValueError(f"Unsupported language: {lang}")
 

@@ -1,10 +1,12 @@
 # Roadmap
 
-Current: **v0.61.0** — 21-language code intelligence.
+Current: **v0.61.1** — 30-language code intelligence.
 
 ---
 
 ## Ongoing
+
+Continuous work with no fixed end state.
 
 **Benchmark re-evaluation.** LoCoMo 81.6% scored at v0.55 (full run, 1,986 questions across 5 categories). Re-run periodically as the system evolves. The graph neighbor signal, entity canonicalization, and contradiction scoping should affect scores.
 
@@ -12,7 +14,33 @@ Current: **v0.61.0** — 21-language code intelligence.
 
 **Test infrastructure.** Integration tests with real Postgres + Neo4j containers. API contract tests for REST endpoints. UI smoke tests (Playwright). CI should run integration suite on PRs, not just lint and unit tests.
 
-**Graph entity management UI.** Visualize entity nodes, merge duplicates, correct types, browse relationships from the dashboard.
+---
+
+## Planned
+
+Have work items, intent to build.
+
+**Graph entity management UI.** Visualize entity nodes, merge duplicates, correct types, browse relationships from the dashboard. (ca-109)
+
+**Memory editing UI.** Edit content, metadata, and lifecycle from cairn-ui. (ca-110)
+
+**Chat LLM thinking indicator.** Show animation while the model responds. (ca-122)
+
+**Async MCP observability.** Progress reporting for long-running tools (code_index, consolidate, ingest). (ca-107)
+
+**Content size management.** Auto-summarize oversized memories to keep context windows efficient. (ca-84)
+
+**JIT enrichment fallback.** On-demand enrichment for unenriched memories at search time. (ca-85)
+
+---
+
+## Considering
+
+Exploring, not committed.
+
+**User identity and multi-user support.** Authentication, per-user state, RBAC. Currently Cairn is single-user by design — this would be a significant architecture shift. (ca-124)
+
+**tree-sitter-language-pack integration.** Adding the language pack dependency would unlock PowerShell, Perl, R, Dart, Haskell, Erlang, Protobuf, and 150+ other languages in one shot. Trade-off is dependency weight (~160 compiled grammars).
 
 **Plugin development guide.** Tutorial for adding custom embedding/LLM/reranker backends. The plugin registry pattern is a core extensibility feature — it needs documentation.
 
@@ -21,6 +49,14 @@ Current: **v0.61.0** — 21-language code intelligence.
 ---
 
 ## Shipped
+
+### v0.61.1 — "Polyglot II" ✓
+
+9 more languages. 30 total.
+
+- [x] **9 new language parsers** — HTML, CSS, Lua, Groovy, Objective-C, Zig, OCaml, MATLAB, Makefile. Each with language-specific symbol extraction tuned to idioms (Lua `require()` imports, CSS selectors and `@media`/`@keyframes`, Zig `@import()` and struct methods, OCaml `let`/`type`/`module` bindings, Groovy classes for Jenkinsfile parsing, Makefile targets and variables, ObjC protocols and `@property` declarations).
+- [x] **Filename-based detection** — `Makefile`, `GNUmakefile`, `makefile`, `Jenkinsfile` recognised without extensions.
+- [x] **109 new parser tests** across 9 languages, all passing.
 
 ### v0.61.0 — "Polyglot" ✓
 
