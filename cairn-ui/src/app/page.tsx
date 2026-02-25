@@ -12,22 +12,13 @@ import {
   type HeatmapResult,
 } from "@/lib/api";
 import { useFetch } from "@/lib/use-fetch";
+import { useDashboardLayout } from "@/lib/use-dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { PageLayout } from "@/components/page-layout";
 import { ErrorState } from "@/components/error-state";
 import { SkeletonList } from "@/components/skeleton-list";
-
-import { OperationalStrip } from "@/components/dashboard/operational-strip";
-import { EntityGrowthChart } from "@/components/dashboard/entity-growth-chart";
-import { MemoryTypeGrowthChart } from "@/components/dashboard/memory-type-growth-chart";
-import { MemoryTypeBar } from "@/components/dashboard/memory-type-bar";
-import { HealthStrip } from "@/components/dashboard/health-strip";
-import { TokenAreaChart } from "@/components/analytics/token-area-chart";
-import { OperationsBarChart } from "@/components/analytics/operations-bar-chart";
-import { ActivityHeatmap } from "@/components/analytics/activity-heatmap";
-import { ModelPerformance } from "@/components/analytics/model-performance";
-import { ProjectBreakdown } from "@/components/analytics/project-breakdown";
-import { CostProjection } from "@/components/analytics/cost-projection";
+import { DashboardGrid } from "@/components/dashboard/dashboard-grid";
+import { DashboardToolbar } from "@/components/dashboard/dashboard-toolbar";
 
 const DAY_PRESETS = [
   { label: "7d", value: 7 },
@@ -39,6 +30,17 @@ export default function Dashboard() {
   const [days, setDays] = useState(7);
   const daysStr = String(days);
   const granularity = days <= 7 ? "hour" : "day";
+
+  const {
+    layouts,
+    visibleWidgets,
+    isEditing,
+    setEditing,
+    onLayoutChange,
+    removeWidget,
+    toggleWidget,
+    resetToDefaults,
+  } = useDashboardLayout();
 
   // --- Data fetching: all parallel, each section renders independently ---
 
@@ -91,69 +93,49 @@ export default function Dashboard() {
     <PageLayout
       title="Dashboard"
       filters={
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Range</span>
-          <div className="flex gap-1">
-            {DAY_PRESETS.map((p) => (
-              <Button
-                key={p.value}
-                variant={days === p.value ? "default" : "outline"}
-                size="sm"
-                onClick={() => setDays(p.value)}
-              >
-                {p.label}
-              </Button>
-            ))}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Range</span>
+            <div className="flex gap-1">
+              {DAY_PRESETS.map((p) => (
+                <Button
+                  key={p.value}
+                  variant={days === p.value ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setDays(p.value)}
+                >
+                  {p.label}
+                </Button>
+              ))}
+            </div>
           </div>
+          <DashboardToolbar
+            isEditing={isEditing}
+            visibleWidgets={visibleWidgets}
+            onSetEditing={setEditing}
+            onToggleWidget={toggleWidget}
+            onReset={resetToDefaults}
+          />
         </div>
       }
     >
-      <div className="space-y-4">
-        {/* Operational status strip */}
-        <OperationalStrip />
-
-        {/* Entity growth — full width, selectable metrics */}
-        {sparklines && <EntityGrowthChart data={sparklines} />}
-
-        {/* Memory Type Growth + Token Usage — 2 col */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {memoryGrowth && memoryGrowth.series.length > 0 && (
-            <MemoryTypeGrowthChart data={memoryGrowth} />
-          )}
-          {timeseries && timeseries.series.length > 0 && (
-            <TokenAreaChart series={timeseries.series} />
-          )}
-        </div>
-
-        {/* Activity Heatmap — full width */}
-        {heatmapData && <ActivityHeatmap heatmapData={heatmapData.days} />}
-
-        {/* Health strip — compact horizontal */}
-        <HealthStrip
-          embedding={status.models?.embedding}
-          llm={status.models?.llm}
-          digest={status.digest}
-        />
-
-        {/* Operations Volume + Cost Projection — 2 col */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {timeseries && timeseries.series.length > 0 && (
-            <OperationsBarChart series={timeseries.series} />
-          )}
-          {modelsData && modelsData.items.length > 0 && (
-            <CostProjection models={modelsData.items} days={days} />
-          )}
-        </div>
-
-        {/* Model Performance + Project Breakdown — 2 col tables */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {modelsData && <ModelPerformance items={modelsData.items} />}
-          {projectsData && <ProjectBreakdown items={projectsData.items} />}
-        </div>
-
-        {/* Memory type distribution bar */}
-        <MemoryTypeBar types={status.types} />
-      </div>
+      <DashboardGrid
+        layouts={layouts}
+        visibleWidgets={visibleWidgets}
+        isEditing={isEditing}
+        onLayoutChange={onLayoutChange}
+        onRemoveWidget={removeWidget}
+        data={{
+          status,
+          sparklines: sparklines ?? null,
+          timeseries: timeseries ?? null,
+          memoryGrowth: memoryGrowth ?? null,
+          heatmapData: heatmapData ?? null,
+          modelsData: modelsData ?? null,
+          projectsData: projectsData ?? null,
+          days,
+        }}
+      />
     </PageLayout>
   );
 }

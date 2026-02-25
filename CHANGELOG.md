@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.60.0] — 2026-02-24
+
+### Added
+- **Drag-and-drop dashboard** — fully customizable dashboard grid powered by
+  `react-grid-layout` v2. Drag, resize, reorder, show/hide any of the 11
+  dashboard widgets. Edit mode activated via toolbar button; dashboard is
+  unchanged until you click Edit. Layouts persist in localStorage with schema
+  versioning. Responsive breakpoints (lg/md/sm) auto-adapt to screen size.
+  Widget picker sheet lets you toggle widgets on/off. Reset button restores
+  defaults. (ca-124)
+
 ## [0.59.3] — 2026-02-24
 
 ### Fixed
