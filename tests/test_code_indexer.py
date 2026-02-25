@@ -146,7 +146,7 @@ class TestCodeIndexer:
     def test_index_directory(self, tmp_path):
         (tmp_path / "a.py").write_text("def a(): pass\n")
         (tmp_path / "b.py").write_text("class B: pass\n")
-        (tmp_path / "readme.md").write_text("# Not indexed\n")
+        (tmp_path / "readme.txt").write_text("Not indexed\n")
 
         graph = self._make_mock_graph()
         parser = CodeParser()
@@ -210,14 +210,14 @@ class MyClass:
         assert method_sym["parent_name"] == "MyClass"
 
     def test_unsupported_file_ignored(self, tmp_path):
-        (tmp_path / "data.json").write_text('{"key": "value"}\n')
+        (tmp_path / "data.xyz").write_text("not a supported format\n")
 
         graph = self._make_mock_graph()
         parser = CodeParser()
         indexer = CodeIndexer(parser, graph)
 
         result = indexer.index_file(
-            tmp_path / "data.json", project="test", project_id=1
+            tmp_path / "data.xyz", project="test", project_id=1
         )
         assert result.files_scanned == 1
         assert result.files_indexed == 0
