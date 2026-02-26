@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Watchtower Phase 1: Trace context** — `TraceContext` threading with actor, entry
+  point, and trace ID propagated across MCP tools, REST API, event bus, and background
+  workers. `TraceMiddleware` on REST, `new_trace()`/`clear_trace()` context managers.
+  Migration 033 adds `trace_id`, `actor`, `entry_point` columns to events table.
+
+- **Watchtower Phase 2: Audit trail** — immutable, append-only `audit_log` table for
+  every state-changing operation. `AuditManager` records actor, action, resource type/ID,
+  before/after state diffs. `AuditListener` subscribes to EventBus events (memory, work
+  item, task, thinking) and auto-logs mutations. REST API: `GET /audit/log` (filtered,
+  paginated), `GET /audit/log/{id}`, `GET /audit/stats`. Migration 034. 15 tests.
+
+- **Watchtower Phase 3: Webhooks** — external event notifications via HTTP callbacks.
+  `WebhookManager` with CRUD, HMAC-SHA256 signing, event pattern matching (wildcards).
+  `WebhookDeliveryWorker` daemon thread with async delivery, exponential backoff retry
+  (5 attempts), dead letter after max retries. `WebhookListener` subscribes to EventBus
+  and auto-creates deliveries for matching webhooks. REST API: 8 endpoints for webhook
+  CRUD, deliveries, and retry. Migration 035. 28 tests.
+
+- **Watchtower Phase 4: Health alerting** — rule-based health alerting evaluated against
+  `metric_rollups` and system health stats. `AlertManager` with CRUD, two condition
+  evaluators (`metric_threshold` queries aggregated metrics, `health_status` checks
+  component health singletons), cooldown enforcement, alert history. `AlertEvaluator`
+  daemon thread polls active rules every 60s, fires via webhook infrastructure.
+  4 built-in templates: `error_rate_high`, `enrichment_failures`, `stale_agent`,
+  `budget_exceeded`. REST API: 8 endpoints for rule CRUD, history, active alerts,
+  templates. Migration 036. 39 tests.
+
+- **142 REST API endpoints** across 22 route modules (up from ~120 pre-Watchtower).
+
+### Changed
+- `config.py` — added `AuditConfig`, `WebhookConfig`, `AlertingConfig` dataclasses
+  with env var mapping and editable keys.
+- `services.py` — conditional init of `AuditManager`, `WebhookManager`,
+  `WebhookDeliveryWorker`, `AlertManager`, `AlertEvaluator` based on feature flags.
+- `server.py` — start/stop lifecycle for `WebhookDeliveryWorker` and `AlertEvaluator`.
+- `docker-compose.override.yml` — added `CAIRN_AUDIT_ENABLED`,
+  `CAIRN_WEBHOOKS_ENABLED`, `CAIRN_ALERTING_ENABLED` feature flags.
+
 ## [0.62.2] — 2026-02-26
 
 ### Fixed

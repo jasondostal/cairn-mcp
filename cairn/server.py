@@ -127,6 +127,10 @@ def _start_workers(svc, cfg, db_instance):
         svc.rollup_worker.start()
     if svc.decay_worker:
         svc.decay_worker.start()
+    if svc.webhook_worker:
+        svc.webhook_worker.start()
+    if svc.alert_worker:
+        svc.alert_worker.start()
     logger.info("Cairn started. Embedding: %s (%d-dim)", cfg.embedding.backend, cfg.embedding.dimensions)
 
 
@@ -138,6 +142,10 @@ def _stop_workers(svc, db_instance):
         svc.rollup_worker.stop()
     if svc.decay_worker:
         svc.decay_worker.stop()
+    if svc.webhook_worker:
+        svc.webhook_worker.stop()
+    if svc.alert_worker:
+        svc.alert_worker.stop()
     if svc.analytics_tracker:
         svc.analytics_tracker.stop()
     if svc.graph_provider:

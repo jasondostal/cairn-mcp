@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.62.1** — Server-side PDF/markdown export, memory editing, thinking indicator, content size management, JIT enrichment, KG entity editing, chat resume.
+Current: **v0.62.2** — Fix dashboard 500 from dead messages polling.
 
 ---
 

@@ -87,6 +87,11 @@ class EventBus:
         - session_end events auto-close the session (set closed_at).
         """
         import json
+        from cairn.core.trace import current_trace
+
+        # Read trace context (if active)
+        trace = current_trace()
+        trace_id = trace.trace_id if trace else None
 
         project_id = None
         if project:
@@ -96,8 +101,8 @@ class EventBus:
             """
             INSERT INTO events
                 (session_name, agent_id, work_item_id, project_id,
-                 event_type, tool_name, payload)
-            VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+                 event_type, tool_name, payload, trace_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s)
             RETURNING id
             """,
             (
@@ -108,6 +113,7 @@ class EventBus:
                 event_type,
                 tool_name,
                 json.dumps(payload or {}),
+                trace_id,
             ),
         )
         self.db.commit()

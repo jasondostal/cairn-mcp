@@ -82,6 +82,11 @@ class Services:
     rollup_worker: RollupWorker | None
     decay_worker: "DecayWorker | None"
     analytics_engine: AnalyticsQueryEngine | None
+    audit_manager: "AuditManager | None"
+    webhook_manager: "WebhookManager | None"
+    webhook_worker: "WebhookDeliveryWorker | None"
+    alert_manager: "AlertManager | None"
+    alert_worker: "AlertEvaluator | None"
 
 
 def create_services(config: Config | None = None, db: Database | None = None) -> Services:
@@ -240,6 +245,39 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         _code_listener.register(event_bus)
         logger.info("CodeIndexListener registered with EventBus")
 
+    # Audit listener — append-only compliance log for mutation events (Watchtower Phase 2)
+    audit_manager = None
+    if config.audit.enabled:
+        from cairn.core.audit import AuditManager
+        from cairn.listeners.audit_listener import AuditListener
+        audit_manager = AuditManager(db)
+        _audit_listener = AuditListener(audit_manager)
+        _audit_listener.register(event_bus)
+        logger.info("AuditListener registered with EventBus")
+
+    # Webhook subscriptions — push events to external HTTP endpoints (Watchtower Phase 3)
+    webhook_manager = None
+    webhook_worker = None
+    if config.webhooks.enabled:
+        from cairn.core.webhooks import WebhookManager
+        from cairn.core.webhook_worker import WebhookDeliveryWorker
+        from cairn.listeners.webhook_listener import WebhookListener
+        webhook_manager = WebhookManager(db, config.webhooks)
+        _webhook_listener = WebhookListener(webhook_manager)
+        _webhook_listener.register(event_bus)
+        webhook_worker = WebhookDeliveryWorker(db, config.webhooks)
+        logger.info("WebhookListener registered with EventBus")
+
+    # Health alerting — rule evaluation + webhook delivery (Watchtower Phase 4)
+    alert_manager = None
+    alert_worker = None
+    if config.alerting.enabled:
+        from cairn.core.alerting import AlertManager
+        from cairn.core.alert_worker import AlertEvaluator
+        alert_manager = AlertManager(db, config.alerting)
+        alert_worker = AlertEvaluator(db, alert_manager, webhook_manager, config.alerting)
+        logger.info("AlertEvaluator enabled (interval=%ds)", config.alerting.eval_interval_seconds)
+
     # Event dispatcher — background delivery worker (started in _start_workers)
     event_dispatcher = EventDispatcher(db, event_bus)
 
@@ -359,4 +397,9 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         rollup_worker=rollup_worker,
         decay_worker=decay_worker,
         analytics_engine=analytics_engine,
+        audit_manager=audit_manager,
+        webhook_manager=webhook_manager,
+        webhook_worker=webhook_worker,
+        alert_manager=alert_manager,
+        alert_worker=alert_worker,
     )

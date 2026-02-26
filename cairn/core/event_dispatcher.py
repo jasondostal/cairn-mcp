@@ -80,7 +80,7 @@ class EventDispatcher:
             """
             SELECT ed.id, ed.event_id, ed.handler, ed.attempts,
                    e.event_type, e.payload, e.project_id, e.work_item_id,
-                   e.session_name
+                   e.session_name, e.trace_id
             FROM event_dispatches ed
             JOIN events e ON e.id = ed.event_id
             WHERE ed.status IN ('pending', 'failed')
@@ -114,6 +114,7 @@ class EventDispatcher:
                 "project_id": row["project_id"],
                 "work_item_id": row["work_item_id"],
                 "session_name": row["session_name"],
+                "trace_id": row["trace_id"],
             }
 
             try:

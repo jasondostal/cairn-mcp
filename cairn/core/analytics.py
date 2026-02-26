@@ -47,6 +47,10 @@ class UsageEvent:
     success: bool = True
     error_message: str | None = None
     metadata: dict | None = None
+    # Trace context (Watchtower Phase 1)
+    trace_id: str | None = None
+    span_id: str | None = None
+    parent_span_id: str | None = None
 
 
 # ============================================================
@@ -123,14 +127,17 @@ class UsageTracker:
                     INSERT INTO usage_events
                         (timestamp, operation, project_id, session_name,
                          tokens_in, tokens_out, latency_ms, model,
-                         success, error_message, metadata)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+                         success, error_message, metadata,
+                         trace_id, span_id, parent_span_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb,
+                            %s, %s, %s)
                     """,
                     (
                         ev.timestamp, ev.operation, ev.project_id, ev.session_name,
                         ev.tokens_in, ev.tokens_out, ev.latency_ms, ev.model,
                         ev.success, ev.error_message,
                         __import__("json").dumps(ev.metadata) if ev.metadata else "{}",
+                        ev.trace_id, ev.span_id, ev.parent_span_id,
                     ),
                 )
             self.db.commit()
@@ -188,6 +195,8 @@ def track_operation(operation_name: str, tracker: UsageTracker | None = _SENTINE
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
+            from cairn.core.trace import current_trace, new_trace, clear_trace
+
             # Resolve which tracker to use
             active_tracker = tracker if tracker is not _SENTINEL else _analytics_tracker
             if active_tracker is None:
@@ -198,6 +207,13 @@ def track_operation(operation_name: str, tracker: UsageTracker | None = _SENTINE
                     db = _find_db(args)
                     if db is not None:
                         db.release_if_held()
+
+            # Trace context: read existing (REST middleware) or create new (MCP entry)
+            trace = current_trace()
+            created_trace = False
+            if trace is None:
+                trace = new_trace(actor="mcp", entry_point=operation_name)
+                created_trace = True
 
             t0 = time.monotonic()
             success = True
@@ -248,6 +264,9 @@ def track_operation(operation_name: str, tracker: UsageTracker | None = _SENTINE
                     latency_ms=latency_ms,
                     success=success,
                     error_message=error_msg,
+                    trace_id=trace.trace_id if trace else None,
+                    span_id=trace.span_id if trace else None,
+                    parent_span_id=trace.parent_span_id if trace else None,
                 ))
 
                 # Release DB connection after all tracking work is done.
@@ -257,6 +276,10 @@ def track_operation(operation_name: str, tracker: UsageTracker | None = _SENTINE
                 db = _find_db(args)
                 if db is not None:
                     db.release_if_held()
+
+                # Only clear trace if we created it (don't clear REST middleware's trace)
+                if created_trace:
+                    clear_trace()
 
         return wrapper
     return decorator
@@ -579,7 +602,7 @@ class AnalyticsQueryEngine:
             f"""
             SELECT ue.id, ue.timestamp, ue.operation, ue.tokens_in, ue.tokens_out,
                    ue.latency_ms, ue.model, ue.success, ue.error_message,
-                   ue.session_name, p.name as project
+                   ue.session_name, ue.trace_id, ue.span_id, p.name as project
             FROM usage_events ue
             LEFT JOIN projects p ON ue.project_id = p.id
             WHERE {where_clause}
@@ -602,6 +625,8 @@ class AnalyticsQueryEngine:
                 "success": r["success"],
                 "error_message": r["error_message"],
                 "session_name": r["session_name"],
+                "trace_id": r["trace_id"],
+                "span_id": r["span_id"],
             }
             for r in rows
         ]
@@ -906,6 +931,79 @@ class AnalyticsQueryEngine:
         ]
 
         return {"days": day_list}
+
+    def trace(self, trace_id: str) -> dict:
+        """Reconstruct the full story of an operation by trace_id.
+
+        Joins usage_events and events tables to show the complete
+        operation timeline: what was called, what events were published,
+        and how spans relate.
+        """
+        usage_rows = self.db.execute(
+            """
+            SELECT ue.id, ue.timestamp, ue.operation, ue.span_id,
+                   ue.parent_span_id, ue.tokens_in, ue.tokens_out,
+                   ue.latency_ms, ue.model, ue.success, ue.error_message,
+                   ue.session_name, p.name as project
+            FROM usage_events ue
+            LEFT JOIN projects p ON ue.project_id = p.id
+            WHERE ue.trace_id = %s
+            ORDER BY ue.timestamp ASC
+            """,
+            (trace_id,),
+        )
+
+        event_rows = self.db.execute(
+            """
+            SELECT e.id, e.created_at, e.event_type, e.tool_name,
+                   e.session_name, e.payload, p.name as project
+            FROM events e
+            LEFT JOIN projects p ON e.project_id = p.id
+            WHERE e.trace_id = %s
+            ORDER BY e.created_at ASC
+            """,
+            (trace_id,),
+        )
+
+        spans = [
+            {
+                "id": r["id"],
+                "timestamp": r["timestamp"].isoformat(),
+                "operation": r["operation"],
+                "span_id": r["span_id"],
+                "parent_span_id": r["parent_span_id"],
+                "tokens_in": r["tokens_in"],
+                "tokens_out": r["tokens_out"],
+                "latency_ms": round(r["latency_ms"], 1),
+                "model": r["model"],
+                "success": r["success"],
+                "error_message": r["error_message"],
+                "session_name": r["session_name"],
+                "project": r["project"],
+            }
+            for r in usage_rows
+        ]
+
+        events = [
+            {
+                "id": r["id"],
+                "timestamp": r["created_at"].isoformat() if r["created_at"] else None,
+                "event_type": r["event_type"],
+                "tool_name": r["tool_name"],
+                "session_name": r["session_name"],
+                "project": r["project"],
+                "payload": r["payload"],
+            }
+            for r in event_rows
+        ]
+
+        return {
+            "trace_id": trace_id,
+            "span_count": len(spans),
+            "event_count": len(events),
+            "spans": spans,
+            "events": events,
+        }
 
     # --- internal helpers ---
 

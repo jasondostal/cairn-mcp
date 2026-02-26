@@ -218,6 +218,27 @@ class DecayConfig:
 
 
 @dataclass(frozen=True)
+class AuditConfig:
+    enabled: bool = False              # Master switch for audit trail
+
+
+@dataclass(frozen=True)
+class WebhookConfig:
+    enabled: bool = False              # Master switch for webhooks
+    delivery_interval: float = 5.0     # Seconds between delivery worker polls
+    delivery_batch_size: int = 20      # Max deliveries per poll cycle
+    max_attempts: int = 5              # Default max delivery attempts
+    backoff_base: int = 30             # Seconds; actual = base * 2^attempts
+    timeout: int = 10                  # HTTP request timeout (seconds)
+
+
+@dataclass(frozen=True)
+class AlertingConfig:
+    enabled: bool = False              # Master switch for health alerting
+    eval_interval_seconds: int = 60    # Seconds between evaluation cycles
+
+
+@dataclass(frozen=True)
 class Config:
     db: DatabaseConfig = field(default_factory=DatabaseConfig)
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
@@ -244,6 +265,9 @@ class Config:
     ingest_chunk_overlap: int = 64     # overlap tokens between chunks
     decay_lambda: float = 0.01        # Exponential decay rate (half-life ~69 days at 0.01)
     decay: DecayConfig = field(default_factory=DecayConfig)
+    audit: AuditConfig = field(default_factory=AuditConfig)
+    webhooks: WebhookConfig = field(default_factory=WebhookConfig)
+    alerting: AlertingConfig = field(default_factory=AlertingConfig)
 
 
 def _parse_cors_origins(raw: str) -> list[str]:
@@ -309,6 +333,12 @@ EDITABLE_KEYS: set[str] = {
     "ingest_chunk_size", "ingest_chunk_overlap", "decay_lambda",
     "decay.enabled", "decay.scan_interval_hours", "decay.threshold",
     "decay.min_age_days", "decay.protect_importance", "decay.dry_run",
+    # Audit
+    "audit.enabled",
+    # Webhooks
+    "webhooks.enabled",
+    # Alerting
+    "alerting.enabled", "alerting.eval_interval_seconds",
 }
 
 # Map of section -> dataclass for sub-configs that are editable
@@ -325,6 +355,8 @@ _SECTION_CLASSES = {
     "work_items": WorkItemsConfig,
     "clustering": ClusteringConfig,
     "decay": DecayConfig,
+    "webhooks": WebhookConfig,
+    "alerting": AlertingConfig,
 }
 
 _BOOL_TRUTHY = {"true", "1", "yes"}
@@ -366,6 +398,9 @@ PROFILE_PRESETS: dict[str, dict[str, str]] = {
         "CAIRN_ACCESS_FREQUENCY": "true",
         "CAIRN_LLM_CONFIDENCE_GATING": "true",
         "CAIRN_ROUTER_ENABLED": "true",
+        "CAIRN_AUDIT_ENABLED": "true",
+        "CAIRN_WEBHOOKS_ENABLED": "true",
+        "CAIRN_ALERTING_ENABLED": "true",
     },
 }
 
@@ -584,6 +619,15 @@ _ENV_MAP: dict[str, str] = {
     "decay.min_age_days": "CAIRN_DECAY_MIN_AGE_DAYS",
     "decay.protect_importance": "CAIRN_DECAY_PROTECT_IMPORTANCE",
     "decay.dry_run": "CAIRN_DECAY_DRY_RUN",
+    "audit.enabled": "CAIRN_AUDIT_ENABLED",
+    "webhooks.enabled": "CAIRN_WEBHOOKS_ENABLED",
+    "webhooks.delivery_interval": "CAIRN_WEBHOOKS_DELIVERY_INTERVAL",
+    "webhooks.delivery_batch_size": "CAIRN_WEBHOOKS_BATCH_SIZE",
+    "webhooks.max_attempts": "CAIRN_WEBHOOKS_MAX_ATTEMPTS",
+    "webhooks.backoff_base": "CAIRN_WEBHOOKS_BACKOFF_BASE",
+    "webhooks.timeout": "CAIRN_WEBHOOKS_TIMEOUT",
+    "alerting.enabled": "CAIRN_ALERTING_ENABLED",
+    "alerting.eval_interval_seconds": "CAIRN_ALERTING_EVAL_INTERVAL",
 }
 
 
@@ -760,5 +804,20 @@ def load_config() -> Config:
             protect_importance=float(os.getenv("CAIRN_DECAY_PROTECT_IMPORTANCE", "0.8")),
             protect_types=tuple(os.getenv("CAIRN_DECAY_PROTECT_TYPES", "rule").split(",")),
             dry_run=os.getenv("CAIRN_DECAY_DRY_RUN", "true").lower() in ("true", "1", "yes"),
+        ),
+        audit=AuditConfig(
+            enabled=os.getenv("CAIRN_AUDIT_ENABLED", "false").lower() in ("true", "1", "yes"),
+        ),
+        webhooks=WebhookConfig(
+            enabled=os.getenv("CAIRN_WEBHOOKS_ENABLED", "false").lower() in ("true", "1", "yes"),
+            delivery_interval=float(os.getenv("CAIRN_WEBHOOKS_DELIVERY_INTERVAL", "5.0")),
+            delivery_batch_size=int(os.getenv("CAIRN_WEBHOOKS_BATCH_SIZE", "20")),
+            max_attempts=int(os.getenv("CAIRN_WEBHOOKS_MAX_ATTEMPTS", "5")),
+            backoff_base=int(os.getenv("CAIRN_WEBHOOKS_BACKOFF_BASE", "30")),
+            timeout=int(os.getenv("CAIRN_WEBHOOKS_TIMEOUT", "10")),
+        ),
+        alerting=AlertingConfig(
+            enabled=os.getenv("CAIRN_ALERTING_ENABLED", "false").lower() in ("true", "1", "yes"),
+            eval_interval_seconds=int(os.getenv("CAIRN_ALERTING_EVAL_INTERVAL", "60")),
         ),
     )

@@ -8,12 +8,27 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import Depends, FastAPI, APIRouter
+from fastapi import Depends, FastAPI, APIRouter, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from cairn import __version__
 from cairn.api.utils import APIKeyAuthMiddleware
 from cairn.core.services import Services
+from cairn.core.trace import new_trace, clear_trace
+
+
+class TraceMiddleware(BaseHTTPMiddleware):
+    """Set trace context for every REST API request."""
+
+    async def dispatch(self, request: Request, call_next):
+        entry_point = request.url.path.rstrip("/")
+        new_trace(actor="rest", entry_point=entry_point)
+        try:
+            response = await call_next(request)
+            return response
+        finally:
+            clear_trace()
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +68,8 @@ def create_api(svc: Services) -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.add_middleware(TraceMiddleware)
+
     if config.auth.enabled and config.auth.api_key:
         app.add_middleware(
             APIKeyAuthMiddleware,
@@ -83,6 +100,9 @@ def create_api(svc: Services) -> FastAPI:
     from cairn.api.code import register_routes as reg_code
     from cairn.api.dispatch import register_routes as reg_dispatch
     from cairn.api.graph_edit import register_routes as reg_graph_edit
+    from cairn.api.audit import register_routes as reg_audit
+    from cairn.api.webhooks import register_routes as reg_webhooks
+    from cairn.api.alerting import register_routes as reg_alerting
 
     reg_core(router, svc)
     reg_search(router, svc)
@@ -103,6 +123,9 @@ def create_api(svc: Services) -> FastAPI:
     reg_code(router, svc)
     reg_dispatch(router, svc)
     reg_graph_edit(router, svc)
+    reg_audit(router, svc)
+    reg_webhooks(router, svc)
+    reg_alerting(router, svc)
 
     app.include_router(router)
     return app
