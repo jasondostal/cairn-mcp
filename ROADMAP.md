@@ -40,6 +40,15 @@ Exploring, not committed.
 
 ## Shipped
 
+### v0.62.1 ✓
+
+Server-side document export. No more browser crashes on large docs.
+
+- [x] **Server-side PDF export** — `GET /api/docs/{id}/pdf` via weasyprint (cairo/pango). Replaces client-side html2pdf.js.
+- [x] **Server-side markdown export** — `GET /api/docs/{id}/md` with Content-Disposition headers.
+- [x] **UI download buttons wired to API** — both markdown and PDF use server endpoints. Removed html2pdf.js dependency.
+- [x] **requirements.lock CUDA regression fixed** — stripped CUDA torch that leaked back into lockfile.
+
 ### v0.62.0 — "The Editable Hulk" ✓
 
 Four features deepening the core product after the Polyglot breadth releases.
