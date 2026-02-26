@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.62.1] — 2026-02-25
+
+### Added
+- **Server-side PDF export** — `GET /api/docs/{id}/pdf` renders markdown to PDF
+  via weasyprint (cairo/pango). Replaces client-side html2pdf.js which crashed
+  on large documents. No browser memory limits, consistent output.
+
+- **Server-side markdown export** — `GET /api/docs/{id}/md` returns raw markdown
+  with proper `Content-Disposition` headers for clean file downloads.
+
+### Changed
+- **UI download buttons use server-side API** — both markdown and PDF download
+  buttons now call the server endpoints instead of generating files client-side.
+  Consistent behavior, no more browser freezes on large docs.
+
+### Removed
+- `html2pdf.js` client dependency — replaced by server-side weasyprint.
+
+### Fixed
+- **requirements.lock CUDA regression** — lockfile had been regenerated with
+  full CUDA torch (15 NVIDIA packages). Stripped back to CPU-only torch
+  (Dockerfile handles CPU torch separately via pytorch.org/whl/cpu).
+
 ## [0.62.0] "The Editable Hulk" — 2026-02-25
 
 ### Added

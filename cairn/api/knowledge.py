@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Body, Query, Path, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from cairn.api.utils import parse_multi
@@ -75,6 +76,68 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         if doc is None:
             raise HTTPException(status_code=404, detail="Document not found")
         return doc
+
+    @router.get("/docs/{doc_id}/md")
+    def api_doc_md(doc_id: int = Path(...)):
+        """Export a document as raw markdown."""
+        doc = project_manager.get_doc(doc_id)
+        if doc is None:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        title = doc.get("title") or "Untitled"
+        content = doc.get("content", "")
+        safe_title = "".join(c if c.isalnum() or c in " -_" else "" for c in title)
+        filename = f"{safe_title.strip() or 'document'}.md"
+
+        return Response(
+            content=content,
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    @router.get("/docs/{doc_id}/pdf")
+    def api_doc_pdf(doc_id: int = Path(...)):
+        """Export a document as PDF via server-side markdown→HTML→PDF."""
+        import markdown as md
+        import weasyprint
+
+        doc = project_manager.get_doc(doc_id)
+        if doc is None:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        title = doc.get("title") or "Untitled"
+        content = doc.get("content", "")
+
+        html_body = md.markdown(
+            content,
+            extensions=["tables", "fenced_code", "toc", "sane_lists"],
+        )
+
+        html_doc = (
+            "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+            "<style>"
+            "body{font-family:sans-serif;font-size:11pt;line-height:1.4;margin:2cm}"
+            "h1{font-size:20pt} h2{font-size:16pt} h3{font-size:13pt}"
+            "code,pre{font-family:monospace;font-size:9pt}"
+            "pre{background:#f4f4f4;padding:8px;border-radius:4px;white-space:pre-wrap}"
+            "table{border-collapse:collapse;width:100%;margin:1em 0}"
+            "th,td{border:1px solid #ccc;padding:6px 10px;text-align:left}"
+            "th{background:#f0f0f0;font-weight:bold}"
+            "blockquote{border-left:3px solid #ccc;margin-left:0;padding-left:1em;color:#555}"
+            "</style></head><body>"
+            f"{html_body}</body></html>"
+        )
+
+        pdf_bytes = weasyprint.HTML(string=html_doc).write_pdf()
+
+        safe_title = "".join(c if c.isalnum() or c in " -_" else "" for c in title)
+        filename = f"{safe_title.strip() or 'document'}.pdf"
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
 
     @router.get("/clusters/visualization")
     def api_cluster_visualization(

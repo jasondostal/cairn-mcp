@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.62.0** — Memory editing, thinking indicator, content size management, JIT enrichment, KG entity editing, chat resume.
+Current: **v0.62.1** — Server-side PDF/markdown export, memory editing, thinking indicator, content size management, JIT enrichment, KG entity editing, chat resume.
 
 ---
 

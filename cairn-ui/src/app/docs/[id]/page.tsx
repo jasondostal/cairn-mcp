@@ -14,7 +14,6 @@ import { EmptyState } from "@/components/empty-state";
 import { PageLayout } from "@/components/page-layout";
 import { DocTypeBadge } from "@/components/doc-type-badge";
 import { DownloadMenu } from "@/components/download-menu";
-import { triggerDownload, sanitizeFilename } from "@/lib/download";
 import { ArrowLeft } from "lucide-react";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
@@ -30,7 +29,6 @@ export default function DocDetailPage() {
   const [doc, setDoc] = useState<Document | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pdfBusy, setPdfBusy] = useState(false);
   const articleRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -48,46 +46,13 @@ export default function DocDetailPage() {
 
   function downloadMarkdown() {
     if (!doc) return;
-    const filename = `${sanitizeFilename(title)}.md`;
-    const content = doc.title ? `# ${doc.title}\n\n${doc.content}` : doc.content;
-    triggerDownload(content, filename, "text/markdown");
+    window.open(`/api/docs/${doc.id}/md`, "_blank");
   }
 
-  async function downloadPdf() {
-    if (!doc || !articleRef.current) return;
-    setPdfBusy(true);
-    try {
-      const html2pdf = (await import("html2pdf.js")).default;
-      // Clone and restyle for light-mode PDF output
-      const clone = articleRef.current.cloneNode(true) as HTMLElement;
-      clone.style.color = "#111";
-      clone.style.background = "#fff";
-      clone.querySelectorAll("*").forEach((el) => {
-        const htmlEl = el as HTMLElement;
-        htmlEl.style.color = "#111";
-      });
-
-      // Use lower scale for large documents to avoid browser OOM/freeze
-      const contentLength = doc.content.length;
-      const scale = contentLength > 50_000 ? 1 : contentLength > 20_000 ? 1.5 : 2;
-
-      const filename = `${sanitizeFilename(title)}.pdf`;
-      await html2pdf()
-        .set({
-          margin: [12, 12, 12, 12],
-          filename,
-          image: { type: "jpeg", quality: 0.85 },
-          html2canvas: { scale, useCORS: true, logging: false },
-          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-        })
-        .from(clone)
-        .save();
-    } catch (err) {
-      console.error("PDF generation failed:", err);
-      alert("PDF generation failed — the document may be too large. Try downloading as Markdown instead.");
-    } finally {
-      setPdfBusy(false);
-    }
+  function downloadPdf() {
+    if (!doc) return;
+    // Server-side PDF generation — no size limits
+    window.open(`/api/docs/${doc.id}/pdf`, "_blank");
   }
 
   return (
@@ -98,7 +63,7 @@ export default function DocDetailPage() {
           <DownloadMenu
             options={[
               { label: "Markdown (.md)", onClick: downloadMarkdown },
-              { label: pdfBusy ? "Generating PDF\u2026" : "PDF (.pdf)", onClick: downloadPdf },
+              { label: "PDF (.pdf)", onClick: downloadPdf },
             ]}
           />
         )}
