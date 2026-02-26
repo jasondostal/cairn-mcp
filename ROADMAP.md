@@ -20,13 +20,31 @@ Continuous work with no fixed end state.
 
 Have work items, intent to build.
 
+**OpenTelemetry observability.** Structured traces across MCP tools, API requests, LLM calls, and agent dispatch. Metrics export to Prometheus/Grafana/Datadog. Correlation IDs, configurable sampling, dashboard templates. (ca-127)
+
+**Audit trail.** Immutable, append-only compliance logging for every state-changing operation. Actor, action, resource, before/after state. Query API, export for SOC2/GDPR/HIPAA reviews. (ca-128)
+
+**Health degradation alerting.** Push notifications when components degrade — enrichment failures, stale agents, DB pool exhaustion, LLM budget exceeded. Webhook, Slack, PagerDuty channels. Configurable thresholds and cooldowns. (ca-129)
+
+**Webhook subscriptions.** External event notifications via HTTP callbacks. Subscribe to memory, work item, agent, and enrichment events. HMAC-signed, async delivery with retry and dead letter queue. (ca-130)
+
+**Data retention policies.** Configurable TTLs per project/type, scheduled cleanup, legal hold override. Cascading deletion through graph and embeddings. Dry-run mode. (ca-131)
+
+**Backup and disaster recovery.** Automated PG + Neo4j snapshots with rotation, WAL archiving for point-in-time recovery, tested restore procedures, documented runbooks. (ca-132)
+
 **Async MCP observability.** Progress reporting for long-running tools (code_index, consolidate, ingest). (ca-107)
+
+**Multi-agent stress testing.** Concurrent dispatch, resource contention, heartbeat reliability, gate coordination, and recovery under real parallel load. Validate that 3–5 agents can work simultaneously without data corruption or silent failures. (ca-126)
 
 ---
 
 ## Considering
 
 Exploring, not committed.
+
+**Python + TypeScript SDKs.** Official client libraries wrapping the REST API for CI/CD pipelines and custom tooling. `pip install cairn-client` / `npm install @cairn/client`. Auto-generated from OpenAPI spec. (ca-133)
+
+**API versioning.** `/api/v1/` prefix, deprecation policy, breaking change detection in CI, OpenAPI spec per version. Stability contract for enterprise adoption. (ca-134)
 
 **User identity and multi-user support.** Authentication, per-user state, RBAC. Currently Cairn is single-user by design — this would be a significant architecture shift. (ca-124)
 
