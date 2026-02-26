@@ -44,15 +44,23 @@ export default function DocDetailPage() {
 
   const title = doc ? extractTitle(doc) : "Document";
 
+  function triggerServerDownload(path: string) {
+    const a = document.createElement("a");
+    a.href = path;
+    a.download = "";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
   function downloadMarkdown() {
     if (!doc) return;
-    window.open(`/api/docs/${doc.id}/md`, "_blank");
+    triggerServerDownload(`/api/docs/${doc.id}/md`);
   }
 
   function downloadPdf() {
     if (!doc) return;
-    // Server-side PDF generation — no size limits
-    window.open(`/api/docs/${doc.id}/pdf`, "_blank");
+    triggerServerDownload(`/api/docs/${doc.id}/pdf`);
   }
 
   return (
