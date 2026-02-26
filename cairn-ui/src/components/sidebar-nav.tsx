@@ -28,29 +28,6 @@ function useVisibilityPolling(pollFn: () => void, intervalMs: number) {
   }, []);
 }
 
-function useUnreadCount() {
-  const [count, setCount] = useState(0);
-  const [hasUrgent, setHasUrgent] = useState(false);
-
-  useVisibilityPolling(() => {
-    fetch("/api/messages/unread-count")
-      .then((r) => r.json())
-      .then((d) => {
-        setCount(d.count ?? 0);
-      })
-      .catch(() => {});
-    fetch("/api/messages?limit=1&include_archived=false")
-      .then((r) => r.json())
-      .then((d) => {
-        const items = d.items ?? [];
-        setHasUrgent(items.some((m: { priority: string; is_read: boolean }) => m.priority === "urgent" && !m.is_read));
-      })
-      .catch(() => {});
-  }, 30_000);
-
-  return { count, hasUrgent };
-}
-
 function useAttentionCount() {
   const [count, setCount] = useState(0);
 
@@ -68,7 +45,6 @@ function useAttentionCount() {
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
-  const { count: unreadCount, hasUrgent } = useUnreadCount();
   const attentionCount = useAttentionCount();
 
   return (
@@ -98,16 +74,6 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
                 {href === "/work-items" && attentionCount > 0 && (
                   <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[oklch(0.627_0.265_304)] px-1.5 text-[11px] font-medium leading-none text-white">
                     {attentionCount}
-                  </span>
-                )}
-                {href === "/messages" && unreadCount > 0 && (
-                  <span
-                    className={cn(
-                      "ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-medium leading-none text-white",
-                      hasUrgent ? "bg-red-500" : "bg-primary"
-                    )}
-                  >
-                    {unreadCount}
                   </span>
                 )}
               </Link>

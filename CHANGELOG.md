@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.62.2] — 2026-02-26
+
+### Fixed
+- **Dashboard 500 on prod** — `sidebar-nav.tsx` was still polling `/api/messages/unread-count`
+  and `/api/messages` every 30s, remnants of the pre-work-items messaging feature removed in
+  v0.54.0. The endpoints no longer exist, causing proxy errors (ECONNRESET) on util and noisy
+  404s on cortex. Removed `useUnreadCount()` hook and unread badge rendering.
+
+### Removed
+- **Dead message files** — `cairn/api/messages.py` and `cairn/core/messages.py` were orphaned
+  since v0.54.0 (never registered, never instantiated). Cleaned up. Migration `015_messages.sql`
+  and the `messages` table (3 historical rows) retained per policy.
+
 ## [0.62.1] — 2026-02-25
 
 ### Added
