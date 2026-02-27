@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.63.0] "Watchtower" — 2026-02-27
+
+Six-phase enterprise observability stack with full UI CRUD. Trace context, audit trail,
+webhooks, alerting, data retention, and OTel export — all wired into a single tabbed
+Watchtower page with OKLCH-colored section accents.
+
 ### Added
 - **Watchtower Phase 1: Trace context** — `TraceContext` threading with actor, entry
   point, and trace ID propagated across MCP tools, REST API, event bus, and background
@@ -16,15 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Watchtower Phase 2: Audit trail** — immutable, append-only `audit_log` table for
   every state-changing operation. `AuditManager` records actor, action, resource type/ID,
   before/after state diffs. `AuditListener` subscribes to EventBus events (memory, work
-  item, task, thinking) and auto-logs mutations. REST API: `GET /audit/log` (filtered,
-  paginated), `GET /audit/log/{id}`, `GET /audit/stats`. Migration 034. 15 tests.
+  item, task, thinking) and auto-logs mutations. REST API: `GET /audit` (filtered,
+  paginated), `GET /audit/{id}`, `GET /audit/trace/{trace_id}`. Migration 034. 15 tests.
 
 - **Watchtower Phase 3: Webhooks** — external event notifications via HTTP callbacks.
   `WebhookManager` with CRUD, HMAC-SHA256 signing, event pattern matching (wildcards).
   `WebhookDeliveryWorker` daemon thread with async delivery, exponential backoff retry
   (5 attempts), dead letter after max retries. `WebhookListener` subscribes to EventBus
   and auto-creates deliveries for matching webhooks. REST API: 8 endpoints for webhook
-  CRUD, deliveries, and retry. Migration 035. 28 tests.
+  CRUD, deliveries, test, and secret rotation. Migration 035. 28 tests.
 
 - **Watchtower Phase 4: Health alerting** — rule-based health alerting evaluated against
   `metric_rollups` and system health stats. `AlertManager` with CRUD, two condition
@@ -35,24 +41,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `budget_exceeded`. REST API: 8 endpoints for rule CRUD, history, active alerts,
   templates. Migration 036. 39 tests.
 
-- **142 REST API endpoints** across 22 route modules (up from ~120 pre-Watchtower).
+- **Watchtower Phase 5: Data retention** — configurable TTL policies per resource type
+  with optional project scoping. `RetentionManager` with CRUD, dry-run preview, and
+  batch cleanup (LIMIT 5000 per pass). `RetentionWorker` daemon thread runs on
+  configurable interval. Legal hold prevents deletion. Audit log enforces 365-day
+  minimum TTL. 7 resource types: events, usage_events, metric_rollups,
+  webhook_deliveries, alert_history, audit_log, event_dispatches. REST API: 7 endpoints
+  for policy CRUD, preview, and status. Migration 037. Tests.
+
+- **Watchtower Phase 6: OTel export** — optional bridge to OpenTelemetry. Reads trace
+  context from Phase 1, exports spans via OTLP. Hooks into `@track_operation` and
+  `UsageTracker._write_batch()` so every MCP tool, REST request, and background op is
+  auto-exported. Zero overhead when disabled or packages not installed. Conditional
+  import with cached module-level state — `export_span()` never imports at runtime.
+  Optional dependency group: `otel`. 13 tests.
+
+- **Watchtower UI** — tabbed page with 4 sections (Alerts, Audit, Webhooks, Retention),
+  each with full CRUD:
+  - **Alerts**: create from templates (dropdown), toggle active/inactive, delete,
+    active alerts banner, 7-day history
+  - **Audit**: filter bar (actor, action, resource_type, days), expandable rows with
+    trace/detail view
+  - **Webhooks**: create form (name, URL, event type pills), toggle, delete, test
+    delivery, expandable delivery history
+  - **Retention**: create form (resource_type dropdown with smart TTL defaults, legal
+    hold checkbox), toggle, delete, scan status card, dry-run preview
+
+- **OKLCH color palette** — 13 perceptually-uniform color tokens for Watchtower
+  (severity, status, section accents). Severity badges use `color-mix(in oklch, ...)`
+  for border tints. Each tab gets its own OKLCH accent color (orange/blue/purple/teal).
+
+- **Page title icons** — `PageLayout` auto-resolves the nav icon for the current route
+  via `usePathname()` + `nav.ts` lookup. Single source of truth — every page
+  automatically shows its sidebar icon next to the title.
+
+- **~155 REST API endpoints** across 24 route modules.
 
 ### Changed
-- `config.py` — added `AuditConfig`, `WebhookConfig`, `AlertingConfig` dataclasses
-  with env var mapping and editable keys.
+- `config.py` — added `AuditConfig`, `WebhookConfig`, `AlertingConfig`,
+  `RetentionConfig`, `OTelConfig` dataclasses with env var mapping and editable keys.
 - `services.py` — conditional init of `AuditManager`, `WebhookManager`,
-  `WebhookDeliveryWorker`, `AlertManager`, `AlertEvaluator` based on feature flags.
-- `server.py` — start/stop lifecycle for `WebhookDeliveryWorker` and `AlertEvaluator`.
-- `docker-compose.override.yml` — added `CAIRN_AUDIT_ENABLED`,
-  `CAIRN_WEBHOOKS_ENABLED`, `CAIRN_ALERTING_ENABLED` feature flags.
-
-## [0.62.2] — 2026-02-26
+  `WebhookDeliveryWorker`, `AlertManager`, `AlertEvaluator`, `RetentionManager`,
+  `RetentionWorker` based on feature flags. OTel init on startup, shutdown on teardown.
+- `server.py` — start/stop lifecycle for all daemon threads and OTel.
+- `analytics.py` — `_write_batch()` calls `otel.export_span()` per event.
+- `page-layout.tsx` — now a client component with `usePathname()` for auto icon
+  resolution. Accepts optional `icon` override and `iconColor`.
 
 ### Fixed
-- **Dashboard 500 on prod** — `sidebar-nav.tsx` was still polling `/api/messages/unread-count`
+- **Duplicate audit entries** — `EventBus.subscribe()` was not idempotent; uvicorn
+  lifespan double-init caused all handlers to register twice, producing duplicate
+  dispatch records. Added dedup guard: handler_name checked before appending.
+- **Retention status 500** — `RetentionManager` used tuple indexing but psycopg3
+  returns dict rows. Added `isinstance(row, dict)` dual-access pattern and `_scalar()`
+  helper for count queries.
+- **Dashboard 500** — `sidebar-nav.tsx` was still polling `/api/messages/unread-count`
   and `/api/messages` every 30s, remnants of the pre-work-items messaging feature removed in
-  v0.54.0. The endpoints no longer exist, causing proxy errors (ECONNRESET) on util and noisy
-  404s on cortex. Removed `useUnreadCount()` hook and unread badge rendering.
+  v0.54.0. The endpoints no longer exist, causing proxy errors (ECONNRESET) and noisy
+  404s on the host. Removed `useUnreadCount()` hook and unread badge rendering.
 
 ### Removed
 - **Dead message files** — `cairn/api/messages.py` and `cairn/core/messages.py` were orphaned

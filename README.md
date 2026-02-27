@@ -125,6 +125,14 @@ The rest: `modify`, `insights`, `tasks`, `think`, `status`, `consolidate`, `drif
   <sub>Memory growth by type, token usage tracking, and the full nav.</sub>
 </p>
 
+**Observability.** Watchtower is a six-phase enterprise observability stack, all manageable from a single tabbed UI page. Immutable audit trail for every state-changing operation. Webhook delivery with HMAC-SHA256 signing and retry. Rule-based health alerting against metrics and system health. Configurable data retention with legal hold and dry-run preview. Optional OpenTelemetry export — reads trace context, exports spans via OTLP, zero overhead when disabled.
+
+<p align="center">
+  <img src="images/cairn-watchtower.jpg" alt="Cairn Watchtower — audit, alerts, webhooks, retention" width="700">
+  <br>
+  <sub>Watchtower: audit trail, alerting rules, webhook delivery, and data retention in one place.</sub>
+</p>
+
 **Code intelligence.** Index any codebase with tree-sitter — 30 languages supported. Ask structural questions — "what depends on this file?", "what's the blast radius?" — and get answers from the code graph. Enforce architecture boundaries with YAML rules. Search code by natural language description. Works across projects.
 
 <details>
@@ -171,6 +179,12 @@ All via environment variables. The ones that matter:
 | `CAIRN_GRAPH_BACKEND` | *(disabled)* | Set to `neo4j` to enable knowledge graph |
 | `CAIRN_KNOWLEDGE_EXTRACTION` | `false` | Entity/statement extraction on store |
 | `CAIRN_EMBEDDING_BACKEND` | `local` | `local` (MiniLM, 384-dim) or `bedrock` (Titan V2, 1024-dim) |
+| `CAIRN_AUDIT_ENABLED` | `false` | Immutable audit trail for state-changing operations |
+| `CAIRN_WEBHOOKS_ENABLED` | `false` | HTTP webhook delivery with HMAC signing and retry |
+| `CAIRN_ALERTING_ENABLED` | `false` | Rule-based health alerting against metrics |
+| `CAIRN_RETENTION_ENABLED` | `false` | Data retention policies with TTL cleanup |
+| `CAIRN_OTEL_ENABLED` | `false` | OpenTelemetry span export via OTLP |
+| `CAIRN_OTEL_ENDPOINT` | *(empty)* | OTLP HTTP endpoint (e.g. `http://otel-collector:4318/v1/traces`) |
 
 Full reference is in [docker-compose.yml](docker-compose.yml). Every variable has a sensible default.
 
@@ -187,13 +201,17 @@ MCP clients (Claude Code, Cursor, etc.)     REST clients (curl, web UI, hooks)
 |  core: memory, search, enrichment, extraction, clustering   |
 |        work items, projects, tasks, thinking, code intel    |
 |                                                             |
+|  watchtower: audit trail, webhooks, alerting, retention     |
+|              trace context, OTel export (optional)           |
+|                                                             |
 |  graph: Neo4j (entities, statements, triples, code graph)   |
 |  embedding: local (MiniLM) or Bedrock (Titan V2)            |
 |  llm: Ollama, Bedrock, Gemini, OpenAI-compatible            |
-+------+----------------------------------------------+-------+
-       |                                              |
-       v                                              v
-  PostgreSQL 16 + pgvector                    Neo4j 5 (optional)
++------+----------------------------------------------+----+--+
+       |                                              |    |
+       v                                              v    v
+  PostgreSQL 16 + pgvector                Neo4j 5    OTLP endpoint
+                                        (optional)    (optional)
 ```
 
 ## Benchmark

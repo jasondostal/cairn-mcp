@@ -990,6 +990,92 @@ export interface TerminalHost {
   updated_at: string;
 }
 
+// --- Watchtower types ---
+
+export interface AlertRule {
+  id: number;
+  name: string;
+  condition_type: string;
+  condition: Record<string, unknown>;
+  notification: Record<string, unknown> | null;
+  severity: string;
+  cooldown_minutes: number;
+  is_active: boolean;
+  last_fired_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AlertHistoryEntry {
+  id: number;
+  rule_id: number;
+  rule_name: string;
+  severity: string;
+  message: string;
+  value: number | null;
+  fired_at: string;
+}
+
+export interface AuditEntry {
+  id: number;
+  trace_id: string | null;
+  actor: string;
+  action: string;
+  resource_type: string;
+  resource_id: number | null;
+  project: string | null;
+  detail: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface Webhook {
+  id: number;
+  name: string;
+  url: string;
+  event_types: string[];
+  project_id: number | null;
+  secret: string;
+  is_active: boolean;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WebhookDelivery {
+  id: number;
+  webhook_id: number;
+  event_type: string;
+  status: string;
+  http_status: number | null;
+  attempts: number;
+  last_attempt_at: string | null;
+  created_at: string;
+}
+
+export interface RetentionPolicy {
+  id: number;
+  project_id: string | null;
+  resource_type: string;
+  ttl_days: number;
+  legal_hold: boolean;
+  is_active: boolean;
+  last_run_at: string | null;
+  last_deleted: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RetentionStatus {
+  total_policies: number;
+  active_policies: number;
+  held_policies: number;
+  last_run_at: string | null;
+  earliest_policy: string | null;
+  total_deleted: number;
+  scan_interval_hours: number;
+  dry_run: boolean;
+}
+
 // --- API functions ---
 
 export const api = {
@@ -1348,4 +1434,86 @@ export const api = {
 
   invalidateStatement: (uuid: string, opts?: { invalidated_by?: string }) =>
     post<{ invalidated: boolean; uuid: string }>(`/statements/${uuid}/invalidate`, opts),
+
+  // --- Watchtower: Alerts ---
+
+  alertRules: (opts?: { is_active?: string; severity?: string; limit?: string; offset?: string }) =>
+    get<Paginated<AlertRule>>("/alerts/rules", opts),
+
+  alertRuleCreate: (body: {
+    name: string; condition_type: string; condition: Record<string, unknown>;
+    notification?: Record<string, unknown>; severity?: string; cooldown_minutes?: number;
+  }) => post<AlertRule>("/alerts/rules", body),
+
+  alertRuleUpdate: (id: number, body: Record<string, unknown>) =>
+    patch<AlertRule>(`/alerts/rules/${id}`, body),
+
+  alertRuleDelete: (id: number) =>
+    del<{ deleted: boolean }>(`/alerts/rules/${id}`),
+
+  alertHistory: (opts?: { rule_id?: string; severity?: string; days?: string; limit?: string; offset?: string }) =>
+    get<Paginated<AlertHistoryEntry>>("/alerts/history", opts),
+
+  alertActive: (opts?: { hours?: string }) =>
+    get<{ active: AlertHistoryEntry[] }>("/alerts/active", opts),
+
+  alertTemplates: () =>
+    get<{ templates: Record<string, Record<string, unknown>> }>("/alerts/templates"),
+
+  // --- Watchtower: Audit ---
+
+  auditQuery: (opts?: {
+    trace_id?: string; actor?: string; action?: string;
+    resource_type?: string; project?: string; days?: string;
+    limit?: string; offset?: string;
+  }) => get<Paginated<AuditEntry>>("/audit", opts),
+
+  auditGet: (id: number) => get<AuditEntry>(`/audit/${id}`),
+
+  auditByTrace: (traceId: string) =>
+    get<Paginated<AuditEntry>>(`/audit/trace/${traceId}`),
+
+  // --- Watchtower: Webhooks ---
+
+  webhooks: (opts?: { project?: string; active_only?: string; limit?: string; offset?: string }) =>
+    get<Paginated<Webhook>>("/webhooks", opts),
+
+  webhookCreate: (body: { name: string; url: string; event_types: string[]; project?: string; metadata?: Record<string, unknown> }) =>
+    post<Webhook>("/webhooks", body),
+
+  webhookUpdate: (id: number, body: Record<string, unknown>) =>
+    patch<Webhook>(`/webhooks/${id}`, body),
+
+  webhookDelete: (id: number) =>
+    del<{ status: string }>(`/webhooks/${id}`),
+
+  webhookTest: (id: number) =>
+    post<{ status: string; http_status?: number; error?: string }>(`/webhooks/${id}/test`, {}),
+
+  webhookRotateSecret: (id: number) =>
+    post<Webhook>(`/webhooks/${id}/rotate-secret`, {}),
+
+  webhookDeliveries: (id: number, opts?: { status?: string; limit?: string; offset?: string }) =>
+    get<Paginated<WebhookDelivery>>(`/webhooks/${id}/deliveries`, opts),
+
+  // --- Watchtower: Retention ---
+
+  retentionPolicies: (opts?: { resource_type?: string; project_id?: string; is_active?: string; limit?: string; offset?: string }) =>
+    get<Paginated<RetentionPolicy>>("/retention/policies", opts),
+
+  retentionPolicyCreate: (body: { resource_type: string; ttl_days: number; project_id?: string; legal_hold?: boolean }) =>
+    post<RetentionPolicy>("/retention/policies", body),
+
+  retentionPolicyUpdate: (id: number, body: Record<string, unknown>) =>
+    patch<RetentionPolicy>(`/retention/policies/${id}`, body),
+
+  retentionPolicyDelete: (id: number) =>
+    del<{ deleted: boolean }>(`/retention/policies/${id}`),
+
+  retentionPreview: (policyId?: number) =>
+    post<{ results: Array<{ policy_id: number; resource_type: string; would_delete: number; reason?: string }> }>(
+      "/retention/preview", policyId ? { policy_id: policyId } : {},
+    ),
+
+  retentionStatus: () => get<RetentionStatus>("/retention/status"),
 };

@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.62.2** — Fix dashboard 500 from dead messages polling.
+Current: **v0.63.0** — "Watchtower" — Six-phase enterprise observability with full UI CRUD.
 
 ---
 
@@ -19,16 +19,6 @@ Continuous work with no fixed end state.
 ## Planned
 
 Have work items, intent to build.
-
-**OpenTelemetry observability.** Structured traces across MCP tools, API requests, LLM calls, and agent dispatch. Metrics export to Prometheus/Grafana/Datadog. Correlation IDs, configurable sampling, dashboard templates. (ca-127)
-
-**Audit trail.** Immutable, append-only compliance logging for every state-changing operation. Actor, action, resource, before/after state. Query API, export for SOC2/GDPR/HIPAA reviews. (ca-128)
-
-**Health degradation alerting.** Push notifications when components degrade — enrichment failures, stale agents, DB pool exhaustion, LLM budget exceeded. Webhook, Slack, PagerDuty channels. Configurable thresholds and cooldowns. (ca-129)
-
-**Webhook subscriptions.** External event notifications via HTTP callbacks. Subscribe to memory, work item, agent, and enrichment events. HMAC-signed, async delivery with retry and dead letter queue. (ca-130)
-
-**Data retention policies.** Configurable TTLs per project/type, scheduled cleanup, legal hold override. Cascading deletion through graph and embeddings. Dry-run mode. (ca-131)
 
 **Backup and disaster recovery.** Automated PG + Neo4j snapshots with rotation, WAL archiving for point-in-time recovery, tested restore procedures, documented runbooks. (ca-132)
 
@@ -57,6 +47,22 @@ Exploring, not committed.
 ---
 
 ## Shipped
+
+### v0.63.0 — "Watchtower" ✓
+
+Six-phase enterprise observability stack with full UI CRUD. The Eye sees all.
+
+- [x] **Phase 1: Trace context** (ca-127) — `TraceContext` threading across MCP, REST, events, background workers. Migration 033.
+- [x] **Phase 2: Audit trail** (ca-128) — immutable `audit_log` table, `AuditManager`, `AuditListener` on EventBus. REST API. 15 tests.
+- [x] **Phase 3: Webhooks** (ca-130) — HMAC-SHA256 signed HTTP callbacks, `WebhookDeliveryWorker` with retry, pattern matching. 28 tests.
+- [x] **Phase 4: Health alerting** (ca-129) — rule-based alerting, metric/health evaluators, 4 templates, cooldowns. 39 tests.
+- [x] **Phase 5: Data retention** (ca-131) — TTL policies per resource type, legal hold, batch cleanup, dry-run preview. Migration 037.
+- [x] **Phase 6: OTel export** (ca-127) — optional OTLP span export, zero overhead when disabled. 13 tests.
+- [x] **Watchtower UI** — 4-tab page (Alerts, Audit, Webhooks, Retention) with full CRUD on all sections.
+- [x] **OKLCH color palette** — 13 perceptually-uniform tokens, `color-mix` severity badges, section-specific tab accents.
+- [x] **Page title icons** — `PageLayout` auto-resolves nav icons via `usePathname()`. DRY single source of truth.
+- [x] **Dashboard 500 fix** — removed orphaned `/api/messages` polling and dead message files from v0.54.0.
+- [x] **~155 REST API endpoints** across 24 route modules.
 
 ### v0.62.1 ✓
 

@@ -48,9 +48,15 @@ class EventBus:
 
         Supports exact types (``work_item.completed``) and domain wildcards
         (``work_item.*``).  Handler names must be unique across all
-        subscriptions.
+        subscriptions.  Duplicate (event_type, handler_name) pairs are ignored
+        to handle double-init from uvicorn lifespan.
         """
-        self._handlers[event_type].append((handler_name, fn))
+        # Guard against double-registration (uvicorn lifespan runs twice)
+        existing = self._handlers[event_type]
+        if any(name == handler_name for name, _ in existing):
+            logger.debug("EventBus: handler '%s' already subscribed to '%s', skipping", handler_name, event_type)
+            return
+        existing.append((handler_name, fn))
         self._handler_lookup[handler_name] = fn
         logger.info("EventBus: subscribed handler '%s' to '%s'", handler_name, event_type)
 

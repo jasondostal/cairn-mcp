@@ -85,7 +85,7 @@ export function EntityCreateDialog({ projects, defaultProject, onCreated }: Enti
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Jason, Cairn, React..."
+              placeholder="e.g. Alice, Cairn, React..."
               className="mt-1"
               autoFocus
               onKeyDown={(e) => e.key === "Enter" && handleSubmit()}

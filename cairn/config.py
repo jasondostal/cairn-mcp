@@ -239,6 +239,20 @@ class AlertingConfig:
 
 
 @dataclass(frozen=True)
+class RetentionConfig:
+    enabled: bool = False              # Master switch for data retention
+    scan_interval_hours: int = 24      # Hours between retention scans
+    dry_run: bool = True               # Safe default — preview only, no deletes
+
+
+@dataclass(frozen=True)
+class OTelConfig:
+    enabled: bool = False              # Master switch for OTel export
+    endpoint: str = ""                 # OTLP endpoint (e.g. http://localhost:4318)
+    service_name: str = "cairn"        # OTel service.name resource attribute
+
+
+@dataclass(frozen=True)
 class Config:
     db: DatabaseConfig = field(default_factory=DatabaseConfig)
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
@@ -268,6 +282,8 @@ class Config:
     audit: AuditConfig = field(default_factory=AuditConfig)
     webhooks: WebhookConfig = field(default_factory=WebhookConfig)
     alerting: AlertingConfig = field(default_factory=AlertingConfig)
+    retention: RetentionConfig = field(default_factory=RetentionConfig)
+    otel: OTelConfig = field(default_factory=OTelConfig)
 
 
 def _parse_cors_origins(raw: str) -> list[str]:
@@ -339,6 +355,10 @@ EDITABLE_KEYS: set[str] = {
     "webhooks.enabled",
     # Alerting
     "alerting.enabled", "alerting.eval_interval_seconds",
+    # Retention
+    "retention.enabled", "retention.scan_interval_hours", "retention.dry_run",
+    # OTel
+    "otel.enabled", "otel.endpoint", "otel.service_name",
 }
 
 # Map of section -> dataclass for sub-configs that are editable
@@ -357,6 +377,8 @@ _SECTION_CLASSES = {
     "decay": DecayConfig,
     "webhooks": WebhookConfig,
     "alerting": AlertingConfig,
+    "retention": RetentionConfig,
+    "otel": OTelConfig,
 }
 
 _BOOL_TRUTHY = {"true", "1", "yes"}
@@ -401,6 +423,7 @@ PROFILE_PRESETS: dict[str, dict[str, str]] = {
         "CAIRN_AUDIT_ENABLED": "true",
         "CAIRN_WEBHOOKS_ENABLED": "true",
         "CAIRN_ALERTING_ENABLED": "true",
+        "CAIRN_RETENTION_ENABLED": "true",
     },
 }
 
@@ -628,6 +651,12 @@ _ENV_MAP: dict[str, str] = {
     "webhooks.timeout": "CAIRN_WEBHOOKS_TIMEOUT",
     "alerting.enabled": "CAIRN_ALERTING_ENABLED",
     "alerting.eval_interval_seconds": "CAIRN_ALERTING_EVAL_INTERVAL",
+    "retention.enabled": "CAIRN_RETENTION_ENABLED",
+    "retention.scan_interval_hours": "CAIRN_RETENTION_SCAN_INTERVAL",
+    "retention.dry_run": "CAIRN_RETENTION_DRY_RUN",
+    "otel.enabled": "CAIRN_OTEL_ENABLED",
+    "otel.endpoint": "CAIRN_OTEL_ENDPOINT",
+    "otel.service_name": "CAIRN_OTEL_SERVICE_NAME",
 }
 
 
@@ -819,5 +848,15 @@ def load_config() -> Config:
         alerting=AlertingConfig(
             enabled=os.getenv("CAIRN_ALERTING_ENABLED", "false").lower() in ("true", "1", "yes"),
             eval_interval_seconds=int(os.getenv("CAIRN_ALERTING_EVAL_INTERVAL", "60")),
+        ),
+        retention=RetentionConfig(
+            enabled=os.getenv("CAIRN_RETENTION_ENABLED", "false").lower() in ("true", "1", "yes"),
+            scan_interval_hours=int(os.getenv("CAIRN_RETENTION_SCAN_INTERVAL", "24")),
+            dry_run=os.getenv("CAIRN_RETENTION_DRY_RUN", "true").lower() in ("true", "1", "yes"),
+        ),
+        otel=OTelConfig(
+            enabled=os.getenv("CAIRN_OTEL_ENABLED", "false").lower() in ("true", "1", "yes"),
+            endpoint=os.getenv("CAIRN_OTEL_ENDPOINT", ""),
+            service_name=os.getenv("CAIRN_OTEL_SERVICE_NAME", "cairn"),
         ),
     )

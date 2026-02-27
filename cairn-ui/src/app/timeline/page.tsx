@@ -18,6 +18,7 @@ import { SkeletonList } from "@/components/skeleton-list";
 import { EmptyState } from "@/components/empty-state";
 import { PageLayout } from "@/components/page-layout";
 
+
 const MEMORY_TYPES = [
   "note", "decision", "rule", "code-snippet", "learning",
   "research", "discussion", "progress", "task", "debug", "design",

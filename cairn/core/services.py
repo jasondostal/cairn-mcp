@@ -87,6 +87,8 @@ class Services:
     webhook_worker: "WebhookDeliveryWorker | None"
     alert_manager: "AlertManager | None"
     alert_worker: "AlertEvaluator | None"
+    retention_manager: "RetentionManager | None"
+    retention_worker: "RetentionWorker | None"
 
 
 def create_services(config: Config | None = None, db: Database | None = None) -> Services:
@@ -278,6 +280,21 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         alert_worker = AlertEvaluator(db, alert_manager, webhook_manager, config.alerting)
         logger.info("AlertEvaluator enabled (interval=%ds)", config.alerting.eval_interval_seconds)
 
+    # Data retention — scheduled cleanup of old data (Watchtower Phase 5)
+    retention_manager = None
+    retention_worker = None
+    if config.retention.enabled:
+        from cairn.core.retention import RetentionManager
+        from cairn.core.retention_worker import RetentionWorker
+        retention_manager = RetentionManager(db, config.retention)
+        retention_worker = RetentionWorker(retention_manager, config.retention)
+        logger.info("RetentionWorker enabled (interval=%dh, dry_run=%s)",
+                     config.retention.scan_interval_hours, config.retention.dry_run)
+
+    # OTel export — optional bridge to external observability (Watchtower Phase 6)
+    from cairn.core import otel
+    otel.init(config.otel)
+
     # Event dispatcher — background delivery worker (started in _start_workers)
     event_dispatcher = EventDispatcher(db, event_bus)
 
@@ -402,4 +419,6 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         webhook_worker=webhook_worker,
         alert_manager=alert_manager,
         alert_worker=alert_worker,
+        retention_manager=retention_manager,
+        retention_worker=retention_worker,
     )
