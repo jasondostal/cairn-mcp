@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cairn.core.utils import extract_json, get_or_create_project
@@ -16,6 +18,12 @@ if TYPE_CHECKING:
     from cairn.storage.database import Database
 
 logger = logging.getLogger(__name__)
+
+# File extensions allowed for local file ingestion
+_ALLOWED_EXTENSIONS = frozenset({
+    ".md", ".txt", ".json", ".yaml", ".yml",
+    ".toml", ".csv", ".html", ".xml", ".rst",
+})
 
 
 class IngestPipeline:
@@ -33,6 +41,7 @@ class IngestPipeline:
         self.project_manager = project_manager
         self.memory_store = memory_store
         self.llm = llm
+        self.config = config
         self.chunk_size = config.ingest_chunk_size
         self.chunk_overlap = config.ingest_chunk_overlap
         self._chunker = None  # lazy init
@@ -107,6 +116,65 @@ class IngestPipeline:
             pass
         return text, title
 
+    def read_local_file(self, file_path: str) -> tuple[str, str | None]:
+        """Read a file from the configured ingest staging directory.
+
+        Resolves the path, validates it's under config.ingest_dir (path traversal
+        protection), checks file size against MAX_CONTENT_SIZE, and returns
+        (content, inferred_title).
+
+        The inferred title is the filename stem (without extension), titlecased
+        with underscores/hyphens replaced by spaces, unless the caller provides
+        an explicit title.
+        """
+        from cairn.core.constants import MAX_CONTENT_SIZE
+
+        ingest_dir = Path(self.config.ingest_dir).resolve()
+        target = Path(file_path).resolve()
+
+        # Path traversal protection: must be under ingest_dir
+        try:
+            target.relative_to(ingest_dir)
+        except ValueError:
+            raise ValueError(
+                f"file_path must be under the ingest directory ({ingest_dir}), "
+                f"got: {file_path}"
+            )
+
+        # No symlink following outside the staging dir
+        if target.is_symlink():
+            real = target.resolve()
+            try:
+                real.relative_to(ingest_dir)
+            except ValueError:
+                raise ValueError(
+                    f"Symlink target is outside the ingest directory: {file_path}"
+                )
+
+        if not target.is_file():
+            raise ValueError(f"File not found: {file_path}")
+
+        # Extension check
+        suffix = target.suffix.lower()
+        if suffix not in _ALLOWED_EXTENSIONS:
+            raise ValueError(
+                f"Unsupported file type: {suffix}. "
+                f"Allowed: {', '.join(sorted(_ALLOWED_EXTENSIONS))}"
+            )
+
+        # Size check
+        file_size = target.stat().st_size
+        if file_size > MAX_CONTENT_SIZE:
+            raise ValueError(
+                f"File too large: {file_size:,} bytes "
+                f"(max {MAX_CONTENT_SIZE:,})"
+            )
+
+        content = target.read_text(encoding="utf-8")
+        inferred_title = target.stem.replace("_", " ").replace("-", " ").title()
+
+        return content, inferred_title
+
     def ingest(
         self,
         content: str | None = None,
@@ -119,12 +187,21 @@ class IngestPipeline:
         session_name: str | None = None,
         url: str | None = None,
         memory_type: str | None = None,
+        file_path: str | None = None,
     ) -> dict:
         """Run the full pipeline. Returns result dict.
 
+        If file_path is provided and content is empty, reads from local staging dir.
         If url is provided and content is empty, fetches and extracts from URL.
         If both url and content, stores content and attaches url as source.
         """
+        # 0a. Local file read (before URL extraction)
+        if file_path and not content:
+            content, inferred_title = self.read_local_file(file_path)
+            if not title:
+                title = inferred_title
+            source = source or file_path
+
         # 0. URL extraction
         if url and not content:
             content, extracted_title = self.fetch_url(url)
@@ -135,7 +212,21 @@ class IngestPipeline:
             source = source or url
 
         if not content:
-            raise ValueError("content is required (or provide a url to fetch)")
+            raise ValueError("content is required (or provide a url or file_path)")
+
+        # Guard: reject content that looks like a file path rather than actual content.
+        # Agents sometimes pass a path string instead of reading the file first.
+        if len(content) < 300 and not url:
+            stripped = content.strip()
+            if (
+                (stripped.startswith("/") or stripped.startswith("./") or stripped.startswith("~/"))
+                and "\n" not in stripped
+                and stripped.rsplit(".", 1)[-1] in ("md", "txt", "json", "yaml", "yml", "toml", "csv", "html", "xml", "rst")
+            ):
+                raise ValueError(
+                    f"content looks like a file path ({stripped}), not actual content. "
+                    "Read the file first and pass its contents as the content parameter."
+                )
 
         # 1. Dedup
         content_hash = hashlib.sha256(content.encode()).hexdigest()

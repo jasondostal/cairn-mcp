@@ -92,6 +92,24 @@ def _init_services(svc):
     ingest_pipeline = svc.ingest_pipeline
 
 
+async def _in_thread(fn, *args, **kwargs):
+    """Run fn in a thread pool, then release the DB connection back to the pool.
+
+    The Database class uses threading.local() to hold connections per-thread.
+    With asyncio.to_thread(), worker threads from the ThreadPoolExecutor
+    check out connections but never return them — causing pool exhaustion
+    and deadlock after enough concurrent calls. This wrapper ensures every
+    thread returns its connection when the work is done.
+    """
+    def _wrapped():
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            if db is not None:
+                db._release()
+    return await asyncio.to_thread(_wrapped)
+
+
 def _build_config_with_overrides(db_instance):
     """Load DB overrides and rebuild config."""
     try:
@@ -299,7 +317,7 @@ async def store(
                 author=author,
             )
 
-        return await asyncio.to_thread(_do_store)
+        return await _in_thread(_do_store)
     except ValidationError as e:
         return {"error": str(e)}
     except Exception as e:
@@ -407,7 +425,7 @@ async def search(
                 return {"results": results, "confidence": confidence}
             return results
 
-        return await asyncio.to_thread(_do_search)
+        return await _in_thread(_do_search)
     except ValidationError as e:
         return {"error": str(e)}
     except Exception as e:
@@ -474,7 +492,7 @@ async def recall(ids: list[int]) -> list[dict]:
 
             return results
 
-        return await asyncio.to_thread(_do_recall)
+        return await _in_thread(_do_recall)
     except Exception as e:
         logger.exception("recall failed")
         return {"error": f"Internal error: {e}"}
@@ -548,7 +566,7 @@ async def modify(
                 author=author,
             )
 
-        return await asyncio.to_thread(_do_modify)
+        return await _in_thread(_do_modify)
     except Exception as e:
         logger.exception("modify failed")
         return {"error": f"Internal error: {e}"}
@@ -595,7 +613,7 @@ async def rules(project: str | None = None) -> list[dict]:
                     items.append({"_overflow": meta["overflow_message"]})
             return items
 
-        return await asyncio.to_thread(_do_rules)
+        return await _in_thread(_do_rules)
     except Exception as e:
         logger.exception("rules failed")
         return {"error": f"Internal error: {e}"}
@@ -679,7 +697,7 @@ async def insights(
                 result["_overflow"] = overflow_msg
             return result
 
-        return await asyncio.to_thread(_do_insights)
+        return await _in_thread(_do_insights)
     except Exception as e:
         logger.exception("insights failed")
         return {"error": f"Internal error: {e}"}
@@ -699,6 +717,7 @@ async def projects(
     title: str | None = None,
     target: str | None = None,
     link_type: str = "related",
+    file_path: str | None = None,
 ) -> dict | list[dict]:
     """Manage project documents and relationships. For formal project docs, NOT working notes.
 
@@ -722,17 +741,28 @@ async def projects(
         action: One of 'list', 'create_doc', 'get_docs', 'update_doc', 'link', 'get_links'.
         project: Project name (required for all actions except 'list').
         doc_type: Document type: 'brief', 'prd', 'plan', 'primer', 'writeup', or 'guide' (for create_doc, optional for get_docs).
-        content: Document content (required for create_doc, update_doc).
+        content: Document content (required for create_doc, update_doc). Can be omitted if file_path is provided.
         doc_id: Document ID (required for update_doc).
         title: Optional document title (for create_doc, update_doc).
         target: Target project name (required for link).
         link_type: Relationship type for link (default 'related').
+        file_path: Path to a local file in the server's ingest staging directory.
+            Use instead of content for large docs that would exceed MCP message size limits.
     """
     try:
         if not project and action != "list":
             return {"error": "project is required for this action"}
 
         def _do_projects():
+            nonlocal content, title
+
+            # Resolve file_path for create_doc/update_doc
+            if file_path and not content and action in ("create_doc", "update_doc"):
+                file_content, inferred_title = ingest_pipeline.read_local_file(file_path)
+                content = file_content
+                if not title:
+                    title = inferred_title
+
             if action == "list":
                 return project_manager.list_all()["items"]
 
@@ -759,7 +789,9 @@ async def projects(
 
             return {"error": f"Unknown action: {action}"}
 
-        return await asyncio.to_thread(_do_projects)
+        return await _in_thread(_do_projects)
+    except ValueError as e:
+        return {"error": str(e)}
     except Exception as e:
         logger.exception("projects failed")
         return {"error": f"Internal error: {e}"}
@@ -885,7 +917,7 @@ async def tasks(
 
             return {"error": f"Unknown action: {action}"}
 
-        return await asyncio.to_thread(_do_tasks)
+        return await _in_thread(_do_tasks)
     except Exception as e:
         logger.exception("tasks failed")
         return {"error": f"Internal error: {e}"}
@@ -1083,7 +1115,7 @@ async def work_items(
 
             return {"error": f"Unknown action: {action}"}
 
-        return await asyncio.to_thread(_do_work_items)
+        return await _in_thread(_do_work_items)
     except ValueError as e:
         return {"error": str(e)}
     except Exception as e:
@@ -1142,7 +1174,7 @@ async def dispatch(
         assignee: Name for the agent claim (auto-generated if omitted).
     """
     try:
-        return await asyncio.to_thread(
+        return await _in_thread(
             workspace_manager.dispatch,
             work_item_id=work_item_id,
             project=project,
@@ -1245,7 +1277,7 @@ async def think(
 
             return {"error": f"Unknown action: {action}"}
 
-        return await asyncio.to_thread(_do_think)
+        return await _in_thread(_do_think)
     except Exception as e:
         logger.exception("think failed")
         return {"error": f"Internal error: {e}"}
@@ -1263,7 +1295,7 @@ async def status() -> dict:
     verifying deployment status. Quick diagnostic tool — no parameters required.
     """
     try:
-        return await asyncio.to_thread(get_status, db, config)
+        return await _in_thread(get_status, db, config)
     except Exception as e:
         logger.exception("status failed")
         return {"error": f"Internal error: {e}"}
@@ -1295,7 +1327,7 @@ async def consolidate(
     try:
         if not project or not project.strip():
             return {"error": "project is required"}
-        return await asyncio.to_thread(
+        return await _in_thread(
             consolidation_engine.consolidate, project, dry_run=dry_run,
         )
     except Exception as e:
@@ -1352,7 +1384,7 @@ async def orient(project: str | None = None) -> dict:
                 graph_provider=graph_provider,
             )
 
-        return await asyncio.to_thread(_do_orient)
+        return await _in_thread(_do_orient)
     except Exception as e:
         logger.exception("orient failed")
         return {"error": f"Internal error: {e}"}
@@ -1384,7 +1416,7 @@ async def drift_check(
                Use sha256 or any consistent hash of file contents.
     """
     try:
-        return await asyncio.to_thread(drift_detector.check, project=project, files=files)
+        return await _in_thread(drift_detector.check, project=project, files=files)
     except Exception as e:
         logger.exception("drift_check failed")
         return {"error": f"Internal error: {e}"}
@@ -1406,22 +1438,23 @@ async def ingest(
     tags: list[str] | None = None,
     session_name: str | None = None,
     memory_type: str | None = None,
+    file_path: str | None = None,
 ) -> dict:
     """Ingest content into Cairn: dedup, classify, chunk, and store.
 
-    Smart ingestion pipeline that handles text and URLs. Content is classified
-    as doc, memory, or both. Large content is automatically chunked. Duplicates
-    are detected by content hash.
+    Smart ingestion pipeline that handles text, URLs, and local files. Content
+    is classified as doc, memory, or both. Large content is automatically
+    chunked. Duplicates are detected by content hash.
 
     WHEN TO USE:
-    - Importing documents, articles, or web pages into the knowledge base
+    - Storing large documents (briefs, primers, plans) — pass the content directly
+    - Importing web pages — pass a URL
     - Bulk loading content that needs to be chunked and indexed
-    - Ingesting URLs (fetches, extracts readable text, stores)
 
     DON'T USE FOR: Quick notes or decisions — use store() instead.
 
     Args:
-        content: Text content to ingest. Required unless url is provided.
+        content: Text content to ingest. Required unless url or file_path is provided.
         project: Project name. Required.
         url: URL to fetch and ingest. If content is also provided, url becomes source metadata.
         hint: Classification hint: 'auto' (LLM classifies), 'doc', 'memory', or 'both'.
@@ -1431,10 +1464,13 @@ async def ingest(
         tags: Optional tags for memories created from chunks.
         session_name: Optional session grouping for memories.
         memory_type: Override memory type for chunks (default: 'note').
+        file_path: Path to a local file in the server's ingest staging directory.
+            Use this for large files that would exceed MCP message size limits.
+            The file must be under the configured CAIRN_INGEST_DIR (default: /data/ingest).
     """
     try:
-        if not content and not url:
-            return {"error": "content or url is required"}
+        if not content and not url and not file_path:
+            return {"error": "content, url, or file_path is required"}
         if not project:
             return {"error": "project is required"}
         if hint not in ("auto", "doc", "memory", "both"):
@@ -1452,9 +1488,10 @@ async def ingest(
                 tags=tags,
                 session_name=session_name,
                 memory_type=memory_type,
+                file_path=file_path,
             )
 
-        return await asyncio.to_thread(_do_ingest)
+        return await _in_thread(_do_ingest)
     except ValueError as e:
         return {"error": str(e)}
     except Exception as e:
@@ -1492,7 +1529,7 @@ async def code_index(
     from cairn.core.code_ops import run_code_index
 
     try:
-        return await asyncio.to_thread(
+        return await _in_thread(
             run_code_index,
             project=project, path=path, force=force,
             graph_provider=graph_provider, db=db, config=config,
@@ -1555,7 +1592,7 @@ async def code_query(
     from cairn.core.code_ops import run_code_query
 
     try:
-        return await asyncio.to_thread(
+        return await _in_thread(
             run_code_query,
             action=action, project=project, target=target, query=query,
             kind=kind, depth=depth, limit=limit, mode=mode,
@@ -1594,7 +1631,7 @@ async def code_describe(
     from cairn.core.code_ops import run_code_describe
 
     try:
-        return await asyncio.to_thread(
+        return await _in_thread(
             run_code_describe,
             project=project, target=target, kind=kind, limit=limit,
             graph_provider=graph_provider, db=db, config=config,
@@ -1643,7 +1680,7 @@ async def arch_check(
     from cairn.core.code_ops import run_arch_check
 
     try:
-        return await asyncio.to_thread(
+        return await _in_thread(
             run_arch_check,
             project=project, path=path, config_path=config_path,
             use_graph=use_graph,

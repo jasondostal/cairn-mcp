@@ -114,8 +114,9 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         url = body.get("url")
         hint = body.get("hint", "auto")
 
-        if not content and not url:
-            raise HTTPException(status_code=400, detail="content or url is required")
+        file_path = body.get("file_path")
+        if not content and not url and not file_path:
+            raise HTTPException(status_code=400, detail="content, url, or file_path is required")
         if not project:
             raise HTTPException(status_code=400, detail="project is required")
         if hint not in ("auto", "doc", "memory", "both"):
@@ -147,6 +148,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 session_name=body.get("session_name"),
                 url=url,
                 memory_type=memory_type,
+                file_path=file_path,
             )
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))

@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.64.0] "Trailhead" — 2026-02-28
+
+File-path ingestion to bypass MCP content size limits. Large documents can now be
+staged on the host filesystem and ingested by path reference instead of inline
+content, avoiding the ~30KB MCP message size ceiling.
+
+### Added
+- **File-path ingestion** — `ingest()` and `projects()` MCP tools accept a new
+  `file_path` parameter pointing to a file in the server's staging directory
+  (default: `/data/ingest`). The server reads the file locally and processes it
+  normally. Eliminates MCP message size limits for large docs.
+- **`CAIRN_INGEST_DIR` env var** — configures the staging directory path
+  (default: `/data/ingest`). Bind-mount a host directory here to stage files.
+- **`read_local_file()` helper** — `IngestPipeline` method with path traversal
+  protection (resolved path must be under `ingest_dir`), symlink validation,
+  file extension whitelist (`.md`, `.txt`, `.json`, `.yaml`, `.yml`, `.toml`,
+  `.csv`, `.html`, `.xml`, `.rst`), and `MAX_CONTENT_SIZE` enforcement (100KB).
+- **REST API support** — `/api/ingest` endpoint also accepts `file_path`.
+- **Docker compose** — default bind mount `./ingest:/data/ingest` added to the
+  cairn service.
+
+### Workflow
+```bash
+# 1. Copy file to staging dir
+cp large-doc.md ./ingest/
+
+# 2. Ingest by path (tiny MCP message)
+ingest(file_path="/data/ingest/large-doc.md", project="my-project", hint="doc", doc_type="guide")
+```
+
 ## [0.63.1] "Unblocked" — 2026-02-28
 
 Async MCP architecture fix. All 20 MCP tool handlers converted from sync `def`

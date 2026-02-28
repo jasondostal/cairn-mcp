@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.63.1** — "Unblocked" — Async MCP architecture fix.
+Current: **v0.64.0** — "Trailhead" — File-path ingestion for large documents.
 
 ---
 

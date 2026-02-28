@@ -22,6 +22,7 @@ services:
       CAIRN_AUTH_HEADER: "${CAIRN_AUTH_HEADER:-X-API-Key}"
       CAIRN_TRANSPORT: "${CAIRN_TRANSPORT:-http}"
       CAIRN_EVENT_ARCHIVE_DIR: "${CAIRN_EVENT_ARCHIVE_DIR:-/data/events}"
+      CAIRN_INGEST_DIR: "${CAIRN_INGEST_DIR:-/data/ingest}"
       # Embedding backend (bedrock or local)
       CAIRN_EMBEDDING_BACKEND: "${CAIRN_EMBEDDING_BACKEND:-local}"
       CAIRN_EMBEDDING_DIMENSIONS: "${CAIRN_EMBEDDING_DIMENSIONS:-384}"
@@ -68,6 +69,7 @@ services:
       - "${CAIRN_HTTP_PORT:-8000}:8000"
     volumes:
       - cairn-events:/data/events
+      - ${CAIRN_INGEST_PATH:-./ingest}:/data/ingest
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/status')\""]
       interval: 15s

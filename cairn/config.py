@@ -275,6 +275,7 @@ class Config:
     http_port: int = 8000
     cors_origins: list[str] = field(default_factory=lambda: ["*"])
     event_archive_dir: str | None = None  # File-based event archive (e.g. /data/events)
+    ingest_dir: str = "/data/ingest"   # Staging dir for file-path ingestion
     ingest_chunk_size: int = 512       # tokens per chunk (Chonkie)
     ingest_chunk_overlap: int = 64     # overlap tokens between chunks
     decay_lambda: float = 0.01        # Exponential decay rate (half-life ~69 days at 0.01)
@@ -628,6 +629,7 @@ _ENV_MAP: dict[str, str] = {
     "clustering.staleness_growth_pct": "CAIRN_CLUSTER_STALENESS_GROWTH_PCT",
     "clustering.tsne_max_samples": "CAIRN_CLUSTER_TSNE_MAX_SAMPLES",
     "work_items.default_prefix_length": "CAIRN_WORK_ITEMS_PREFIX_LENGTH",
+    "ingest_dir": "CAIRN_INGEST_DIR",
     "enrichment_enabled": "CAIRN_ENRICHMENT_ENABLED",
     "profile": "CAIRN_PROFILE",
     "transport": "CAIRN_TRANSPORT",
@@ -822,6 +824,7 @@ def load_config() -> Config:
         http_port=int(os.getenv("CAIRN_HTTP_PORT", "8000")),
         cors_origins=_parse_cors_origins(os.getenv("CAIRN_CORS_ORIGINS", "*")),
         event_archive_dir=os.getenv("CAIRN_EVENT_ARCHIVE_DIR") or None,
+        ingest_dir=os.getenv("CAIRN_INGEST_DIR", "/data/ingest"),
         ingest_chunk_size=int(os.getenv("CAIRN_INGEST_CHUNK_SIZE", "512")),
         ingest_chunk_overlap=int(os.getenv("CAIRN_INGEST_CHUNK_OVERLAP", "64")),
         decay_lambda=float(os.getenv("CAIRN_DECAY_LAMBDA", "0.01")),
