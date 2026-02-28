@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.65.0] "The Swarm" — 2026-02-28
+
+Multi-agent orchestration hardening. Typed agents with enforced boundaries, file-level
+resource locking, intelligent affinity routing, persistent agent learning, and a live
+operational dashboard. The coordination layer that turns Cairn from agent tracking into
+agent orchestration.
+
+### Added
+- **Agent type system** (ca-150) — `AgentDefinition` with role, capabilities, tool
+  allowlists/blocklists, file pattern restrictions, and risk tier ceilings. Five roles:
+  `worker`, `coordinator`, `researcher`, `planner`, `reviewer`.
+- **Six built-in agents** (ca-155) — `cairn-worker`, `cairn-build`, `cairn-coordinator`,
+  `cairn-research`, `cairn-plan`, `cairn-reviewer`. Each with role-specific system
+  prompts, capability sets, and risk tier defaults.
+- **Coordinator boundary enforcement** — coordinators cannot be dispatched to
+  implementation tasks. They orchestrate via decompose/dispatch/monitor/synthesize.
+- **Risk tier ceiling** — agents cannot accept work above their declared risk level.
+  Researchers capped at tier 3 (read-only), planners and reviewers at tier 2.
+- **Resource locking** (ca-156) — file-level ownership with atomic acquire, glob
+  pattern matching, auto-release on work item completion. Four MCP actions: `lock`,
+  `unlock`, `check_locks`, `list_locks`.
+- **Affinity routing** (ca-157) — 5-factor weighted scoring (file affinity 30%,
+  project familiarity 25%, capability match 20%, load 15%, risk compatibility 10%).
+  `suggest_agent` MCP action returns ranked recommendations.
+- **Agent persistent memory** (ca-158) — `agent_learnings` table for cross-dispatch
+  knowledge accumulation. Store learnings by type (convention, mistake, pattern,
+  optimization), recall for briefing injection, auto-extract from deliverables.
+  Migration 040.
+- **Agent dashboard** (ca-159) — live multi-agent observability. Three REST endpoints:
+  overview (health, locks, stale count), active agents (heartbeat ages, work items),
+  agent detail (gates, history).
+- **`AgentRegistry`** — dict-backed registry combining built-in and custom agent
+  definitions. `get_or_default()` falls back to `cairn-worker`.
+
+### Fixed
+- **Work item tree display** — child items beyond LIMIT=100 were invisible in the UI
+  when `include_children=true` was sent without `parent_id`. Added second-pass recursive
+  descendant fetch.
+- **Duplicate work items in tree view** — recursive CTE used `UNION ALL`, causing items
+  reachable via multiple paths to appear twice. Changed to `UNION` with Python-side
+  dedup.
+
 ## [0.64.0] "Trailhead" — 2026-02-28
 
 File-path ingestion to bypass MCP content size limits. Large documents can now be

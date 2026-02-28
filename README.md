@@ -115,7 +115,7 @@ The rest: `modify`, `insights`, `tasks`, `think`, `status`, `consolidate`, `drif
 
 **Knowledge graph.** With Neo4j enabled, entities and facts get extracted into a graph that connects memories through shared people, places, projects, and concepts. Optional, but powerful when you're working across domains.
 
-**Work management.** Hierarchical work items, dependency tracking, a dispatch queue for agents, and gates that pause for human decisions. For when you have agents that need to coordinate.
+**Work management and multi-agent orchestration.** Hierarchical work items, dependency tracking, a dispatch queue, and gates that pause for human decisions. Typed agent definitions with capability enforcement, file-level resource locking, affinity-based routing, and persistent cross-dispatch learning. Agents accumulate institutional knowledge and get smarter with every task.
 
 **Web dashboard.** Browse memories, explore the knowledge graph, view analytics, manage work items, chat with your memory. Port 3000.
 

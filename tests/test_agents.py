@@ -344,7 +344,7 @@ class TestValidateDispatch:
         assert errors == []
 
     def test_coordinator_subtask_plus_risk_tier_two_errors(self):
-        """Both Admiral at the Helm and risk tier violations can fire together."""
+        """Both coordinator boundary and risk tier violations can fire together."""
         coord = AgentDefinition(
             name="c", role="coordinator", description="",
             max_risk_tier=3,

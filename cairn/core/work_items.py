@@ -705,7 +705,7 @@ class WorkItemManager:
                     f"""
                     WITH RECURSIVE descendants AS (
                         SELECT id FROM work_items WHERE parent_id IN ({ph})
-                        UNION ALL
+                        UNION
                         SELECT c.id FROM work_items c
                         JOIN descendants d ON c.parent_id = d.id
                     )
@@ -727,7 +727,9 @@ class WorkItemManager:
                     """,
                     tuple(parents_with_children) + tuple(returned_ids),
                 )
-                rows = list(rows) + list(child_rows)
+                # Deduplicate — belt-and-suspenders against CTE multi-path traversal
+                new_rows = [r for r in child_rows if r["id"] not in returned_ids]
+                rows = list(rows) + new_rows
 
         items = [
             {

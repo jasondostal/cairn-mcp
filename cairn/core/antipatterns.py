@@ -1,6 +1,6 @@
 """Multi-agent anti-pattern detection (ca-154).
 
-Detects known anti-patterns from the Nelson research:
+Detects known multi-agent anti-patterns:
 - Split Keel: Two agents touching the same file
 - Drifting Anchorage: Scope expanding beyond original plan
 - Skeleton Crew: Over-decomposition into trivially small tasks

@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.64.0** — "Trailhead" — File-path ingestion for large documents.
+Current: **v0.65.0** — "The Swarm" — Multi-agent orchestration hardening.
 
 ---
 
@@ -20,13 +20,15 @@ Continuous work with no fixed end state.
 
 Have work items, intent to build.
 
-**v0.64.0 — Async re-architecture.** Native async I/O throughout the service layer: psycopg async driver, aiohttp for HTTP backends, neo4j AsyncGraphDatabase. Multi-worker uvicorn via import string + per-worker lifespan init. Concurrency integration tests to prevent regressions.
-
 **Backup and disaster recovery.** Automated PG + Neo4j snapshots with rotation, WAL archiving for point-in-time recovery, tested restore procedures, documented runbooks. (ca-132)
 
 **Async MCP observability.** Progress reporting for long-running tools (code_index, consolidate, ingest). (ca-107)
 
-**Multi-agent stress testing.** Concurrent dispatch, resource contention, heartbeat reliability, gate coordination, and recovery under real parallel load. Validate that 3–5 agents can work simultaneously without data corruption or silent failures. (ca-126)
+**Agent relief protocol.** Context window lifecycle management and automated handover — agents approaching context limits can checkpoint state and hand off to a fresh agent. (ca-103)
+
+**Pagination and virtual scrolling.** Server-side limits with UI pagination controls across all list pages. (ca-120)
+
+**Full OpenTelemetry.** Metrics export to Prometheus/Grafana/Datadog, structured logging with correlation IDs, Grafana dashboard templates. Basic OTel span export shipped in v0.63.0; this is the enterprise expansion.
 
 ---
 
@@ -40,6 +42,8 @@ Exploring, not committed.
 
 **User identity and multi-user support.** Authentication, per-user state, RBAC. Currently Cairn is single-user by design — this would be a significant architecture shift. (ca-124)
 
+**Audit settings governance.** Configurable vs locked settings for Watchtower — which settings can operators change vs which are policy-enforced. (ca-135)
+
 **tree-sitter-language-pack integration.** Adding the language pack dependency would unlock PowerShell, Perl, R, Dart, Haskell, Erlang, Protobuf, and 150+ other languages in one shot. Trade-off is dependency weight (~160 compiled grammars).
 
 **Plugin development guide.** Tutorial for adding custom embedding/LLM/reranker backends. The plugin registry pattern is a core extensibility feature — it needs documentation.
@@ -49,6 +53,28 @@ Exploring, not committed.
 ---
 
 ## Shipped
+
+### v0.65.0 — "The Swarm" ✓
+
+Multi-agent orchestration hardening. Typed agents, resource locking, affinity routing, persistent learning, live dashboard.
+
+- [x] **Agent type system** (ca-150, ca-155) — 5 roles, 6 built-in agents, capability enforcement, tool restrictions, file patterns, risk tier ceilings.
+- [x] **Coordinator boundary enforcement** — coordinators orchestrate only, cannot claim implementation tasks.
+- [x] **Resource locking** (ca-156) — file-level ownership with atomic acquire, glob patterns, auto-release. 4 MCP actions.
+- [x] **Affinity routing** (ca-157) — 5-factor weighted scoring for agent-to-work-item matching. `suggest_agent` MCP action.
+- [x] **Agent persistent memory** (ca-158) — cross-dispatch learning accumulation, briefing injection, deliverable extraction. Migration 040.
+- [x] **Agent dashboard** (ca-159) — live observability: overview, active agents, agent detail. 3 REST endpoints.
+- [x] **Work item tree fix** — child items beyond LIMIT now fetched via recursive descendant pass.
+- [x] **Duplicate tree fix** — CTE `UNION ALL` → `UNION` to prevent multi-path duplicates.
+- [x] **203 tests** across 10 test files, all passing.
+
+### v0.64.0 — "Trailhead" ✓
+
+File-path ingestion to bypass MCP content size limits.
+
+- [x] **File-path ingestion** — `ingest()` and `projects()` accept `file_path` parameter for large documents.
+- [x] **`CAIRN_INGEST_DIR`** — configurable staging directory with path traversal protection.
+- [x] **Docker compose** — default `./ingest:/data/ingest` bind mount.
 
 ### v0.63.1 — "Unblocked" ✓
 

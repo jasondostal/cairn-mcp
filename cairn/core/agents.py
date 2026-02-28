@@ -9,7 +9,7 @@ Defines agent roles (worker, coordinator, researcher, planner, reviewer) with:
 - File pattern restrictions (glob patterns for allowed file modifications)
 - Max risk tier (highest risk work this agent can claim)
 - Briefing context (role-specific instructions appended to dispatch)
-- Admiral at the Helm enforcement for coordinators
+- Coordinator boundary enforcement (orchestrate, don't implement)
 """
 
 from __future__ import annotations
@@ -346,7 +346,7 @@ def validate_dispatch(
     """
     errors: list[str] = []
 
-    # Admiral at the Helm: coordinators cannot claim implementation tasks
+    # Coordinator boundary: coordinators orchestrate, they don't implement
     if agent_def.is_coordinator:
         item_type = work_item.get("item_type", "task")
 
