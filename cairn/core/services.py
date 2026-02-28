@@ -33,6 +33,7 @@ from cairn.core.search_v2 import SearchV2
 from cairn.core.synthesis import SessionSynthesizer
 from cairn.core.tasks import TaskManager
 from cairn.core.thinking import ThinkingEngine
+from cairn.core.deliverables import DeliverableManager
 from cairn.core.work_items import WorkItemManager
 from cairn.core.stats import init_embedding_stats, init_event_bus_stats, init_llm_stats
 from cairn.embedding import get_embedding_engine
@@ -76,6 +77,7 @@ class Services:
     workspace_backends: dict[str, WorkspaceBackend]
     workspace_manager: WorkspaceManager
     work_item_manager: WorkItemManager
+    deliverable_manager: DeliverableManager
     conversation_manager: ConversationManager
     event_dispatcher: EventDispatcher | None
     analytics_tracker: UsageTracker | None
@@ -89,6 +91,8 @@ class Services:
     alert_worker: "AlertEvaluator | None"
     retention_manager: "RetentionManager | None"
     retention_worker: "RetentionWorker | None"
+    subscription_manager: "SubscriptionManager | None"
+    agent_registry: "AgentRegistry | None"
 
 
 def create_services(config: Config | None = None, db: Database | None = None) -> Services:
@@ -247,6 +251,34 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         _code_listener.register(event_bus)
         logger.info("CodeIndexListener registered with EventBus")
 
+    # Work item + deliverable managers — created early for listener registration
+    _wi_mgr = WorkItemManager(
+        db, embedding, graph=graph_provider,
+        knowledge_extractor=knowledge_extractor,
+        event_bus=event_bus,
+    )
+    _deliverable_mgr = DeliverableManager(db, event_bus=event_bus)
+
+    # Deliverable auto-generation listener — creates deliverables on work item completion
+    from cairn.listeners.deliverable_listener import DeliverableListener
+    _deliverable_listener = DeliverableListener(
+        deliverable_manager=_deliverable_mgr,
+        work_item_manager=_wi_mgr,
+        db=db,
+        llm=llm_fast,
+    )
+    _deliverable_listener.register(event_bus)
+    logger.info("DeliverableListener registered with EventBus")
+
+    # Review listener — handles work item state changes on deliverable approve/revise/reject
+    from cairn.listeners.review_listener import ReviewListener
+    _review_listener = ReviewListener(
+        work_item_manager=_wi_mgr,
+        db=db,
+    )
+    _review_listener.register(event_bus)
+    logger.info("ReviewListener registered with EventBus")
+
     # Audit listener — append-only compliance log for mutation events (Watchtower Phase 2)
     audit_manager = None
     if config.audit.enabled:
@@ -290,6 +322,27 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         retention_worker = RetentionWorker(retention_manager, config.retention)
         logger.info("RetentionWorker enabled (interval=%dh, dry_run=%s)",
                      config.retention.scan_interval_hours, config.retention.dry_run)
+
+    # Push notifications via ntfy.sh (ca-148)
+    from cairn.listeners.push_notifier import PushNotifier
+    push_notifier: PushNotifier | None = None
+    if config.push.enabled and config.push.url:
+        push_notifier = PushNotifier(config.push)
+        logger.info("PushNotifier enabled (url=%s, topic=%s)",
+                     config.push.url, config.push.default_topic)
+
+    # Event subscriptions + notifications (ca-146)
+    from cairn.core.subscriptions import SubscriptionManager
+    from cairn.listeners.notification_listener import NotificationListener
+    subscription_manager = SubscriptionManager(db, push_notifier=push_notifier)
+    _notification_listener = NotificationListener(subscription_manager)
+    _notification_listener.register(event_bus)
+    logger.info("NotificationListener registered with EventBus")
+
+    # Agent type registry (ca-150)
+    from cairn.core.agents import AgentRegistry
+    agent_registry = AgentRegistry()
+    logger.info("AgentRegistry initialized with %d definitions", len(agent_registry.list()))
 
     # OTel export — optional bridge to external observability (Watchtower Phase 6)
     from cairn.core import otel
@@ -379,11 +432,8 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         cluster_engine=ClusterEngine(db, embedding, llm=llm_fast, config=config.clustering),
         project_manager=project_manager,
         task_manager=TaskManager(db, graph=graph_provider, event_bus=event_bus),
-        work_item_manager=(_wi_mgr := WorkItemManager(
-            db, embedding, graph=graph_provider,
-            knowledge_extractor=knowledge_extractor,
-            event_bus=event_bus,
-        )),
+        work_item_manager=_wi_mgr,
+        deliverable_manager=_deliverable_mgr,
         thinking_engine=ThinkingEngine(
             db,
             graph=graph_provider,
@@ -421,4 +471,6 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         alert_worker=alert_worker,
         retention_manager=retention_manager,
         retention_worker=retention_worker,
+        subscription_manager=subscription_manager,
+        agent_registry=agent_registry,
     )

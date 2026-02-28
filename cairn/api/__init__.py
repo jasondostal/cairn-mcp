@@ -104,6 +104,9 @@ def create_api(svc: Services) -> FastAPI:
     from cairn.api.webhooks import register_routes as reg_webhooks
     from cairn.api.alerting import register_routes as reg_alerting
     from cairn.api.retention import register_routes as reg_retention
+    from cairn.api.deliverables import register_routes as reg_deliverables
+    from cairn.api.subscriptions import register_routes as reg_subscriptions
+    from cairn.api.agents import register_routes as reg_agents
 
     reg_core(router, svc)
     reg_search(router, svc)
@@ -128,6 +131,9 @@ def create_api(svc: Services) -> FastAPI:
     reg_webhooks(router, svc)
     reg_alerting(router, svc)
     reg_retention(router, svc)
+    reg_deliverables(router, svc)
+    reg_subscriptions(router, svc)
+    reg_agents(router, svc)
 
     app.include_router(router)
     return app

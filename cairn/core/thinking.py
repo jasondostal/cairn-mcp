@@ -359,3 +359,83 @@ class ThinkingEngine:
             for r in rows
         ]
         return {"total": total, "limit": limit, "offset": offset, "items": items}
+
+    # ------------------------------------------------------------------
+    # Deliberation summary (ca-102 — coordinator deliberation protocol)
+    # ------------------------------------------------------------------
+
+    @track_operation("think.summarize")
+    def summarize_deliberation(self, sequence_id: int) -> dict:
+        """Produce a structured summary of a thinking sequence for decision-making.
+
+        Groups thoughts by type and extracts key elements:
+        - Decisions made
+        - Tradeoffs considered
+        - Risks identified
+        - Dependencies found
+        - Open questions
+        - The conclusion (if reached)
+
+        Useful for coordinators reviewing their own deliberation before acting,
+        and for humans reviewing agent reasoning.
+        """
+        seq_data = self.get_sequence(sequence_id)
+        thoughts = seq_data.get("thoughts", [])
+
+        # Group by type
+        by_type: dict[str, list[dict]] = {}
+        for t in thoughts:
+            ttype = t.get("type", "general")
+            by_type.setdefault(ttype, []).append(t)
+
+        # Extract structured elements
+        decisions = [
+            {"content": t["content"], "author": t.get("author")}
+            for t in by_type.get("decision", [])
+        ]
+        tradeoffs = [
+            {"content": t["content"], "author": t.get("author")}
+            for t in by_type.get("tradeoff", [])
+        ]
+        risks = [
+            {"content": t["content"], "author": t.get("author")}
+            for t in by_type.get("risk", [])
+        ]
+        dependencies = [
+            {"content": t["content"], "author": t.get("author")}
+            for t in by_type.get("dependency", [])
+        ]
+        open_questions = [
+            {"content": t["content"], "author": t.get("author")}
+            for t in by_type.get("question", [])
+        ]
+        insights = [
+            {"content": t["content"], "author": t.get("author")}
+            for t in by_type.get("insight", []) + by_type.get("realization", [])
+        ]
+
+        # Get conclusion if present
+        conclusions = by_type.get("conclusion", [])
+        conclusion = conclusions[-1]["content"] if conclusions else None
+
+        # Branch analysis
+        branches: dict[str, int] = {}
+        for t in thoughts:
+            if t.get("branch"):
+                branches[t["branch"]] = branches.get(t["branch"], 0) + 1
+
+        return {
+            "sequence_id": sequence_id,
+            "goal": seq_data["goal"],
+            "status": seq_data["status"],
+            "total_thoughts": len(thoughts),
+            "conclusion": conclusion,
+            "decisions": decisions,
+            "tradeoffs": tradeoffs,
+            "risks": risks,
+            "dependencies": dependencies,
+            "open_questions": open_questions,
+            "insights": insights,
+            "branches": branches,
+            "thought_type_counts": {k: len(v) for k, v in by_type.items()},
+        }

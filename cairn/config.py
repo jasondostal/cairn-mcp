@@ -253,6 +253,15 @@ class OTelConfig:
 
 
 @dataclass(frozen=True)
+class PushConfig:
+    enabled: bool = False              # Master switch for push notifications
+    url: str = ""                      # ntfy.sh server URL (e.g. https://ntfy.sh)
+    token: str = ""                    # Access token (Bearer auth)
+    default_topic: str = "cairn"       # Default ntfy topic
+    timeout: int = 10                  # HTTP request timeout (seconds)
+
+
+@dataclass(frozen=True)
 class Config:
     db: DatabaseConfig = field(default_factory=DatabaseConfig)
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
@@ -285,6 +294,7 @@ class Config:
     alerting: AlertingConfig = field(default_factory=AlertingConfig)
     retention: RetentionConfig = field(default_factory=RetentionConfig)
     otel: OTelConfig = field(default_factory=OTelConfig)
+    push: PushConfig = field(default_factory=PushConfig)
 
 
 def _parse_cors_origins(raw: str) -> list[str]:
@@ -659,6 +669,11 @@ _ENV_MAP: dict[str, str] = {
     "otel.enabled": "CAIRN_OTEL_ENABLED",
     "otel.endpoint": "CAIRN_OTEL_ENDPOINT",
     "otel.service_name": "CAIRN_OTEL_SERVICE_NAME",
+    "push.enabled": "CAIRN_PUSH_ENABLED",
+    "push.url": "CAIRN_PUSH_URL",
+    "push.token": "CAIRN_PUSH_TOKEN",
+    "push.default_topic": "CAIRN_PUSH_TOPIC",
+    "push.timeout": "CAIRN_PUSH_TIMEOUT",
 }
 
 
@@ -861,5 +876,12 @@ def load_config() -> Config:
             enabled=os.getenv("CAIRN_OTEL_ENABLED", "false").lower() in ("true", "1", "yes"),
             endpoint=os.getenv("CAIRN_OTEL_ENDPOINT", ""),
             service_name=os.getenv("CAIRN_OTEL_SERVICE_NAME", "cairn"),
+        ),
+        push=PushConfig(
+            enabled=os.getenv("CAIRN_PUSH_ENABLED", "false").lower() in ("true", "1", "yes"),
+            url=os.getenv("CAIRN_PUSH_URL", ""),
+            token=os.getenv("CAIRN_PUSH_TOKEN", ""),
+            default_topic=os.getenv("CAIRN_PUSH_TOPIC", "cairn"),
+            timeout=int(os.getenv("CAIRN_PUSH_TIMEOUT", "10")),
         ),
     )

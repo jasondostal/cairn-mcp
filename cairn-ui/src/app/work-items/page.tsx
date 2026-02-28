@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type WorkItem, type GatedItem, type WorkItemStatus, type WorkItemDetail, type WorkspaceBackendInfo } from "@/lib/api";
+import { api, type WorkItem, type GatedItem, type WorkItemStatus, type WorkItemDetail, type WorkspaceBackendInfo, type Deliverable } from "@/lib/api";
 import { usePageFilters } from "@/lib/use-page-filters";
 import { useLocalStorage } from "@/lib/use-local-storage";
 import { useKeyboardNav } from "@/lib/use-keyboard-nav";
@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { WorkItemRow } from "@/components/work-items/work-item-row";
 import { WorkItemSheet } from "@/components/work-items/work-item-sheet";
 import { CreateWorkItemDialog } from "@/components/work-items/create-dialog";
-import { Hand, Plus } from "lucide-react";
+import { FileCheck, Hand, Plus } from "lucide-react";
 
 const statusOptions: { value: string; label: string }[] = [
   { value: "open", label: "open" },
@@ -133,6 +133,7 @@ export default function WorkItemsPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [gatedItems, setGatedItems] = useState<GatedItem[]>([]);
+  const [pendingReviews, setPendingReviews] = useState<Deliverable[]>([]);
   const [backends, setBackends] = useState<WorkspaceBackendInfo[]>([]);
 
   // Persisted UI state
@@ -170,19 +171,22 @@ export default function WorkItemsPage() {
       Promise<{ items: WorkItem[] }>,
       Promise<{ items: { id: number }[] } | null>,
       Promise<{ items: GatedItem[] }>,
+      Promise<{ items: Deliverable[] }>,
     ] = [
       api.workItems(opts),
       projectParam
         ? api.workItemReady(projectParam)
         : Promise.resolve(null),
       api.workItemsGated(projectParam ? { project: projectParam } : {}),
+      api.pendingDeliverables(projectParam ? { project: projectParam } : {}),
     ];
 
     Promise.all(promises)
-      .then(([itemsRes, readyRes, gatedRes]) => {
+      .then(([itemsRes, readyRes, gatedRes, pendingRes]) => {
         setItems(itemsRes.items);
         if (readyRes) setReadyIds(new Set(readyRes.items.map((i) => i.id)));
         setGatedItems(gatedRes.items);
+        setPendingReviews(pendingRes.items);
       })
       .catch((err) => setError(err?.message || "Failed to load work items"))
       .finally(() => setLoading(false));
@@ -216,11 +220,13 @@ export default function WorkItemsPage() {
           ? api.workItemReady(projectParam)
           : Promise.resolve(null),
         api.workItemsGated(projectParam ? { project: projectParam } : {}),
+        api.pendingDeliverables(projectParam ? { project: projectParam } : {}),
       ])
-        .then(([itemsRes, readyRes, gatedRes]) => {
+        .then(([itemsRes, readyRes, gatedRes, pendingRes]) => {
           setItems(itemsRes.items);
           if (readyRes) setReadyIds(new Set(readyRes.items.map((i) => i.id)));
           setGatedItems(gatedRes.items);
+          setPendingReviews(pendingRes.items);
           backoff = POLL_INTERVAL;
         })
         .catch(() => {
@@ -414,6 +420,37 @@ export default function WorkItemsPage() {
                   </span>
                 )}
                 <span className="font-mono text-xs text-muted-foreground/60 shrink-0">{g.project}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Needs Review — pending deliverables */}
+      {pendingReviews.length > 0 && (
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-2 text-sm font-medium text-[oklch(0.769_0.188_70)]">
+            <FileCheck className="h-4 w-4" />
+            Needs Review ({pendingReviews.length})
+          </div>
+          <div className="rounded-md border border-[oklch(0.769_0.188_70)]/20 divide-y divide-border">
+            {pendingReviews.map((d) => (
+              <div
+                key={d.id}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer"
+                onClick={() => openSheet(d.work_item_id)}
+              >
+                <FileCheck className="h-3 w-3 text-[oklch(0.769_0.188_70)] shrink-0" />
+                <span className="font-mono text-xs text-muted-foreground shrink-0">v{d.version}</span>
+                <span className="flex-1 truncate">{d.work_item_title || `Work item #${d.work_item_id}`}</span>
+                {d.summary && (
+                  <span className="text-xs text-muted-foreground truncate max-w-64">
+                    {d.summary.slice(0, 80)}{d.summary.length > 80 ? "…" : ""}
+                  </span>
+                )}
+                {d.project_name && (
+                  <span className="font-mono text-xs text-muted-foreground/60 shrink-0">{d.project_name}</span>
+                )}
               </div>
             ))}
           </div>

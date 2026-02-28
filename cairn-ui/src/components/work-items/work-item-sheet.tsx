@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, type WorkItem, type WorkItemDetail, type WorkItemActivity, type WorkItemStatus, type WorkspaceBackendInfo } from "@/lib/api";
+import { api, type WorkItem, type WorkItemDetail, type WorkItemActivity, type WorkItemStatus, type WorkspaceBackendInfo, type Deliverable } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import {
   Sheet,
@@ -23,14 +23,19 @@ import {
   Bot,
   CheckCircle,
   Clock,
+  FileCheck,
   GitBranch,
   Hand,
   Link2,
   Lock,
+  MessageSquare,
   Pencil,
   Plus,
   Radio,
+  RotateCcw,
   Shield,
+  ThumbsDown,
+  ThumbsUp,
   User,
   X,
   XCircle,
@@ -63,6 +68,9 @@ export function WorkItemSheet({
   const [editingParent, setEditingParent] = useState(false);
   const [parentOptions, setParentOptions] = useState<WorkItem[]>([]);
   const [parentSaving, setParentSaving] = useState(false);
+  const [deliverable, setDeliverable] = useState<Deliverable | null>(null);
+  const [reviewNotes, setReviewNotes] = useState("");
+  const [reviewActing, setReviewActing] = useState(false);
 
   const fetchDetail = useCallback(() => {
     if (!itemId) return;
@@ -82,11 +90,19 @@ export function WorkItemSheet({
       .finally(() => setActivitiesLoading(false));
   }, [itemId]);
 
+  const fetchDeliverable = useCallback(() => {
+    if (!itemId) return;
+    api.deliverable(itemId)
+      .then((d) => setDeliverable(d?.id ? d : null))
+      .catch(() => setDeliverable(null));
+  }, [itemId]);
+
   useEffect(() => {
     if (!itemId || !open) return;
     fetchDetail();
     fetchActivities();
-  }, [itemId, open, fetchDetail, fetchActivities]);
+    fetchDeliverable();
+  }, [itemId, open, fetchDetail, fetchActivities, fetchDeliverable]);
 
   async function handleComplete() {
     if (!detail) return;
@@ -138,6 +154,23 @@ export function WorkItemSheet({
     finally { setActing(false); }
   }
 
+  async function handleReview(action: "approve" | "revise" | "reject") {
+    if (!detail || !deliverable) return;
+    setReviewActing(true);
+    try {
+      await api.reviewDeliverable(detail.id, {
+        action,
+        reviewer: "user",
+        notes: reviewNotes || undefined,
+      });
+      setReviewNotes("");
+      fetchDeliverable();
+      fetchActivities();
+      onAction?.();
+    } catch { /* silent */ }
+    finally { setReviewActing(false); }
+  }
+
   function navigateTo(id: number) {
     onNavigate?.(id);
   }
@@ -171,6 +204,8 @@ export function WorkItemSheet({
   const hasUnresolvedGate = detail?.gate_type && !detail?.gate_resolved_at;
   const constraints = detail?.constraints ?? {};
   const hasConstraints = Object.keys(constraints).length > 0;
+  const isReviewable = deliverable && (deliverable.status === "draft" || deliverable.status === "pending_review");
+  const isReviewed = deliverable && (deliverable.status === "approved" || deliverable.status === "revised" || deliverable.status === "rejected");
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -494,6 +529,162 @@ export function WorkItemSheet({
                 </>
               )}
 
+              {/* Deliverable */}
+              {deliverable && (
+                <>
+                  <Separator />
+                  <div>
+                    <SectionHeader icon={<FileCheck className="h-3 w-3" />}>
+                      Deliverable v{deliverable.version}
+                      <Badge
+                        variant="outline"
+                        className={`ml-2 text-[10px] ${
+                          deliverable.status === "approved"
+                            ? "border-[oklch(0.696_0.17_162)] text-[oklch(0.696_0.17_162)]"
+                            : deliverable.status === "revised"
+                              ? "border-[oklch(0.769_0.188_70)] text-[oklch(0.769_0.188_70)]"
+                              : deliverable.status === "rejected"
+                                ? "border-destructive text-destructive"
+                                : deliverable.status === "pending_review"
+                                  ? "border-[oklch(0.627_0.265_304)] text-[oklch(0.627_0.265_304)]"
+                                  : ""
+                        }`}
+                      >
+                        {deliverable.status.replace("_", " ")}
+                      </Badge>
+                    </SectionHeader>
+
+                    {/* Summary */}
+                    {deliverable.summary && (
+                      <p className="text-sm leading-relaxed mb-3">{deliverable.summary}</p>
+                    )}
+
+                    {/* Changes */}
+                    {deliverable.changes.length > 0 && (
+                      <div className="mb-2">
+                        <span className="text-xs text-muted-foreground block mb-1">Changes:</span>
+                        <ul className="space-y-0.5 text-sm">
+                          {deliverable.changes.map((c, i) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <span className="text-muted-foreground/60 shrink-0">-</span>
+                              <span>{c.description}</span>
+                              {c.type && (
+                                <Badge variant="outline" className="text-[10px] shrink-0">{c.type}</Badge>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Decisions */}
+                    {deliverable.decisions.length > 0 && (
+                      <div className="mb-2">
+                        <span className="text-xs text-muted-foreground block mb-1">Decisions:</span>
+                        <ul className="space-y-1 text-sm">
+                          {deliverable.decisions.map((d, i) => (
+                            <li key={i}>
+                              <span className="font-medium">{d.decision}</span>
+                              {d.rationale && (
+                                <span className="text-muted-foreground text-xs ml-1">— {d.rationale}</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Open items */}
+                    {deliverable.open_items.length > 0 && (
+                      <div className="mb-2">
+                        <span className="text-xs text-muted-foreground block mb-1">Open items:</span>
+                        <ul className="space-y-0.5 text-sm">
+                          {deliverable.open_items.map((o, i) => (
+                            <li key={i} className="flex items-center gap-2">
+                              <span className="text-muted-foreground/60 shrink-0">-</span>
+                              <span>{o.description}</span>
+                              {o.priority && (
+                                <Badge variant="outline" className="text-[10px] shrink-0">{o.priority}</Badge>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Metrics */}
+                    {deliverable.metrics && Object.keys(deliverable.metrics).length > 0 && (
+                      <div className="flex gap-3 text-xs text-muted-foreground mb-2">
+                        {Object.entries(deliverable.metrics).map(([k, v]) => (
+                          <span key={k} className="font-mono">{k}: {String(v)}</span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Reviewed info */}
+                    {isReviewed && deliverable.reviewed_by && (
+                      <div className="text-xs text-muted-foreground flex items-center gap-1.5 mb-2">
+                        <User className="h-3 w-3" />
+                        Reviewed by {deliverable.reviewed_by}
+                        {deliverable.reviewed_at && <span>— {formatDateTime(deliverable.reviewed_at)}</span>}
+                      </div>
+                    )}
+                    {isReviewed && deliverable.reviewer_notes && (
+                      <div className="text-sm bg-muted rounded p-2 mb-2">
+                        <span className="text-xs text-muted-foreground block mb-0.5">
+                          <MessageSquare className="h-3 w-3 inline mr-1" />
+                          Review notes:
+                        </span>
+                        {deliverable.reviewer_notes}
+                      </div>
+                    )}
+
+                    {/* Review actions */}
+                    {isReviewable && (
+                      <div className="mt-3 space-y-2">
+                        <textarea
+                          value={reviewNotes}
+                          onChange={(e) => setReviewNotes(e.target.value)}
+                          placeholder="Review notes (optional for approve, recommended for revise/reject)…"
+                          className="w-full h-16 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => handleReview("approve")}
+                            disabled={reviewActing}
+                            size="sm"
+                            className="flex-1 bg-[oklch(0.696_0.17_162)] hover:bg-[oklch(0.696_0.17_162)]/90 text-white"
+                          >
+                            <ThumbsUp className="mr-1 h-3.5 w-3.5" />
+                            Approve
+                          </Button>
+                          <Button
+                            onClick={() => handleReview("revise")}
+                            disabled={reviewActing}
+                            size="sm"
+                            variant="outline"
+                            className="flex-1 border-[oklch(0.769_0.188_70)] text-[oklch(0.769_0.188_70)] hover:bg-[oklch(0.769_0.188_70)]/10"
+                          >
+                            <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                            Revise
+                          </Button>
+                          <Button
+                            onClick={() => handleReview("reject")}
+                            disabled={reviewActing}
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <ThumbsDown className="mr-1 h-3.5 w-3.5" />
+                            Reject
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
               {/* Actions */}
               {!isTerminal && (
                 <>
@@ -675,7 +866,7 @@ function SectionHeader({ children, icon }: { children: React.ReactNode; icon?: R
 }
 
 const activityIcons: Record<string, string> = {
-  created: "+"  ,
+  created: "+",
   status_change: "~",
   claim: "@",
   gate_set: "!",
@@ -683,6 +874,8 @@ const activityIcons: Record<string, string> = {
   heartbeat: ".",
   checkpoint: "#",
   note: "*",
+  review: "R",
+  deliverable: "D",
 };
 
 function ActivityIcon({ type }: { type: string }) {

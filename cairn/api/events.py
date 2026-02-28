@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import fnmatch
 import json
 import logging
 import time
@@ -19,7 +20,18 @@ logger = logging.getLogger(__name__)
 
 def register_routes(router: APIRouter, svc: Services, **kw):
     event_bus = svc.event_bus
+    event_dispatcher = svc.event_dispatcher
     db = svc.db
+
+    @router.get("/event-bus/health")
+    def api_event_bus_health():
+        """Event bus + dispatcher health: handler metrics, circuit breakers."""
+        result: dict = {}
+        if stats.event_bus_stats:
+            result["bus"] = stats.event_bus_stats.to_dict()
+        if event_dispatcher:
+            result["dispatcher"] = event_dispatcher.health()
+        return result
 
     @router.post("/events", status_code=201)
     def api_post_event(body: dict):
@@ -132,6 +144,115 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 logger.error("SSE stream error: %s", e, exc_info=True)
                 if stats.event_bus_stats:
                     stats.event_bus_stats.record_error(f"SSE stream: {e}")
+                yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
+            finally:
+                if stats.event_bus_stats:
+                    stats.event_bus_stats.record_sse_disconnect()
+                await conn.close()
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    @router.get("/sse/subscribe")
+    async def api_sse_subscribe(
+        patterns: str = Query("*", description="Comma-separated event patterns (fnmatch)"),
+        project: str | None = Query(None),
+    ):
+        """Pattern-based SSE subscription.
+
+        Streams events matching any of the given patterns (fnmatch syntax).
+        Supports reconnection via Last-Event-ID header.
+
+        Examples:
+        - patterns=work_item.*,notification.* — work item + notification events
+        - patterns=* — all events
+        - patterns=deliverable.created,work_item.gated — specific events
+        """
+        pattern_list = [p.strip() for p in patterns.split(",") if p.strip()]
+        if not pattern_list:
+            pattern_list = ["*"]
+
+        def _matches(event_type: str) -> bool:
+            return any(fnmatch.fnmatch(event_type, p) for p in pattern_list)
+
+        async def event_generator():
+            import psycopg
+
+            dsn = db._dsn
+            try:
+                conn = await psycopg.AsyncConnection.connect(
+                    dsn, autocommit=True,
+                )
+            except Exception as e:
+                logger.error("SSE subscribe: failed to connect: %s", e)
+                yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
+                return
+
+            if stats.event_bus_stats:
+                stats.event_bus_stats.record_sse_connect()
+            try:
+                await conn.execute("LISTEN cairn_events")
+
+                # Send initial connected event with subscription info
+                yield (
+                    f"event: connected\n"
+                    f"data: {json.dumps({'patterns': pattern_list, 'project': project})}\n\n"
+                )
+
+                last_heartbeat = time.monotonic()
+                event_counter = 0
+
+                while True:
+                    try:
+                        async for notify in conn.notifies(
+                            timeout=EVENT_STREAM_HEARTBEAT_INTERVAL,
+                        ):
+                            try:
+                                data = json.loads(notify.payload)
+                            except (json.JSONDecodeError, TypeError):
+                                continue
+
+                            evt_type = data.get("event_type", "")
+
+                            # Pattern filter
+                            if not _matches(evt_type):
+                                continue
+
+                            # Project filter
+                            if project and data.get("project") != project:
+                                continue
+
+                            event_counter += 1
+                            event_id = data.get("event_id", event_counter)
+
+                            yield (
+                                f"id: {event_id}\n"
+                                f"event: event\n"
+                                f"data: {json.dumps(data, default=str)}\n\n"
+                            )
+                            if stats.event_bus_stats:
+                                stats.event_bus_stats.record_sse_event()
+                            last_heartbeat = time.monotonic()
+                            break
+                    except asyncio.TimeoutError:
+                        pass
+
+                    now = time.monotonic()
+                    if now - last_heartbeat >= EVENT_STREAM_HEARTBEAT_INTERVAL:
+                        yield f"event: heartbeat\ndata: {json.dumps({'ts': int(now)})}\n\n"
+                        last_heartbeat = now
+
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.error("SSE subscribe error: %s", e, exc_info=True)
                 yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
             finally:
                 if stats.event_bus_stats:

@@ -617,6 +617,61 @@ export interface GatedItem {
   project: string;
 }
 
+// --- Deliverable types ---
+
+export type DeliverableStatus = "draft" | "pending_review" | "approved" | "revised" | "rejected";
+
+export interface Deliverable {
+  id: number;
+  work_item_id: number;
+  version: number;
+  status: DeliverableStatus;
+  summary: string;
+  changes: Array<{ description: string; type: string }>;
+  decisions: Array<{ decision: string; rationale: string }>;
+  open_items: Array<{ description: string; priority: string }>;
+  metrics: Record<string, unknown>;
+  reviewer_notes: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined fields from list_pending
+  work_item_title?: string;
+  project_name?: string;
+}
+
+export interface PendingDeliverables {
+  items: Deliverable[];
+  limit: number;
+  offset: number;
+}
+
+// --- Notification types ---
+
+export type NotificationSeverity = "info" | "warning" | "error" | "success";
+
+export interface Notification {
+  id: number;
+  subscription_id: number | null;
+  event_id: number | null;
+  title: string;
+  body: string | null;
+  severity: NotificationSeverity;
+  is_read: boolean;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  read_at: string | null;
+}
+
+export interface NotificationList {
+  items: Notification[];
+  total: number;
+  unread: number;
+  limit: number;
+  offset: number;
+}
+
 export interface ReadyQueue {
   project: string;
   items: Array<{ id: number; display_id: string; title: string; priority: number; item_type: string }>;
@@ -1328,6 +1383,56 @@ export const api = {
 
   sessionWorkItems: (sessionName: string) =>
     get<WorkItemSessionLink[]>(`/sessions/${encodeURIComponent(sessionName)}/work-items`),
+
+  // --- Deliverables ---
+
+  deliverable: (workItemId: number | string, version?: number) =>
+    get<Deliverable>(`/work-items/${workItemId}/deliverable`, version ? { version: String(version) } : {}),
+
+  deliverables: (workItemId: number | string) =>
+    get<Deliverable[]>(`/work-items/${workItemId}/deliverables`),
+
+  pendingDeliverables: (opts?: { project?: string; limit?: string; offset?: string }) =>
+    get<PendingDeliverables>("/deliverables/pending", opts),
+
+  createDeliverable: (workItemId: number | string, body: {
+    summary: string; changes?: Array<{ description: string; type: string }>;
+    decisions?: Array<{ decision: string; rationale: string }>;
+    open_items?: Array<{ description: string; priority: string }>;
+    metrics?: Record<string, unknown>; status?: string;
+  }) => post<Deliverable>(`/work-items/${workItemId}/deliverable`, body),
+
+  submitDeliverable: (workItemId: number | string) =>
+    post<Deliverable>(`/work-items/${workItemId}/deliverable/submit`, {}),
+
+  reviewDeliverable: (workItemId: number | string, body: {
+    action: "approve" | "revise" | "reject"; reviewer?: string; notes?: string;
+  }) => post<Deliverable>(`/work-items/${workItemId}/deliverable/review`, body),
+
+  // --- Notifications ---
+
+  notifications: (opts?: { unread_only?: string; limit?: string; offset?: string }) =>
+    get<NotificationList>("/notifications", opts),
+
+  unreadCount: () =>
+    get<{ unread: number }>("/notifications/unread-count"),
+
+  markNotificationRead: (id: number) =>
+    post<{ id: number; is_read: boolean }>(`/notifications/${id}/read`, {}),
+
+  markAllNotificationsRead: () =>
+    post<{ marked: number }>("/notifications/read-all", {}),
+
+  // --- Push notifications ---
+
+  pushStatus: () =>
+    get<{ enabled: boolean; url?: string; topic?: string }>("/push/status"),
+
+  pushTest: (title?: string, body?: string) =>
+    post<{ sent: boolean; error?: string }>("/push/test", {
+      ...(title && { title }),
+      ...(body && { body }),
+    }),
 
   // --- Memory CRUD ---
 

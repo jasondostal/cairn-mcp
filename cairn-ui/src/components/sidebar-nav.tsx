@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { NotificationBell } from "@/components/notification-bell";
 
 function useVisibilityPolling(pollFn: () => void, intervalMs: number) {
   useEffect(() => {
@@ -121,12 +122,15 @@ export function SidebarNav() {
           <img src="/cairn-mark-trail.svg" alt="Cairn" className="h-5 w-5" />
           <span className="text-lg font-semibold tracking-tight">Cairn</span>
         </Link>
-        <button
-          onClick={() => setOpen(!open)}
-          className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-        >
-          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
+        <div className="flex items-center gap-1">
+          <NotificationBell />
+          <button
+            onClick={() => setOpen(!open)}
+            className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          >
+            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
       </header>
 
       {/* Mobile drawer */}
@@ -153,9 +157,12 @@ export function SidebarNav() {
             <img src="/cairn-mark-trail.svg" alt="Cairn" className="h-5 w-5" />
             <span className="text-lg font-semibold tracking-tight">Cairn</span>
           </Link>
-          <div className="text-[10px] text-muted-foreground/50 tabular-nums text-right leading-tight">
-            {version && <div>v{version}</div>}
-            {time && <div>{time}</div>}
+          <div className="flex items-center gap-1.5">
+            <NotificationBell />
+            <div className="text-[10px] text-muted-foreground/50 tabular-nums text-right leading-tight">
+              {version && <div>v{version}</div>}
+              {time && <div>{time}</div>}
+            </div>
           </div>
         </div>
         <nav className="flex flex-1 flex-col p-2 overflow-y-auto">

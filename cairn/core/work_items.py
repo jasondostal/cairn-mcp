@@ -690,6 +690,45 @@ class WorkItemManager:
         rows = self.db.execute(query, tuple(params))
         total = rows[0]["_total"] if rows else 0
 
+        # When include_children is requested without a parent_id, fetch all
+        # descendants of the items in the result set so the UI can build a
+        # complete tree. Without this, children beyond the LIMIT are invisible.
+        if include_children and parent_id is None and rows:
+            returned_ids = {r["id"] for r in rows}
+            parents_with_children = [
+                r["id"] for r in rows if r["children_count"] > 0
+            ]
+            if parents_with_children:
+                # Recursively collect all descendants of items in the result
+                ph = ", ".join(["%s"] * len(parents_with_children))
+                child_rows = self.db.execute(
+                    f"""
+                    WITH RECURSIVE descendants AS (
+                        SELECT id FROM work_items WHERE parent_id IN ({ph})
+                        UNION ALL
+                        SELECT c.id FROM work_items c
+                        JOIN descendants d ON c.parent_id = d.id
+                    )
+                    SELECT wi.id, wi.seq_num, wi.title, wi.item_type, wi.priority,
+                           wi.status, wi.assignee, wi.parent_id, wi.session_name,
+                           wi.risk_tier, wi.gate_type, wi.agent_state,
+                           wi.created_at, wi.updated_at, wi.completed_at, wi.cancelled_at,
+                           p.name AS project, p.work_item_prefix,
+                           COALESCE(cc.cnt, 0) AS children_count,
+                           0 AS _total
+                    FROM work_items wi
+                    JOIN descendants d ON wi.id = d.id
+                    LEFT JOIN projects p ON wi.project_id = p.id
+                    LEFT JOIN LATERAL (
+                        SELECT COUNT(*) AS cnt FROM work_items c WHERE c.parent_id = wi.id
+                    ) cc ON true
+                    WHERE wi.id NOT IN ({", ".join(["%s"] * len(returned_ids))})
+                    ORDER BY wi.priority DESC, wi.created_at DESC
+                    """,
+                    tuple(parents_with_children) + tuple(returned_ids),
+                )
+                rows = list(rows) + list(child_rows)
+
         items = [
             {
                 "id": r["id"],
@@ -1271,6 +1310,7 @@ class WorkItemManager:
                 "display_id": item_detail["display_id"],
                 "title": item_detail["title"],
                 "description": item_detail.get("description"),
+                "item_type": item_detail.get("item_type", "task"),
                 "acceptance_criteria": item_detail.get("acceptance_criteria"),
                 "risk_tier": item_detail.get("risk_tier", 0),
                 "risk_label": RiskTier.LABELS.get(item_detail.get("risk_tier", 0), "patrol"),
@@ -1285,6 +1325,151 @@ class WorkItemManager:
                 for m in item_detail.get("linked_memories", [])
             ],
             "parent_chain": parent_chain,
+        }
+
+    @track_operation("work_items.decomposition_context")
+    def decomposition_context(self, work_item_id: int | str) -> dict:
+        """Assemble context for epic decomposition by a coordinator agent.
+
+        Returns the epic details plus existing children (if any), so the
+        coordinator can reason about what subtasks to create, what's already
+        been decomposed, and what dependencies exist.
+        """
+        briefing = self.generate_briefing(work_item_id)
+        wi = briefing["work_item"]
+
+        # Fetch existing children
+        item = self._resolve_id(work_item_id)
+        existing_children = []
+        if item:
+            rows = self.db.execute(
+                """SELECT wi.id, wi.seq_num, wi.title, wi.description,
+                          wi.status, wi.item_type, wi.priority, wi.risk_tier,
+                          wi.assignee, p.work_item_prefix
+                   FROM work_items wi
+                   JOIN projects p ON wi.project_id = p.id
+                   WHERE wi.parent_id = %s
+                   ORDER BY wi.priority DESC, wi.created_at ASC""",
+                (item["id"],),
+            )
+            for r in rows:
+                existing_children.append({
+                    "display_id": self._display_id_from_row(r),
+                    "title": r["title"],
+                    "description": r.get("description"),
+                    "status": r["status"],
+                    "item_type": r["item_type"],
+                    "priority": r["priority"],
+                    "risk_tier": r.get("risk_tier", 0),
+                    "assignee": r.get("assignee"),
+                })
+
+        return {
+            **briefing,
+            "existing_children": existing_children,
+            "children_count": len(existing_children),
+            "is_re_decomposition": len(existing_children) > 0,
+        }
+
+    # ------------------------------------------------------------------
+    # Progress monitoring (v0.65.0 — ca-152)
+    # ------------------------------------------------------------------
+
+    @track_operation("work_items.progress_summary")
+    def progress_summary(
+        self,
+        work_item_id: int | str,
+        stale_threshold_minutes: int = 10,
+    ) -> dict:
+        """Aggregate progress of all subtasks under a parent work item.
+
+        Returns status counts, stale/stuck agents, blocked items, and a
+        human-readable progress line. Used by coordinators to monitor workers.
+        """
+        item = self._resolve_id(work_item_id)
+        if not item:
+            raise ValueError(f"Work item {work_item_id} not found")
+
+        rows = self.db.execute(
+            """SELECT wi.id, wi.seq_num, wi.title, wi.status, wi.assignee,
+                      wi.agent_state, wi.last_heartbeat, wi.gate_type,
+                      wi.risk_tier, wi.item_type,
+                      p.work_item_prefix,
+                      EXTRACT(EPOCH FROM (NOW() - wi.last_heartbeat)) / 60.0
+                          AS heartbeat_age_minutes
+               FROM work_items wi
+               JOIN projects p ON wi.project_id = p.id
+               WHERE wi.parent_id = %s
+               ORDER BY wi.priority DESC, wi.created_at ASC""",
+            (item["id"],),
+        )
+
+        # Status counts
+        status_counts: dict[str, int] = {}
+        stale_agents: list[dict] = []
+        blocked_items: list[dict] = []
+        children: list[dict] = []
+
+        for r in rows:
+            status = r["status"]
+            status_counts[status] = status_counts.get(status, 0) + 1
+            display_id = self._display_id_from_row(r)
+
+            child_info = {
+                "display_id": display_id,
+                "title": r["title"],
+                "status": status,
+                "assignee": r.get("assignee"),
+                "agent_state": r.get("agent_state"),
+                "heartbeat_age_minutes": round(r["heartbeat_age_minutes"], 1) if r.get("heartbeat_age_minutes") else None,
+            }
+            children.append(child_info)
+
+            # Detect stale agents
+            if (status == "in_progress"
+                    and r.get("heartbeat_age_minutes") is not None
+                    and r["heartbeat_age_minutes"] > stale_threshold_minutes):
+                stale_agents.append({
+                    "display_id": display_id,
+                    "title": r["title"],
+                    "assignee": r.get("assignee"),
+                    "heartbeat_age_minutes": round(r["heartbeat_age_minutes"], 1),
+                    "agent_state": r.get("agent_state"),
+                })
+
+            # Detect blocked/gated items
+            if r.get("gate_type") or status == "blocked":
+                blocked_items.append({
+                    "display_id": display_id,
+                    "title": r["title"],
+                    "gate_type": r.get("gate_type"),
+                    "status": status,
+                })
+
+        total = len(rows)
+        done = status_counts.get("done", 0)
+        in_progress = status_counts.get("in_progress", 0)
+        blocked = status_counts.get("blocked", 0)
+        open_count = status_counts.get("open", 0) + status_counts.get("ready", 0)
+
+        # Human-readable progress line
+        progress_line = f"{done}/{total} complete"
+        if in_progress:
+            progress_line += f", {in_progress} in progress"
+        if blocked:
+            progress_line += f", {blocked} blocked"
+        if stale_agents:
+            progress_line += f", {len(stale_agents)} stale"
+
+        return {
+            "parent_display_id": self._display_id(item),
+            "total_children": total,
+            "status_counts": status_counts,
+            "progress_line": progress_line,
+            "all_complete": done == total and total > 0,
+            "stale_agents": stale_agents,
+            "blocked_items": blocked_items,
+            "children": children,
         }
 
     # ------------------------------------------------------------------

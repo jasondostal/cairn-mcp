@@ -19,6 +19,7 @@ from cairn.core.constants import (
     ActivityType,
 )
 
+from cairn.core.agents import AgentRegistry, validate_dispatch
 from cairn.core.utils import get_or_create_project, get_project
 from cairn.core.work_items import WorkItemManager
 from cairn.integrations.interface import WorkspaceBackend, WorkspaceBackendError
@@ -52,6 +53,7 @@ class WorkspaceManager:
         self.work_item_manager = work_item_manager
         self.default_agent = default_agent
         self.budget_tokens = budget_tokens
+        self.agent_registry: AgentRegistry | None = None
 
     # -- backend resolution --------------------------------------------------
 
@@ -268,10 +270,24 @@ class WorkspaceManager:
         instructions: str | None = task
 
         # Generate dispatch briefing from work item (overrides generic context)
+        # Use decomposition_context for coordinators dispatched against epics.
         briefing: dict[str, Any] | None = None
         if work_item_id and self.work_item_manager:
             try:
+                # Check if this is a coordinator-on-epic dispatch
+                agent_def = None
+                if self.agent_registry:
+                    agent_def = self.agent_registry.get(agent or self.default_agent)
                 briefing = self.work_item_manager.generate_briefing(work_item_id)
+                if (agent_def and agent_def.is_coordinator
+                        and briefing.get("work_item", {}).get("item_type") in ("epic", None)):
+                    # Enrich with decomposition context
+                    try:
+                        decomp = self.work_item_manager.decomposition_context(work_item_id)
+                        briefing = decomp
+                    except Exception:
+                        logger.warning("Decomposition context failed for %s, using standard briefing",
+                                       work_item_id, exc_info=True)
             except Exception:
                 logger.warning("Failed to generate briefing for work item %s", work_item_id, exc_info=True)
 
@@ -324,7 +340,11 @@ class WorkspaceManager:
 
         # Dispatch briefing takes priority over generic context
         if briefing:
-            briefing_text = self._format_briefing(briefing)
+            # Resolve agent definition for system prompt injection
+            agent_def = None
+            if self.agent_registry:
+                agent_def = self.agent_registry.get(agent)
+            briefing_text = self._format_briefing(briefing, agent_def=agent_def)
             message_parts.append(briefing_text)
             result["context_injected"] = True
             result["briefing"] = True
@@ -437,17 +457,31 @@ class WorkspaceManager:
         else:
             return {"error": "Either work_item_id or (project + title) is required"}
 
-        # 2. Determine backend and assignee
+        # 2. Resolve agent definition and validate dispatch
+        agent_def = None
+        if self.agent_registry:
+            agent_def = self.agent_registry.get_or_default(agent)
+            # Auto-set risk_tier from agent definition if not explicitly provided
+            if risk_tier is None:
+                risk_tier = agent_def.default_risk_tier
+            # Validate: e.g. coordinators can't be dispatched to subtasks
+            errors = validate_dispatch(agent_def, wi)
+            if errors:
+                return {"error": "; ".join(errors), "validation_errors": errors}
+            # Use agent name from definition for consistency
+            agent = agent_def.name
+
+        # 3. Determine backend and assignee
         backend_name = backend or self._default_backend
         assignee_name = assignee or f"agent:{backend_name}"
 
-        # 3. Claim the work item
+        # 4. Claim the work item
         try:
             self.work_item_manager.claim(wi["id"], assignee_name)
         except ValueError as e:
             return {"error": str(e)}
 
-        # 4. Create session (handles briefing + context + backend routing)
+        # 5. Create session (handles briefing + context + backend routing)
         session_result = self.create_session(
             project=wi_project,
             work_item_id=wi["id"],
@@ -463,7 +497,7 @@ class WorkspaceManager:
                 "id": wi["id"], "display_id": wi.get("display_id"), "title": wi.get("title"),
             }}
 
-        # 5. Log dispatch activity
+        # 6. Log dispatch activity
         self.work_item_manager._log_activity(
             wi["id"],
             actor=assignee_name,
@@ -740,14 +774,20 @@ class WorkspaceManager:
 
     # -- private helpers -----------------------------------------------------
 
-    def _format_briefing(self, briefing: dict[str, Any]) -> str:
+    def _format_briefing(self, briefing: dict[str, Any], *, agent_def=None) -> str:
         """Format a work item dispatch briefing into a prompt for the agent.
 
         Produces a structured assignment that tells the agent exactly what it's
         working on, including acceptance criteria, constraints, and linked context.
+        If an agent_def is provided, its system_prompt is prepended as role context.
         """
         wi = briefing.get("work_item", {})
         sections: list[str] = []
+
+        # Inject agent role context if available
+        if agent_def and agent_def.system_prompt:
+            sections.append(agent_def.system_prompt.strip())
+            sections.append("")  # blank line separator
 
         sections.append("[DISPATCH BRIEFING]")
         sections.append(f"You are assigned to work item **{wi.get('display_id', '?')}**: {wi.get('title', 'Untitled')}")
@@ -791,11 +831,40 @@ class WorkspaceManager:
             sections.append(f"**Human answered:** {resp_text}")
             sections.append("Do NOT re-ask this question. Proceed with the chosen option.")
 
-        sections.append("\n## Instructions")
-        sections.append("- Update this work item's status as you progress (claim → in_progress → done)")
-        sections.append("- Use heartbeat to report progress")
-        sections.append("- Set a gate if you need human input before proceeding")
-        sections.append("- You may call orient() or search() via MCP for additional project context")
+        # Decomposition context for coordinator-on-epic dispatches
+        existing_children = briefing.get("existing_children", [])
+        is_decomposition = "existing_children" in briefing
+        if is_decomposition:
+            if existing_children:
+                sections.append("\n## Existing Subtasks")
+                for child in existing_children:
+                    status_icon = {"done": "done", "in_progress": "WIP", "blocked": "BLOCKED"}.get(
+                        child.get("status", ""), "pending")
+                    sections.append(
+                        f"- [{status_icon}] **{child['display_id']}**: {child['title']}"
+                    )
+                sections.append(
+                    f"\n{len(existing_children)} subtask(s) already exist. "
+                    "Review before creating duplicates."
+                )
+
+            sections.append("\n## Decomposition Instructions")
+            sections.append("You are a **coordinator** assigned to decompose this epic into subtasks.")
+            sections.append("1. Use `orient()` and `search()` to gather project context")
+            sections.append("2. Use `think()` to reason about the decomposition strategy")
+            sections.append("3. Create subtasks via `work_items(action='add_child', work_item_id=..., title=..., description=...)`")
+            sections.append("4. Set dependencies between subtasks using `work_items(action='block', ...)`")
+            sections.append("5. Aim for 3-7 subtasks — each independently dispatchable")
+            sections.append("6. Set a `human` gate on the epic for decomposition approval:")
+            sections.append("   `work_items(action='set_gate', work_item_id=..., gate_type='human', "
+                          "gate_data={'question': 'Review decomposition', 'options': ['approve', 'adjust']})`")
+            sections.append("7. **Do NOT dispatch workers** until the gate is resolved")
+        else:
+            sections.append("\n## Instructions")
+            sections.append("- Update this work item's status as you progress (claim → in_progress → done)")
+            sections.append("- Use heartbeat to report progress")
+            sections.append("- Set a gate if you need human input before proceeding")
+            sections.append("- You may call orient() or search() via MCP for additional project context")
 
         return "\n".join(sections)
 

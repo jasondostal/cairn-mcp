@@ -213,7 +213,21 @@ class ActivityType:
     CREATED = "created"
     PROMOTED = "promoted"
     DISPATCHED = "dispatched"
-    ALL = {STATUS_CHANGE, CLAIM, GATE_SET, GATE_RESOLVED, HEARTBEAT, CHECKPOINT, NOTE, CREATED, PROMOTED, DISPATCHED}
+    DELIVERABLE = "deliverable"
+    REVIEW = "review"
+    ALL = {STATUS_CHANGE, CLAIM, GATE_SET, GATE_RESOLVED, HEARTBEAT, CHECKPOINT, NOTE, CREATED, PROMOTED, DISPATCHED, DELIVERABLE, REVIEW}
+
+
+class DeliverableStatus:
+    DRAFT = "draft"
+    PENDING_REVIEW = "pending_review"
+    APPROVED = "approved"
+    REVISED = "revised"
+    REJECTED = "rejected"
+
+    REVIEWABLE = {DRAFT, PENDING_REVIEW}
+    TERMINAL = {APPROVED, REVISED, REJECTED}
+    ALL = REVIEWABLE | TERMINAL
 
 
 # ============================================================
@@ -229,6 +243,8 @@ VALID_THOUGHT_TYPES = [
     "observation", "hypothesis", "question", "reasoning", "conclusion",
     "assumption", "analysis", "general", "alternative", "branch",
     "insight", "realization", "pattern", "challenge", "response",
+    # Coordinator deliberation types (ca-102)
+    "tradeoff", "decision", "risk", "dependency", "scope",
 ]
 
 
