@@ -1,5 +1,7 @@
 """Cairn MCP Server. Entry point for the semantic memory system."""
 
+import asyncio
+import concurrent.futures
 import logging
 from contextlib import asynccontextmanager
 
@@ -235,7 +237,7 @@ mcp = FastMCP(**mcp_kwargs)
 # ============================================================
 
 @mcp.tool()
-def store(
+async def store(
     content: str,
     project: str,
     memory_type: str = "note",
@@ -282,18 +284,22 @@ def store(
     """
     try:
         validate_store(content, project, memory_type, importance, tags, session_name)
-        return memory_store.store(
-            content=content,
-            project=project,
-            memory_type=memory_type,
-            importance=importance,
-            tags=tags,
-            session_name=session_name,
-            related_files=related_files,
-            related_ids=related_ids,
-            file_hashes=file_hashes,
-            author=author,
-        )
+
+        def _do_store():
+            return memory_store.store(
+                content=content,
+                project=project,
+                memory_type=memory_type,
+                importance=importance,
+                tags=tags,
+                session_name=session_name,
+                related_files=related_files,
+                related_ids=related_ids,
+                file_hashes=file_hashes,
+                author=author,
+            )
+
+        return await asyncio.to_thread(_do_store)
     except ValidationError as e:
         return {"error": str(e)}
     except Exception as e:
@@ -306,7 +312,7 @@ def store(
 # ============================================================
 
 @mcp.tool()
-def search(
+async def search(
     query: str,
     project: str | None = None,
     memory_type: str | None = None,
@@ -351,53 +357,57 @@ def search(
         if search_mode not in VALID_SEARCH_MODES:
             return {"error": f"invalid search_mode: {search_mode}. Must be one of: {', '.join(VALID_SEARCH_MODES)}"}
 
-        results = search_engine.search(
-            query=query,
-            project=project,
-            memory_type=memory_type,
-            search_mode=search_mode,
-            limit=limit,
-            include_full=include_full,
-        )
-
-        # Apply budget cap
-        budget = config.budget.search
-        if budget > 0 and results:
-            content_key = "content" if include_full else "summary"
-            results, meta = apply_list_budget(
-                results, budget, content_key,
-                per_item_max=BUDGET_SEARCH_PER_ITEM,
-                overflow_message=(
-                    "...{omitted} more results omitted. "
-                    "Use recall(ids=[...]) for full content, or narrow your query."
-                ),
+        def _do_search():
+            results = search_engine.search(
+                query=query,
+                project=project,
+                memory_type=memory_type,
+                search_mode=search_mode,
+                limit=limit,
+                include_full=include_full,
             )
-            if meta["omitted"] > 0:
-                results.append({"_overflow": meta["overflow_message"]})
 
-        # Publish search.executed event for access tracking
-        if event_bus and results:
-            try:
-                memory_ids = [r["id"] for r in results if isinstance(r, dict) and "id" in r]
-                event_bus.publish(
-                    session_name="",
-                    event_type="search.executed",
-                    project=project,
-                    payload={
-                        "query": query[:200],
-                        "result_count": len(memory_ids),
-                        "memory_ids": memory_ids[:20],
-                        "search_mode": search_mode,
-                    },
+            # Apply budget cap
+            budget = config.budget.search
+            if budget > 0 and results:
+                content_key = "content" if include_full else "summary"
+                results_capped, meta = apply_list_budget(
+                    results, budget, content_key,
+                    per_item_max=BUDGET_SEARCH_PER_ITEM,
+                    overflow_message=(
+                        "...{omitted} more results omitted. "
+                        "Use recall(ids=[...]) for full content, or narrow your query."
+                    ),
                 )
-            except Exception:
-                logger.debug("Failed to publish search.executed event", exc_info=True)
+                if meta["omitted"] > 0:
+                    results_capped.append({"_overflow": meta["overflow_message"]})
+                results = results_capped
 
-        # Confidence gating: wrap results with assessment when active
-        confidence = search_engine.assess_confidence(query, results)
-        if confidence is not None:
-            return {"results": results, "confidence": confidence}
-        return results
+            # Publish search.executed event for access tracking
+            if event_bus and results:
+                try:
+                    memory_ids = [r["id"] for r in results if isinstance(r, dict) and "id" in r]
+                    event_bus.publish(
+                        session_name="",
+                        event_type="search.executed",
+                        project=project,
+                        payload={
+                            "query": query[:200],
+                            "result_count": len(memory_ids),
+                            "memory_ids": memory_ids[:20],
+                            "search_mode": search_mode,
+                        },
+                    )
+                except Exception:
+                    logger.debug("Failed to publish search.executed event", exc_info=True)
+
+            # Confidence gating: wrap results with assessment when active
+            confidence = search_engine.assess_confidence(query, results)
+            if confidence is not None:
+                return {"results": results, "confidence": confidence}
+            return results
+
+        return await asyncio.to_thread(_do_search)
     except ValidationError as e:
         return {"error": str(e)}
     except Exception as e:
@@ -410,7 +420,7 @@ def search(
 # ============================================================
 
 @mcp.tool()
-def recall(ids: list[int]) -> list[dict]:
+async def recall(ids: list[int]) -> list[dict]:
     """Retrieve full content for specific memory IDs. Second step in progressive disclosure.
 
     WHEN TO USE: After search returns relevant summaries and you need the complete content.
@@ -429,37 +439,42 @@ def recall(ids: list[int]) -> list[dict]:
             return {"error": "ids list is required and cannot be empty"}
         if len(ids) > MAX_RECALL_IDS:
             return {"error": f"Maximum {MAX_RECALL_IDS} IDs per recall. Batch into multiple calls."}
-        results = memory_store.recall(ids)
 
-        # Apply budget cap
-        budget = config.budget.recall
-        if budget > 0 and results:
-            results, meta = apply_list_budget(
-                results, budget, "content",
-                per_item_max=BUDGET_RECALL_PER_ITEM,
-                overflow_message=(
-                    "...{omitted} memories truncated from response. "
-                    "Recall fewer IDs per call for full content."
-                ),
-            )
-            if meta["omitted"] > 0:
-                results.append({"_overflow": meta["overflow_message"]})
-        # Publish memory.recalled event for access tracking
-        if event_bus and results:
-            try:
-                memory_ids = [r["id"] for r in results if isinstance(r, dict) and "id" in r]
-                event_bus.publish(
-                    session_name="",
-                    event_type="memory.recalled",
-                    payload={
-                        "memory_ids": memory_ids,
-                        "count": len(memory_ids),
-                    },
+        def _do_recall():
+            results = memory_store.recall(ids)
+
+            # Apply budget cap
+            budget = config.budget.recall
+            if budget > 0 and results:
+                results_capped, meta = apply_list_budget(
+                    results, budget, "content",
+                    per_item_max=BUDGET_RECALL_PER_ITEM,
+                    overflow_message=(
+                        "...{omitted} memories truncated from response. "
+                        "Recall fewer IDs per call for full content."
+                    ),
                 )
-            except Exception:
-                logger.debug("Failed to publish memory.recalled event", exc_info=True)
+                if meta["omitted"] > 0:
+                    results_capped.append({"_overflow": meta["overflow_message"]})
+                results = results_capped
+            # Publish memory.recalled event for access tracking
+            if event_bus and results:
+                try:
+                    memory_ids = [r["id"] for r in results if isinstance(r, dict) and "id" in r]
+                    event_bus.publish(
+                        session_name="",
+                        event_type="memory.recalled",
+                        payload={
+                            "memory_ids": memory_ids,
+                            "count": len(memory_ids),
+                        },
+                    )
+                except Exception:
+                    logger.debug("Failed to publish memory.recalled event", exc_info=True)
 
-        return results
+            return results
+
+        return await asyncio.to_thread(_do_recall)
     except Exception as e:
         logger.exception("recall failed")
         return {"error": f"Internal error: {e}"}
@@ -470,7 +485,7 @@ def recall(ids: list[int]) -> list[dict]:
 # ============================================================
 
 @mcp.tool()
-def modify(
+async def modify(
     id: int,
     action: str,
     content: str | None = None,
@@ -519,17 +534,21 @@ def modify(
             return {"error": f"invalid memory_type: {memory_type}"}
         if importance is not None and not (0.0 <= importance <= 1.0):
             return {"error": "importance must be between 0.0 and 1.0"}
-        return memory_store.modify(
-            memory_id=id,
-            action=action,
-            content=content,
-            memory_type=memory_type,
-            importance=importance,
-            tags=tags,
-            reason=reason,
-            project=project,
-            author=author,
-        )
+
+        def _do_modify():
+            return memory_store.modify(
+                memory_id=id,
+                action=action,
+                content=content,
+                memory_type=memory_type,
+                importance=importance,
+                tags=tags,
+                reason=reason,
+                project=project,
+                author=author,
+            )
+
+        return await asyncio.to_thread(_do_modify)
     except Exception as e:
         logger.exception("modify failed")
         return {"error": f"Internal error: {e}"}
@@ -540,7 +559,7 @@ def modify(
 # ============================================================
 
 @mcp.tool()
-def rules(project: str | None = None) -> list[dict]:
+async def rules(project: str | None = None) -> list[dict]:
     """Get behavioral rules and guardrails.
 
     CRITICAL: Call this at session start. Rules define how you should behave —
@@ -559,21 +578,24 @@ def rules(project: str | None = None) -> list[dict]:
         project: Project name to get rules for. Omit for global rules only.
     """
     try:
-        result = memory_store.get_rules(project)
-        items = result["items"]
-        budget = config.budget.rules
-        if budget > 0 and items:
-            items, meta = apply_list_budget(
-                items, budget, "content",
-                per_item_max=BUDGET_RULES_PER_ITEM,
-                overflow_message=(
-                    "...{omitted} more rules omitted. "
-                    "Use search(query='topic', memory_type='rule') for targeted retrieval."
-                ),
-            )
-            if meta["omitted"] > 0:
-                items.append({"_overflow": meta["overflow_message"]})
-        return items
+        def _do_rules():
+            result = memory_store.get_rules(project)
+            items = result["items"]
+            budget = config.budget.rules
+            if budget > 0 and items:
+                items, meta = apply_list_budget(
+                    items, budget, "content",
+                    per_item_max=BUDGET_RULES_PER_ITEM,
+                    overflow_message=(
+                        "...{omitted} more rules omitted. "
+                        "Use search(query='topic', memory_type='rule') for targeted retrieval."
+                    ),
+                )
+                if meta["omitted"] > 0:
+                    items.append({"_overflow": meta["overflow_message"]})
+            return items
+
+        return await asyncio.to_thread(_do_rules)
     except Exception as e:
         logger.exception("rules failed")
         return {"error": f"Internal error: {e}"}
@@ -610,8 +632,6 @@ async def insights(
         min_confidence: Minimum cluster confidence score (0.0-1.0, default 0.5).
         limit: Maximum clusters to return (default 10).
     """
-    import asyncio
-
     try:
         def _do_insights():
             # Check staleness and recluster if needed
@@ -670,7 +690,7 @@ async def insights(
 # ============================================================
 
 @mcp.tool()
-def projects(
+async def projects(
     action: str,
     project: str | None = None,
     doc_type: str | None = None,
@@ -709,34 +729,37 @@ def projects(
         link_type: Relationship type for link (default 'related').
     """
     try:
-        if action == "list":
-            return project_manager.list_all()["items"]
-
-        if not project:
+        if not project and action != "list":
             return {"error": "project is required for this action"}
 
-        if action == "create_doc":
-            if not doc_type or not content:
-                return {"error": "doc_type and content are required for create_doc"}
-            return project_manager.create_doc(project, doc_type, content, title=title)
+        def _do_projects():
+            if action == "list":
+                return project_manager.list_all()["items"]
 
-        if action == "get_docs":
-            return project_manager.get_docs(project, doc_type=doc_type)
+            if action == "create_doc":
+                if not doc_type or not content:
+                    return {"error": "doc_type and content are required for create_doc"}
+                return project_manager.create_doc(project, doc_type, content, title=title)
 
-        if action == "update_doc":
-            if not doc_id or not content:
-                return {"error": "doc_id and content are required for update_doc"}
-            return project_manager.update_doc(doc_id, content, title=title)
+            if action == "get_docs":
+                return project_manager.get_docs(project, doc_type=doc_type)
 
-        if action == "link":
-            if not target:
-                return {"error": "target project is required for link"}
-            return project_manager.link(project, target, link_type)
+            if action == "update_doc":
+                if not doc_id or not content:
+                    return {"error": "doc_id and content are required for update_doc"}
+                return project_manager.update_doc(doc_id, content, title=title)
 
-        if action == "get_links":
-            return project_manager.get_links(project)
+            if action == "link":
+                if not target:
+                    return {"error": "target project is required for link"}
+                return project_manager.link(project, target, link_type)
 
-        return {"error": f"Unknown action: {action}"}
+            if action == "get_links":
+                return project_manager.get_links(project)
+
+            return {"error": f"Unknown action: {action}"}
+
+        return await asyncio.to_thread(_do_projects)
     except Exception as e:
         logger.exception("projects failed")
         return {"error": f"Internal error: {e}"}
@@ -747,7 +770,7 @@ def projects(
 # ============================================================
 
 @mcp.tool()
-def tasks(
+async def tasks(
     action: str,
     project: str,
     description: str | None = None,
@@ -792,74 +815,77 @@ def tasks(
         include_completed: Include completed tasks in list (default false).
     """
     try:
-        if action == "create":
-            if not description:
-                return {"error": "description is required for create"}
-            return task_manager.create(project, description)
+        def _do_tasks():
+            if action == "create":
+                if not description:
+                    return {"error": "description is required for create"}
+                return task_manager.create(project, description)
 
-        if action == "complete":
-            if not task_id:
-                return {"error": "task_id is required for complete"}
-            return task_manager.complete(task_id)
+            if action == "complete":
+                if not task_id:
+                    return {"error": "task_id is required for complete"}
+                return task_manager.complete(task_id)
 
-        if action == "list":
-            return task_manager.list_tasks(project, include_completed=include_completed)["items"]
+            if action == "list":
+                return task_manager.list_tasks(project, include_completed=include_completed)["items"]
 
-        if action == "link_memories":
-            if not task_id or not memory_ids:
-                return {"error": "task_id and memory_ids are required for link_memories"}
-            return task_manager.link_memories(task_id, memory_ids)
+            if action == "link_memories":
+                if not task_id or not memory_ids:
+                    return {"error": "task_id and memory_ids are required for link_memories"}
+                return task_manager.link_memories(task_id, memory_ids)
 
-        if action == "promote":
-            if not task_id:
-                return {"error": "task_id is required for promote"}
+            if action == "promote":
+                if not task_id:
+                    return {"error": "task_id is required for promote"}
 
-            # 1. Fetch and validate task
-            task_row = db.execute_one(
-                """SELECT t.id, t.description, t.status, p.name AS project
-                   FROM tasks t
-                   LEFT JOIN projects p ON t.project_id = p.id
-                   WHERE t.id = %s""",
-                (task_id,),
-            )
-            if not task_row:
-                return {"error": f"Task {task_id} not found"}
-            if task_row["status"] != "pending":
-                return {"error": f"Task {task_id} is already {task_row['status']}"}
+                # 1. Fetch and validate task
+                task_row = db.execute_one(
+                    """SELECT t.id, t.description, t.status, p.name AS project
+                       FROM tasks t
+                       LEFT JOIN projects p ON t.project_id = p.id
+                       WHERE t.id = %s""",
+                    (task_id,),
+                )
+                if not task_row:
+                    return {"error": f"Task {task_id} not found"}
+                if task_row["status"] != "pending":
+                    return {"error": f"Task {task_id} is already {task_row['status']}"}
 
-            task_project = task_row["project"] or project
+                task_project = task_row["project"] or project
 
-            # 2. Create work item from task description
-            wi = work_item_manager.create(
-                project=task_project,
-                title=task_row["description"],
-                item_type="task",
-            )
+                # 2. Create work item from task description
+                wi = work_item_manager.create(
+                    project=task_project,
+                    title=task_row["description"],
+                    item_type="task",
+                )
 
-            # 3. Mark task completed
-            task_manager.complete(task_id)
+                # 3. Mark task completed
+                task_manager.complete(task_id)
 
-            # 4. Transfer linked memories
-            linked = db.execute(
-                "SELECT memory_id FROM task_memory_links WHERE task_id = %s",
-                (task_id,),
-            )
-            linked_ids = [r["memory_id"] for r in linked]
-            if linked_ids:
-                work_item_manager.link_memories(wi["id"], linked_ids)
+                # 4. Transfer linked memories
+                linked = db.execute(
+                    "SELECT memory_id FROM task_memory_links WHERE task_id = %s",
+                    (task_id,),
+                )
+                linked_ids = [r["memory_id"] for r in linked]
+                if linked_ids:
+                    work_item_manager.link_memories(wi["id"], linked_ids)
 
-            # 5. Log promoted activity
-            work_item_manager._log_activity(
-                wi["id"],
-                actor="system",
-                activity_type=ActivityType.PROMOTED,
-                content=f"Promoted from task #{task_id}",
-                metadata={"source_task_id": task_id},
-            )
+                # 5. Log promoted activity
+                work_item_manager._log_activity(
+                    wi["id"],
+                    actor="system",
+                    activity_type=ActivityType.PROMOTED,
+                    content=f"Promoted from task #{task_id}",
+                    metadata={"source_task_id": task_id},
+                )
 
-            return {"action": "promoted", "task_id": task_id, "work_item": wi}
+                return {"action": "promoted", "task_id": task_id, "work_item": wi}
 
-        return {"error": f"Unknown action: {action}"}
+            return {"error": f"Unknown action: {action}"}
+
+        return await asyncio.to_thread(_do_tasks)
     except Exception as e:
         logger.exception("tasks failed")
         return {"error": f"Internal error: {e}"}
@@ -870,7 +896,7 @@ def tasks(
 # ============================================================
 
 @mcp.tool()
-def work_items(
+async def work_items(
     action: str,
     project: str | None = None,
     title: str | None = None,
@@ -919,142 +945,145 @@ def work_items(
     - 'gated': Items awaiting gates. Optional: project, gate_type.
     """
     try:
-        if action == "create":
-            if not project or not title:
-                return {"error": "project and title are required for create"}
-            return work_item_manager.create(
-                project=project, title=title, description=description,
-                item_type=item_type or "task", priority=priority or 0,
-                parent_id=parent_id, session_name=session_name,
-                metadata=metadata, acceptance_criteria=acceptance_criteria,
-                constraints=constraints, risk_tier=risk_tier,
-            )
+        def _do_work_items():
+            if action == "create":
+                if not project or not title:
+                    return {"error": "project and title are required for create"}
+                return work_item_manager.create(
+                    project=project, title=title, description=description,
+                    item_type=item_type or "task", priority=priority or 0,
+                    parent_id=parent_id, session_name=session_name,
+                    metadata=metadata, acceptance_criteria=acceptance_criteria,
+                    constraints=constraints, risk_tier=risk_tier,
+                )
 
-        if action == "update":
-            if not work_item_id:
-                return {"error": "work_item_id is required for update"}
-            fields = {}
-            if session_name is not None:
-                fields["_calling_session"] = session_name
-            if title is not None:
-                fields["title"] = title
-            if description is not None:
-                fields["description"] = description
-            if status is not None:
-                fields["status"] = status
-            if priority is not None:
-                fields["priority"] = priority
-            if assignee is not None:
-                fields["assignee"] = assignee
-            if acceptance_criteria is not None:
-                fields["acceptance_criteria"] = acceptance_criteria
-            if item_type is not None:
-                fields["item_type"] = item_type
-            if session_name is not None:
-                fields["session_name"] = session_name
-            if metadata is not None:
-                fields["metadata"] = metadata
-            if risk_tier is not None:
-                fields["risk_tier"] = risk_tier
-            if constraints is not None:
-                fields["constraints"] = constraints
-            if parent_id is not None:
-                fields["parent_id"] = parent_id
-            return work_item_manager.update(work_item_id, **fields)
+            if action == "update":
+                if not work_item_id:
+                    return {"error": "work_item_id is required for update"}
+                fields = {}
+                if session_name is not None:
+                    fields["_calling_session"] = session_name
+                if title is not None:
+                    fields["title"] = title
+                if description is not None:
+                    fields["description"] = description
+                if status is not None:
+                    fields["status"] = status
+                if priority is not None:
+                    fields["priority"] = priority
+                if assignee is not None:
+                    fields["assignee"] = assignee
+                if acceptance_criteria is not None:
+                    fields["acceptance_criteria"] = acceptance_criteria
+                if item_type is not None:
+                    fields["item_type"] = item_type
+                if session_name is not None:
+                    fields["session_name"] = session_name
+                if metadata is not None:
+                    fields["metadata"] = metadata
+                if risk_tier is not None:
+                    fields["risk_tier"] = risk_tier
+                if constraints is not None:
+                    fields["constraints"] = constraints
+                if parent_id is not None:
+                    fields["parent_id"] = parent_id
+                return work_item_manager.update(work_item_id, **fields)
 
-        if action == "claim":
-            if not work_item_id or not assignee:
-                return {"error": "work_item_id and assignee are required for claim"}
-            return work_item_manager.claim(work_item_id, assignee, session_name=session_name)
+            if action == "claim":
+                if not work_item_id or not assignee:
+                    return {"error": "work_item_id and assignee are required for claim"}
+                return work_item_manager.claim(work_item_id, assignee, session_name=session_name)
 
-        if action == "complete":
-            if not work_item_id:
-                return {"error": "work_item_id is required for complete"}
-            return work_item_manager.complete(work_item_id, session_name=session_name)
+            if action == "complete":
+                if not work_item_id:
+                    return {"error": "work_item_id is required for complete"}
+                return work_item_manager.complete(work_item_id, session_name=session_name)
 
-        if action == "add_child":
-            if not work_item_id or not title:
-                return {"error": "work_item_id (parent) and title are required for add_child"}
-            return work_item_manager.add_child(
-                parent_id=work_item_id, title=title, description=description,
-                priority=priority or 0, session_name=session_name,
-                metadata=metadata, acceptance_criteria=acceptance_criteria,
-                constraints=constraints, risk_tier=risk_tier,
-            )
+            if action == "add_child":
+                if not work_item_id or not title:
+                    return {"error": "work_item_id (parent) and title are required for add_child"}
+                return work_item_manager.add_child(
+                    parent_id=work_item_id, title=title, description=description,
+                    priority=priority or 0, session_name=session_name,
+                    metadata=metadata, acceptance_criteria=acceptance_criteria,
+                    constraints=constraints, risk_tier=risk_tier,
+                )
 
-        if action == "block":
-            if not blocker_id or not blocked_id:
-                return {"error": "blocker_id and blocked_id are required for block"}
-            return work_item_manager.block(blocker_id, blocked_id)
+            if action == "block":
+                if not blocker_id or not blocked_id:
+                    return {"error": "blocker_id and blocked_id are required for block"}
+                return work_item_manager.block(blocker_id, blocked_id)
 
-        if action == "unblock":
-            if not blocker_id or not blocked_id:
-                return {"error": "blocker_id and blocked_id are required for unblock"}
-            return work_item_manager.unblock(blocker_id, blocked_id)
+            if action == "unblock":
+                if not blocker_id or not blocked_id:
+                    return {"error": "blocker_id and blocked_id are required for unblock"}
+                return work_item_manager.unblock(blocker_id, blocked_id)
 
-        if action == "list":
-            return work_item_manager.list_items(
-                project=project, status=status, item_type=item_type,
-                assignee=assignee, parent_id=parent_id,
-                include_children=include_children,
-                limit=min(limit, MAX_LIMIT), offset=offset,
-            )
+            if action == "list":
+                return work_item_manager.list_items(
+                    project=project, status=status, item_type=item_type,
+                    assignee=assignee, parent_id=parent_id,
+                    include_children=include_children,
+                    limit=min(limit, MAX_LIMIT), offset=offset,
+                )
 
-        if action == "ready":
-            if not project:
-                return {"error": "project is required for ready"}
-            return work_item_manager.ready_queue(project, limit=min(limit, MAX_LIMIT))
+            if action == "ready":
+                if not project:
+                    return {"error": "project is required for ready"}
+                return work_item_manager.ready_queue(project, limit=min(limit, MAX_LIMIT))
 
-        if action == "get":
-            if not work_item_id:
-                return {"error": "work_item_id is required for get"}
-            return work_item_manager.get(work_item_id)
+            if action == "get":
+                if not work_item_id:
+                    return {"error": "work_item_id is required for get"}
+                return work_item_manager.get(work_item_id)
 
-        if action == "link_memories":
-            if not work_item_id or not memory_ids:
-                return {"error": "work_item_id and memory_ids are required for link_memories"}
-            return work_item_manager.link_memories(work_item_id, memory_ids)
+            if action == "link_memories":
+                if not work_item_id or not memory_ids:
+                    return {"error": "work_item_id and memory_ids are required for link_memories"}
+                return work_item_manager.link_memories(work_item_id, memory_ids)
 
-        if action == "set_gate":
-            if not work_item_id or not gate_type:
-                return {"error": "work_item_id and gate_type are required for set_gate"}
-            return work_item_manager.set_gate(
-                work_item_id, gate_type, gate_data=gate_data, actor=actor,
-            )
+            if action == "set_gate":
+                if not work_item_id or not gate_type:
+                    return {"error": "work_item_id and gate_type are required for set_gate"}
+                return work_item_manager.set_gate(
+                    work_item_id, gate_type, gate_data=gate_data, actor=actor,
+                )
 
-        if action == "resolve_gate":
-            if not work_item_id:
-                return {"error": "work_item_id is required for resolve_gate"}
-            return work_item_manager.resolve_gate(
-                work_item_id, response=gate_response, actor=actor,
-            )
+            if action == "resolve_gate":
+                if not work_item_id:
+                    return {"error": "work_item_id is required for resolve_gate"}
+                return work_item_manager.resolve_gate(
+                    work_item_id, response=gate_response, actor=actor,
+                )
 
-        if action == "heartbeat":
-            if not work_item_id or not assignee:
-                return {"error": "work_item_id and assignee are required for heartbeat"}
-            return work_item_manager.heartbeat(
-                work_item_id, assignee, state=status or "working", note=note,
-                session_name=session_name,
-            )
+            if action == "heartbeat":
+                if not work_item_id or not assignee:
+                    return {"error": "work_item_id and assignee are required for heartbeat"}
+                return work_item_manager.heartbeat(
+                    work_item_id, assignee, state=status or "working", note=note,
+                    session_name=session_name,
+                )
 
-        if action == "activity":
-            if not work_item_id:
-                return {"error": "work_item_id is required for activity"}
-            return work_item_manager.get_activity(
-                work_item_id, limit=min(limit, MAX_LIMIT), offset=offset,
-            )
+            if action == "activity":
+                if not work_item_id:
+                    return {"error": "work_item_id is required for activity"}
+                return work_item_manager.get_activity(
+                    work_item_id, limit=min(limit, MAX_LIMIT), offset=offset,
+                )
 
-        if action == "briefing":
-            if not work_item_id:
-                return {"error": "work_item_id is required for briefing"}
-            return work_item_manager.generate_briefing(work_item_id)
+            if action == "briefing":
+                if not work_item_id:
+                    return {"error": "work_item_id is required for briefing"}
+                return work_item_manager.generate_briefing(work_item_id)
 
-        if action == "gated":
-            return work_item_manager.gated_items(
-                project=project, gate_type=gate_type, limit=min(limit, MAX_LIMIT),
-            )
+            if action == "gated":
+                return work_item_manager.gated_items(
+                    project=project, gate_type=gate_type, limit=min(limit, MAX_LIMIT),
+                )
 
-        return {"error": f"Unknown action: {action}"}
+            return {"error": f"Unknown action: {action}"}
+
+        return await asyncio.to_thread(_do_work_items)
     except ValueError as e:
         return {"error": str(e)}
     except Exception as e:
@@ -1112,8 +1141,6 @@ async def dispatch(
         agent: Agent definition to use (defaults to workspace config).
         assignee: Name for the agent claim (auto-generated if omitted).
     """
-    import asyncio
-
     try:
         return await asyncio.to_thread(
             workspace_manager.dispatch,
@@ -1137,7 +1164,7 @@ async def dispatch(
 # ============================================================
 
 @mcp.tool()
-def think(
+async def think(
     action: str,
     project: str,
     goal: str | None = None,
@@ -1187,35 +1214,38 @@ def think(
         author: Who contributed this thought (e.g., "human", "assistant", a name).
     """
     try:
-        if action == "start":
-            if not goal:
-                return {"error": "goal is required for start"}
-            return thinking_engine.start(project, goal)
+        def _do_think():
+            if action == "start":
+                if not goal:
+                    return {"error": "goal is required for start"}
+                return thinking_engine.start(project, goal)
 
-        if action == "add":
-            if not sequence_id or not thought:
-                return {"error": "sequence_id and thought are required for add"}
-            return thinking_engine.add_thought(sequence_id, thought, thought_type, branch_name, author)
+            if action == "add":
+                if not sequence_id or not thought:
+                    return {"error": "sequence_id and thought are required for add"}
+                return thinking_engine.add_thought(sequence_id, thought, thought_type, branch_name, author)
 
-        if action == "conclude":
-            if not sequence_id or not thought:
-                return {"error": "sequence_id and thought (conclusion) are required for conclude"}
-            return thinking_engine.conclude(sequence_id, thought, author)
+            if action == "conclude":
+                if not sequence_id or not thought:
+                    return {"error": "sequence_id and thought (conclusion) are required for conclude"}
+                return thinking_engine.conclude(sequence_id, thought, author)
 
-        if action == "reopen":
-            if not sequence_id:
-                return {"error": "sequence_id is required for reopen"}
-            return thinking_engine.reopen(sequence_id)
+            if action == "reopen":
+                if not sequence_id:
+                    return {"error": "sequence_id is required for reopen"}
+                return thinking_engine.reopen(sequence_id)
 
-        if action == "get":
-            if not sequence_id:
-                return {"error": "sequence_id is required for get"}
-            return thinking_engine.get_sequence(sequence_id)
+            if action == "get":
+                if not sequence_id:
+                    return {"error": "sequence_id is required for get"}
+                return thinking_engine.get_sequence(sequence_id)
 
-        if action == "list":
-            return thinking_engine.list_sequences(project)["items"]
+            if action == "list":
+                return thinking_engine.list_sequences(project)["items"]
 
-        return {"error": f"Unknown action: {action}"}
+            return {"error": f"Unknown action: {action}"}
+
+        return await asyncio.to_thread(_do_think)
     except Exception as e:
         logger.exception("think failed")
         return {"error": f"Internal error: {e}"}
@@ -1226,14 +1256,14 @@ def think(
 # ============================================================
 
 @mcp.tool()
-def status() -> dict:
+async def status() -> dict:
     """System health and statistics.
 
     WHEN TO USE: Health checks, system overview, "how many memories", "is cairn working",
     verifying deployment status. Quick diagnostic tool — no parameters required.
     """
     try:
-        return get_status(db, config)
+        return await asyncio.to_thread(get_status, db, config)
     except Exception as e:
         logger.exception("status failed")
         return {"error": f"Internal error: {e}"}
@@ -1262,8 +1292,6 @@ async def consolidate(
         project: Project name to consolidate.
         dry_run: If True (default), only recommend. If False, apply changes.
     """
-    import asyncio
-
     try:
         if not project or not project.strip():
             return {"error": "project is required"}
@@ -1297,7 +1325,7 @@ def _fetch_trail_data(
 # ============================================================
 
 @mcp.tool()
-def orient(project: str | None = None) -> dict:
+async def orient(project: str | None = None) -> dict:
     """Single-pass session boot. Returns rules, trail, learnings, and work items.
 
     Replaces calling rules() + search() + work_items() individually with one call.
@@ -1312,16 +1340,19 @@ def orient(project: str | None = None) -> dict:
     from cairn.core.orient import run_orient
 
     try:
-        return run_orient(
-            project=project,
-            config=config,
-            db=db,
-            memory_store=memory_store,
-            search_engine=search_engine,
-            work_item_manager=work_item_manager,
-            task_manager=task_manager,
-            graph_provider=graph_provider,
-        )
+        def _do_orient():
+            return run_orient(
+                project=project,
+                config=config,
+                db=db,
+                memory_store=memory_store,
+                search_engine=search_engine,
+                work_item_manager=work_item_manager,
+                task_manager=task_manager,
+                graph_provider=graph_provider,
+            )
+
+        return await asyncio.to_thread(_do_orient)
     except Exception as e:
         logger.exception("orient failed")
         return {"error": f"Internal error: {e}"}
@@ -1332,7 +1363,7 @@ def orient(project: str | None = None) -> dict:
 # ============================================================
 
 @mcp.tool()
-def drift_check(
+async def drift_check(
     project: str | None = None,
     files: list[dict] | None = None,
 ) -> dict:
@@ -1353,7 +1384,7 @@ def drift_check(
                Use sha256 or any consistent hash of file contents.
     """
     try:
-        return drift_detector.check(project=project, files=files)
+        return await asyncio.to_thread(drift_detector.check, project=project, files=files)
     except Exception as e:
         logger.exception("drift_check failed")
         return {"error": f"Internal error: {e}"}
@@ -1401,8 +1432,6 @@ async def ingest(
         session_name: Optional session grouping for memories.
         memory_type: Override memory type for chunks (default: 'note').
     """
-    import asyncio
-
     try:
         if not content and not url:
             return {"error": "content or url is required"}
@@ -1460,7 +1489,6 @@ async def code_index(
         path: Root directory to scan (absolute path).
         force: Re-index all files even if unchanged (default: False).
     """
-    import asyncio
     from cairn.core.code_ops import run_code_index
 
     try:
@@ -1524,7 +1552,6 @@ async def code_query(
         limit: Max results (default 20).
         mode: Search mode: "fulltext" (default) or "semantic" (NL descriptions).
     """
-    import asyncio
     from cairn.core.code_ops import run_code_query
 
     try:
@@ -1564,7 +1591,6 @@ async def code_describe(
         kind: Filter by symbol kind (function, class, method, etc.).
         limit: Max symbols to describe (default 50).
     """
-    import asyncio
     from cairn.core.code_ops import run_code_describe
 
     try:
@@ -1614,7 +1640,6 @@ async def arch_check(
         config_path: Explicit path to architecture YAML (overrides project doc).
         use_graph: Use Neo4j IMPORTS edges instead of re-parsing source (default: False).
     """
-    import asyncio
     from cairn.core.code_ops import run_arch_check
 
     try:
@@ -1664,17 +1689,33 @@ def main():
 
         @asynccontextmanager
         async def combined_lifespan(app):
+            # Size thread pool to DB pool capacity + headroom for concurrent tool calls
+            loop = asyncio.get_event_loop()
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)
+            loop.set_default_executor(executor)
+
             _start_workers(svc, final_config, db_instance)
             try:
                 async with _mcp_lifespan(app) as state:
                     yield state
             finally:
                 _stop_workers(svc, db_instance)
+                executor.shutdown(wait=False)
 
         mcp_app.router.lifespan_context = combined_lifespan
 
-        logger.info("Starting Cairn (HTTP on %s:%d — MCP at /mcp, API at /api)", _base_config.http_host, _base_config.http_port)
-        uvicorn.run(mcp_app, host=_base_config.http_host, port=_base_config.http_port)
+        # NOTE: uvicorn workers>1 requires an import string, not an app object.
+        # Multi-worker also needs DB/services init moved into the per-worker lifespan
+        # (forked TCP connections are broken). Planned for 0.64.0.
+        logger.info(
+            "Starting Cairn (HTTP on %s:%d — MCP at /mcp, API at /api)",
+            _base_config.http_host, _base_config.http_port,
+        )
+        uvicorn.run(
+            mcp_app,
+            host=_base_config.http_host,
+            port=_base_config.http_port,
+        )
     else:
         logger.info("Starting Cairn MCP server (stdio)")
         mcp.run(transport="stdio")

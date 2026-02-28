@@ -26,7 +26,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
     # ------------------------------------------------------------------
 
     @router.post("/alerts/rules", tags=["alerting"])
-    async def create_rule(body: dict[str, Any]):
+    def create_rule(body: dict[str, Any]):
         name = body.get("name", "").strip()
         if not name:
             return {"error": "name is required"}, 400
@@ -50,7 +50,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         return rule
 
     @router.get("/alerts/rules", tags=["alerting"])
-    async def list_rules(
+    def list_rules(
         is_active: bool | None = Query(None),
         severity: str | None = Query(None),
         limit: int = Query(50, ge=1, le=200),
@@ -64,21 +64,21 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         )
 
     @router.get("/alerts/rules/{rule_id}", tags=["alerting"])
-    async def get_rule(rule_id: int):
+    def get_rule(rule_id: int):
         rule = alert_mgr.get(rule_id)
         if not rule:
             return {"error": "Alert rule not found"}, 404
         return rule
 
     @router.patch("/alerts/rules/{rule_id}", tags=["alerting"])
-    async def update_rule(rule_id: int, body: dict[str, Any]):
+    def update_rule(rule_id: int, body: dict[str, Any]):
         rule = alert_mgr.update(rule_id, **body)
         if not rule:
             return {"error": "Alert rule not found"}, 404
         return rule
 
     @router.delete("/alerts/rules/{rule_id}", tags=["alerting"])
-    async def delete_rule(rule_id: int):
+    def delete_rule(rule_id: int):
         deleted = alert_mgr.delete(rule_id)
         if not deleted:
             return {"error": "Alert rule not found"}, 404
@@ -89,7 +89,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
     # ------------------------------------------------------------------
 
     @router.get("/alerts/history", tags=["alerting"])
-    async def query_history(
+    def query_history(
         rule_id: int | None = Query(None),
         severity: str | None = Query(None),
         days: int | None = Query(None, ge=1, le=365),
@@ -105,7 +105,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         )
 
     @router.get("/alerts/active", tags=["alerting"])
-    async def active_alerts(
+    def active_alerts(
         hours: int = Query(24, ge=1, le=168),
     ):
         return alert_mgr.active_alerts(hours=hours)
@@ -115,7 +115,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
     # ------------------------------------------------------------------
 
     @router.get("/alerts/templates", tags=["alerting"])
-    async def list_templates():
+    def list_templates():
         return {
             "templates": {
                 key: {**tmpl}
