@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.63.0** — "Watchtower" — Six-phase enterprise observability with full UI CRUD.
+Current: **v0.63.1** — "Unblocked" — Async MCP architecture fix.
 
 ---
 
@@ -19,6 +19,8 @@ Continuous work with no fixed end state.
 ## Planned
 
 Have work items, intent to build.
+
+**v0.64.0 — Async re-architecture.** Native async I/O throughout the service layer: psycopg async driver, aiohttp for HTTP backends, neo4j AsyncGraphDatabase. Multi-worker uvicorn via import string + per-worker lifespan init. Concurrency integration tests to prevent regressions.
 
 **Backup and disaster recovery.** Automated PG + Neo4j snapshots with rotation, WAL archiving for point-in-time recovery, tested restore procedures, documented runbooks. (ca-132)
 
@@ -47,6 +49,15 @@ Exploring, not committed.
 ---
 
 ## Shipped
+
+### v0.63.1 — "Unblocked" ✓
+
+Async MCP architecture fix. Event loop no longer blocks during tool calls.
+
+- [x] **12 sync MCP tools → async** — store, search, recall, modify, rules, projects, tasks, work_items, think, status, orient, drift_check all wrapped with `asyncio.to_thread()`.
+- [x] **Alerting route handlers fixed** — 8 `async def` handlers converted back to `def` (FastAPI threads sync handlers automatically).
+- [x] **Explicit thread pool** — `ThreadPoolExecutor(max_workers=20)` at startup, proper shutdown.
+- [x] **Eliminates ECONNRESET** — cairn-ui no longer drops connections during concurrent MCP + REST access.
 
 ### v0.63.0 — "Watchtower" ✓
 

@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.63.1] "Unblocked" — 2026-02-28
+
+Async MCP architecture fix. All 20 MCP tool handlers converted from sync `def`
+to `async def` with `asyncio.to_thread()` wrappers, unblocking the uvicorn event
+loop during blocking I/O (embeddings, LLM enrichment, Neo4j, psycopg).
+
+### Fixed
+- **MCP tools blocking event loop** — 12 sync `def` tool handlers (store, search,
+  recall, modify, rules, projects, tasks, work_items, think, status, orient,
+  drift_check) ran blocking I/O directly on the event loop thread, freezing the
+  entire server during DB/embedding/LLM calls. Converted all to `async def` with
+  `asyncio.to_thread()` wrappers matching the pattern already used by 8 other tools.
+  Eliminates ECONNRESET / socket hang up errors in cairn-ui during concurrent access.
+
+- **Alerting route handlers blocking event loop** — 8 `async def` route handlers
+  in `alerting.py` were calling sync `alert_mgr.*()` methods, inadvertently blocking
+  the event loop. Converted back to `def` — FastAPI runs sync handlers in its own
+  threadpool automatically.
+
+### Changed
+- **Explicit thread pool** — `ThreadPoolExecutor(max_workers=20)` configured at
+  startup, sized to DB connection pool max (15) + headroom (5). Properly shut down
+  on server exit.
+- **Module-level asyncio import** — consolidated 6 inline `import asyncio` statements
+  from existing async tools into a single top-level import.
+
 ## [0.63.0] "Watchtower" — 2026-02-27
 
 Six-phase enterprise observability stack with full UI CRUD. Trace context, audit trail,
