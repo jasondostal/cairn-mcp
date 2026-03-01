@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.66.5** — "Base Camp" — Setup assistant. See [CHANGELOG](CHANGELOG.md).
+Current: **v0.66.5** — "Base Camp" — Setup wizard. See [CHANGELOG](CHANGELOG.md).
 
 ---
 
