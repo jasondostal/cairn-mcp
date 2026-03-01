@@ -109,7 +109,7 @@ export function WorkItemRow({
       </span>
 
       {hasGate && (
-        <Hand className="h-3 w-3 text-[oklch(0.627_0.265_304)] shrink-0" />
+        <Hand className="h-3 w-3 text-status-gate shrink-0" />
       )}
 
       <PriorityLabel priority={item.priority} />

@@ -245,8 +245,8 @@ export function WorkItemSheet({
 
               {/* Gate — Needs Your Input (prominent if unresolved) */}
               {hasUnresolvedGate && (
-                <div className="rounded-md border border-[oklch(0.627_0.265_304)]/30 bg-[oklch(0.627_0.265_304)]/5 p-3 space-y-2">
-                  <div className="flex items-center gap-2 text-sm font-medium text-[oklch(0.627_0.265_304)]">
+                <div className="rounded-md border border-status-gate/30 bg-status-gate/5 p-3 space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-medium text-status-gate">
                     <Hand className="h-4 w-4" />
                     Needs Your Input
                   </div>
@@ -297,7 +297,7 @@ export function WorkItemSheet({
               {/* Resolved gate info */}
               {detail.gate_type && detail.gate_resolved_at && (
                 <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-                  <CheckCircle className="h-3 w-3 text-[oklch(0.696_0.17_162)]" />
+                  <CheckCircle className="h-3 w-3 text-status-done" />
                   Gate ({detail.gate_type}) resolved {formatDateTime(detail.gate_resolved_at)}
                   {typeof detail.gate_response?.text === "string" && (
                     <span className="font-mono">— {detail.gate_response.text}</span>
@@ -540,13 +540,13 @@ export function WorkItemSheet({
                         variant="outline"
                         className={`ml-2 text-[10px] ${
                           deliverable.status === "approved"
-                            ? "border-[oklch(0.696_0.17_162)] text-[oklch(0.696_0.17_162)]"
+                            ? "border-status-done text-status-done"
                             : deliverable.status === "revised"
-                              ? "border-[oklch(0.769_0.188_70)] text-[oklch(0.769_0.188_70)]"
+                              ? "border-status-wip text-status-wip"
                               : deliverable.status === "rejected"
                                 ? "border-destructive text-destructive"
                                 : deliverable.status === "pending_review"
-                                  ? "border-[oklch(0.627_0.265_304)] text-[oklch(0.627_0.265_304)]"
+                                  ? "border-status-gate text-status-gate"
                                   : ""
                         }`}
                       >
@@ -653,7 +653,7 @@ export function WorkItemSheet({
                             onClick={() => handleReview("approve")}
                             disabled={reviewActing}
                             size="sm"
-                            className="flex-1 bg-[oklch(0.696_0.17_162)] hover:bg-[oklch(0.696_0.17_162)]/90 text-white"
+                            className="flex-1 bg-status-done hover:bg-status-done/90 text-white"
                           >
                             <ThumbsUp className="mr-1 h-3.5 w-3.5" />
                             Approve
@@ -663,7 +663,7 @@ export function WorkItemSheet({
                             disabled={reviewActing}
                             size="sm"
                             variant="outline"
-                            className="flex-1 border-[oklch(0.769_0.188_70)] text-[oklch(0.769_0.188_70)] hover:bg-[oklch(0.769_0.188_70)]/10"
+                            className="flex-1 border-status-wip text-status-wip hover:bg-status-wip/10"
                           >
                             <RotateCcw className="mr-1 h-3.5 w-3.5" />
                             Revise

@@ -2,21 +2,21 @@ import { cn } from "@/lib/utils";
 import type { WorkItemStatus } from "@/lib/api";
 
 const statusColors: Record<WorkItemStatus, string> = {
-  open: "bg-[oklch(0.556_0.04_264)]",
-  ready: "bg-[oklch(0.488_0.243_264)]",
-  in_progress: "bg-[oklch(0.769_0.188_70)]",
-  blocked: "bg-[oklch(0.645_0.246_16)]",
-  done: "bg-[oklch(0.696_0.17_162)]",
-  cancelled: "bg-[oklch(0.556_0_0)]",
+  open: "bg-status-open",
+  ready: "bg-status-ready",
+  in_progress: "bg-status-wip",
+  blocked: "bg-status-blocked",
+  done: "bg-status-done",
+  cancelled: "bg-status-cancelled",
 };
 
 const statusTextColors: Record<WorkItemStatus, string> = {
-  open: "text-[oklch(0.556_0.04_264)]",
-  ready: "text-[oklch(0.488_0.243_264)]",
-  in_progress: "text-[oklch(0.769_0.188_70)]",
-  blocked: "text-[oklch(0.645_0.246_16)]",
-  done: "text-[oklch(0.696_0.17_162)]",
-  cancelled: "text-[oklch(0.556_0_0)] line-through",
+  open: "text-status-open",
+  ready: "text-status-ready",
+  in_progress: "text-status-wip",
+  blocked: "text-status-blocked",
+  done: "text-status-done",
+  cancelled: "text-status-cancelled line-through",
 };
 
 export function StatusDot({ status, className }: { status: WorkItemStatus; className?: string }) {
@@ -54,10 +54,10 @@ export function PriorityDots({ priority }: { priority: number }) {
 
 const priorityColors: Record<number, string> = {
   1: "text-muted-foreground",
-  2: "text-[oklch(0.488_0.243_264)]",
-  3: "text-[oklch(0.769_0.188_70)]",
-  4: "text-[oklch(0.705_0.213_47)]",
-  5: "text-[oklch(0.645_0.246_16)]",
+  2: "text-status-ready",
+  3: "text-status-wip",
+  4: "text-priority-p4",
+  5: "text-status-blocked",
 };
 
 export function PriorityLabel({ priority }: { priority: number }) {

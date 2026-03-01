@@ -1,9 +1,9 @@
 import { cn } from "@/lib/utils";
 
 const riskConfig: Record<number, { label: string; className: string }> = {
-  1: { label: "caution", className: "text-[oklch(0.769_0.188_70)]/80 border-[oklch(0.769_0.188_70)]/30" },
-  2: { label: "action", className: "text-[oklch(0.705_0.213_47)] border-[oklch(0.705_0.213_47)]/30" },
-  3: { label: "critical", className: "text-[oklch(0.645_0.246_16)] border-[oklch(0.645_0.246_16)]/30" },
+  1: { label: "caution", className: "text-status-wip/80 border-status-wip/30" },
+  2: { label: "action", className: "text-priority-p4 border-priority-p4/30" },
+  3: { label: "critical", className: "text-status-blocked border-status-blocked/30" },
 };
 
 export function RiskTierBadge({ tier, className }: { tier: number; className?: string }) {

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.66.6] — 2026-03-01
+
+### Changed
+- **Sidebar polish** — removed text section headers (Core, Context, etc.),
+  replaced with subtle centered dividers. Tightened nav item padding and added
+  thin CSS scrollbar styling for a more connected, compact feel.
+- **Color token system** — extracted 14 files of hardcoded OKLCH colors into
+  8 CSS custom properties (`--status-open`, `--status-ready`, `--status-wip`,
+  `--status-blocked`, `--status-done`, `--status-cancelled`, `--status-gate`,
+  `--priority-p4`). Single source of truth for status/priority colors.
+- **Card component** — tightened default spacing from `gap-6 py-6 px-6` to
+  `gap-4 py-4 px-4` for denser, less wasteful card layouts across all pages.
+- **Page layout** — fixed header/content padding mismatch (`pb-3` → `pb-4`).
+
+### Fixed
+- **Sessions page** — replaced custom empty state with shared `EmptyState`
+  component, tightened list row padding (`py-3` → `py-2`), replaced inline
+  hardcoded status dots with the shared `StatusDot` component.
+
 ## [0.66.5] — 2026-03-01 — "Base Camp"
 
 ### Added

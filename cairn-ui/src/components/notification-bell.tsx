@@ -32,10 +32,10 @@ const severityIcon: Record<NotificationSeverity, typeof Info> = {
 };
 
 const severityColor: Record<NotificationSeverity, string> = {
-  info: "text-[oklch(0.488_0.243_264)]",
-  warning: "text-[oklch(0.769_0.188_70)]",
+  info: "text-status-ready",
+  warning: "text-status-wip",
   error: "text-destructive",
-  success: "text-[oklch(0.696_0.17_162)]",
+  success: "text-status-done",
 };
 
 export function NotificationBell() {
@@ -125,7 +125,7 @@ export function NotificationBell() {
       >
         <Bell className="h-4 w-4" />
         {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[oklch(0.645_0.246_16)] px-1 text-[10px] font-medium leading-none text-white">
+          <span className="absolute -top-0.5 -right-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-status-blocked px-1 text-[10px] font-medium leading-none text-white">
             {unread > 99 ? "99+" : unread}
           </span>
         )}
@@ -202,7 +202,7 @@ export function NotificationBell() {
                       </p>
                     </div>
                     {!n.is_read && (
-                      <span className="h-2 w-2 rounded-full bg-[oklch(0.488_0.243_264)] shrink-0 mt-1.5" />
+                      <span className="h-2 w-2 rounded-full bg-status-ready shrink-0 mt-1.5" />
                     )}
                   </div>
                 );

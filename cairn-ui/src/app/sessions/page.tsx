@@ -20,7 +20,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/error-state";
+import { EmptyState } from "@/components/empty-state";
 import { MemoryTypeBadge } from "@/components/memory-type-badge";
+import { StatusDot } from "@/components/work-items/status-dot";
 import { PageLayout } from "@/components/page-layout";
 
 function timeAgo(dateStr: string): string {
@@ -75,13 +77,10 @@ function SessionList({
       {error && <ErrorState message="Failed to load sessions" detail={error} />}
 
       {!error && sessions.length === 0 && !loading && (
-        <div className="text-center py-12 text-muted-foreground">
-          <Radio className="mx-auto mb-3 h-10 w-10 opacity-30" />
-          <p className="text-sm">No sessions yet.</p>
-          <p className="text-xs mt-1 opacity-60">
-            Sessions appear when Claude Code hooks ship events.
-          </p>
-        </div>
+        <EmptyState
+          message="No sessions yet."
+          detail="Sessions appear when Claude Code hooks ship events."
+        />
       )}
 
       <div className="space-y-2">
@@ -90,7 +89,7 @@ function SessionList({
             key={s.session_name}
             onClick={() => onSelect(s)}
             className={cn(
-              "w-full text-left rounded-lg border px-4 py-3 transition-colors",
+              "w-full text-left rounded-lg border px-4 py-2 transition-colors",
               "hover:bg-muted/50",
               s.is_active && "border-green-500/50 bg-green-500/5"
             )}
@@ -246,14 +245,7 @@ function SessionDetail({
                 href={`/workspace?wi=${wi.display_id}`}
                 className="flex items-center gap-3 px-3 py-2 hover:bg-accent/50 transition-colors text-xs"
               >
-                <span className={cn(
-                  "h-2 w-2 rounded-full shrink-0",
-                  wi.status === "done" ? "bg-[oklch(0.696_0.17_162)]" :
-                  wi.status === "in_progress" ? "bg-[oklch(0.6_0.25_250)]" :
-                  wi.status === "blocked" ? "bg-[oklch(0.627_0.265_29)]" :
-                  wi.status === "cancelled" ? "bg-muted-foreground/30" :
-                  "bg-[oklch(0.7_0.15_80)]"
-                )} />
+                <StatusDot status={wi.status as import("@/lib/api").WorkItemStatus} />
                 <span className="font-mono text-muted-foreground shrink-0">{wi.display_id}</span>
                 <span className="flex-1 truncate">{wi.title}</span>
                 <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">

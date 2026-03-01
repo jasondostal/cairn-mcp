@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.66.5** — "Base Camp" — Setup wizard. See [CHANGELOG](CHANGELOG.md).
+Current: **v0.66.6** — UI polish pass. See [CHANGELOG](CHANGELOG.md).
 
 ---
 
@@ -47,6 +47,10 @@ Exploring, not committed.
 ---
 
 ## Shipped
+
+### v0.66.6 ✓
+
+- [x] **UI polish** — sidebar section headers removed (subtle dividers instead), hardcoded OKLCH colors extracted into CSS custom properties (8 status/priority tokens), Card component tightened (`gap-4 py-4 px-4`), page layout padding aligned, Sessions page consistency fixes (EmptyState, StatusDot, row padding).
 
 ### v0.66.5 ✓
 
