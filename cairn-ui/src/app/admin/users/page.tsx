@@ -10,8 +10,8 @@ import { SingleSelect } from "@/components/ui/single-select";
 import { PageLayout } from "@/components/page-layout";
 import { SkeletonList } from "@/components/skeleton-list";
 import { toast } from "sonner";
-import { getAuthHeaders, getUser } from "@/lib/auth";
-import { Plus, UserCog } from "lucide-react";
+import { getAuthHeaders, getUser, checkAuthStatus } from "@/lib/auth";
+import { Plus, UserCog, Shield } from "lucide-react";
 
 interface User {
   id: number;
@@ -25,10 +25,42 @@ interface User {
 
 const BASE = "/api";
 
+function DisabledState() {
+  return (
+    <PageLayout title="Users" icon={UserCog}>
+      <div className="flex flex-col items-center justify-center h-full text-center max-w-lg mx-auto gap-6 p-8">
+        <div className="rounded-full bg-muted p-4">
+          <Shield className="h-8 w-8 text-muted-foreground" />
+        </div>
+        <div>
+          <h2 className="text-xl font-semibold mb-2">Authentication not enabled</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Enable multi-user authentication by setting the <code className="text-xs bg-muted px-1.5 py-0.5 rounded">CAIRN_AUTH_ENABLED=true</code> and <code className="text-xs bg-muted px-1.5 py-0.5 rounded">CAIRN_AUTH_JWT_SECRET</code> environment variables.
+          </p>
+        </div>
+        <div className="text-left w-full space-y-4">
+          <div>
+            <h3 className="text-sm font-medium mb-1">Quick start</h3>
+            <pre className="text-xs bg-muted rounded p-3 overflow-x-auto">
+{`CAIRN_AUTH_ENABLED=true
+CAIRN_AUTH_JWT_SECRET=your-secret-key-here`}
+            </pre>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            The first user to register will automatically become the admin.
+            Agent accounts can be created from this page after setup.
+          </p>
+        </div>
+      </div>
+    </PageLayout>
+  );
+}
+
 export default function AdminUsersPage() {
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [authDisabled, setAuthDisabled] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -57,11 +89,20 @@ export default function AdminUsersPage() {
   }, [router]);
 
   useEffect(() => {
-    if (!currentUser || currentUser.role !== "admin") {
-      router.push("/");
-      return;
+    async function init() {
+      const status = await checkAuthStatus();
+      if (!status.enabled) {
+        setAuthDisabled(true);
+        setLoading(false);
+        return;
+      }
+      if (!currentUser || currentUser.role !== "admin") {
+        router.push("/");
+        return;
+      }
+      fetchUsers();
     }
-    fetchUsers();
+    init();
   }, [currentUser, router, fetchUsers]);
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -135,6 +176,10 @@ export default function AdminUsersPage() {
         <SkeletonList count={3} />
       </PageLayout>
     );
+  }
+
+  if (authDisabled) {
+    return <DisabledState />;
   }
 
   return (
