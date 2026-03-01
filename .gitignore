@@ -2,6 +2,9 @@
 .env
 *.creds
 
+# Backups
+backups/
+
 # Python
 __pycache__/
 *.py[cod]

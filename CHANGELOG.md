@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.66.4] — 2026-03-01
+
+### Added
+- **Backup and restore scripts** (ca-132) — `scripts/backup.sh` creates
+  compressed archives with PostgreSQL dump (custom format), optional Neo4j
+  APOC JSON export, and backup metadata. Cron-friendly (silent by default),
+  configurable retention with `--retain-days`. `scripts/restore.sh` restores
+  from archive with safety checks (migration count comparison), confirmation
+  prompt, and post-restore guidance.
+- **[Backup guide](docs/backup.md)** — runbook covering automated backups
+  with cron, remote backup (rsync/S3), restore walkthrough, Docker volume
+  snapshots, disaster recovery scenarios, and credential security.
+
 ## [0.66.3] — 2026-03-01
 
 ### Added

@@ -155,6 +155,8 @@ The rest: `modify`, `insights`, `tasks`, `think`, `status`, `consolidate`, `drif
 
 **Session capture.** IDE hooks (Claude Code, Cursor, Cline, Windsurf) log every tool call. Next session boots warm. See [`examples/hooks/README.md`](examples/hooks/README.md).
 
+**Backup and disaster recovery.** Cron-friendly scripts for PostgreSQL dump and Neo4j graph export with configurable retention. Tested restore procedures with migration safety checks. See the **[Backup Guide](docs/backup.md)**.
+
 ## Do I need an LLM?
 
 No. Store, search, recall, and rules work without one. You lose auto-enrichment (summaries, tags, importance scoring), knowledge extraction, and chat.

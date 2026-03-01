@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.66.3** — Settings governance, settings pane maturity, user groups. See [CHANGELOG](CHANGELOG.md).
+Current: **v0.66.4** — Backup and disaster recovery. See [CHANGELOG](CHANGELOG.md).
 
 ---
 
@@ -19,8 +19,6 @@ Continuous work with no fixed end state.
 ## Planned
 
 Have work items, intent to build.
-
-**Backup and disaster recovery.** Automated PG + Neo4j snapshots with rotation, WAL archiving for point-in-time recovery, tested restore procedures, documented runbooks. (ca-132)
 
 **Setup assistant.** Guided auth configuration via CLI and web UI. Interactive wizard walks through auth mode selection, JWT secret generation, first admin creation, OIDC provider testing, and PAT setup with copy-paste MCP config snippets. Think `certbot` UX for Cairn auth. (ca-172)
 
@@ -51,6 +49,10 @@ Exploring, not committed.
 ---
 
 ## Shipped
+
+### v0.66.4 ✓
+
+- [x] **Backup and restore scripts** (ca-132) — `scripts/backup.sh` with PG dump + optional Neo4j APOC export, cron-friendly, configurable retention. `scripts/restore.sh` with safety checks and confirmation. Full runbook at `docs/backup.md`.
 
 ### v0.66.3 ✓
 
