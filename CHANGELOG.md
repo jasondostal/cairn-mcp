@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.66.2] — 2026-03-01
+
+### Changed
+- **Ingestion size limits** — `MAX_CONTENT_SIZE` raised from 100KB to 500KB
+  (single memories), `MAX_INGEST_SIZE` from 10MB to 100MB (ingest pipeline).
+  Embedding quality is handled by the summarize-embed threshold, not input
+  ceilings. The old limits were artifacts of the synchronous MCP era.
+- **file_path docstrings** — removed misleading "MCP message size limits"
+  language. MCP has no protocol-level message size limit; file_path mode exists
+  for staging convenience (rsync, batch import), not transport constraints.
+
 ## [0.66.1] — 2026-03-01
 
 ### Fixed

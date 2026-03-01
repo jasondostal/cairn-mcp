@@ -765,7 +765,7 @@ async def projects(
         target: Target project name (required for link).
         link_type: Relationship type for link (default 'related').
         file_path: Path to a local file in the server's ingest staging directory.
-            Use instead of content for large docs that would exceed MCP message size limits.
+            Use instead of content to ingest from a staging directory (avoids inline transfer).
     """
     try:
         if not project and action != "list":
@@ -1666,7 +1666,7 @@ async def ingest(
         session_name: Optional session grouping for memories.
         memory_type: Override memory type for chunks (default: 'note').
         file_path: Path to a local file in the server's ingest staging directory.
-            Use this for large files that would exceed MCP message size limits.
+            Use this to ingest from the staging directory (e.g. after rsync or batch import).
             The file must be under the configured CAIRN_INGEST_DIR (default: /data/ingest).
     """
     try:

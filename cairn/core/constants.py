@@ -19,8 +19,10 @@ IMPORTANCE_DEFAULT = 0.5
 AUTO_SUMMARIZE_EMBED_THRESHOLD = 8000  # chars — use summary for embedding above this
 
 # Input limits
-MAX_CONTENT_SIZE = 100_000      # ~100KB (store, modify — single memories)
-MAX_INGEST_SIZE = 10_000_000    # ~10MB (ingest pipeline — chunked automatically)
+MAX_CONTENT_SIZE = 500_000      # ~500KB — single memory ceiling (embedding quality
+                                # is handled by AUTO_SUMMARIZE_EMBED_THRESHOLD above)
+MAX_INGEST_SIZE = 100_000_000   # ~100MB — ingest pipeline chunks automatically via
+                                # Chonkie; cost is proportional to chunk count, not size
 MAX_NAME_LENGTH = 255  # project, session, branch names
 MAX_TAGS = 20
 MAX_TAG_LENGTH = 100
