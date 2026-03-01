@@ -204,6 +204,18 @@ async def lifespan(server: FastMCP):
     svc = create_services(config=final_config, db=db_instance)
     _init_services(svc)
 
+    # Stdio identity mapping: set UserContext for the session lifetime (ca-162)
+    if final_config.auth.enabled and final_config.auth.stdio_user and svc.user_manager:
+        from cairn.core.user import set_user
+        stdio_user = svc.user_manager.get_by_username(final_config.auth.stdio_user)
+        if stdio_user and stdio_user.get("is_active"):
+            ctx = svc.user_manager.load_user_context(stdio_user["id"])
+            if ctx:
+                set_user(ctx)
+                logger.info("Stdio identity set: %s (role=%s)", ctx.username, ctx.role)
+        else:
+            logger.warning("CAIRN_STDIO_USER=%s not found or inactive", final_config.auth.stdio_user)
+
     _start_workers(svc, final_config, db_instance)
     try:
         yield {}
@@ -1912,36 +1924,59 @@ def main():
         api = create_api(svc)
         mcp_app.mount("/api", api)
 
-        # MCP HTTP: JWT bearer → UserContext for MCP tool calls (ca-124)
+        # MCP HTTP: enforce auth on /mcp/* when auth is enabled (ca-162)
         if final_config.auth.enabled and final_config.auth.jwt_secret and svc.user_manager:
             from starlette.middleware.base import BaseHTTPMiddleware
-            from cairn.core.user import clear_user, decode_access_token, set_user
+            from fastapi.responses import JSONResponse
+            from cairn.core.auth import resolve_bearer_token
+            from cairn.core.user import clear_user, set_user
+
+            _mcp_jwt_secret = final_config.auth.jwt_secret
+            _mcp_user_manager = svc.user_manager
+            _mcp_api_key = final_config.auth.api_key
+            _mcp_api_key_header = final_config.auth.header_name
 
             class MCPAuthMiddleware(BaseHTTPMiddleware):
                 async def dispatch(self, request, call_next):
                     # Only apply to MCP endpoints
                     if not request.url.path.startswith("/mcp"):
                         return await call_next(request)
+                    # Allow CORS preflight and OAuth discovery probes
+                    if request.method == "OPTIONS":
+                        return await call_next(request)
+                    if "/.well-known/" in request.url.path:
+                        return await call_next(request)
+
+                    # Try API key fallback first (legacy/simple auth)
+                    if _mcp_api_key:
+                        key = request.headers.get(_mcp_api_key_header)
+                        if key and key == _mcp_api_key:
+                            return await call_next(request)
+
+                    # Try Bearer token (JWT or PAT) via unified resolution
                     auth_header = request.headers.get("Authorization", "")
                     if auth_header.startswith("Bearer "):
                         token = auth_header[7:]
-                        payload = decode_access_token(
-                            token, secret=final_config.auth.jwt_secret,
+                        ctx = resolve_bearer_token(
+                            token,
+                            jwt_secret=_mcp_jwt_secret,
+                            user_manager=_mcp_user_manager,
                         )
-                        if payload:
-                            user_id = int(payload["sub"])
-                            ctx = svc.user_manager.load_user_context(user_id)
-                            if ctx:
-                                set_user(ctx)
-                                try:
-                                    return await call_next(request)
-                                finally:
-                                    clear_user()
-                    # No token or invalid — proceed without UserContext (stdio-like)
-                    return await call_next(request)
+                        if ctx:
+                            set_user(ctx)
+                            try:
+                                return await call_next(request)
+                            finally:
+                                clear_user()
+
+                    # Auth enabled but no valid credentials — reject
+                    return JSONResponse(
+                        status_code=401,
+                        content={"detail": "Authentication required"},
+                    )
 
             mcp_app.add_middleware(MCPAuthMiddleware)
-            logger.info("MCP HTTP JWT auth middleware enabled")
+            logger.info("MCP HTTP auth enforcement enabled")
 
         @asynccontextmanager
         async def combined_lifespan(app):

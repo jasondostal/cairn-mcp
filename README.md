@@ -151,6 +151,8 @@ The rest: `modify`, `insights`, `tasks`, `think`, `status`, `consolidate`, `drif
 
 </details>
 
+**Multi-user authentication and RBAC.** Off by default, zero to enterprise in five minutes. Local auth with JWT, Personal Access Tokens for machine clients, OIDC/SSO for identity providers (Authentik, Keycloak, Auth0, Okta, Azure AD), and stdio identity for MCP. Three roles, project-level scoping, first-user-becomes-admin. See the **[Authentication Guide](docs/authentication.md)**.
+
 **Session capture.** IDE hooks (Claude Code, Cursor, Cline, Windsurf) log every tool call. Next session boots warm. See [`examples/hooks/README.md`](examples/hooks/README.md).
 
 ## Do I need an LLM?
@@ -174,8 +176,9 @@ All via environment variables. The ones that matter:
 |----------|---------|-------------|
 | `CAIRN_LLM_BACKEND` | `ollama` | LLM provider: `ollama`, `bedrock`, `gemini`, `openai` |
 | `CAIRN_DB_PASS` | `cairn-dev-password` | Database password. Change this for anything beyond local. |
-| `CAIRN_AUTH_ENABLED` | `false` | API key auth on `/api` routes |
-| `CAIRN_API_KEY` | *(empty)* | The API key when auth is enabled |
+| `CAIRN_AUTH_ENABLED` | `false` | Multi-user authentication (JWT, PATs, OIDC/SSO) |
+| `CAIRN_AUTH_JWT_SECRET` | *(empty)* | JWT signing secret (required when auth enabled) |
+| `CAIRN_OIDC_ENABLED` | `false` | OIDC/SSO integration (any OIDC-compliant provider) |
 | `CAIRN_GRAPH_BACKEND` | *(disabled)* | Set to `neo4j` to enable knowledge graph |
 | `CAIRN_KNOWLEDGE_EXTRACTION` | `false` | Entity/statement extraction on store |
 | `CAIRN_EMBEDDING_BACKEND` | `local` | `local` (MiniLM, 384-dim) or `bedrock` (Titan V2, 1024-dim) |
@@ -188,6 +191,20 @@ All via environment variables. The ones that matter:
 | `CAIRN_INGEST_DIR` | `/data/ingest` | Staging directory for file-path ingestion of large documents |
 
 Full reference is in [docker-compose.yml](docker-compose.yml). Every variable has a sensible default.
+
+## Authentication
+
+Off by default. When enabled, Cairn supports local username/password (JWT),
+Personal Access Tokens for machine clients, and OIDC/SSO for enterprise identity
+provider integration. First user to register becomes admin. Role-based access
+control enforces permissions across REST API, MCP HTTP, and the web UI.
+
+See the **[Authentication Guide](docs/authentication.md)** for setup instructions
+covering all auth modes, OIDC provider configuration, and MCP client examples.
+
+> **Security note:** Cairn's auth system is functional and production-tested but
+> has not been independently audited. For network-exposed deployments, add TLS
+> termination and network-level access controls.
 
 ## Architecture
 

@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.66.0] "Authentication/User Mgmt/RBAC - MVP" — 2026-03-01
+
+Multi-user authentication and authorization. Six auth modes from zero-config
+to enterprise SSO, role-based access control across all access surfaces, and
+a comprehensive setup guide.
+
+### Added
+- **Multi-user authentication** (ca-124, ca-162) — local username/password with
+  bcrypt hashing, JWT tokens with configurable expiry, and first-user-becomes-admin
+  setup flow. Identity enforced across REST API, MCP HTTP, and web UI.
+- **OIDC/SSO integration** — Authorization Code flow with PKCE, provider-agnostic.
+  Tested with Authentik; designed for any OIDC-compliant provider (Keycloak, Auth0,
+  Okta, Azure AD, etc.). Auto-provisions users from IdP claims with configurable
+  default role and group-to-admin mapping.
+- **Personal Access Tokens** — GitHub-style `cairn_xxx` tokens with SHA-256 hash
+  storage. Create, list, and revoke from the Settings page or REST API. Optional
+  expiration and last-used tracking.
+- **Role-based access control** — three roles (`admin`, `user`, `agent`) with
+  project-level membership scoping. Admins manage users and see all projects.
+- **Stdio identity** — `CAIRN_STDIO_USER` maps MCP stdio transport sessions to a
+  database user for RBAC scoping without tokens.
+- **`CAIRN_PUBLIC_URL`** — externally-reachable base URL for OIDC callbacks when
+  running behind a reverse proxy.
+- **[Authentication guide](docs/authentication.md)** — comprehensive setup
+  documentation covering all auth modes, OIDC provider configuration, PAT usage
+  with MCP clients, environment variable reference, and troubleshooting.
+- **Login page** — `/login` with local auth form, SSO button, and first-user
+  admin registration flow.
+- **User management** — admin-only user CRUD at `/admin/users` and REST endpoints
+  for project membership.
+- **Return-to-page after login** — redirects to the originally requested page
+  after authentication completes.
+- **Migration 042** — extensible auth schema: nullable `password_hash` for OIDC
+  users, `auth_provider`/`external_id` columns, `api_tokens` table.
+- **Example hooks PAT support** — `session-start.sh`, `session-end.sh`, and
+  `log-event.sh` support `CAIRN_PAT` env var with Bearer authentication,
+  falling back to `CAIRN_API_KEY`.
+
+### Fixed
+- **PAT creation API** — response now returns `raw_token` field matching the
+  documented interface (was returning `token`, causing "undefined" in the UI).
+- **Invalid middleware.ts** — removed no-op Next.js middleware placeholder that
+  interfered with client-side auth routing.
+- **Users page when auth disabled** — shows setup instructions instead of
+  silently redirecting to dashboard.
+
+### Security
+- Passwords hashed with bcrypt. JWT secrets are never logged.
+- PAT tokens stored as SHA-256 hashes; raw tokens shown only at creation time.
+- OIDC uses PKCE (S256) to prevent authorization code interception.
+- Static API key checked before bearer token resolution.
+
+> **Disclaimer:** This auth system is functional and production-tested but has not
+> been independently audited. For network-exposed deployments, layer TLS and
+> network-level access controls.
+
 ## [0.65.0] "The Swarm" — 2026-02-28
 
 Multi-agent orchestration hardening. Typed agents with enforced boundaries, file-level

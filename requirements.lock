@@ -4,6 +4,8 @@
 #
 #    pip-compile --no-emit-index-url --output-file=requirements.lock --strip-extras pyproject.toml
 #
+bcrypt==4.3.0
+    # via cairn (pyproject.toml)
 annotated-doc==0.0.4
     # via
     #   fastapi

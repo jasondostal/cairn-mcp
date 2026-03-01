@@ -1,16 +1,15 @@
-import { getAuthHeaders, clearToken } from "@/lib/auth";
+import { getAuthHeaders } from "@/lib/auth";
 
 const BASE = "/api";
 
 // ---------------------------------------------------------------------------
-// Global 401 handler: clear token and redirect to login (ca-124)
+// Global 401 handler: delegates to AuthProvider via window callback (ca-124)
 // ---------------------------------------------------------------------------
 function handle401(res: Response): void {
   if (res.status === 401) {
-    clearToken();
-    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
-      window.location.href = "/login";
-    }
+    const handler = // eslint-disable-next-line @typescript-eslint/no-explicit-any
+(window as any).__cairn_on_401;
+    if (typeof handler === "function") handler();
   }
 }
 
@@ -221,6 +220,25 @@ export interface SettingsResponse {
   experimental: string[];
   profiles: string[];
   active_profile: string | null;
+}
+
+export interface ApiToken {
+  id: number;
+  name: string;
+  token_prefix: string;
+  scopes: string;
+  expires_at: string | null;
+  last_used_at: string | null;
+  created_at: string;
+  is_active: boolean;
+}
+
+export interface ApiTokenCreateResult {
+  id: number;
+  name: string;
+  raw_token: string;
+  token_prefix: string;
+  expires_at: string | null;
 }
 
 export interface Project {
@@ -1643,4 +1661,19 @@ export const api = {
     ),
 
   retentionStatus: () => get<RetentionStatus>("/retention/status"),
+
+  // --- Auth: Personal Access Tokens ---
+
+  authTokens: () => get<ApiToken[]>("/auth/tokens"),
+
+  authTokenCreate: (body: { name: string; expires_in_days?: number }) =>
+    post<ApiTokenCreateResult>("/auth/tokens", body),
+
+  authTokenRevoke: (tokenId: number) =>
+    del<{ status: string }>(`/auth/tokens/${tokenId}`),
+
+  // --- Auth: OIDC ---
+
+  authOidcLogin: (redirectUri?: string) =>
+    get<{ authorization_url: string; state: string }>("/auth/oidc/login", redirectUri ? { redirect_uri: redirectUri } : {}),
 };

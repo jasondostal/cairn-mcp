@@ -38,6 +38,7 @@ eval/data/corpus.json
 eval/benchmark/data/longmemeval/
 eval/benchmark/data/locomo/
 !eval/benchmark/data/.gitkeep
+eval/backups/
 eval/reports/
 
 # Local dev artifacts
@@ -47,6 +48,7 @@ screenshot.jpg
 .mcpregistry_*
 
 # Internal dev notes
+SESSION_HANDOFF.md
 RETRIEVAL_POSTMORTEM.md
 V2_PROGRESS.md
 EVAL_STATE.md

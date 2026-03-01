@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.65.0** — "The Swarm" — Multi-agent orchestration hardening.
+Current: **v0.66.0** — "Authentication/User Mgmt/RBAC - MVP" — Multi-user auth, OIDC SSO, PATs, RBAC.
 
 ---
 
@@ -20,7 +20,13 @@ Continuous work with no fixed end state.
 
 Have work items, intent to build.
 
+**Settings Pane / Settings Management Maturity.** Better organization, validation, per-section save, restart-required indicators, settings profiles (export/import), diff view. (ca-170)
+
+**User Management Expansion.** Cairn-native groups with OIDC group sync, group-based project access and role inheritance, user deprovisioning flows, admin UI for group management. Builds on the ca-124/ca-162 auth foundation. (ca-171)
+
 **Backup and disaster recovery.** Automated PG + Neo4j snapshots with rotation, WAL archiving for point-in-time recovery, tested restore procedures, documented runbooks. (ca-132)
+
+**Setup assistant.** Guided auth configuration via CLI and web UI. Interactive wizard walks through auth mode selection, JWT secret generation, first admin creation, OIDC provider testing, and PAT setup with copy-paste MCP config snippets. Think `certbot` UX for Cairn auth. (ca-172)
 
 **Async MCP observability.** Progress reporting for long-running tools (code_index, consolidate, ingest). (ca-107)
 
@@ -40,8 +46,6 @@ Exploring, not committed.
 
 **API versioning.** `/api/v1/` prefix, deprecation policy, breaking change detection in CI, OpenAPI spec per version. Stability contract for enterprise adoption. (ca-134)
 
-**User identity and multi-user support.** Authentication, per-user state, RBAC. Currently Cairn is single-user by design — this would be a significant architecture shift. (ca-124)
-
 **Audit settings governance.** Configurable vs locked settings for Watchtower — which settings can operators change vs which are policy-enforced. (ca-135)
 
 **tree-sitter-language-pack integration.** Adding the language pack dependency would unlock PowerShell, Perl, R, Dart, Haskell, Erlang, Protobuf, and 150+ other languages in one shot. Trade-off is dependency weight (~160 compiled grammars).
@@ -53,6 +57,22 @@ Exploring, not committed.
 ---
 
 ## Shipped
+
+### v0.66.0 — "Authentication/User Mgmt/RBAC - MVP" ✓
+
+Multi-user authentication and authorization. Six auth modes, RBAC, comprehensive setup guide.
+
+- [x] **Multi-user authentication** (ca-124, ca-162) — local JWT, bcrypt passwords, first-user-becomes-admin.
+- [x] **OIDC/SSO** — Authorization Code + PKCE, provider-agnostic. Tested with Authentik.
+- [x] **Personal Access Tokens** — `cairn_xxx` format, SHA-256 storage, UI + API management.
+- [x] **Role-based access control** — admin/user/agent roles, project-level membership scoping.
+- [x] **Stdio identity** — `CAIRN_STDIO_USER` for MCP stdio transport sessions.
+- [x] **`CAIRN_PUBLIC_URL`** — externally-reachable URL for OIDC behind reverse proxy.
+- [x] **[Authentication guide](docs/authentication.md)** — all auth modes, env var reference, troubleshooting.
+- [x] **Login page** — local auth, SSO button, first-user registration flow.
+- [x] **User management** — admin CRUD at `/admin/users`, project membership endpoints.
+- [x] **Return-to-page after login** — sessionStorage-based redirect to originally requested page.
+- [x] Migration 042 (extensible auth schema, api_tokens table).
 
 ### v0.65.0 — "The Swarm" ✓
 

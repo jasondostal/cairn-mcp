@@ -1,9 +1,11 @@
-"""Authentication and user management REST endpoints (ca-124)."""
+"""Authentication and user management REST endpoints (ca-124, ca-162)."""
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from cairn.core.services import Services
@@ -14,6 +16,8 @@ from cairn.core.user import (
     verify_password,
 )
 from cairn.core.utils import get_project
+
+logger = logging.getLogger(__name__)
 
 
 # --- Request models ---
@@ -45,6 +49,11 @@ class UpdateUserRequest(BaseModel):
 class AddMemberRequest(BaseModel):
     user_id: int
     role: str = "member"
+
+
+class CreateTokenRequest(BaseModel):
+    name: str
+    expires_in_days: int | None = None  # None = never expires
 
 
 def register_routes(router: APIRouter, svc: Services) -> None:
@@ -107,7 +116,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
             return err
 
         user = user_mgr.get_by_username(body.username)
-        if not user or not verify_password(body.password, user["password_hash"]):
+        if not user or not user.get("password_hash") or not verify_password(body.password, user["password_hash"]):
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Invalid credentials"},
@@ -157,12 +166,24 @@ def register_routes(router: APIRouter, svc: Services) -> None:
 
     @router.get("/auth/status")
     def auth_status():
-        """Public endpoint: is auth enabled? Are there any users yet?"""
+        """Public endpoint: auth configuration status."""
         enabled = config.auth.enabled and bool(config.auth.jwt_secret)
         has_users = True
         if enabled and user_mgr:
             has_users = not user_mgr.is_first_user()
-        return {"enabled": enabled, "has_users": has_users}
+        oidc_enabled = (
+            config.auth.oidc.enabled
+            and bool(config.auth.oidc.provider_url)
+        )
+        providers = ["local"]
+        if oidc_enabled:
+            providers.append("oidc")
+        return {
+            "enabled": enabled,
+            "has_users": has_users,
+            "oidc_enabled": oidc_enabled,
+            "providers": providers,
+        }
 
     # --- Admin endpoints ---
 
@@ -213,6 +234,107 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if not result:
             return JSONResponse(status_code=404, content={"detail": "User not found"})
         return result
+
+    # --- OIDC/OAuth2 endpoints ---
+
+    # Lazy-init: created on first OIDC request
+    _oidc_client = None
+    _oidc_state_store = None
+
+    def _get_oidc():
+        nonlocal _oidc_client, _oidc_state_store
+        if _oidc_client is None:
+            from cairn.core.oidc import OIDCClient, OIDCStateStore
+            oidc_cfg = config.auth.oidc
+            _oidc_client = OIDCClient(
+                provider_url=oidc_cfg.provider_url,
+                client_id=oidc_cfg.client_id,
+                client_secret=oidc_cfg.client_secret,
+                scopes=oidc_cfg.scopes,
+            )
+            _oidc_state_store = OIDCStateStore()
+        return _oidc_client, _oidc_state_store
+
+    @router.get("/auth/oidc/login")
+    def oidc_login(redirect_uri: str | None = None):
+        """Start OIDC login flow. Returns the authorization URL to redirect to."""
+        err = _require_auth_enabled()
+        if err:
+            return err
+        if not config.auth.oidc.enabled or not config.auth.oidc.provider_url:
+            return JSONResponse(status_code=404, content={"detail": "OIDC not configured"})
+
+        oidc, state_store = _get_oidc()
+        # Callback URL: prefer explicit redirect_uri, then CAIRN_PUBLIC_URL, then internal host
+        if redirect_uri:
+            callback_uri = redirect_uri
+        elif config.public_url:
+            callback_uri = f"{config.public_url.rstrip('/')}/api/auth/oidc/callback"
+        else:
+            callback_uri = f"http://{config.http_host}:{config.http_port}/api/auth/oidc/callback"
+        # Extract UI origin from callback URI (e.g. http://localhost:3000)
+        # so we can redirect back correctly even behind a rewriting proxy.
+        from urllib.parse import urlparse
+        parsed = urlparse(callback_uri)
+        ui_origin = f"{parsed.scheme}://{parsed.netloc}"
+        state, code_verifier = state_store.create(ui_origin)
+        auth_url = oidc.authorization_url(callback_uri, state, code_verifier)
+        return {"authorization_url": auth_url, "state": state}
+
+    @router.get("/auth/oidc/callback")
+    def oidc_callback(code: str, state: str, request: Request):
+        """Handle OIDC provider callback. Exchanges code for tokens, creates/finds user."""
+        err = _require_auth_enabled()
+        if err:
+            return err
+        if not config.auth.oidc.enabled:
+            return JSONResponse(status_code=404, content={"detail": "OIDC not configured"})
+
+        oidc, state_store = _get_oidc()
+        state_data = state_store.consume(state)
+        if state_data is None:
+            return JSONResponse(status_code=400, content={"detail": "Invalid or expired state"})
+        code_verifier, ui_origin = state_data
+
+        try:
+            # Reconstruct callback URI using the stored origin (proxy-safe)
+            callback_uri = f"{ui_origin}{request.url.path}"
+
+            # Exchange code for tokens
+            token_response = oidc.exchange_code(code, callback_uri, code_verifier)
+            id_token = token_response.get("id_token")
+            if not id_token:
+                return JSONResponse(status_code=400, content={"detail": "No id_token in response"})
+
+            # Validate ID token
+            claims = oidc.validate_id_token(id_token)
+            external_id = claims.get("sub")
+            if not external_id:
+                return JSONResponse(status_code=400, content={"detail": "No sub claim in ID token"})
+
+            # Get or create user
+            oidc_cfg = config.auth.oidc
+            admin_groups = [g.strip() for g in oidc_cfg.admin_groups.split(",") if g.strip()] if oidc_cfg.admin_groups else None
+            user = user_mgr.get_or_create_oidc_user(
+                external_id=external_id,
+                claims=claims,
+                default_role=oidc_cfg.default_role,
+                admin_groups=admin_groups,
+            )
+
+            # Issue Cairn JWT
+            cairn_token = create_access_token(
+                user["id"], user["username"], user["role"],
+                secret=config.auth.jwt_secret,
+                expire_minutes=config.auth.jwt_expire_minutes,
+            )
+
+            redirect_url = f"{ui_origin}/login?token={cairn_token}&username={user['username']}&role={user['role']}"
+            return RedirectResponse(url=redirect_url, status_code=302)
+
+        except Exception:
+            logger.exception("OIDC callback failed")
+            return JSONResponse(status_code=500, content={"detail": "OIDC authentication failed"})
 
     # --- Project membership endpoints ---
 
@@ -273,6 +395,54 @@ def register_routes(router: APIRouter, svc: Services) -> None:
                 )
 
         user_mgr.remove_project_member(member_user_id, project_id)
+        return {"status": "ok"}
+
+    # --- Personal Access Tokens ---
+
+    @router.post("/auth/tokens")
+    def create_token(body: CreateTokenRequest):
+        """Create a personal access token for the current user."""
+        err = _require_auth_enabled()
+        if err:
+            return err
+
+        ctx = current_user()
+        if not ctx:
+            return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
+
+        from datetime import datetime, timedelta, timezone
+        expires_at = None
+        if body.expires_in_days:
+            expires_at = datetime.now(timezone.utc) + timedelta(days=body.expires_in_days)
+
+        result = user_mgr.create_api_token(ctx.user_id, body.name, expires_at)
+        return result
+
+    @router.get("/auth/tokens")
+    def list_tokens():
+        """List the current user's API tokens (no secrets)."""
+        err = _require_auth_enabled()
+        if err:
+            return err
+
+        ctx = current_user()
+        if not ctx:
+            return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
+
+        return user_mgr.list_api_tokens(ctx.user_id)
+
+    @router.delete("/auth/tokens/{token_id}")
+    def revoke_token(token_id: int):
+        """Revoke a personal access token."""
+        err = _require_auth_enabled()
+        if err:
+            return err
+
+        ctx = current_user()
+        if not ctx:
+            return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
+
+        user_mgr.revoke_api_token(token_id, ctx.user_id)
         return {"status": "ok"}
 
     @router.get("/projects/{project_name}/members")

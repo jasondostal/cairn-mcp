@@ -88,7 +88,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             import psycopg
 
             # Get a raw connection for LISTEN (can't use pooled connections)
-            dsn = db._dsn
+            dsn = db.config.dsn
             try:
                 conn = await psycopg.AsyncConnection.connect(
                     dsn, autocommit=True,
@@ -185,7 +185,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         async def event_generator():
             import psycopg
 
-            dsn = db._dsn
+            dsn = db.config.dsn
             try:
                 conn = await psycopg.AsyncConnection.connect(
                     dsn, autocommit=True,

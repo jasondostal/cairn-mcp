@@ -180,12 +180,27 @@ class BudgetConfig:
 
 
 @dataclass(frozen=True)
+class OIDCConfig:
+    """OIDC/OAuth2 provider configuration (e.g. Authentik)."""
+    enabled: bool = False
+    provider_url: str = ""        # OIDC discovery URL (e.g. https://auth.example.com/application/o/cairn/)
+    client_id: str = ""
+    client_secret: str = ""
+    scopes: str = "openid email profile"
+    auto_create_users: bool = True   # Auto-create Cairn user on first OIDC login
+    default_role: str = "user"       # Role for auto-created OIDC users
+    admin_groups: str = ""           # Comma-separated groups that map to admin role
+
+
+@dataclass(frozen=True)
 class AuthConfig:
     enabled: bool = False
     api_key: str | None = None  # Static API key (checked via X-API-Key header)
     header_name: str = "X-API-Key"  # Header to check for auth token
     jwt_secret: str = ""  # Secret for JWT signing (required when auth.enabled=true)
     jwt_expire_minutes: int = 1440  # JWT expiration (default 24h)
+    oidc: OIDCConfig = field(default_factory=OIDCConfig)
+    stdio_user: str = ""  # Username for stdio transport identity (CAIRN_STDIO_USER)
 
 
 @dataclass(frozen=True)
@@ -284,6 +299,7 @@ class Config:
     transport: str = "stdio"  # "stdio" or "http"
     http_host: str = "0.0.0.0"
     http_port: int = 8000
+    public_url: str = ""  # Externally-reachable base URL (e.g. https://cairn.example.com)
     cors_origins: list[str] = field(default_factory=lambda: ["*"])
     event_archive_dir: str | None = None  # File-based event archive (e.g. /data/events)
     ingest_dir: str = "/data/ingest"   # Staging dir for file-path ingestion
@@ -337,7 +353,10 @@ EDITABLE_KEYS: set[str] = {
     "analytics.cost_llm_output_per_1k",
     # Auth
     "auth.enabled", "auth.api_key", "auth.header_name",
-    "auth.jwt_secret", "auth.jwt_expire_minutes",
+    "auth.jwt_secret", "auth.jwt_expire_minutes", "auth.stdio_user",
+    # Auth OIDC (secrets excluded — env-only)
+    "auth.oidc.enabled", "auth.oidc.provider_url", "auth.oidc.scopes",
+    "auth.oidc.auto_create_users", "auth.oidc.default_role", "auth.oidc.admin_groups",
     # Terminal
     "terminal.backend", "terminal.max_sessions", "terminal.connect_timeout",
     # Neo4j
@@ -613,6 +632,15 @@ _ENV_MAP: dict[str, str] = {
     "auth.header_name": "CAIRN_AUTH_HEADER",
     "auth.jwt_secret": "CAIRN_AUTH_JWT_SECRET",
     "auth.jwt_expire_minutes": "CAIRN_AUTH_JWT_EXPIRE_MINUTES",
+    "auth.stdio_user": "CAIRN_STDIO_USER",
+    "auth.oidc.enabled": "CAIRN_OIDC_ENABLED",
+    "auth.oidc.provider_url": "CAIRN_OIDC_PROVIDER_URL",
+    "auth.oidc.client_id": "CAIRN_OIDC_CLIENT_ID",
+    "auth.oidc.client_secret": "CAIRN_OIDC_CLIENT_SECRET",
+    "auth.oidc.scopes": "CAIRN_OIDC_SCOPES",
+    "auth.oidc.auto_create_users": "CAIRN_OIDC_AUTO_CREATE",
+    "auth.oidc.default_role": "CAIRN_OIDC_DEFAULT_ROLE",
+    "auth.oidc.admin_groups": "CAIRN_OIDC_ADMIN_GROUPS",
     "analytics.enabled": "CAIRN_ANALYTICS_ENABLED",
     "analytics.retention_days": "CAIRN_ANALYTICS_RETENTION_DAYS",
     "analytics.cost_embedding_per_1k": "CAIRN_ANALYTICS_COST_EMBEDDING",
@@ -650,6 +678,7 @@ _ENV_MAP: dict[str, str] = {
     "transport": "CAIRN_TRANSPORT",
     "http_host": "CAIRN_HTTP_HOST",
     "http_port": "CAIRN_HTTP_PORT",
+    "public_url": "CAIRN_PUBLIC_URL",
     "ingest_chunk_size": "CAIRN_INGEST_CHUNK_SIZE",
     "ingest_chunk_overlap": "CAIRN_INGEST_CHUNK_OVERLAP",
     "decay_lambda": "CAIRN_DECAY_LAMBDA",
@@ -766,6 +795,17 @@ def load_config() -> Config:
             header_name=os.getenv("CAIRN_AUTH_HEADER", "X-API-Key"),
             jwt_secret=os.getenv("CAIRN_AUTH_JWT_SECRET", ""),
             jwt_expire_minutes=int(os.getenv("CAIRN_AUTH_JWT_EXPIRE_MINUTES", "1440")),
+            stdio_user=os.getenv("CAIRN_STDIO_USER", ""),
+            oidc=OIDCConfig(
+                enabled=os.getenv("CAIRN_OIDC_ENABLED", "false").lower() in ("true", "1", "yes"),
+                provider_url=os.getenv("CAIRN_OIDC_PROVIDER_URL", ""),
+                client_id=os.getenv("CAIRN_OIDC_CLIENT_ID", ""),
+                client_secret=os.getenv("CAIRN_OIDC_CLIENT_SECRET", ""),
+                scopes=os.getenv("CAIRN_OIDC_SCOPES", "openid email profile"),
+                auto_create_users=os.getenv("CAIRN_OIDC_AUTO_CREATE", "true").lower() in ("true", "1", "yes"),
+                default_role=os.getenv("CAIRN_OIDC_DEFAULT_ROLE", "user"),
+                admin_groups=os.getenv("CAIRN_OIDC_ADMIN_GROUPS", ""),
+            ),
         ),
         analytics=AnalyticsConfig(
             enabled=os.getenv("CAIRN_ANALYTICS_ENABLED", "true").lower() in ("true", "1", "yes"),
@@ -844,6 +884,7 @@ def load_config() -> Config:
         transport=os.getenv("CAIRN_TRANSPORT", "stdio"),
         http_host=os.getenv("CAIRN_HTTP_HOST", "0.0.0.0"),
         http_port=int(os.getenv("CAIRN_HTTP_PORT", "8000")),
+        public_url=os.getenv("CAIRN_PUBLIC_URL", ""),
         cors_origins=_parse_cors_origins(os.getenv("CAIRN_CORS_ORIGINS", "*")),
         event_archive_dir=os.getenv("CAIRN_EVENT_ARCHIVE_DIR") or None,
         ingest_dir=os.getenv("CAIRN_INGEST_DIR", "/data/ingest"),

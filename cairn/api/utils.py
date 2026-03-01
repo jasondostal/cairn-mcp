@@ -50,8 +50,7 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS":
             return await call_next(request)
         path = request.url.path.rstrip("/")
-        if path in ("/status", "/swagger", "/openapi.json",
-                     "/api/status", "/api/swagger", "/api/openapi.json"):
+        if path in _JWT_OPEN_PATHS:
             return await call_next(request)
 
         token = request.headers.get(self.header_name)
@@ -63,11 +62,16 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-# Paths that bypass JWT auth (public endpoints)
+# Paths that bypass JWT auth (public endpoints).
+# The REST API is mounted at /api, so middleware sees mount-relative paths
+# (e.g. /auth/status, not /api/auth/status). Include both for safety.
 _JWT_OPEN_PATHS = frozenset({
     "/status", "/swagger", "/openapi.json",
     "/api/status", "/api/swagger", "/api/openapi.json",
+    "/auth/login", "/auth/register", "/auth/status",
+    "/auth/oidc/login", "/auth/oidc/callback",
     "/api/auth/login", "/api/auth/register", "/api/auth/status",
+    "/api/auth/oidc/login", "/api/auth/oidc/callback",
 })
 
 
@@ -87,7 +91,8 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         self.api_key_header = api_key_header
 
     async def dispatch(self, request: Request, call_next):
-        from cairn.core.user import clear_user, decode_access_token, set_user
+        from cairn.core.auth import resolve_bearer_token
+        from cairn.core.user import clear_user, set_user
 
         # Always allow CORS preflight
         if request.method == "OPTIONS":
@@ -99,13 +104,13 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         try:
-            # Check for API key first (MCP HTTP clients use this)
+            # Check for API key first (legacy/simple auth)
             if self.api_key:
                 api_key_value = request.headers.get(self.api_key_header)
                 if api_key_value and api_key_value == self.api_key:
                     return await call_next(request)
 
-            # Check for Bearer token
+            # Check for Bearer token (JWT or PAT)
             auth_header = request.headers.get("Authorization", "")
             if not auth_header.startswith("Bearer "):
                 return JSONResponse(
@@ -113,20 +118,16 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
                     content={"detail": "Missing or invalid authorization"},
                 )
 
-            token = auth_header[7:]  # Strip "Bearer "
-            payload = decode_access_token(token, secret=self.jwt_secret)
-            if payload is None:
-                return JSONResponse(
-                    status_code=401,
-                    content={"detail": "Invalid or expired token"},
-                )
-
-            user_id = int(payload["sub"])
-            ctx = self.user_manager.load_user_context(user_id)
+            token = auth_header[7:]
+            ctx = resolve_bearer_token(
+                token,
+                jwt_secret=self.jwt_secret,
+                user_manager=self.user_manager,
+            )
             if ctx is None:
                 return JSONResponse(
                     status_code=401,
-                    content={"detail": "User not found or deactivated"},
+                    content={"detail": "Invalid or expired token"},
                 )
 
             set_user(ctx)

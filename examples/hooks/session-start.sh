@@ -18,12 +18,15 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 
 CAIRN_URL="${CAIRN_URL:-http://localhost:8000}"
+CAIRN_PAT="${CAIRN_PAT:-}"
 CAIRN_API_KEY="${CAIRN_API_KEY:-}"
 CAIRN_PROJECT="${CAIRN_PROJECT:-$(basename "${CWD:-$(pwd)}")}"
 
-# Build auth header if API key is set
+# Build auth header — prefer PAT (Bearer), fall back to API key
 AUTH_HEADER=()
-if [ -n "$CAIRN_API_KEY" ]; then
+if [ -n "$CAIRN_PAT" ]; then
+    AUTH_HEADER=(-H "Authorization: Bearer ${CAIRN_PAT}")
+elif [ -n "$CAIRN_API_KEY" ]; then
     AUTH_HEADER=(-H "X-API-Key: ${CAIRN_API_KEY}")
 fi
 

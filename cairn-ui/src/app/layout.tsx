@@ -1,12 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
-import { SidebarNav } from "@/components/sidebar-nav";
-import { CommandPalette } from "@/components/command-palette";
-import { ChatDrawerTrigger } from "@/components/chat/chat-drawer-trigger";
-import { ErrorBoundary } from "@/components/error-boundary";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthGuard } from "@/components/auth-guard";
+import { AuthProvider } from "@/components/auth-provider";
+import { AppShell } from "@/components/app-shell";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -36,16 +33,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <TooltipProvider delayDuration={300}>
-          <AuthGuard>
-            <div className="flex h-dvh flex-col md:flex-row">
-              <SidebarNav />
-              <main className="flex-1 overflow-y-auto p-4 md:p-6">
-                <ErrorBoundary>{children}</ErrorBoundary>
-              </main>
-            </div>
-            <CommandPalette />
-            <ChatDrawerTrigger />
-          </AuthGuard>
+          <AuthProvider>
+            <AppShell>{children}</AppShell>
+          </AuthProvider>
           <Toaster theme="dark" position="bottom-right" richColors />
         </TooltipProvider>
       </body>

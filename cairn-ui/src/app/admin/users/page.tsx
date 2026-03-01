@@ -10,7 +10,8 @@ import { SingleSelect } from "@/components/ui/single-select";
 import { PageLayout } from "@/components/page-layout";
 import { SkeletonList } from "@/components/skeleton-list";
 import { toast } from "sonner";
-import { getAuthHeaders, getUser, checkAuthStatus } from "@/lib/auth";
+import { useAuth } from "@/components/auth-provider";
+import { getAuthHeaders } from "@/lib/auth";
 import { Plus, UserCog, Shield } from "lucide-react";
 
 interface User {
@@ -58,16 +59,14 @@ CAIRN_AUTH_JWT_SECRET=your-secret-key-here`}
 
 export default function AdminUsersPage() {
   const router = useRouter();
+  const { user: currentUser, authEnabled } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [authDisabled, setAuthDisabled] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newRole, setNewRole] = useState("user");
-
-  const currentUser = getUser();
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -89,21 +88,16 @@ export default function AdminUsersPage() {
   }, [router]);
 
   useEffect(() => {
-    async function init() {
-      const status = await checkAuthStatus();
-      if (!status.enabled) {
-        setAuthDisabled(true);
-        setLoading(false);
-        return;
-      }
-      if (!currentUser || currentUser.role !== "admin") {
-        router.push("/");
-        return;
-      }
-      fetchUsers();
+    if (!authEnabled) {
+      setLoading(false);
+      return;
     }
-    init();
-  }, [currentUser, router, fetchUsers]);
+    if (!currentUser || currentUser.role !== "admin") {
+      router.push("/");
+      return;
+    }
+    fetchUsers();
+  }, [authEnabled, currentUser, router, fetchUsers]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,7 +172,7 @@ export default function AdminUsersPage() {
     );
   }
 
-  if (authDisabled) {
+  if (!authEnabled) {
     return <DisabledState />;
   }
 

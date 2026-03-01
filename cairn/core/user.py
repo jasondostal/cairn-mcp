@@ -300,3 +300,198 @@ class UserManager:
             role=user["role"],
             project_ids=frozenset(project_ids),
         )
+
+    # --- Personal Access Tokens (PATs) ---
+
+    def create_api_token(
+        self,
+        user_id: int,
+        name: str,
+        expires_at: datetime | None = None,
+    ) -> dict:
+        """Create a personal access token. Returns the raw token (shown once)."""
+        import hashlib
+        import secrets as _secrets
+
+        raw_token = f"cairn_{_secrets.token_hex(24)}"
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        token_prefix = raw_token[:12]
+
+        row = self.db.execute_one(
+            """
+            INSERT INTO api_tokens (user_id, name, token_hash, token_prefix, expires_at)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id, name, token_prefix, expires_at, created_at
+            """,
+            (user_id, name, token_hash, token_prefix, expires_at),
+        )
+        self.db.commit()
+        return {
+            "id": row["id"],
+            "name": row["name"],
+            "raw_token": raw_token,
+            "token_prefix": row["token_prefix"],
+            "expires_at": row["expires_at"].isoformat() if row["expires_at"] else None,
+            "created_at": row["created_at"].isoformat(),
+        }
+
+    def list_api_tokens(self, user_id: int) -> list[dict]:
+        """List a user's API tokens (metadata only, no secrets)."""
+        rows = self.db.execute(
+            """
+            SELECT id, name, token_prefix, expires_at, last_used_at, created_at, is_active
+            FROM api_tokens WHERE user_id = %s ORDER BY created_at DESC
+            """,
+            (user_id,),
+        )
+        return [
+            {
+                "id": r["id"],
+                "name": r["name"],
+                "token_prefix": r["token_prefix"],
+                "expires_at": r["expires_at"].isoformat() if r["expires_at"] else None,
+                "last_used_at": r["last_used_at"].isoformat() if r["last_used_at"] else None,
+                "created_at": r["created_at"].isoformat(),
+                "is_active": r["is_active"],
+            }
+            for r in rows
+        ]
+
+    def revoke_api_token(self, token_id: int, user_id: int) -> bool:
+        """Revoke a token (soft delete). Returns True if found and revoked."""
+        self.db.execute(
+            "UPDATE api_tokens SET is_active = FALSE WHERE id = %s AND user_id = %s",
+            (token_id, user_id),
+        )
+        self.db.commit()
+        return True
+
+    def resolve_api_token(self, raw_token: str) -> UserContext | None:
+        """Resolve a raw PAT to a UserContext. Updates last_used_at."""
+        import hashlib
+
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        row = self.db.execute_one(
+            """
+            SELECT t.user_id, t.expires_at
+            FROM api_tokens t
+            JOIN users u ON u.id = t.user_id
+            WHERE t.token_hash = %s AND t.is_active = TRUE AND u.is_active = TRUE
+            """,
+            (token_hash,),
+        )
+        if not row:
+            return None
+        if row["expires_at"] and row["expires_at"] < datetime.now(timezone.utc):
+            return None
+        # Update last_used_at
+        self.db.execute(
+            "UPDATE api_tokens SET last_used_at = NOW() WHERE token_hash = %s",
+            (token_hash,),
+        )
+        self.db.commit()
+        return self.load_user_context(row["user_id"])
+
+    # --- OIDC users ---
+
+    def get_by_external_id(self, auth_provider: str, external_id: str) -> dict | None:
+        """Find a user by their external IdP identity."""
+        row = self.db.execute_one(
+            "SELECT * FROM users WHERE auth_provider = %s AND external_id = %s",
+            (auth_provider, external_id),
+        )
+        return dict(row) if row else None
+
+    def create_oidc_user(
+        self,
+        external_id: str,
+        username: str,
+        email: str | None = None,
+        role: str = "user",
+    ) -> dict:
+        """Create a user from OIDC claims (no password)."""
+        row = self.db.execute_one(
+            """
+            INSERT INTO users (username, email, password_hash, role, auth_provider, external_id)
+            VALUES (%s, %s, NULL, %s, 'oidc', %s)
+            RETURNING id, username, email, role, is_active, created_at
+            """,
+            (username, email, role, external_id),
+        )
+        self.db.commit()
+        return {
+            "id": row["id"],
+            "username": row["username"],
+            "email": row["email"],
+            "role": row["role"],
+            "is_active": row["is_active"],
+            "created_at": row["created_at"].isoformat(),
+        }
+
+    def get_or_create_oidc_user(
+        self,
+        external_id: str,
+        claims: dict,
+        *,
+        default_role: str = "user",
+        admin_groups: list[str] | None = None,
+    ) -> dict:
+        """Find or create a user from OIDC claims.
+
+        Link order: external_id match → email match (link existing) → create new.
+        """
+        # 1. Already linked by external_id
+        existing = self.get_by_external_id("oidc", external_id)
+        if existing:
+            if claims.get("email") and claims["email"] != existing.get("email"):
+                self.update_user(existing["id"], email=claims["email"])
+            return self.get_by_id(existing["id"]) or existing
+
+        # Determine role from groups
+        role = default_role
+        if admin_groups:
+            user_groups = claims.get("groups", [])
+            if any(g in admin_groups for g in user_groups):
+                role = "admin"
+
+        # 2. Email match — link existing local user to this OIDC identity
+        email = claims.get("email")
+        if email:
+            email_match = self.db.execute_one(
+                "SELECT * FROM users WHERE email = %s AND is_active = TRUE",
+                (email,),
+            )
+            if email_match:
+                self.db.execute(
+                    "UPDATE users SET auth_provider = 'oidc', external_id = %s WHERE id = %s",
+                    (external_id, email_match["id"]),
+                )
+                if role == "admin" and email_match.get("role") != "admin":
+                    self.db.execute(
+                        "UPDATE users SET role = 'admin' WHERE id = %s",
+                        (email_match["id"],),
+                    )
+                self.db.commit()
+                logger.info("Linked OIDC identity to existing user %s (email match)", email_match["username"])
+                return self.get_by_id(email_match["id"]) or email_match
+
+        # 3. Create new OIDC user
+        username = (
+            claims.get("preferred_username")
+            or (email.split("@")[0] if email else "")
+            or f"oidc_{external_id[:8]}"
+        )
+
+        # Handle username collision
+        base_username = username
+        counter = 1
+        while self.get_by_username(username):
+            username = f"{base_username}_{counter}"
+            counter += 1
+
+        return self.create_oidc_user(
+            external_id=external_id,
+            username=username,
+            email=email,
+            role=role,
+        )
