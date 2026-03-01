@@ -73,11 +73,19 @@ Where that goes:
 | **Cline** | MCP settings panel in VS Code |
 | **Continue** | `.continue/config.yaml` |
 
-Or run the setup script:
+Or run the setup script — it detects your IDEs, configures MCP, and offers to set up auth:
 
 ```bash
 git clone https://github.com/jasondostal/cairn-mcp.git && ./cairn-mcp/scripts/setup.sh
 ```
+
+Want auth? The setup wizard walks you through it:
+
+```bash
+./scripts/setup-auth.sh
+```
+
+Three modes: no auth (default), local JWT, or OIDC/SSO. Generates secrets, validates your identity provider, writes `.env`. Think `certbot` for Cairn auth.
 
 ### 3. Use it
 
@@ -151,7 +159,7 @@ The rest: `modify`, `insights`, `tasks`, `think`, `status`, `consolidate`, `drif
 
 </details>
 
-**Multi-user authentication and RBAC.** Off by default, zero to enterprise in five minutes. Local auth with JWT, Personal Access Tokens for machine clients, OIDC/SSO for identity providers (Authentik, Keycloak, Auth0, Okta, Azure AD), and stdio identity for MCP. Three roles, project-level scoping, first-user-becomes-admin. Groups with OIDC sync — IdP group claims auto-provision Cairn groups and drive project access. See the **[Authentication Guide](docs/authentication.md)**.
+**Multi-user authentication and RBAC.** Off by default, zero to enterprise in one command. `./scripts/setup-auth.sh` walks you through auth mode selection, JWT secret generation, and OIDC provider configuration with provider-specific hints for Authentik, Keycloak, Auth0, Okta, and Azure AD. Local auth with JWT, Personal Access Tokens for machine clients, OIDC/SSO, and stdio identity for MCP. Three roles, project-level scoping, first-user-becomes-admin. Groups with OIDC sync. See the **[Authentication Guide](docs/authentication.md)**.
 
 **Session capture.** IDE hooks (Claude Code, Cursor, Cline, Windsurf) log every tool call. Next session boots warm. See [`examples/hooks/README.md`](examples/hooks/README.md).
 
@@ -196,12 +204,22 @@ Full reference is in [docker-compose.yml](docker-compose.yml). Every variable ha
 
 ## Authentication
 
-Off by default. When enabled, Cairn supports local username/password (JWT),
-Personal Access Tokens for machine clients, and OIDC/SSO for enterprise identity
-provider integration. First user to register becomes admin. Role-based access
-control enforces permissions across REST API, MCP HTTP, and the web UI.
+Off by default. The fastest way to enable it:
 
-See the **[Authentication Guide](docs/authentication.md)** for setup instructions
+```bash
+./scripts/setup-auth.sh
+```
+
+The wizard walks you through three modes — no auth, local JWT, or OIDC/SSO —
+generates secrets, validates your identity provider's discovery endpoint, and
+writes `.env`. Provider-specific URL hints for Authentik, Keycloak, Auth0, Okta,
+and Azure AD. Supports `--dry-run` and `--non-interactive` for CI.
+
+First user to register becomes admin. Role-based access control enforces
+permissions across REST API, MCP HTTP, and the web UI. Personal Access Tokens
+for machine clients, groups with OIDC sync.
+
+See the **[Authentication Guide](docs/authentication.md)** for the full reference
 covering all auth modes, OIDC provider configuration, and MCP client examples.
 
 > **Security note:** Cairn's auth system is functional and production-tested but

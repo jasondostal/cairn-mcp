@@ -526,3 +526,20 @@ fi
 echo ""
 echo "  Documentation: $HOOKS_DIR/README.md"
 echo ""
+
+# ──────────────────────────────────────────────
+# Optional: Authentication setup
+# ──────────────────────────────────────────────
+
+AUTH_SCRIPT="$SCRIPT_DIR/setup-auth.sh"
+if [ -f "$AUTH_SCRIPT" ]; then
+    echo -n "Would you like to configure authentication? [y/N]: "
+    read -r SETUP_AUTH
+    if [[ "$SETUP_AUTH" =~ ^[Yy] ]]; then
+        AUTH_ARGS=()
+        if [ "$DRY_RUN" = true ]; then
+            AUTH_ARGS+=("--dry-run")
+        fi
+        exec "$AUTH_SCRIPT" "${AUTH_ARGS[@]}"
+    fi
+fi

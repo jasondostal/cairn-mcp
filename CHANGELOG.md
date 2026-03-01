@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.66.5] — 2026-03-01 — "Base Camp"
+
+### Added
+- **Setup assistant** (ca-172) — `scripts/setup-auth.sh` interactive CLI wizard
+  for auth configuration. Three auth modes (none, local JWT, OIDC SSO), auto
+  JWT secret generation, OIDC discovery endpoint validation, provider-specific
+  URL hints (Authentik, Keycloak, Auth0, Okta, Azure AD), and idempotent `.env`
+  writing. Supports `--dry-run` and `--non-interactive` for CI. `setup.sh` now
+  offers to run auth setup after IDE configuration.
+
 ## [0.66.4] — 2026-03-01
 
 ### Added

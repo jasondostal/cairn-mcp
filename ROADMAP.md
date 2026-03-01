@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.66.4** — Backup and disaster recovery. See [CHANGELOG](CHANGELOG.md).
+Current: **v0.66.5** — "Base Camp" — Setup assistant. See [CHANGELOG](CHANGELOG.md).
 
 ---
 
@@ -19,8 +19,6 @@ Continuous work with no fixed end state.
 ## Planned
 
 Have work items, intent to build.
-
-**Setup assistant.** Guided auth configuration via CLI and web UI. Interactive wizard walks through auth mode selection, JWT secret generation, first admin creation, OIDC provider testing, and PAT setup with copy-paste MCP config snippets. Think `certbot` UX for Cairn auth. (ca-172)
 
 **Async MCP observability.** Progress reporting for long-running tools (code_index, consolidate, ingest). (ca-107)
 
@@ -49,6 +47,10 @@ Exploring, not committed.
 ---
 
 ## Shipped
+
+### v0.66.5 ✓
+
+- [x] **Setup assistant** (ca-172) — `scripts/setup-auth.sh` interactive CLI wizard for auth configuration. Walks through auth mode selection (none / local JWT / OIDC SSO), JWT secret generation, OIDC provider validation via discovery endpoint, and `.env` writing. Provider-specific URL hints for Authentik, Keycloak, Auth0, Okta, Azure AD. Supports `--dry-run` and `--non-interactive` modes. `setup.sh` prompts to run it after IDE configuration.
 
 ### v0.66.4 ✓
 
