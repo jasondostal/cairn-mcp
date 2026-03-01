@@ -37,6 +37,15 @@ import {
   Plus,
   Copy,
   Trash2,
+  Lock,
+  Globe,
+  Bell,
+  Timer,
+  Activity,
+  Boxes,
+  Clock,
+  Network,
+  Search,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth-provider";
@@ -51,6 +60,24 @@ function SourceBadge({ source }: { source: "default" | "env" | "db" }) {
   };
   const { variant, label } = variants[source] || variants.default;
   return <Badge variant={variant} className="text-[10px] px-1.5 py-0">{label}</Badge>;
+}
+
+// --- Env-locked badge ---
+
+function EnvLockedBadge() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-0.5">
+          <Lock className="h-2.5 w-2.5" />
+          env-locked
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[240px]">
+        <p>This setting is locked by an environment variable and cannot be changed via the UI.</p>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 // --- Capability metadata ---
@@ -237,11 +264,11 @@ function SectionCard({ icon, title, children, dirty, onSave, saving, className }
 // --- Editable fields ---
 
 function EditableText({
-  label, settingKey, value, source, secret, localEdits, setLocalEdits, onReset, tooltip,
+  label, settingKey, value, source, secret, localEdits, setLocalEdits, onReset, tooltip, envLocked,
 }: {
   label: string; settingKey: string; value: string; source: "default" | "env" | "db";
   secret?: boolean; localEdits: Record<string, string>; setLocalEdits: (e: Record<string, string>) => void;
-  onReset: (key: string) => void; tooltip?: string;
+  onReset: (key: string) => void; tooltip?: string; envLocked?: boolean;
 }) {
   const [show, setShow] = useState(false);
   const editedValue = settingKey in localEdits ? localEdits[settingKey] : value;
@@ -255,8 +282,8 @@ function EditableText({
         <TooltipLabel description={tooltip}>
           <span className="text-muted-foreground">{label}</span>
         </TooltipLabel>
-        <SourceBadge source={source} />
-        {source === "db" && (
+        {envLocked ? <EnvLockedBadge /> : <SourceBadge source={source} />}
+        {!envLocked && source === "db" && (
           <button onClick={() => onReset(settingKey)} className="text-muted-foreground hover:text-foreground" title="Reset to default">
             <RotateCcw className="h-3 w-3" />
           </button>
@@ -266,10 +293,11 @@ function EditableText({
         <Input
           type={isSecret && !show ? "password" : "text"}
           value={editedValue}
+          disabled={envLocked}
           onChange={(e) => setLocalEdits({ ...localEdits, [settingKey]: e.target.value })}
           className="h-7 text-xs font-mono"
         />
-        {isSecret && (
+        {isSecret && !envLocked && (
           <button onClick={() => setShow(!show)} className="text-muted-foreground hover:text-foreground shrink-0">
             {show ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
           </button>
@@ -280,11 +308,11 @@ function EditableText({
 }
 
 function EditableNumber({
-  label, settingKey, value, source, localEdits, setLocalEdits, onReset, min, tooltip,
+  label, settingKey, value, source, localEdits, setLocalEdits, onReset, min, tooltip, envLocked,
 }: {
   label: string; settingKey: string; value: number; source: "default" | "env" | "db";
   localEdits: Record<string, string>; setLocalEdits: (e: Record<string, string>) => void;
-  onReset: (key: string) => void; min?: number; tooltip?: string;
+  onReset: (key: string) => void; min?: number; tooltip?: string; envLocked?: boolean;
 }) {
   const editedValue = settingKey in localEdits ? localEdits[settingKey] : String(value);
   const dirty = settingKey in localEdits;
@@ -296,8 +324,8 @@ function EditableNumber({
         <TooltipLabel description={tooltip}>
           <span className="text-muted-foreground">{label}</span>
         </TooltipLabel>
-        <SourceBadge source={source} />
-        {source === "db" && (
+        {envLocked ? <EnvLockedBadge /> : <SourceBadge source={source} />}
+        {!envLocked && source === "db" && (
           <button onClick={() => onReset(settingKey)} className="text-muted-foreground hover:text-foreground" title="Reset to default">
             <RotateCcw className="h-3 w-3" />
           </button>
@@ -307,6 +335,7 @@ function EditableNumber({
         type="number"
         value={editedValue}
         min={min ?? 0}
+        disabled={envLocked}
         onChange={(e) => setLocalEdits({ ...localEdits, [settingKey]: e.target.value })}
         className="h-7 text-xs font-mono w-24"
       />
@@ -315,11 +344,11 @@ function EditableNumber({
 }
 
 function EditableToggle({
-  label, settingKey, value, source, localEdits, setLocalEdits, onReset, tooltip,
+  label, settingKey, value, source, localEdits, setLocalEdits, onReset, tooltip, envLocked,
 }: {
   label: string; settingKey: string; value: boolean; source: "default" | "env" | "db";
   localEdits: Record<string, string>; setLocalEdits: (e: Record<string, string>) => void;
-  onReset: (key: string) => void; tooltip?: string;
+  onReset: (key: string) => void; tooltip?: string; envLocked?: boolean;
 }) {
   const editedValue = settingKey in localEdits
     ? localEdits[settingKey] === "true"
@@ -333,8 +362,8 @@ function EditableToggle({
         <TooltipLabel description={tooltip}>
           <span className={editedValue ? "text-sm" : "text-muted-foreground text-sm"}>{label}</span>
         </TooltipLabel>
-        <SourceBadge source={source} />
-        {source === "db" && (
+        {envLocked ? <EnvLockedBadge /> : <SourceBadge source={source} />}
+        {!envLocked && source === "db" && (
           <button onClick={() => onReset(settingKey)} className="text-muted-foreground hover:text-foreground" title="Reset to default">
             <RotateCcw className="h-3 w-3" />
           </button>
@@ -343,17 +372,18 @@ function EditableToggle({
       <Toggle
         checked={editedValue}
         onChange={(v) => setLocalEdits({ ...localEdits, [settingKey]: v ? "true" : "false" })}
+        disabled={envLocked}
       />
     </div>
   );
 }
 
 function EditableSelect({
-  label, settingKey, value, source, options, localEdits, setLocalEdits, onReset, tooltip,
+  label, settingKey, value, source, options, localEdits, setLocalEdits, onReset, tooltip, envLocked,
 }: {
   label: string; settingKey: string; value: string; source: "default" | "env" | "db";
   options: string[]; localEdits: Record<string, string>; setLocalEdits: (e: Record<string, string>) => void;
-  onReset: (key: string) => void; tooltip?: string;
+  onReset: (key: string) => void; tooltip?: string; envLocked?: boolean;
 }) {
   const editedValue = settingKey in localEdits ? localEdits[settingKey] : value;
   const dirty = settingKey in localEdits;
@@ -365,8 +395,8 @@ function EditableSelect({
         <TooltipLabel description={tooltip}>
           <span className="text-muted-foreground">{label}</span>
         </TooltipLabel>
-        <SourceBadge source={source} />
-        {source === "db" && (
+        {envLocked ? <EnvLockedBadge /> : <SourceBadge source={source} />}
+        {!envLocked && source === "db" && (
           <button onClick={() => onReset(settingKey)} className="text-muted-foreground hover:text-foreground" title="Reset to default">
             <RotateCcw className="h-3 w-3" />
           </button>
@@ -376,6 +406,7 @@ function EditableSelect({
         options={options.map((o) => ({ value: o, label: o }))}
         value={editedValue}
         onValueChange={(v) => setLocalEdits({ ...localEdits, [settingKey]: v })}
+        disabled={envLocked}
         className="h-7 text-xs font-mono"
       />
     </div>
@@ -614,6 +645,8 @@ export default function SettingsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  const [searchFilter, setSearchFilter] = useState("");
+
   const val = (key: string) => settings?.values[key];
   type SettingSource = "default" | "env" | "db";
   const src = (key: string): SettingSource =>
@@ -621,6 +654,26 @@ export default function SettingsPage() {
 
   const isExperimental = (key: string) =>
     settings?.experimental?.includes(`capabilities.${key}`) ?? false;
+
+  const isEnvLocked = (key: string) =>
+    settings?.env_locked?.includes(key) ?? false;
+
+  // Search filter: check if a section prefix or any of its keys match the filter
+  const sectionVisible = (prefix: string, ...extraKeys: string[]) => {
+    if (!searchFilter) return true;
+    const q = searchFilter.toLowerCase();
+    if (prefix.toLowerCase().includes(q)) return true;
+    // Check if any key under this prefix matches
+    if (settings?.values) {
+      for (const key of Object.keys(settings.values)) {
+        if (key.startsWith(prefix) && key.toLowerCase().includes(q)) return true;
+      }
+    }
+    for (const k of extraKeys) {
+      if (k.toLowerCase().includes(q)) return true;
+    }
+    return false;
+  };
 
   // Collect dirty keys for a section
   const dirtyKeys = (prefix: string) =>
@@ -676,6 +729,17 @@ export default function SettingsPage() {
 
       {!loading && !error && status && settings && (
         <>
+          {/* Search filter */}
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Filter settings..."
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              className="pl-9 h-9"
+            />
+          </div>
+
           {/* Restart banner */}
           {settings.pending_restart && (
             <div className="flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-200 mb-4">
@@ -739,7 +803,7 @@ export default function SettingsPage() {
             </Card>
 
             {/* 2. LLM */}
-            <SectionCard
+            {sectionVisible("llm.", "enrichment_enabled") && <SectionCard
               icon={<Brain className="h-4 w-4" />}
               title="LLM"
               dirty={sectionDirty("llm.") || "enrichment_enabled" in localEdits}
@@ -761,10 +825,10 @@ export default function SettingsPage() {
               <EditableText label="OpenAI Model" settingKey="llm.openai_model" value={String(val("llm.openai_model") ?? "")} source={src("llm.openai_model")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
               <EditableText label="OpenAI API Key" settingKey="llm.openai_api_key" value={String(val("llm.openai_api_key") ?? "")} source={src("llm.openai_api_key")} secret localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
               <EditableToggle label="Enrichment" settingKey="enrichment_enabled" value={Boolean(val("enrichment_enabled"))} source={src("enrichment_enabled")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS.enrichment_enabled} />
-            </SectionCard>
+            </SectionCard>}
 
             {/* 2. Reranker */}
-            <SectionCard
+            {sectionVisible("reranker.") && <SectionCard
               icon={<Zap className="h-4 w-4" />}
               title="Reranker"
               dirty={sectionDirty("reranker.")}
@@ -776,10 +840,10 @@ export default function SettingsPage() {
               <EditableNumber label="Candidates" settingKey="reranker.candidates" value={Number(val("reranker.candidates") ?? 50)} source={src("reranker.candidates")} min={1} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS["reranker.candidates"]} />
               <EditableText label="Bedrock Model" settingKey="reranker.bedrock_model" value={String(val("reranker.bedrock_model") ?? "")} source={src("reranker.bedrock_model")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
               <EditableText label="Bedrock Region" settingKey="reranker.bedrock_region" value={String(val("reranker.bedrock_region") ?? "")} source={src("reranker.bedrock_region")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
-            </SectionCard>
+            </SectionCard>}
 
             {/* Router — full width, 3 tiers */}
-            <SectionCard
+            {sectionVisible("router.") && <SectionCard
               icon={<Route className="h-4 w-4" />}
               title="Model Router"
               dirty={sectionDirty("router.")}
@@ -802,10 +866,10 @@ export default function SettingsPage() {
                   </div>
                 </div>
               ))}
-            </SectionCard>
+            </SectionCard>}
 
             {/* 3. Auth */}
-            <SectionCard
+            {sectionVisible("auth.") && <SectionCard
               icon={<Shield className="h-4 w-4" />}
               title="Authentication"
               dirty={sectionDirty("auth.")}
@@ -815,10 +879,10 @@ export default function SettingsPage() {
               <EditableToggle label="Enabled" settingKey="auth.enabled" value={Boolean(val("auth.enabled"))} source={src("auth.enabled")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
               <EditableText label="API Key" settingKey="auth.api_key" value={String(val("auth.api_key") ?? "")} source={src("auth.api_key")} secret localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
               <EditableText label="Header" settingKey="auth.header_name" value={String(val("auth.header_name") ?? "X-API-Key")} source={src("auth.header_name")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
-            </SectionCard>
+            </SectionCard>}
 
             {/* 3. Terminal */}
-            <SectionCard
+            {sectionVisible("terminal.") && <SectionCard
               icon={<Terminal className="h-4 w-4" />}
               title="Terminal"
               dirty={sectionDirty("terminal.")}
@@ -828,10 +892,10 @@ export default function SettingsPage() {
               <EditableSelect label="Backend" settingKey="terminal.backend" value={String(val("terminal.backend") ?? "disabled")} source={src("terminal.backend")} options={["native", "ttyd", "disabled"]} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
               <EditableNumber label="Max Sessions" settingKey="terminal.max_sessions" value={Number(val("terminal.max_sessions") ?? 5)} source={src("terminal.max_sessions")} min={1} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
               <EditableNumber label="Connect Timeout" settingKey="terminal.connect_timeout" value={Number(val("terminal.connect_timeout") ?? 30)} source={src("terminal.connect_timeout")} min={1} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
-            </SectionCard>
+            </SectionCard>}
 
             {/* Neo4j */}
-            <SectionCard
+            {sectionVisible("neo4j.") && <SectionCard
               icon={<Share2 className="h-4 w-4" />}
               title="Neo4j (Knowledge Graph)"
               dirty={sectionDirty("neo4j.")}
@@ -842,10 +906,10 @@ export default function SettingsPage() {
               <EditableText label="User" settingKey="neo4j.user" value={String(val("neo4j.user") ?? "")} source={src("neo4j.user")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS["neo4j.user"]} />
               <EditableText label="Password" settingKey="neo4j.password" value={String(val("neo4j.password") ?? "")} source={src("neo4j.password")} secret localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS["neo4j.password"]} />
               <EditableText label="Database" settingKey="neo4j.database" value={String(val("neo4j.database") ?? "")} source={src("neo4j.database")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS["neo4j.database"]} />
-            </SectionCard>
+            </SectionCard>}
 
             {/* 4. Analytics */}
-            <SectionCard
+            {sectionVisible("analytics.") && <SectionCard
               icon={<BarChart3 className="h-4 w-4" />}
               title="Analytics"
               dirty={sectionDirty("analytics.")}
@@ -857,10 +921,10 @@ export default function SettingsPage() {
               <EditableNumber label="Embedding $/1k" settingKey="analytics.cost_embedding_per_1k" value={Number(val("analytics.cost_embedding_per_1k") ?? 0.0001)} source={src("analytics.cost_embedding_per_1k")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS["analytics.cost_embedding_per_1k"]} />
               <EditableNumber label="LLM Input $/1k" settingKey="analytics.cost_llm_input_per_1k" value={Number(val("analytics.cost_llm_input_per_1k") ?? 0.003)} source={src("analytics.cost_llm_input_per_1k")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS["analytics.cost_llm_input_per_1k"]} />
               <EditableNumber label="LLM Output $/1k" settingKey="analytics.cost_llm_output_per_1k" value={Number(val("analytics.cost_llm_output_per_1k") ?? 0.015)} source={src("analytics.cost_llm_output_per_1k")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS["analytics.cost_llm_output_per_1k"]} />
-            </SectionCard>
+            </SectionCard>}
 
             {/* 4. Ingestion */}
-            <SectionCard
+            {sectionVisible("ingest") && <SectionCard
               icon={<Layers className="h-4 w-4" />}
               title="Ingestion"
               dirty={"ingest_chunk_size" in localEdits || "ingest_chunk_overlap" in localEdits}
@@ -872,10 +936,10 @@ export default function SettingsPage() {
             >
               <EditableNumber label="Chunk Size (tokens)" settingKey="ingest_chunk_size" value={Number(val("ingest_chunk_size") ?? 512)} source={src("ingest_chunk_size")} min={64} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS.ingest_chunk_size} />
               <EditableNumber label="Chunk Overlap (tokens)" settingKey="ingest_chunk_overlap" value={Number(val("ingest_chunk_overlap") ?? 64)} source={src("ingest_chunk_overlap")} min={0} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS.ingest_chunk_overlap} />
-            </SectionCard>
+            </SectionCard>}
 
             {/* Budget (token budgets) */}
-            <SectionCard
+            {sectionVisible("budget.") && <SectionCard
               icon={<Coins className="h-4 w-4" />}
               title="Token Budgets"
               dirty={sectionDirty("budget.")}
@@ -893,10 +957,10 @@ export default function SettingsPage() {
                   <EditableNumber label="Workspace" settingKey="budget.workspace" value={Number(val("budget.workspace") ?? 6000)} source={src("budget.workspace")} min={0} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS["budget.workspace"]} />
                 </div>
               </div>
-            </SectionCard>
+            </SectionCard>}
 
             {/* 5. LLM Capabilities — full width, stable/experimental split */}
-            <SectionCard
+            {sectionVisible("capabilities.") && <SectionCard
               icon={<Cpu className="h-4 w-4" />}
               title="LLM Capabilities"
               dirty={sectionDirty("capabilities.")}
@@ -949,7 +1013,160 @@ export default function SettingsPage() {
                   </div>
                 </div>
               )}
+            </SectionCard>}
+
+            {/* Audit Trail */}
+            {sectionVisible("audit.") && (
+            <SectionCard
+              icon={<Eye className="h-4 w-4" />}
+              title="Audit Trail"
+              dirty={sectionDirty("audit.")}
+              onSave={() => saveSection("audit.")}
+              saving={saving === "audit."}
+            >
+              <EditableToggle label="Enabled" settingKey="audit.enabled" value={Boolean(val("audit.enabled"))} source={src("audit.enabled")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("audit.enabled")} />
             </SectionCard>
+            )}
+
+            {/* Webhooks */}
+            {sectionVisible("webhooks.") && (
+            <SectionCard
+              icon={<Globe className="h-4 w-4" />}
+              title="Webhooks"
+              dirty={sectionDirty("webhooks.")}
+              onSave={() => saveSection("webhooks.")}
+              saving={saving === "webhooks."}
+            >
+              <EditableToggle label="Enabled" settingKey="webhooks.enabled" value={Boolean(val("webhooks.enabled"))} source={src("webhooks.enabled")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("webhooks.enabled")} />
+              <EditableNumber label="Delivery Interval (s)" settingKey="webhooks.delivery_interval" value={Number(val("webhooks.delivery_interval") ?? 5)} source={src("webhooks.delivery_interval")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("webhooks.delivery_interval")} />
+              <EditableNumber label="Batch Size" settingKey="webhooks.delivery_batch_size" value={Number(val("webhooks.delivery_batch_size") ?? 20)} source={src("webhooks.delivery_batch_size")} min={1} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("webhooks.delivery_batch_size")} />
+              <EditableNumber label="Max Attempts" settingKey="webhooks.max_attempts" value={Number(val("webhooks.max_attempts") ?? 5)} source={src("webhooks.max_attempts")} min={1} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("webhooks.max_attempts")} />
+              <EditableNumber label="Backoff Base (s)" settingKey="webhooks.backoff_base" value={Number(val("webhooks.backoff_base") ?? 30)} source={src("webhooks.backoff_base")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("webhooks.backoff_base")} />
+              <EditableNumber label="Timeout (s)" settingKey="webhooks.timeout" value={Number(val("webhooks.timeout") ?? 10)} source={src("webhooks.timeout")} min={1} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("webhooks.timeout")} />
+            </SectionCard>
+            )}
+
+            {/* Alerting */}
+            {sectionVisible("alerting.") && (
+            <SectionCard
+              icon={<Bell className="h-4 w-4" />}
+              title="Alerting"
+              dirty={sectionDirty("alerting.")}
+              onSave={() => saveSection("alerting.")}
+              saving={saving === "alerting."}
+            >
+              <EditableToggle label="Enabled" settingKey="alerting.enabled" value={Boolean(val("alerting.enabled"))} source={src("alerting.enabled")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("alerting.enabled")} />
+              <EditableNumber label="Eval Interval (s)" settingKey="alerting.eval_interval_seconds" value={Number(val("alerting.eval_interval_seconds") ?? 60)} source={src("alerting.eval_interval_seconds")} min={1} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("alerting.eval_interval_seconds")} />
+            </SectionCard>
+            )}
+
+            {/* Retention */}
+            {sectionVisible("retention.") && (
+            <SectionCard
+              icon={<Timer className="h-4 w-4" />}
+              title="Retention"
+              dirty={sectionDirty("retention.")}
+              onSave={() => saveSection("retention.")}
+              saving={saving === "retention."}
+            >
+              <EditableToggle label="Enabled" settingKey="retention.enabled" value={Boolean(val("retention.enabled"))} source={src("retention.enabled")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("retention.enabled")} />
+              <EditableNumber label="Scan Interval (h)" settingKey="retention.scan_interval_hours" value={Number(val("retention.scan_interval_hours") ?? 24)} source={src("retention.scan_interval_hours")} min={1} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("retention.scan_interval_hours")} />
+              <EditableToggle label="Dry Run" settingKey="retention.dry_run" value={Boolean(val("retention.dry_run") ?? true)} source={src("retention.dry_run")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("retention.dry_run")} />
+            </SectionCard>
+            )}
+
+            {/* OpenTelemetry */}
+            {sectionVisible("otel.") && (
+            <SectionCard
+              icon={<Activity className="h-4 w-4" />}
+              title="OpenTelemetry"
+              dirty={sectionDirty("otel.")}
+              onSave={() => saveSection("otel.")}
+              saving={saving === "otel."}
+            >
+              <EditableToggle label="Enabled" settingKey="otel.enabled" value={Boolean(val("otel.enabled"))} source={src("otel.enabled")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("otel.enabled")} />
+              <EditableText label="Endpoint" settingKey="otel.endpoint" value={String(val("otel.endpoint") ?? "")} source={src("otel.endpoint")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("otel.endpoint")} />
+              <EditableText label="Service Name" settingKey="otel.service_name" value={String(val("otel.service_name") ?? "cairn")} source={src("otel.service_name")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("otel.service_name")} />
+            </SectionCard>
+            )}
+
+            {/* Workspace */}
+            {sectionVisible("workspace.") && (
+            <SectionCard
+              icon={<Boxes className="h-4 w-4" />}
+              title="Workspace"
+              dirty={sectionDirty("workspace.")}
+              onSave={() => saveSection("workspace.")}
+              saving={saving === "workspace."}
+              className="md:col-span-2"
+            >
+              <EditableSelect label="Default Backend" settingKey="workspace.default_backend" value={String(val("workspace.default_backend") ?? "opencode")} source={src("workspace.default_backend")} options={["opencode", "claude_code"]} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("workspace.default_backend")} />
+              <EditableText label="URL" settingKey="workspace.url" value={String(val("workspace.url") ?? "")} source={src("workspace.url")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("workspace.url")} />
+              <EditableText label="Password" settingKey="workspace.password" value={String(val("workspace.password") ?? "")} source={src("workspace.password")} secret localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("workspace.password")} />
+              <EditableText label="Default Agent" settingKey="workspace.default_agent" value={String(val("workspace.default_agent") ?? "")} source={src("workspace.default_agent")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("workspace.default_agent")} />
+              <EditableToggle label="Claude Code Enabled" settingKey="workspace.claude_code_enabled" value={Boolean(val("workspace.claude_code_enabled"))} source={src("workspace.claude_code_enabled")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("workspace.claude_code_enabled")} />
+              <EditableText label="CC Working Dir" settingKey="workspace.claude_code_working_dir" value={String(val("workspace.claude_code_working_dir") ?? "")} source={src("workspace.claude_code_working_dir")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("workspace.claude_code_working_dir")} />
+              <EditableNumber label="CC Max Turns" settingKey="workspace.claude_code_max_turns" value={Number(val("workspace.claude_code_max_turns") ?? 25)} source={src("workspace.claude_code_max_turns")} min={1} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("workspace.claude_code_max_turns")} />
+              <EditableNumber label="CC Max Budget ($)" settingKey="workspace.claude_code_max_budget" value={Number(val("workspace.claude_code_max_budget") ?? 10)} source={src("workspace.claude_code_max_budget")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("workspace.claude_code_max_budget")} />
+              <EditableText label="CC MCP URL" settingKey="workspace.claude_code_mcp_url" value={String(val("workspace.claude_code_mcp_url") ?? "")} source={src("workspace.claude_code_mcp_url")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("workspace.claude_code_mcp_url")} />
+              <EditableText label="CC SSH Host" settingKey="workspace.claude_code_ssh_host" value={String(val("workspace.claude_code_ssh_host") ?? "")} source={src("workspace.claude_code_ssh_host")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("workspace.claude_code_ssh_host")} />
+              <EditableText label="CC SSH User" settingKey="workspace.claude_code_ssh_user" value={String(val("workspace.claude_code_ssh_user") ?? "")} source={src("workspace.claude_code_ssh_user")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("workspace.claude_code_ssh_user")} />
+              <EditableText label="CC SSH Key" settingKey="workspace.claude_code_ssh_key" value={String(val("workspace.claude_code_ssh_key") ?? "")} source={src("workspace.claude_code_ssh_key")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("workspace.claude_code_ssh_key")} />
+            </SectionCard>
+            )}
+
+            {/* OIDC */}
+            {sectionVisible("auth.oidc.") && (
+            <SectionCard
+              icon={<Shield className="h-4 w-4" />}
+              title="OIDC / SSO"
+              dirty={sectionDirty("auth.oidc.")}
+              onSave={() => saveSection("auth.oidc.")}
+              saving={saving === "auth.oidc."}
+            >
+              <EditableToggle label="Enabled" settingKey="auth.oidc.enabled" value={Boolean(val("auth.oidc.enabled"))} source={src("auth.oidc.enabled")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("auth.oidc.enabled")} />
+              <EditableText label="Provider URL" settingKey="auth.oidc.provider_url" value={String(val("auth.oidc.provider_url") ?? "")} source={src("auth.oidc.provider_url")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("auth.oidc.provider_url")} />
+              <EditableText label="Scopes" settingKey="auth.oidc.scopes" value={String(val("auth.oidc.scopes") ?? "openid profile email")} source={src("auth.oidc.scopes")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("auth.oidc.scopes")} />
+              <EditableToggle label="Auto-Create Users" settingKey="auth.oidc.auto_create_users" value={Boolean(val("auth.oidc.auto_create_users") ?? true)} source={src("auth.oidc.auto_create_users")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("auth.oidc.auto_create_users")} />
+              <EditableText label="Default Role" settingKey="auth.oidc.default_role" value={String(val("auth.oidc.default_role") ?? "user")} source={src("auth.oidc.default_role")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("auth.oidc.default_role")} />
+              <EditableText label="Admin Groups" settingKey="auth.oidc.admin_groups" value={String(val("auth.oidc.admin_groups") ?? "")} source={src("auth.oidc.admin_groups")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("auth.oidc.admin_groups")} />
+            </SectionCard>
+            )}
+
+            {/* Decay */}
+            {sectionVisible("decay.") && (
+            <SectionCard
+              icon={<Clock className="h-4 w-4" />}
+              title="Decay (Controlled Forgetting)"
+              dirty={sectionDirty("decay.")}
+              onSave={() => saveSection("decay.")}
+              saving={saving === "decay."}
+            >
+              <EditableToggle label="Enabled" settingKey="decay.enabled" value={Boolean(val("decay.enabled"))} source={src("decay.enabled")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("decay.enabled")} />
+              <EditableNumber label="Scan Interval (h)" settingKey="decay.scan_interval_hours" value={Number(val("decay.scan_interval_hours") ?? 24)} source={src("decay.scan_interval_hours")} min={1} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("decay.scan_interval_hours")} />
+              <EditableNumber label="Threshold" settingKey="decay.threshold" value={Number(val("decay.threshold") ?? 0.05)} source={src("decay.threshold")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("decay.threshold")} />
+              <EditableNumber label="Min Age (days)" settingKey="decay.min_age_days" value={Number(val("decay.min_age_days") ?? 90)} source={src("decay.min_age_days")} min={0} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("decay.min_age_days")} />
+              <EditableNumber label="Protect Importance" settingKey="decay.protect_importance" value={Number(val("decay.protect_importance") ?? 0.8)} source={src("decay.protect_importance")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("decay.protect_importance")} />
+              <EditableToggle label="Dry Run" settingKey="decay.dry_run" value={Boolean(val("decay.dry_run") ?? true)} source={src("decay.dry_run")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("decay.dry_run")} />
+            </SectionCard>
+            )}
+
+            {/* Clustering */}
+            {sectionVisible("clustering.") && (
+            <SectionCard
+              icon={<Network className="h-4 w-4" />}
+              title="Clustering"
+              dirty={sectionDirty("clustering.")}
+              onSave={() => saveSection("clustering.")}
+              saving={saving === "clustering."}
+            >
+              <EditableNumber label="Min Cluster Size" settingKey="clustering.min_cluster_size" value={Number(val("clustering.min_cluster_size") ?? 3)} source={src("clustering.min_cluster_size")} min={2} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("clustering.min_cluster_size")} />
+              <EditableNumber label="Min Samples" settingKey="clustering.min_samples" value={Number(val("clustering.min_samples") ?? 2)} source={src("clustering.min_samples")} min={1} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("clustering.min_samples")} />
+              <EditableSelect label="Selection Method" settingKey="clustering.selection_method" value={String(val("clustering.selection_method") ?? "leaf")} source={src("clustering.selection_method")} options={["eom", "leaf"]} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("clustering.selection_method")} />
+              <EditableNumber label="Staleness (h)" settingKey="clustering.staleness_hours" value={Number(val("clustering.staleness_hours") ?? 24)} source={src("clustering.staleness_hours")} min={1} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("clustering.staleness_hours")} />
+              <EditableNumber label="Staleness Growth (%)" settingKey="clustering.staleness_growth_pct" value={Number(val("clustering.staleness_growth_pct") ?? 20)} source={src("clustering.staleness_growth_pct")} min={1} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("clustering.staleness_growth_pct")} />
+            </SectionCard>
+            )}
 
             {/* 6. Database (read-only) */}
             <Card>

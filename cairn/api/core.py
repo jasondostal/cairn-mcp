@@ -68,10 +68,13 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                         pending_restart = True
                         break
 
+        env_locked = sorted(k for k in flat if env_snapshot.get(k) is not None)
+
         return {
             "values": flat,
             "sources": sources,
             "editable": sorted(EDITABLE_KEYS),
+            "env_locked": env_locked,
             "experimental": sorted(f"capabilities.{c}" for c in EXPERIMENTAL_CAPABILITIES),
             "profiles": sorted(PROFILE_PRESETS.keys()),
             "active_profile": config.profile or None,
@@ -90,6 +93,11 @@ def register_routes(router: APIRouter, svc: Services, **kw):
     def api_settings_update(body: dict):
         if not body:
             raise HTTPException(status_code=400, detail="Request body is required")
+
+        # Reject env-locked keys
+        locked = [k for k in body if k in EDITABLE_KEYS and env_snapshot.get(k) is not None]
+        if locked:
+            raise HTTPException(409, f"Cannot override env-locked settings: {', '.join(sorted(locked))}")
 
         errors = []
         updates: dict[str, str] = {}
@@ -143,6 +151,18 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             raise HTTPException(status_code=400, detail="; ".join(errors))
 
         settings_store.save_bulk(db, updates)
+
+        if svc.event_bus:
+            from cairn.core.user import current_user as _current_user
+            ctx = _current_user()
+            svc.event_bus.publish(
+                session_name="settings", event_type="settings.updated",
+                payload={
+                    "actor": ctx.username if ctx else "anonymous",
+                    "changes": {k: updates[k] for k in updates},
+                },
+            )
+
         return _build_settings_response()
 
     @router.delete("/settings/{key:path}")
@@ -152,4 +172,16 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         deleted = settings_store.delete(db, key)
         if not deleted:
             raise HTTPException(status_code=404, detail=f"No override found for '{key}'")
+
+        if svc.event_bus:
+            from cairn.core.user import current_user as _current_user
+            ctx = _current_user()
+            svc.event_bus.publish(
+                session_name="settings", event_type="settings.deleted",
+                payload={
+                    "actor": ctx.username if ctx else "anonymous",
+                    "key": key,
+                },
+            )
+
         return _build_settings_response()

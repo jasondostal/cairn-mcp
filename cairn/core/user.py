@@ -234,10 +234,16 @@ class UserManager:
     # --- Project membership ---
 
     def get_accessible_project_ids(self, user_id: int) -> set[int]:
-        """Get the set of project IDs a user can access."""
+        """Get project IDs a user can access (direct + group-based)."""
         rows = self.db.execute(
-            "SELECT project_id FROM user_projects WHERE user_id = %s",
-            (user_id,),
+            """
+            SELECT project_id FROM user_projects WHERE user_id = %s
+            UNION
+            SELECT gp.project_id FROM group_members gm
+            JOIN group_projects gp ON gp.group_id = gm.group_id
+            WHERE gm.user_id = %s
+            """,
+            (user_id, user_id),
         )
         return {r["project_id"] for r in rows}
 
@@ -427,6 +433,253 @@ class UserManager:
             "is_active": row["is_active"],
             "created_at": row["created_at"].isoformat(),
         }
+
+    # --- Groups ---
+
+    def create_group(self, name: str, description: str = "", source: str = "manual") -> dict:
+        """Create a new group."""
+        row = self.db.execute_one(
+            """
+            INSERT INTO groups (name, description, source)
+            VALUES (%s, %s, %s)
+            RETURNING id, name, description, source, created_at, updated_at
+            """,
+            (name, description, source),
+        )
+        self.db.commit()
+        return {
+            "id": row["id"], "name": row["name"], "description": row["description"],
+            "source": row["source"], "created_at": row["created_at"].isoformat(),
+            "updated_at": row["updated_at"].isoformat(),
+        }
+
+    def get_group(self, group_id: int) -> dict | None:
+        """Fetch a group by ID."""
+        row = self.db.execute_one(
+            "SELECT id, name, description, source, created_at, updated_at FROM groups WHERE id = %s",
+            (group_id,),
+        )
+        return {
+            "id": row["id"], "name": row["name"], "description": row["description"],
+            "source": row["source"], "created_at": row["created_at"].isoformat(),
+            "updated_at": row["updated_at"].isoformat(),
+        } if row else None
+
+    def get_group_by_name(self, name: str) -> dict | None:
+        """Fetch a group by name."""
+        row = self.db.execute_one(
+            "SELECT id, name, description, source, created_at, updated_at FROM groups WHERE name = %s",
+            (name,),
+        )
+        return {
+            "id": row["id"], "name": row["name"], "description": row["description"],
+            "source": row["source"], "created_at": row["created_at"].isoformat(),
+            "updated_at": row["updated_at"].isoformat(),
+        } if row else None
+
+    def list_groups(self, limit: int = 50, offset: int = 0) -> dict:
+        """List all groups with member/project counts."""
+        rows = self.db.execute(
+            """
+            SELECT g.id, g.name, g.description, g.source, g.created_at, g.updated_at,
+                   (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id) AS member_count,
+                   (SELECT COUNT(*) FROM group_projects gp WHERE gp.group_id = g.id) AS project_count,
+                   COUNT(*) OVER() AS _total
+            FROM groups g
+            ORDER BY g.created_at DESC
+            LIMIT %s OFFSET %s
+            """,
+            (limit, offset),
+        )
+        total = rows[0]["_total"] if rows else 0
+        items = [
+            {
+                "id": r["id"], "name": r["name"], "description": r["description"],
+                "source": r["source"], "member_count": r["member_count"],
+                "project_count": r["project_count"],
+                "created_at": r["created_at"].isoformat(),
+                "updated_at": r["updated_at"].isoformat(),
+            }
+            for r in rows
+        ]
+        return {"total": total, "limit": limit, "offset": offset, "items": items}
+
+    def update_group(self, group_id: int, *, name: str | None = None, description: str | None = None) -> dict | None:
+        """Update group fields."""
+        updates, params = [], []
+        if name is not None:
+            updates.append("name = %s")
+            params.append(name)
+        if description is not None:
+            updates.append("description = %s")
+            params.append(description)
+        if not updates:
+            return self.get_group(group_id)
+        updates.append("updated_at = NOW()")
+        params.append(group_id)
+        self.db.execute(
+            f"UPDATE groups SET {', '.join(updates)} WHERE id = %s",
+            tuple(params),
+        )
+        self.db.commit()
+        return self.get_group(group_id)
+
+    def delete_group(self, group_id: int) -> bool:
+        """Delete a group (cascades members and projects)."""
+        self.db.execute("DELETE FROM groups WHERE id = %s", (group_id,))
+        self.db.commit()
+        return True
+
+    def add_group_member(self, group_id: int, user_id: int) -> None:
+        """Add a user to a group."""
+        self.db.execute(
+            """
+            INSERT INTO group_members (group_id, user_id)
+            VALUES (%s, %s)
+            ON CONFLICT (group_id, user_id) DO NOTHING
+            """,
+            (group_id, user_id),
+        )
+        self.db.commit()
+
+    def remove_group_member(self, group_id: int, user_id: int) -> None:
+        """Remove a user from a group."""
+        self.db.execute(
+            "DELETE FROM group_members WHERE group_id = %s AND user_id = %s",
+            (group_id, user_id),
+        )
+        self.db.commit()
+
+    def list_group_members(self, group_id: int) -> list[dict]:
+        """List members of a group."""
+        rows = self.db.execute(
+            """
+            SELECT u.id, u.username, u.email, u.role, gm.added_at
+            FROM group_members gm
+            JOIN users u ON u.id = gm.user_id
+            WHERE gm.group_id = %s
+            ORDER BY gm.added_at
+            """,
+            (group_id,),
+        )
+        return [
+            {
+                "user_id": r["id"], "username": r["username"], "email": r["email"],
+                "role": r["role"], "added_at": r["added_at"].isoformat(),
+            }
+            for r in rows
+        ]
+
+    def add_group_project(self, group_id: int, project_id: int, role: str = "member") -> None:
+        """Assign a project to a group."""
+        self.db.execute(
+            """
+            INSERT INTO group_projects (group_id, project_id, role)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (group_id, project_id) DO UPDATE SET role = EXCLUDED.role
+            """,
+            (group_id, project_id, role),
+        )
+        self.db.commit()
+
+    def remove_group_project(self, group_id: int, project_id: int) -> None:
+        """Remove a project from a group."""
+        self.db.execute(
+            "DELETE FROM group_projects WHERE group_id = %s AND project_id = %s",
+            (group_id, project_id),
+        )
+        self.db.commit()
+
+    def list_group_projects(self, group_id: int) -> list[dict]:
+        """List projects assigned to a group."""
+        rows = self.db.execute(
+            """
+            SELECT p.id, p.name, gp.role, gp.granted_at
+            FROM group_projects gp
+            JOIN projects p ON p.id = gp.project_id
+            WHERE gp.group_id = %s
+            ORDER BY gp.granted_at
+            """,
+            (group_id,),
+        )
+        return [
+            {
+                "project_id": r["id"], "project_name": r["name"],
+                "role": r["role"], "granted_at": r["granted_at"].isoformat(),
+            }
+            for r in rows
+        ]
+
+    def get_user_groups(self, user_id: int) -> list[dict]:
+        """List groups a user belongs to."""
+        rows = self.db.execute(
+            """
+            SELECT g.id, g.name, g.description, g.source, gm.added_at
+            FROM group_members gm
+            JOIN groups g ON g.id = gm.group_id
+            WHERE gm.user_id = %s
+            ORDER BY g.name
+            """,
+            (user_id,),
+        )
+        return [
+            {
+                "id": r["id"], "name": r["name"], "description": r["description"],
+                "source": r["source"], "added_at": r["added_at"].isoformat(),
+            }
+            for r in rows
+        ]
+
+    def sync_oidc_groups(self, user_id: int, group_names: list[str]) -> None:
+        """Sync OIDC group claims — create missing groups, update membership."""
+        if not group_names:
+            # Remove from all OIDC groups
+            self.db.execute(
+                """
+                DELETE FROM group_members
+                WHERE user_id = %s AND group_id IN (
+                    SELECT id FROM groups WHERE source = 'oidc'
+                )
+                """,
+                (user_id,),
+            )
+            self.db.commit()
+            return
+
+        # Ensure all claimed groups exist
+        for name in group_names:
+            existing = self.get_group_by_name(name)
+            if not existing:
+                self.create_group(name, source="oidc")
+
+        # Get IDs of claimed groups
+        placeholders = ",".join(["%s"] * len(group_names))
+        claimed_rows = self.db.execute(
+            f"SELECT id FROM groups WHERE name IN ({placeholders})",
+            tuple(group_names),
+        )
+        claimed_ids = {r["id"] for r in claimed_rows}
+
+        # Current OIDC group memberships
+        current_rows = self.db.execute(
+            """
+            SELECT gm.group_id FROM group_members gm
+            JOIN groups g ON g.id = gm.group_id
+            WHERE gm.user_id = %s AND g.source = 'oidc'
+            """,
+            (user_id,),
+        )
+        current_ids = {r["group_id"] for r in current_rows}
+
+        # Add to new groups
+        for gid in claimed_ids - current_ids:
+            self.add_group_member(gid, user_id)
+
+        # Remove from groups no longer claimed
+        for gid in current_ids - claimed_ids:
+            self.remove_group_member(gid, user_id)
+
+    # --- OIDC users ---
 
     def get_or_create_oidc_user(
         self,

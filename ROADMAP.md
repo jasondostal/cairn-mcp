@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.66.1** — Ingest size limit fix (10MB configurable). See [CHANGELOG](CHANGELOG.md).
+Current: **v0.66.3** — Settings governance, settings pane maturity, user groups. See [CHANGELOG](CHANGELOG.md).
 
 ---
 
@@ -19,10 +19,6 @@ Continuous work with no fixed end state.
 ## Planned
 
 Have work items, intent to build.
-
-**Settings Pane / Settings Management Maturity.** Better organization, validation, per-section save, restart-required indicators, settings profiles (export/import), diff view. (ca-170)
-
-**User Management Expansion.** Cairn-native groups with OIDC group sync, group-based project access and role inheritance, user deprovisioning flows, admin UI for group management. Builds on the ca-124/ca-162 auth foundation. (ca-171)
 
 **Backup and disaster recovery.** Automated PG + Neo4j snapshots with rotation, WAL archiving for point-in-time recovery, tested restore procedures, documented runbooks. (ca-132)
 
@@ -46,8 +42,6 @@ Exploring, not committed.
 
 **API versioning.** `/api/v1/` prefix, deprecation policy, breaking change detection in CI, OpenAPI spec per version. Stability contract for enterprise adoption. (ca-134)
 
-**Audit settings governance.** Configurable vs locked settings for Watchtower — which settings can operators change vs which are policy-enforced. (ca-135)
-
 **tree-sitter-language-pack integration.** Adding the language pack dependency would unlock PowerShell, Perl, R, Dart, Haskell, Erlang, Protobuf, and 150+ other languages in one shot. Trade-off is dependency weight (~160 compiled grammars).
 
 **Plugin development guide.** Tutorial for adding custom embedding/LLM/reranker backends. The plugin registry pattern is a core extensibility feature — it needs documentation.
@@ -57,6 +51,13 @@ Exploring, not committed.
 ---
 
 ## Shipped
+
+### v0.66.3 ✓
+
+- [x] **Settings governance** (ca-135) — env-locked detection (409 on override), settings audit trail with actor attribution.
+- [x] **Settings pane maturity** (ca-170) — 9 new settings sections, search filter, env-locked badges with disabled inputs.
+- [x] **User groups** (ca-171) — group CRUD, OIDC group sync on login, group-based project access (UNION with direct membership), groups admin page, 10 REST endpoints.
+- [x] **Migration 043** — `groups`, `group_members`, `group_projects` tables.
 
 ### v0.66.1 ✓
 

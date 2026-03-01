@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.66.3] — 2026-03-01
+
+### Added
+- **User groups** (ca-171) — group CRUD, group-based project access (UNION
+  with direct membership), OIDC group sync on login. Full admin API endpoints
+  and Groups admin page in the UI.
+- **Settings governance** (ca-135) — `env_locked` list in settings response,
+  PATCH rejects env-locked keys with 409, settings changes emit audit events
+  (`settings.updated`, `settings.deleted`) with actor attribution.
+- **Settings pane maturity** (ca-170) — 9 new settings sections (Audit,
+  Webhooks, Alerting, Retention, OpenTelemetry, Workspace, OIDC, Decay,
+  Clustering), search filter, env-locked badge with disabled inputs.
+- **Webhook EDITABLE_KEYS** — `delivery_interval`, `delivery_batch_size`,
+  `max_attempts`, `backoff_base`, `timeout` now editable via settings UI.
+- **Migration 043** — `groups`, `group_members`, `group_projects` tables.
+
 ## [0.66.2] — 2026-03-01
 
 ### Changed

@@ -386,7 +386,8 @@ EDITABLE_KEYS: set[str] = {
     # Audit
     "audit.enabled",
     # Webhooks
-    "webhooks.enabled",
+    "webhooks.enabled", "webhooks.delivery_interval", "webhooks.delivery_batch_size",
+    "webhooks.max_attempts", "webhooks.backoff_base", "webhooks.timeout",
     # Alerting
     "alerting.enabled", "alerting.eval_interval_seconds",
     # Retention

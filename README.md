@@ -151,7 +151,7 @@ The rest: `modify`, `insights`, `tasks`, `think`, `status`, `consolidate`, `drif
 
 </details>
 
-**Multi-user authentication and RBAC.** Off by default, zero to enterprise in five minutes. Local auth with JWT, Personal Access Tokens for machine clients, OIDC/SSO for identity providers (Authentik, Keycloak, Auth0, Okta, Azure AD), and stdio identity for MCP. Three roles, project-level scoping, first-user-becomes-admin. See the **[Authentication Guide](docs/authentication.md)**.
+**Multi-user authentication and RBAC.** Off by default, zero to enterprise in five minutes. Local auth with JWT, Personal Access Tokens for machine clients, OIDC/SSO for identity providers (Authentik, Keycloak, Auth0, Okta, Azure AD), and stdio identity for MCP. Three roles, project-level scoping, first-user-becomes-admin. Groups with OIDC sync — IdP group claims auto-provision Cairn groups and drive project access. See the **[Authentication Guide](docs/authentication.md)**.
 
 **Session capture.** IDE hooks (Claude Code, Cursor, Cline, Windsurf) log every tool call. Next session boots warm. See [`examples/hooks/README.md`](examples/hooks/README.md).
 

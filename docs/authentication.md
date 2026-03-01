@@ -312,6 +312,16 @@ The general steps apply to any OIDC provider:
    in Cairn. Users not in these groups get the role specified by
    `CAIRN_OIDC_DEFAULT_ROLE` (default: `user`).
 
+6. **OIDC group sync (automatic):** When the ID token includes a `groups` claim,
+   Cairn automatically syncs group membership on every login:
+   - Groups from the claim are created in Cairn if they don't exist (source: `oidc`)
+   - The user is added to all claimed groups
+   - The user is removed from OIDC-sourced groups no longer present in the claim
+
+   This keeps Cairn group membership in sync with your identity provider. Groups
+   created via OIDC sync can be assigned project access from the Groups admin page
+   (`/admin/groups`), giving you IdP-driven project authorization.
+
 ### Reverse proxy / CAIRN_PUBLIC_URL
 
 When Cairn runs behind a reverse proxy, the server's internal address differs

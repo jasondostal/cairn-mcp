@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Event types that represent mutations worth auditing.
 # Read-only events (search.executed, memory.recalled) are excluded.
-_AUDITED_DOMAINS = {"memory", "work_item", "task", "thinking"}
+_AUDITED_DOMAINS = {"memory", "work_item", "task", "thinking", "settings"}
 
 
 class AuditListener:
@@ -33,6 +33,7 @@ class AuditListener:
         event_bus.subscribe("work_item.*", "audit_work_item", self.handle)
         event_bus.subscribe("task.*", "audit_task", self.handle)
         event_bus.subscribe("thinking.*", "audit_thinking", self.handle)
+        event_bus.subscribe("settings.*", "audit_settings", self.handle)
 
     def handle(self, event: dict) -> None:
         """Route event to audit log."""
@@ -56,6 +57,8 @@ class AuditListener:
             or event.get("work_item_id")
         )
 
+        actor = payload.get("actor")
+
         try:
             self.audit.log(
                 action=action,
@@ -65,6 +68,7 @@ class AuditListener:
                 session_name=event.get("session_name"),
                 trace_id=event.get("trace_id"),
                 after_state=payload,
+                **({"actor": actor} if actor else {}),
             )
         except Exception:
             logger.warning(

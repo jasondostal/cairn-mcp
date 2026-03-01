@@ -51,6 +51,25 @@ class AddMemberRequest(BaseModel):
     role: str = "member"
 
 
+class CreateGroupRequest(BaseModel):
+    name: str
+    description: str = ""
+
+
+class UpdateGroupRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
+class GroupMemberRequest(BaseModel):
+    user_id: int
+
+
+class GroupProjectRequest(BaseModel):
+    project_name: str
+    role: str = "member"
+
+
 class CreateTokenRequest(BaseModel):
     name: str
     expires_in_days: int | None = None  # None = never expires
@@ -322,6 +341,14 @@ def register_routes(router: APIRouter, svc: Services) -> None:
                 admin_groups=admin_groups,
             )
 
+            # Sync OIDC group memberships
+            oidc_groups = claims.get("groups", [])
+            if isinstance(oidc_groups, list) and oidc_groups:
+                try:
+                    user_mgr.sync_oidc_groups(user["id"], oidc_groups)
+                except Exception:
+                    logger.warning("OIDC group sync failed for user %s", user["id"], exc_info=True)
+
             # Issue Cairn JWT
             cairn_token = create_access_token(
                 user["id"], user["username"], user["role"],
@@ -467,3 +494,148 @@ def register_routes(router: APIRouter, svc: Services) -> None:
             )
 
         return user_mgr.list_project_members(project_id)
+
+    # --- Group management (ca-171) ---
+
+    @router.post("/auth/groups")
+    def create_group(body: CreateGroupRequest):
+        err = _require_auth_enabled()
+        if err:
+            return err
+        err = _require_admin()
+        if err:
+            return err
+
+        existing = user_mgr.get_group_by_name(body.name)
+        if existing:
+            return JSONResponse(status_code=409, content={"detail": "Group name already taken"})
+
+        return user_mgr.create_group(body.name, body.description)
+
+    @router.get("/auth/groups")
+    def list_groups(limit: int = 50, offset: int = 0):
+        err = _require_auth_enabled()
+        if err:
+            return err
+        err = _require_admin()
+        if err:
+            return err
+
+        return user_mgr.list_groups(limit=limit, offset=offset)
+
+    @router.get("/auth/groups/{group_id}")
+    def get_group(group_id: int):
+        err = _require_auth_enabled()
+        if err:
+            return err
+        err = _require_admin()
+        if err:
+            return err
+
+        group = user_mgr.get_group(group_id)
+        if not group:
+            return JSONResponse(status_code=404, content={"detail": "Group not found"})
+
+        group["members"] = user_mgr.list_group_members(group_id)
+        group["projects"] = user_mgr.list_group_projects(group_id)
+        return group
+
+    @router.patch("/auth/groups/{group_id}")
+    def update_group(group_id: int, body: UpdateGroupRequest):
+        err = _require_auth_enabled()
+        if err:
+            return err
+        err = _require_admin()
+        if err:
+            return err
+
+        group = user_mgr.get_group(group_id)
+        if not group:
+            return JSONResponse(status_code=404, content={"detail": "Group not found"})
+
+        result = user_mgr.update_group(group_id, name=body.name, description=body.description)
+        return result
+
+    @router.delete("/auth/groups/{group_id}")
+    def delete_group(group_id: int):
+        err = _require_auth_enabled()
+        if err:
+            return err
+        err = _require_admin()
+        if err:
+            return err
+
+        group = user_mgr.get_group(group_id)
+        if not group:
+            return JSONResponse(status_code=404, content={"detail": "Group not found"})
+
+        user_mgr.delete_group(group_id)
+        return {"status": "ok"}
+
+    @router.post("/auth/groups/{group_id}/members")
+    def add_group_member(group_id: int, body: GroupMemberRequest):
+        err = _require_auth_enabled()
+        if err:
+            return err
+        err = _require_admin()
+        if err:
+            return err
+
+        group = user_mgr.get_group(group_id)
+        if not group:
+            return JSONResponse(status_code=404, content={"detail": "Group not found"})
+
+        user = user_mgr.get_by_id(body.user_id)
+        if not user:
+            return JSONResponse(status_code=404, content={"detail": "User not found"})
+
+        user_mgr.add_group_member(group_id, body.user_id)
+        return {"status": "ok"}
+
+    @router.delete("/auth/groups/{group_id}/members/{member_user_id}")
+    def remove_group_member(group_id: int, member_user_id: int):
+        err = _require_auth_enabled()
+        if err:
+            return err
+        err = _require_admin()
+        if err:
+            return err
+
+        user_mgr.remove_group_member(group_id, member_user_id)
+        return {"status": "ok"}
+
+    @router.post("/auth/groups/{group_id}/projects")
+    def add_group_project(group_id: int, body: GroupProjectRequest):
+        err = _require_auth_enabled()
+        if err:
+            return err
+        err = _require_admin()
+        if err:
+            return err
+
+        group = user_mgr.get_group(group_id)
+        if not group:
+            return JSONResponse(status_code=404, content={"detail": "Group not found"})
+
+        project_id = get_project(svc.db, body.project_name)
+        if project_id is None:
+            return JSONResponse(status_code=404, content={"detail": "Project not found"})
+
+        user_mgr.add_group_project(group_id, project_id, body.role)
+        return {"status": "ok"}
+
+    @router.delete("/auth/groups/{group_id}/projects/{project_name}")
+    def remove_group_project(group_id: int, project_name: str):
+        err = _require_auth_enabled()
+        if err:
+            return err
+        err = _require_admin()
+        if err:
+            return err
+
+        project_id = get_project(svc.db, project_name)
+        if project_id is None:
+            return JSONResponse(status_code=404, content={"detail": "Project not found"})
+
+        user_mgr.remove_group_project(group_id, project_id)
+        return {"status": "ok"}

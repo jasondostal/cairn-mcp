@@ -216,10 +216,33 @@ export interface SettingsResponse {
   values: Record<string, string | number | boolean>;
   sources: Record<string, "default" | "env" | "db">;
   editable: string[];
+  env_locked: string[];
   pending_restart: boolean;
   experimental: string[];
   profiles: string[];
   active_profile: string | null;
+}
+
+export interface Group {
+  id: number;
+  name: string;
+  description: string;
+  source: string;
+  member_count: number;
+  project_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GroupDetail {
+  id: number;
+  name: string;
+  description: string;
+  source: string;
+  created_at: string;
+  updated_at: string;
+  members: { user_id: number; username: string; email: string | null; role: string; added_at: string }[];
+  projects: { project_id: number; project_name: string; role: string; granted_at: string }[];
 }
 
 export interface ApiToken {
@@ -1353,6 +1376,34 @@ export const api = {
 
   resetSetting: (key: string) =>
     del<SettingsResponse>(`/settings/${key}`),
+
+  // --- Groups (ca-171) ---
+
+  groups: (opts?: { limit?: string; offset?: string }) =>
+    get<Paginated<Group>>("/auth/groups", opts),
+
+  group: (id: number) => get<GroupDetail>(`/auth/groups/${id}`),
+
+  createGroup: (body: { name: string; description?: string }) =>
+    post<Group>("/auth/groups", body),
+
+  updateGroup: (id: number, body: { name?: string; description?: string }) =>
+    patch<Group>(`/auth/groups/${id}`, body),
+
+  deleteGroup: (id: number) =>
+    del<{ status: string }>(`/auth/groups/${id}`),
+
+  addGroupMember: (groupId: number, userId: number) =>
+    post<{ status: string }>(`/auth/groups/${groupId}/members`, { user_id: userId }),
+
+  removeGroupMember: (groupId: number, userId: number) =>
+    del<{ status: string }>(`/auth/groups/${groupId}/members/${userId}`),
+
+  addGroupProject: (groupId: number, projectName: string, role: string = "member") =>
+    post<{ status: string }>(`/auth/groups/${groupId}/projects`, { project_name: projectName, role }),
+
+  removeGroupProject: (groupId: number, projectName: string) =>
+    del<{ status: string }>(`/auth/groups/${groupId}/projects/${projectName}`),
 
   // --- Work Items ---
 

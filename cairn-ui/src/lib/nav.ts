@@ -19,6 +19,7 @@ import {
   Kanban,
   Eye,
   Users,
+  Users2,
 } from "lucide-react";
 
 export interface NavItem {
@@ -75,6 +76,7 @@ export const navGroups: NavGroup[] = [
       { href: "/analytics", label: "Ops Log", icon: BarChart3 },
       { href: "/watchtower", label: "Watchtower", icon: Eye },
       { href: "/admin/users", label: "Users", icon: Users },
+      { href: "/admin/groups", label: "Groups", icon: Users2 },
       { href: "/settings", label: "Settings", icon: Settings },
     ],
   },
