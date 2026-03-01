@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.66.0** — "Authentication/User Mgmt/RBAC - MVP" — Multi-user auth, OIDC SSO, PATs, RBAC.
+Current: **v0.66.1** — Ingest size limit fix (10MB configurable). See [CHANGELOG](CHANGELOG.md).
 
 ---
 
@@ -58,7 +58,11 @@ Exploring, not committed.
 
 ## Shipped
 
-### v0.66.0 — "Authentication/User Mgmt/RBAC - MVP" ✓
+### v0.66.1 ✓
+
+- [x] **Ingest file size limit** — raised from 100KB to 10MB, configurable via `CAIRN_INGEST_MAX_SIZE`.
+
+### [v0.66.0](https://github.com/jasondostal/cairn-mcp/releases/tag/v0.66.0) — "Authentication/User Mgmt/RBAC - MVP" ✓
 
 Multi-user authentication and authorization. Six auth modes, RBAC, comprehensive setup guide.
 
@@ -74,7 +78,7 @@ Multi-user authentication and authorization. Six auth modes, RBAC, comprehensive
 - [x] **Return-to-page after login** — sessionStorage-based redirect to originally requested page.
 - [x] Migration 042 (extensible auth schema, api_tokens table).
 
-### v0.65.0 — "The Swarm" ✓
+### [v0.65.0](https://github.com/jasondostal/cairn-mcp/releases/tag/v0.65.0) — "The Swarm" ✓
 
 Multi-agent orchestration hardening. Typed agents, resource locking, affinity routing, persistent learning, live dashboard.
 
@@ -88,7 +92,7 @@ Multi-agent orchestration hardening. Typed agents, resource locking, affinity ro
 - [x] **Duplicate tree fix** — CTE `UNION ALL` → `UNION` to prevent multi-path duplicates.
 - [x] **203 tests** across 10 test files, all passing.
 
-### v0.64.0 — "Trailhead" ✓
+### [v0.64.0](https://github.com/jasondostal/cairn-mcp/releases/tag/v0.64.0) — "Trailhead" ✓
 
 File-path ingestion to bypass MCP content size limits.
 
@@ -96,7 +100,7 @@ File-path ingestion to bypass MCP content size limits.
 - [x] **`CAIRN_INGEST_DIR`** — configurable staging directory with path traversal protection.
 - [x] **Docker compose** — default `./ingest:/data/ingest` bind mount.
 
-### v0.63.1 — "Unblocked" ✓
+### [v0.63.1](https://github.com/jasondostal/cairn-mcp/releases/tag/v0.63.1) — "Unblocked" ✓
 
 Async MCP architecture fix. Event loop no longer blocks during tool calls.
 
@@ -105,7 +109,7 @@ Async MCP architecture fix. Event loop no longer blocks during tool calls.
 - [x] **Explicit thread pool** — `ThreadPoolExecutor(max_workers=20)` at startup, proper shutdown.
 - [x] **Eliminates ECONNRESET** — cairn-ui no longer drops connections during concurrent MCP + REST access.
 
-### v0.63.0 — "Watchtower" ✓
+### [v0.63.0](https://github.com/jasondostal/cairn-mcp/releases/tag/v0.63.0) — "Watchtower" ✓
 
 Six-phase enterprise observability stack with full UI CRUD. The Eye sees all.
 
@@ -121,7 +125,7 @@ Six-phase enterprise observability stack with full UI CRUD. The Eye sees all.
 - [x] **Dashboard 500 fix** — removed orphaned `/api/messages` polling and dead message files from v0.54.0.
 - [x] **~155 REST API endpoints** across 24 route modules.
 
-### v0.62.1 ✓
+### [v0.62.1](https://github.com/jasondostal/cairn-mcp/releases/tag/v0.62.1) ✓
 
 Server-side document export. No more browser crashes on large docs.
 
@@ -130,7 +134,7 @@ Server-side document export. No more browser crashes on large docs.
 - [x] **UI download buttons wired to API** — both markdown and PDF use server endpoints. Removed html2pdf.js dependency.
 - [x] **requirements.lock CUDA regression fixed** — stripped CUDA torch that leaked back into lockfile.
 
-### v0.62.0 — "The Editable Hulk" ✓
+### [v0.62.0](https://github.com/jasondostal/cairn-mcp/releases/tag/v0.62.0) — "The Editable Hulk" ✓
 
 Four features deepening the core product after the Polyglot breadth releases.
 
@@ -141,7 +145,7 @@ Four features deepening the core product after the Polyglot breadth releases.
 - [x] **Knowledge graph entity editing** (ca-109) — full CRUD for entities and statements from the graph page. Edit, create, delete, merge entities. View and invalidate statements. 8 new REST endpoints + Neo4j provider methods.
 - [x] **Chat conversation resume** (ca-121) — reopen previous conversations from the chat drawer. History sidebar with project filtering, search, and delete confirmation.
 
-### v0.61.1 — "Polyglot II" ✓
+### [v0.61.1](https://github.com/jasondostal/cairn-mcp/releases/tag/v0.61.1) — "Polyglot II" ✓
 
 9 more languages. 30 total.
 
@@ -149,7 +153,7 @@ Four features deepening the core product after the Polyglot breadth releases.
 - [x] **Filename-based detection** — `Makefile`, `GNUmakefile`, `makefile`, `Jenkinsfile` recognised without extensions.
 - [x] **109 new parser tests** across 9 languages, all passing.
 
-### v0.61.0 — "Polyglot" ✓
+### [v0.61.0](https://github.com/jasondostal/cairn-mcp/releases/tag/v0.61.0) — "Polyglot" ✓
 
 21-language code intelligence. From 2 languages to 21 in two sessions.
 
@@ -157,13 +161,13 @@ Four features deepening the core product after the Polyglot breadth releases.
 - [x] **Filename-based detection** — `Dockerfile` (no extension) recognised alongside `.dockerfile`. Registry supports both extension and filename matching.
 - [x] **375 parser tests** — 205 new tests across 19 languages, all passing. Existing 170 tests unchanged.
 
-### v0.60.0 — "Drag Your Own Adventure" ✓
+### [v0.60.0](https://github.com/jasondostal/cairn-mcp/releases/tag/v0.60.0) — "Drag Your Own Adventure" ✓
 
 Drag-and-drop dashboard. Customizable widget grid.
 
 - [x] **Drag-and-drop dashboard** — `react-grid-layout` v2, 11 widgets, edit mode, responsive breakpoints, localStorage persistence
 
-### v0.59.x — "Chat Intelligence + UI Performance" ✓
+### [v0.59.x](https://github.com/jasondostal/cairn-mcp/releases/tag/v0.59.3) — "Chat Intelligence + UI Performance" ✓
 
 Chat LLM tool surface expansion. UI responsiveness overhaul.
 
@@ -176,7 +180,7 @@ Chat LLM tool surface expansion. UI responsiveness overhaul.
 - [x] **`useFetch` SWR mode** — cached data served instantly while revalidating in background
 - [x] **Visibility-aware polling** — pauses when tab hidden, resumes on focus
 
-### v0.59.0 — "Display IDs + REST API Parity" ✓
+### [v0.59.0](https://github.com/jasondostal/cairn-mcp/releases/tag/v0.59.0) — "Display IDs + REST API Parity" ✓
 
 Jira-style work item IDs. Full REST coverage matching every MCP tool.
 
@@ -188,7 +192,7 @@ Jira-style work item IDs. Full REST coverage matching every MCP tool.
 - [x] **`server.py` slimmed** — 600+ lines of inline business logic moved to dedicated core modules
 - [x] Migration 032 (display IDs: `seq_num` on work_items, `work_item_prefix`/`work_item_next_seq` on projects, backfill, `short_id` column dropped)
 
-### v0.58.x — "Code Intelligence" ✓
+### [v0.58.x](https://github.com/jasondostal/cairn-mcp/releases/tag/v0.58.1) — "Code Intelligence" ✓
 
 Per-project code understanding. Parse source files with tree-sitter, build a code graph in Neo4j, enforce architecture boundaries, search code by natural language, analyze cross-project dependencies — all through MCP.
 
@@ -207,7 +211,7 @@ Per-project code understanding. Parse source files with tree-sitter, build a cod
 - [x] **`architecture.yaml`** — 9 boundary rules for Cairn's own codebase (dogfood), 0 violations
 - [x] **29 code intelligence tests** — parser, indexer, query, cross-project, arch rules, TypeScript
 
-### v0.57.0 — "Frictionless Dispatch" ✓
+### [v0.57.0](https://github.com/jasondostal/cairn-mcp/releases/tag/v0.57.0) — "Frictionless Dispatch" ✓
 
 Single-call agent dispatch, work items UI polish, breadcrumbs, expandable search, project detail overhaul.
 
@@ -223,7 +227,7 @@ Single-call agent dispatch, work items UI polish, breadcrumbs, expandable search
 - [x] **LoCoMo benchmark: 81.6%** — up from 79.4%. Open-domain 86.2%, multi-hop 83.8%, adversarial 78.0%, temporal 74.5%, single-hop 73.4% (1,986 questions)
 - [x] **Collaborative thinking sequences** — multi-agent contribution to shared threads
 
-### v0.56.0 — "Use It or Lose It" ✓
+### [v0.56.0](https://github.com/jasondostal/cairn-mcp/releases/tag/v0.56.0) — "Use It or Lose It" ✓
 
 Memory lifecycle. Access tracking, decay scoring, controlled forgetting, importance boosting, enrichment status tracking.
 
@@ -239,7 +243,7 @@ Memory lifecycle. Access tracking, decay scoring, controlled forgetting, importa
 - [x] **Enricher status returns** — `complete`/`partial`/`failed` instead of silent `{}`
 - [x] Migrations 029 (memory lifecycle), 030 (enrichment status)
 
-### v0.55.0 — "Show Your Work" ✓
+### [v0.55.0](https://github.com/jasondostal/cairn-mcp/releases/tag/v0.55.0) — "Show Your Work" ✓
 
 LoCoMo benchmark, ingest tool, event-driven enrichment, CI pipeline.
 

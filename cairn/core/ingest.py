@@ -120,14 +120,13 @@ class IngestPipeline:
         """Read a file from the configured ingest staging directory.
 
         Resolves the path, validates it's under config.ingest_dir (path traversal
-        protection), checks file size against MAX_CONTENT_SIZE, and returns
-        (content, inferred_title).
+        protection), checks file size against ingest_max_size (default 10MB),
+        and returns (content, inferred_title).
 
         The inferred title is the filename stem (without extension), titlecased
         with underscores/hyphens replaced by spaces, unless the caller provides
         an explicit title.
         """
-        from cairn.core.constants import MAX_CONTENT_SIZE
 
         ingest_dir = Path(self.config.ingest_dir).resolve()
         target = Path(file_path).resolve()
@@ -162,12 +161,14 @@ class IngestPipeline:
                 f"Allowed: {', '.join(sorted(_ALLOWED_EXTENSIONS))}"
             )
 
-        # Size check
+        # Size check — ingest uses a higher limit since content gets chunked
+        from cairn.core.constants import MAX_INGEST_SIZE
+        max_size = getattr(self.config, "ingest_max_size", MAX_INGEST_SIZE)
         file_size = target.stat().st_size
-        if file_size > MAX_CONTENT_SIZE:
+        if file_size > max_size:
             raise ValueError(
                 f"File too large: {file_size:,} bytes "
-                f"(max {MAX_CONTENT_SIZE:,})"
+                f"(max {max_size:,})"
             )
 
         content = target.read_text(encoding="utf-8")

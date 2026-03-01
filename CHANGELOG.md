@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.66.1] — 2026-03-01
+
+### Fixed
+- **Ingest file size limit** — raised from 100KB to 10MB (configurable via
+  `CAIRN_INGEST_MAX_SIZE`). The ingest pipeline chunks content automatically
+  via Chonkie; the old limit blocked files before chunking could run.
+
 ## [0.66.0] "Authentication/User Mgmt/RBAC - MVP" — 2026-03-01
 
 Multi-user authentication and authorization. Six auth modes from zero-config
@@ -2479,7 +2486,21 @@ Initial release. All four implementation phases complete.
 - 13 database tables across 3 migrations
 - 30 tests passing (clustering, enrichment, RRF)
 
-[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.59.0...HEAD
+[Unreleased]: https://github.com/jasondostal/cairn-mcp/compare/v0.66.1...HEAD
+[0.66.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.66.0...v0.66.1
+[0.66.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.65.0...v0.66.0
+[0.65.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.64.0...v0.65.0
+[0.64.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.63.1...v0.64.0
+[0.63.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.63.0...v0.63.1
+[0.63.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.62.1...v0.63.0
+[0.62.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.62.0...v0.62.1
+[0.62.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.61.1...v0.62.0
+[0.61.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.61.0...v0.61.1
+[0.61.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.60.0...v0.61.0
+[0.60.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.59.3...v0.60.0
+[0.59.3]: https://github.com/jasondostal/cairn-mcp/compare/v0.59.2...v0.59.3
+[0.59.2]: https://github.com/jasondostal/cairn-mcp/compare/v0.59.1...v0.59.2
+[0.59.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.59.0...v0.59.1
 [0.59.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.58.1...v0.59.0
 [0.58.1]: https://github.com/jasondostal/cairn-mcp/compare/v0.58.0...v0.58.1
 [0.58.0]: https://github.com/jasondostal/cairn-mcp/compare/v0.56.0...v0.58.0

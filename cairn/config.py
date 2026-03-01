@@ -303,6 +303,7 @@ class Config:
     cors_origins: list[str] = field(default_factory=lambda: ["*"])
     event_archive_dir: str | None = None  # File-based event archive (e.g. /data/events)
     ingest_dir: str = "/data/ingest"   # Staging dir for file-path ingestion
+    ingest_max_size: int = 10_000_000  # Max file size for ingest (~10MB, chunked)
     ingest_chunk_size: int = 512       # tokens per chunk (Chonkie)
     ingest_chunk_overlap: int = 64     # overlap tokens between chunks
     decay_lambda: float = 0.01        # Exponential decay rate (half-life ~69 days at 0.01)
@@ -379,7 +380,7 @@ EDITABLE_KEYS: set[str] = {
     "work_items.default_prefix_length",
     # Top-level
     "enrichment_enabled",
-    "ingest_chunk_size", "ingest_chunk_overlap", "decay_lambda",
+    "ingest_max_size", "ingest_chunk_size", "ingest_chunk_overlap", "decay_lambda",
     "decay.enabled", "decay.scan_interval_hours", "decay.threshold",
     "decay.min_age_days", "decay.protect_importance", "decay.dry_run",
     # Audit
@@ -673,6 +674,7 @@ _ENV_MAP: dict[str, str] = {
     "clustering.tsne_max_samples": "CAIRN_CLUSTER_TSNE_MAX_SAMPLES",
     "work_items.default_prefix_length": "CAIRN_WORK_ITEMS_PREFIX_LENGTH",
     "ingest_dir": "CAIRN_INGEST_DIR",
+    "ingest_max_size": "CAIRN_INGEST_MAX_SIZE",
     "enrichment_enabled": "CAIRN_ENRICHMENT_ENABLED",
     "profile": "CAIRN_PROFILE",
     "transport": "CAIRN_TRANSPORT",
@@ -888,6 +890,7 @@ def load_config() -> Config:
         cors_origins=_parse_cors_origins(os.getenv("CAIRN_CORS_ORIGINS", "*")),
         event_archive_dir=os.getenv("CAIRN_EVENT_ARCHIVE_DIR") or None,
         ingest_dir=os.getenv("CAIRN_INGEST_DIR", "/data/ingest"),
+        ingest_max_size=int(os.getenv("CAIRN_INGEST_MAX_SIZE", "10000000")),
         ingest_chunk_size=int(os.getenv("CAIRN_INGEST_CHUNK_SIZE", "512")),
         ingest_chunk_overlap=int(os.getenv("CAIRN_INGEST_CHUNK_OVERLAP", "64")),
         decay_lambda=float(os.getenv("CAIRN_DECAY_LAMBDA", "0.01")),
