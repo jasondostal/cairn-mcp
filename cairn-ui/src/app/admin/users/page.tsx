@@ -131,14 +131,14 @@ export default function AdminUsersPage() {
 
   if (loading) {
     return (
-      <PageLayout title="Users" description="Manage user accounts" icon={UserCog}>
+      <PageLayout title="Users" icon={UserCog}>
         <SkeletonList count={3} />
       </PageLayout>
     );
   }
 
   return (
-    <PageLayout title="Users" description="Manage user accounts" icon={UserCog}>
+    <PageLayout title="Users" icon={UserCog}>
       <div className="space-y-4">
         <div className="flex justify-end">
           <Button size="sm" onClick={() => setShowCreate(!showCreate)}>
