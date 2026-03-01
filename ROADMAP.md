@@ -50,7 +50,7 @@ Exploring, not committed.
 
 ### v0.66.5 ✓
 
-- [x] **Setup assistant** (ca-172) — `scripts/setup-auth.sh` interactive CLI wizard for auth configuration. Walks through auth mode selection (none / local JWT / OIDC SSO), JWT secret generation, OIDC provider validation via discovery endpoint, and `.env` writing. Provider-specific URL hints for Authentik, Keycloak, Auth0, Okta, Azure AD. Supports `--dry-run` and `--non-interactive` modes. `setup.sh` prompts to run it after IDE configuration.
+- [x] **Setup wizard** (ca-172) — `scripts/setup.sh` is now a full onboarding orchestrator: environment configuration → auth → IDE setup → connectivity test. Four tiers (local dev, recommended, enterprise, custom) map to `CAIRN_PROFILE` presets and collect only the credentials each tier needs. LLM backend selection (Bedrock, OpenAI, Gemini, Ollama) with provider-specific prompts. Embedding backend, knowledge graph, database password, and capability toggles. Auth step walks through mode selection (none / local JWT / OIDC SSO), JWT secret generation, and OIDC provider validation. Shared helper library (`setup-lib.sh`) and modular scripts (`setup-env.sh`, `setup-auth.sh`) — each runnable standalone. `--dry-run` and `--non-interactive` for CI.
 
 ### v0.66.4 ✓
 

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Cairn Multi-IDE Setup Script
-# Detects installed IDEs, configures MCP connections, and optionally installs hook adapters.
+# Cairn Setup
+# Full onboarding wizard: environment configuration, authentication,
+# IDE/MCP connections, and session capture hooks.
 #
-# Usage: ./scripts/setup.sh [--dry-run] [CAIRN_URL]
+# Usage: ./scripts/setup.sh [--dry-run] [--non-interactive] [CAIRN_URL]
 #
 # Supports: Claude Code, Cursor, Windsurf, Cline (VS Code), Continue
 
@@ -26,8 +27,12 @@ fail()  { echo -e "${RED}[fail]${NC} $*"; }
 header() { echo -e "\n${BOLD}$*${NC}"; }
 
 DRY_RUN=false
+NON_INTERACTIVE=false
 CAIRN_URL=""
 CONFIGURED_IDES=()
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
 # ──────────────────────────────────────────────
 # Parse arguments
@@ -36,17 +41,29 @@ CONFIGURED_IDES=()
 for arg in "$@"; do
     case "$arg" in
         --dry-run) DRY_RUN=true ;;
+        --non-interactive) NON_INTERACTIVE=true ;;
         --help|-h)
-            echo "Usage: $(basename "$0") [--dry-run] [CAIRN_URL]"
+            echo "Usage: $(basename "$0") [--dry-run] [--non-interactive] [CAIRN_URL]"
+            echo ""
+            echo "Full onboarding wizard: environment, auth, IDE configuration."
             echo ""
             echo "Options:"
-            echo "  --dry-run    Show what would be written without making changes"
-            echo "  CAIRN_URL    Cairn API base URL (default: http://localhost:8000)"
+            echo "  --dry-run          Show what would be written without making changes"
+            echo "  --non-interactive  Use defaults only (for CI)"
+            echo "  CAIRN_URL          Cairn API base URL (default: http://localhost:8000)"
             exit 0
             ;;
         *) CAIRN_URL="$arg" ;;
     esac
 done
+
+# Helper to propagate flags to sub-scripts
+module_args() {
+    local args=()
+    if [ "$DRY_RUN" = true ]; then args+=("--dry-run"); fi
+    if [ "$NON_INTERACTIVE" = true ]; then args+=("--non-interactive"); fi
+    echo "${args[*]}"
+}
 
 # ──────────────────────────────────────────────
 # Banner
@@ -55,7 +72,7 @@ done
 echo ""
 echo "========================================="
 echo "  Cairn Setup"
-echo "  MCP memory for any IDE"
+echo "  Persistent memory for agents"
 echo "========================================="
 echo ""
 
@@ -65,7 +82,59 @@ if [ "$DRY_RUN" = true ]; then
 fi
 
 # ──────────────────────────────────────────────
-# Step 1: Check dependencies
+# Step 1: Environment configuration (.env)
+# ──────────────────────────────────────────────
+
+ENV_SCRIPT="$SCRIPT_DIR/setup-env.sh"
+if [ -f "$ENV_SCRIPT" ]; then
+    RUN_ENV=false
+
+    if [ ! -f "$REPO_DIR/.env" ]; then
+        # No .env yet — always run env setup
+        RUN_ENV=true
+    elif [ "$NON_INTERACTIVE" = false ]; then
+        echo -n "Reconfigure environment (.env)? [y/N]: "
+        read -r RECONFIG
+        if [[ "$RECONFIG" =~ ^[Yy] ]]; then
+            RUN_ENV=true
+        fi
+    fi
+
+    if [ "$RUN_ENV" = true ]; then
+        # shellcheck disable=SC2046
+        bash "$ENV_SCRIPT" $(module_args)
+        echo ""
+    else
+        ok "Using existing .env"
+        echo ""
+    fi
+fi
+
+# ──────────────────────────────────────────────
+# Step 2: Authentication
+# ──────────────────────────────────────────────
+
+AUTH_SCRIPT="$SCRIPT_DIR/setup-auth.sh"
+if [ -f "$AUTH_SCRIPT" ]; then
+    RUN_AUTH=false
+
+    if [ "$NON_INTERACTIVE" = false ]; then
+        echo -n "Configure authentication? [y/N]: "
+        read -r SETUP_AUTH
+        if [[ "$SETUP_AUTH" =~ ^[Yy] ]]; then
+            RUN_AUTH=true
+        fi
+    fi
+
+    if [ "$RUN_AUTH" = true ]; then
+        # shellcheck disable=SC2046
+        bash "$AUTH_SCRIPT" $(module_args)
+        echo ""
+    fi
+fi
+
+# ──────────────────────────────────────────────
+# Step 3: Check dependencies for IDE setup
 # ──────────────────────────────────────────────
 
 header "Checking dependencies..."
@@ -90,22 +159,24 @@ if [ -n "$MISSING" ]; then
 fi
 
 # ──────────────────────────────────────────────
-# Step 2: Detect/ask for CAIRN_URL
+# Step 4: Detect/ask for CAIRN_URL
 # ──────────────────────────────────────────────
 
 CAIRN_URL="${CAIRN_URL:-${CAIRN_URL_ENV:-}}"
 
 if [ -z "$CAIRN_URL" ]; then
-    echo ""
-    echo -n "Cairn API URL [http://localhost:8000]: "
-    read -r CAIRN_URL
+    if [ "$NON_INTERACTIVE" = false ]; then
+        echo ""
+        echo -n "Cairn API URL [http://localhost:8000]: "
+        read -r CAIRN_URL
+    fi
     CAIRN_URL="${CAIRN_URL:-http://localhost:8000}"
 fi
 
 CAIRN_URL="${CAIRN_URL%/}"
 
 # ──────────────────────────────────────────────
-# Step 3: Test connectivity
+# Step 5: Test connectivity
 # ──────────────────────────────────────────────
 
 header "Testing connectivity..."
@@ -121,11 +192,9 @@ else
 fi
 
 # ──────────────────────────────────────────────
-# Step 4: Find hook scripts
+# Step 6: Find hook scripts
 # ──────────────────────────────────────────────
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(dirname "$SCRIPT_DIR")"
 HOOKS_DIR="$REPO_DIR/examples/hooks"
 ADAPTERS_DIR="$HOOKS_DIR/adapters"
 
@@ -139,7 +208,7 @@ fi
 chmod +x "$HOOKS_DIR/session-start.sh" "$HOOKS_DIR/log-event.sh" "$HOOKS_DIR/session-end.sh"
 
 # ──────────────────────────────────────────────
-# Step 5: Detect installed IDEs
+# Step 7: Detect installed IDEs
 # ──────────────────────────────────────────────
 
 header "Detecting installed IDEs..."
@@ -211,7 +280,7 @@ if [ ${#IDE_LIST[@]} -eq 0 ]; then
 fi
 
 # ──────────────────────────────────────────────
-# Step 6: Select IDEs to configure
+# Step 8: Select IDEs to configure
 # ──────────────────────────────────────────────
 
 header "Select IDEs to configure"
@@ -302,7 +371,7 @@ merge_mcp_config() {
 }
 
 # ──────────────────────────────────────────────
-# Step 7: Configure each selected IDE
+# Step 9: Configure each selected IDE
 # ──────────────────────────────────────────────
 
 for ide in "${SELECTED_IDES[@]}"; do
@@ -519,27 +588,11 @@ if [ "$DRY_RUN" = true ]; then
     echo "  Re-run without --dry-run to apply changes."
 else
     echo "  Next steps:"
-    echo "    1. Start (or restart) your IDE"
-    echo "    2. Begin a session — Cairn should connect automatically"
-    echo "    3. Check: curl -s $CAIRN_URL/api/status | jq ."
+    echo "    1. docker compose up -d"
+    echo "    2. Start (or restart) your IDE"
+    echo "    3. Begin a session — Cairn should connect automatically"
+    echo "    4. Check: curl -s $CAIRN_URL/api/status | jq ."
 fi
 echo ""
 echo "  Documentation: $HOOKS_DIR/README.md"
 echo ""
-
-# ──────────────────────────────────────────────
-# Optional: Authentication setup
-# ──────────────────────────────────────────────
-
-AUTH_SCRIPT="$SCRIPT_DIR/setup-auth.sh"
-if [ -f "$AUTH_SCRIPT" ]; then
-    echo -n "Would you like to configure authentication? [y/N]: "
-    read -r SETUP_AUTH
-    if [[ "$SETUP_AUTH" =~ ^[Yy] ]]; then
-        AUTH_ARGS=()
-        if [ "$DRY_RUN" = true ]; then
-            AUTH_ARGS+=("--dry-run")
-        fi
-        exec "$AUTH_SCRIPT" "${AUTH_ARGS[@]}"
-    fi
-fi

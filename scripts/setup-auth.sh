@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cairn Authentication Setup Assistant
+# Cairn Authentication Setup
 # Interactive wizard for configuring auth mode, JWT secrets, OIDC providers,
 # and writing .env configuration.
 #
@@ -13,51 +13,17 @@
 
 set -euo pipefail
 
-# ──────────────────────────────────────────────
-# Colors and helpers
-# ──────────────────────────────────────────────
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-BOLD='\033[1m'
-DIM='\033[2m'
-NC='\033[0m'
-
-info()   { echo -e "${BLUE}[info]${NC} $*"; }
-ok()     { echo -e "${GREEN}  [ok]${NC} $*"; }
-warn()   { echo -e "${YELLOW}[warn]${NC} $*"; }
-fail()   { echo -e "${RED}[fail]${NC} $*"; }
-header() { echo -e "\n${BOLD}$*${NC}"; }
-
-# ──────────────────────────────────────────────
-# Defaults
-# ──────────────────────────────────────────────
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
+# Defaults (can be overridden by flags)
 ENV_FILE="${PROJECT_DIR}/.env"
 DRY_RUN=false
 NON_INTERACTIVE=false
 
-# Auth config values (populated during wizard)
-AUTH_ENABLED=false
-JWT_SECRET=""
-JWT_EXPIRE_MINUTES="1440"
-API_KEY=""
-OIDC_ENABLED=false
-OIDC_PROVIDER_URL=""
-OIDC_CLIENT_ID=""
-OIDC_CLIENT_SECRET=""
-OIDC_SCOPES="openid email profile"
-OIDC_DEFAULT_ROLE="user"
-OIDC_ADMIN_GROUPS=""
-PUBLIC_URL=""
-STDIO_USER=""
-AUTH_MODE=1
-OIDC_PROVIDER_NAME=""
+# Source shared helpers
+# shellcheck source=setup-lib.sh
+source "${SCRIPT_DIR}/setup-lib.sh"
 
 # ──────────────────────────────────────────────
 # Parse arguments
@@ -80,119 +46,24 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ──────────────────────────────────────────────
-# Helpers
+# Auth config values (populated during wizard)
 # ──────────────────────────────────────────────
 
-# Prompt user for input, return default if non-interactive or empty
-prompt() {
-    local message="$1"
-    local default="${2:-}"
-    local result
-
-    if [ "$NON_INTERACTIVE" = true ]; then
-        echo "$default"
-        return
-    fi
-
-    if [ -n "$default" ]; then
-        echo -n "$message [$default]: " >&2
-    else
-        echo -n "$message: " >&2
-    fi
-    read -r result
-    echo "${result:-$default}"
-}
-
-# Prompt for secret input (masked)
-prompt_secret() {
-    local message="$1"
-    local default="${2:-}"
-    local result
-
-    if [ "$NON_INTERACTIVE" = true ]; then
-        echo "$default"
-        return
-    fi
-
-    if [ -n "$default" ]; then
-        echo -n "$message [****]: " >&2
-    else
-        echo -n "$message: " >&2
-    fi
-    read -rs result
-    echo "" >&2
-    echo "${result:-$default}"
-}
-
-# Prompt for a numbered selection
-prompt_select() {
-    local message="$1"
-    local default="$2"
-    local result
-
-    if [ "$NON_INTERACTIVE" = true ]; then
-        echo "$default"
-        return
-    fi
-
-    echo -n "$message [$default]: " >&2
-    read -r result
-    echo "${result:-$default}"
-}
-
-# Generate a JWT secret
-generate_jwt_secret() {
-    if command -v openssl &>/dev/null; then
-        openssl rand -base64 32
-    elif command -v python3 &>/dev/null; then
-        python3 -c "import secrets; print(secrets.token_urlsafe(32))"
-    else
-        fail "Neither openssl nor python3 found — cannot generate JWT secret"
-        exit 1
-    fi
-}
-
-# Set a key in the .env file (update if exists, append if not)
-env_set() {
-    local key="$1"
-    local value="$2"
-    local file="$3"
-
-    if grep -q "^${key}=" "$file" 2>/dev/null; then
-        # Update existing key (handle values with special chars)
-        local escaped_value
-        escaped_value=$(printf '%s\n' "$value" | sed 's/[&/\]/\\&/g')
-        sed -i "s|^${key}=.*|${key}=${escaped_value}|" "$file"
-    elif grep -q "^# *${key}=" "$file" 2>/dev/null; then
-        # Uncomment and set existing commented key
-        local escaped_value
-        escaped_value=$(printf '%s\n' "$value" | sed 's/[&/\]/\\&/g')
-        sed -i "s|^# *${key}=.*|${key}=${escaped_value}|" "$file"
-    else
-        # Append new key
-        echo "${key}=${value}" >> "$file"
-    fi
-}
-
-# Comment out a key in the .env file
-env_comment() {
-    local key="$1"
-    local file="$2"
-
-    if grep -q "^${key}=" "$file" 2>/dev/null; then
-        sed -i "s|^${key}=|# ${key}=|" "$file"
-    fi
-}
-
-# Mask a value for display (show first 4 chars, mask the rest)
-mask_value() {
-    local value="$1"
-    if [ ${#value} -le 4 ]; then
-        echo "****"
-    else
-        echo "${value:0:4}****"
-    fi
-}
+AUTH_ENABLED=false
+JWT_SECRET=""
+JWT_EXPIRE_MINUTES="1440"
+API_KEY=""
+OIDC_ENABLED=false
+OIDC_PROVIDER_URL=""
+OIDC_CLIENT_ID=""
+OIDC_CLIENT_SECRET=""
+OIDC_SCOPES="openid email profile"
+OIDC_DEFAULT_ROLE="user"
+OIDC_ADMIN_GROUPS=""
+PUBLIC_URL=""
+STDIO_USER=""
+AUTH_MODE=1
+OIDC_PROVIDER_NAME=""
 
 # ──────────────────────────────────────────────
 # Banner
@@ -260,7 +131,7 @@ if [ "$AUTH_ENABLED" = true ]; then
     echo ""
 
     echo -n "Generating JWT signing secret... "
-    JWT_SECRET=$(generate_jwt_secret)
+    JWT_SECRET=$(generate_secret)
     echo "done."
     echo ""
     echo -e "  Generated: ${DIM}${JWT_SECRET}${NC}"
@@ -344,7 +215,6 @@ if [ "$OIDC_ENABLED" = true ]; then
         DISCOVERY_RESPONSE=$(curl -sf --max-time 10 "$DISCOVERY_URL" 2>/dev/null || echo "")
 
         if [ -n "$DISCOVERY_RESPONSE" ]; then
-            # Check for required OIDC fields
             HAS_AUTH=$(echo "$DISCOVERY_RESPONSE" | grep -c "authorization_endpoint" || true)
             HAS_TOKEN=$(echo "$DISCOVERY_RESPONSE" | grep -c "token_endpoint" || true)
 
@@ -466,16 +336,7 @@ if [ "$DRY_RUN" = true ]; then
     info "Would write to ${ENV_FILE}"
     echo ""
 else
-    # Ensure .env exists
-    if [ ! -f "$ENV_FILE" ]; then
-        if [ -f "${PROJECT_DIR}/.env.example" ]; then
-            cp "${PROJECT_DIR}/.env.example" "$ENV_FILE"
-            ok "Created ${ENV_FILE} from .env.example"
-        else
-            touch "$ENV_FILE"
-            ok "Created ${ENV_FILE}"
-        fi
-    fi
+    env_ensure "$ENV_FILE" "$PROJECT_DIR"
 
     # Write auth settings
     env_set "CAIRN_AUTH_ENABLED" "$AUTH_ENABLED" "$ENV_FILE"
@@ -504,7 +365,6 @@ else
             env_set "CAIRN_PUBLIC_URL" "$PUBLIC_URL" "$ENV_FILE"
         fi
     else
-        # Comment out OIDC keys if switching away from OIDC
         env_comment "CAIRN_OIDC_ENABLED" "$ENV_FILE"
         env_comment "CAIRN_OIDC_PROVIDER_URL" "$ENV_FILE"
         env_comment "CAIRN_OIDC_CLIENT_ID" "$ENV_FILE"
@@ -526,15 +386,14 @@ fi
 header "Testing configuration..."
 echo ""
 
-# Detect Cairn URL from env file or default
 CAIRN_URL="${CAIRN_URL:-}"
+CAIRN_PORT="${CAIRN_PORT:-}"
 if [ -z "$CAIRN_URL" ] && [ -f "$ENV_FILE" ]; then
     CAIRN_PORT=$(grep "^CAIRN_HTTP_PORT=" "$ENV_FILE" 2>/dev/null | cut -d= -f2 || echo "")
 fi
 CAIRN_PORT="${CAIRN_PORT:-8000}"
 CAIRN_URL="${CAIRN_URL:-http://localhost:${CAIRN_PORT}}"
 
-# Detect UI port (cairn-ui default is 3000)
 UI_URL="http://localhost:3000"
 
 CAIRN_RUNNING=false
@@ -554,7 +413,6 @@ if command -v curl &>/dev/null; then
             ok "OIDC provider configured"
         fi
 
-        # Check if users exist
         USER_COUNT=$(echo "$STATUS_RESPONSE" | grep -o '"user_count":[0-9]*' | cut -d: -f2 || echo "")
         if [ "$USER_COUNT" = "0" ] || [ -z "$USER_COUNT" ]; then
             ok "No users yet — visit ${UI_URL}/login to create admin"

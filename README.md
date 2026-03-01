@@ -73,19 +73,13 @@ Where that goes:
 | **Cline** | MCP settings panel in VS Code |
 | **Continue** | `.continue/config.yaml` |
 
-Or run the setup script — it detects your IDEs, configures MCP, and offers to set up auth:
+Or run the setup wizard — it walks you through everything: LLM backend, database, embeddings, auth, and IDE configuration:
 
 ```bash
 git clone https://github.com/jasondostal/cairn-mcp.git && ./cairn-mcp/scripts/setup.sh
 ```
 
-Want auth? The setup wizard walks you through it:
-
-```bash
-./scripts/setup-auth.sh
-```
-
-Three modes: no auth (default), local JWT, or OIDC/SSO. Generates secrets, validates your identity provider, writes `.env`. Think `certbot` for Cairn auth.
+Pick a tier (local dev, recommended, enterprise, or custom) and the wizard collects only what that tier needs. Supports `--dry-run` and `--non-interactive` for CI.
 
 ### 3. Use it
 
@@ -159,7 +153,7 @@ The rest: `modify`, `insights`, `tasks`, `think`, `status`, `consolidate`, `drif
 
 </details>
 
-**Multi-user authentication and RBAC.** Off by default, zero to enterprise in one command. `./scripts/setup-auth.sh` walks you through auth mode selection, JWT secret generation, and OIDC provider configuration with provider-specific hints for Authentik, Keycloak, Auth0, Okta, and Azure AD. Local auth with JWT, Personal Access Tokens for machine clients, OIDC/SSO, and stdio identity for MCP. Three roles, project-level scoping, first-user-becomes-admin. Groups with OIDC sync. See the **[Authentication Guide](docs/authentication.md)**.
+**Multi-user authentication and RBAC.** Off by default, zero to enterprise in one command. `./scripts/setup.sh` includes auth configuration, or run `./scripts/setup-auth.sh` standalone. Auth mode selection (none / local JWT / OIDC SSO), JWT secret generation, OIDC provider validation with hints for Authentik, Keycloak, Auth0, Okta, and Azure AD. Personal Access Tokens for machine clients, stdio identity for MCP. Three roles, project-level scoping, first-user-becomes-admin. Groups with OIDC sync. See the **[Authentication Guide](docs/authentication.md)**.
 
 **Session capture.** IDE hooks (Claude Code, Cursor, Cline, Windsurf) log every tool call. Next session boots warm. See [`examples/hooks/README.md`](examples/hooks/README.md).
 
@@ -204,16 +198,17 @@ Full reference is in [docker-compose.yml](docker-compose.yml). Every variable ha
 
 ## Authentication
 
-Off by default. The fastest way to enable it:
+Off by default. The fastest way to enable it is through the setup wizard:
 
 ```bash
-./scripts/setup-auth.sh
+./scripts/setup.sh          # includes auth as step 2
+./scripts/setup-auth.sh     # or run auth setup standalone
 ```
 
-The wizard walks you through three modes — no auth, local JWT, or OIDC/SSO —
-generates secrets, validates your identity provider's discovery endpoint, and
-writes `.env`. Provider-specific URL hints for Authentik, Keycloak, Auth0, Okta,
-and Azure AD. Supports `--dry-run` and `--non-interactive` for CI.
+Three modes — no auth, local JWT, or OIDC/SSO. Generates secrets, validates
+your identity provider's discovery endpoint, writes `.env`. Provider-specific
+URL hints for Authentik, Keycloak, Auth0, Okta, and Azure AD. Both scripts
+support `--dry-run` and `--non-interactive` for CI.
 
 First user to register becomes admin. Role-based access control enforces
 permissions across REST API, MCP HTTP, and the web UI. Personal Access Tokens
