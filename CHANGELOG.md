@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.67.0] — 2026-03-01 — "Mind"
+
+### Added
+- **Working memory** — new `working_memory` MCP tool and `/mind` UI page.
+  Persistent scratch pad for active thoughts: hypotheses, questions, tensions,
+  connections, threads, intuitions. Items have salience scores that decay over
+  time (`base × 0.97^days`). Pin important items to prevent decay, boost to
+  re-engage. Shows up in `orient()` session boot. 8 REST endpoints, inline
+  capture form, type-coded badges.
+- Migration 044 — `working_memory` table with salience, embeddings, resolution
+  tracking.
+
+### Deprecated
+- **`tasks` MCP tool** — use `working_memory` for loose thoughts and
+  `work_items` for structured work. Existing task data preserved, tool still
+  functional. Removed from primary navigation.
+
+### Fixed
+- **Embedding reconciliation** — vector dimension auto-fix now runs
+  independently for each embedding-bearing table, preventing dimension
+  mismatches when new tables are added via migrations.
+
 ## [0.66.6] — 2026-03-01
 
 ### Changed

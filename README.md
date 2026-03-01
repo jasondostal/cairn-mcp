@@ -101,13 +101,14 @@ That's it. 20 tools available. The ones you'll use most:
 | `orient` | Boot a session with rules, recent activity, and open work |
 | `rules` | Load behavioral guardrails (global or per-project) |
 | `work_items` | Create, claim, and complete tasks with dependencies and gates |
+| `working_memory` | Capture active thoughts — hypotheses, questions, tensions — with salience decay |
 | `projects` | Manage project docs (briefs, PRDs, plans) |
 | `code_index` | Parse a codebase with tree-sitter, build a code graph in Neo4j |
 | `code_query` | Structural queries: dependents, impact, hotspots, cross-project search |
 | `code_describe` | Generate NL descriptions of code symbols for semantic search |
 | `arch_check` | Validate architecture boundary rules against imports |
 
-The rest: `modify`, `insights`, `tasks`, `think`, `status`, `consolidate`, `drift_check`, `ingest`, `dispatch`.
+The rest: `modify`, `insights`, `think`, `status`, `consolidate`, `drift_check`, `ingest`, `dispatch`.
 
 ## What's in the box
 
@@ -232,7 +233,7 @@ MCP clients (Claude Code, Cursor, etc.)     REST clients (curl, web UI, hooks)
 |  cairn.server (MCP tools)     cairn.api (FastAPI endpoints) |
 |                                                             |
 |  core: memory, search, enrichment, extraction, clustering   |
-|        work items, projects, tasks, thinking, code intel    |
+|        work items, projects, working memory, thinking, code |
 |                                                             |
 |  watchtower: audit trail, webhooks, alerting, retention     |
 |              trace context, OTel export (optional)           |
