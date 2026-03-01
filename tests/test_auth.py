@@ -234,8 +234,8 @@ class TestPAT:
         }
         mgr = UserManager(db)
         result = mgr.create_api_token(user_id=1, name="test")
-        assert result["token"].startswith("cairn_")
-        assert len(result["token"]) == 54  # "cairn_" + 48 hex chars
+        assert result["raw_token"].startswith("cairn_")
+        assert len(result["raw_token"]) == 54  # "cairn_" + 48 hex chars
         assert result["name"] == "test"
 
     def test_resolve_valid_token(self):
