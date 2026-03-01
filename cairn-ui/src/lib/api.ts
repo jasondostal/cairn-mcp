@@ -1,4 +1,18 @@
+import { getAuthHeaders, clearToken } from "@/lib/auth";
+
 const BASE = "/api";
+
+// ---------------------------------------------------------------------------
+// Global 401 handler: clear token and redirect to login (ca-124)
+// ---------------------------------------------------------------------------
+function handle401(res: Response): void {
+  if (res.status === 401) {
+    clearToken();
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+      window.location.href = "/login";
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // GET cache: deduplicates in-flight requests and caches responses with TTL.
@@ -48,8 +62,11 @@ async function get<T>(path: string, params?: Record<string, string | string[] | 
   if (existing) return existing as Promise<T>;
 
   const doFetch = async (): Promise<T> => {
-    const res = await fetch(key);
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const res = await fetch(key, { headers: getAuthHeaders() });
+    if (!res.ok) {
+      handle401(res);
+      throw new Error(`${res.status} ${res.statusText}`);
+    }
     const data = await res.json();
     _cache.set(key, { data, timestamp: Date.now() });
     return data;
@@ -76,10 +93,11 @@ export function getCached<T>(
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
+    handle401(res);
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || `${res.status} ${res.statusText}`);
   }
@@ -92,10 +110,11 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 async function patch<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
+    handle401(res);
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || `${res.status} ${res.statusText}`);
   }
@@ -107,8 +126,10 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
 async function del<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "DELETE",
+    headers: getAuthHeaders(),
   });
   if (!res.ok) {
+    handle401(res);
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || `${res.status} ${res.statusText}`);
   }
@@ -118,10 +139,11 @@ async function del<T>(path: string): Promise<T> {
 async function delWithBody<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "DELETE",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
+    handle401(res);
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || `${res.status} ${res.statusText}`);
   }

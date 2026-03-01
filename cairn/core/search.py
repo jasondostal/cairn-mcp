@@ -161,6 +161,13 @@ class SearchEngine:
             clauses.append("m.tags @> %s")
             params.append(required_tags)
 
+        # RBAC: scope to user's accessible projects (ca-124)
+        from cairn.core.user import current_user
+        user_ctx = current_user()
+        if user_ctx is not None and user_ctx.role != "admin":
+            clauses.append("m.project_id = ANY(%s)")
+            params.append(list(user_ctx.project_ids))
+
         return " AND ".join(clauses), params
 
     def _vector_search(

@@ -1912,6 +1912,36 @@ def main():
         api = create_api(svc)
         mcp_app.mount("/api", api)
 
+        # MCP HTTP: JWT bearer → UserContext for MCP tool calls (ca-124)
+        if final_config.auth.enabled and final_config.auth.jwt_secret and svc.user_manager:
+            from starlette.middleware.base import BaseHTTPMiddleware
+            from cairn.core.user import clear_user, decode_access_token, set_user
+
+            class MCPAuthMiddleware(BaseHTTPMiddleware):
+                async def dispatch(self, request, call_next):
+                    # Only apply to MCP endpoints
+                    if not request.url.path.startswith("/mcp"):
+                        return await call_next(request)
+                    auth_header = request.headers.get("Authorization", "")
+                    if auth_header.startswith("Bearer "):
+                        token = auth_header[7:]
+                        payload = decode_access_token(
+                            token, secret=final_config.auth.jwt_secret,
+                        )
+                        if payload:
+                            user_id = int(payload["sub"])
+                            ctx = svc.user_manager.load_user_context(user_id)
+                            if ctx:
+                                set_user(ctx)
+                                try:
+                                    return await call_next(request)
+                                finally:
+                                    clear_user()
+                    # No token or invalid — proceed without UserContext (stdio-like)
+                    return await call_next(request)
+
+            mcp_app.add_middleware(MCPAuthMiddleware)
+            logger.info("MCP HTTP JWT auth middleware enabled")
 
         @asynccontextmanager
         async def combined_lifespan(app):

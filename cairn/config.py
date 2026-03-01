@@ -184,6 +184,8 @@ class AuthConfig:
     enabled: bool = False
     api_key: str | None = None  # Static API key (checked via X-API-Key header)
     header_name: str = "X-API-Key"  # Header to check for auth token
+    jwt_secret: str = ""  # Secret for JWT signing (required when auth.enabled=true)
+    jwt_expire_minutes: int = 1440  # JWT expiration (default 24h)
 
 
 @dataclass(frozen=True)
@@ -335,6 +337,7 @@ EDITABLE_KEYS: set[str] = {
     "analytics.cost_llm_output_per_1k",
     # Auth
     "auth.enabled", "auth.api_key", "auth.header_name",
+    "auth.jwt_secret", "auth.jwt_expire_minutes",
     # Terminal
     "terminal.backend", "terminal.max_sessions", "terminal.connect_timeout",
     # Neo4j
@@ -608,6 +611,8 @@ _ENV_MAP: dict[str, str] = {
     "auth.enabled": "CAIRN_AUTH_ENABLED",
     "auth.api_key": "CAIRN_API_KEY",
     "auth.header_name": "CAIRN_AUTH_HEADER",
+    "auth.jwt_secret": "CAIRN_AUTH_JWT_SECRET",
+    "auth.jwt_expire_minutes": "CAIRN_AUTH_JWT_EXPIRE_MINUTES",
     "analytics.enabled": "CAIRN_ANALYTICS_ENABLED",
     "analytics.retention_days": "CAIRN_ANALYTICS_RETENTION_DAYS",
     "analytics.cost_embedding_per_1k": "CAIRN_ANALYTICS_COST_EMBEDDING",
@@ -759,6 +764,8 @@ def load_config() -> Config:
             enabled=os.getenv("CAIRN_AUTH_ENABLED", "false").lower() in ("true", "1", "yes"),
             api_key=os.getenv("CAIRN_API_KEY") or None,
             header_name=os.getenv("CAIRN_AUTH_HEADER", "X-API-Key"),
+            jwt_secret=os.getenv("CAIRN_AUTH_JWT_SECRET", ""),
+            jwt_expire_minutes=int(os.getenv("CAIRN_AUTH_JWT_EXPIRE_MINUTES", "1440")),
         ),
         analytics=AnalyticsConfig(
             enabled=os.getenv("CAIRN_ANALYTICS_ENABLED", "true").lower() in ("true", "1", "yes"),

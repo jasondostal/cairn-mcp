@@ -34,6 +34,7 @@ from cairn.core.synthesis import SessionSynthesizer
 from cairn.core.tasks import TaskManager
 from cairn.core.thinking import ThinkingEngine
 from cairn.core.deliverables import DeliverableManager
+from cairn.core.user import UserManager
 from cairn.core.work_items import WorkItemManager
 from cairn.core.stats import init_embedding_stats, init_event_bus_stats, init_llm_stats
 from cairn.embedding import get_embedding_engine
@@ -93,6 +94,7 @@ class Services:
     retention_worker: "RetentionWorker | None"
     subscription_manager: "SubscriptionManager | None"
     agent_registry: "AgentRegistry | None"
+    user_manager: UserManager | None
 
 
 def create_services(config: Config | None = None, db: Database | None = None) -> Services:
@@ -344,6 +346,12 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     agent_registry = AgentRegistry()
     logger.info("AgentRegistry initialized with %d definitions", len(agent_registry.list()))
 
+    # User manager (ca-124) — created when auth is enabled with JWT
+    _user_manager = None
+    if config.auth.enabled and config.auth.jwt_secret:
+        _user_manager = UserManager(db)
+        logger.info("UserManager initialized (JWT auth enabled)")
+
     # OTel export — optional bridge to external observability (Watchtower Phase 6)
     from cairn.core import otel
     otel.init(config.otel)
@@ -473,4 +481,5 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         retention_worker=retention_worker,
         subscription_manager=subscription_manager,
         agent_registry=agent_registry,
+        user_manager=_user_manager,
     )

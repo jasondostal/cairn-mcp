@@ -170,17 +170,25 @@ class MemoryStore:
         # Insert memory
         import json as _json
         file_hashes_json = _json.dumps(file_hashes) if file_hashes else "{}"
+
+        # RBAC: set owner_user_id from current user context (ca-124)
+        from cairn.core.user import current_user as _current_user
+        _user_ctx = _current_user()
+        _owner_user_id = _user_ctx.user_id if _user_ctx else None
+
         row = self.db.execute_one(
             """
             INSERT INTO memories
                 (content, memory_type, importance, project_id, session_name,
                  embedding, tags, auto_tags, summary, related_files, source_doc_id,
                  file_hashes, entities, author,
-                 enrichment_status, enriched_at)
+                 enrichment_status, enriched_at,
+                 owner_user_id)
             VALUES
                 (%s, %s, %s, %s, %s, %s::vector, %s, %s, %s, %s, %s,
                  %s::jsonb, %s, %s,
-                 %s, CASE WHEN %s IN ('complete', 'partial') THEN NOW() ELSE NULL END)
+                 %s, CASE WHEN %s IN ('complete', 'partial') THEN NOW() ELSE NULL END,
+                 %s)
             RETURNING id, created_at
             """,
             (
@@ -200,6 +208,7 @@ class MemoryStore:
                 author,
                 enrichment_status,
                 enrichment_status,
+                _owner_user_id,
             ),
         )
 
@@ -660,6 +669,16 @@ class MemoryStore:
             return []
 
         placeholders = ",".join(["%s"] * len(ids))
+
+        # RBAC: scope to user's accessible projects (ca-124)
+        from cairn.core.user import current_user as _current_user
+        _user_ctx = _current_user()
+        rbac_clause = ""
+        rbac_params: tuple = ()
+        if _user_ctx is not None and _user_ctx.role != "admin":
+            rbac_clause = " AND m.project_id = ANY(%s)"
+            rbac_params = (list(_user_ctx.project_ids),)
+
         rows = self.db.execute(
             f"""
             SELECT m.id, m.content, m.summary, m.memory_type, m.importance,
@@ -673,10 +692,10 @@ class MemoryStore:
             LEFT JOIN projects p ON m.project_id = p.id
             LEFT JOIN cluster_members cm ON cm.memory_id = m.id
             LEFT JOIN clusters c ON c.id = cm.cluster_id
-            WHERE m.id IN ({placeholders})
+            WHERE m.id IN ({placeholders}){rbac_clause}
             ORDER BY m.id
             """,
-            tuple(ids),
+            tuple(ids) + rbac_params,
         )
 
         # Fetch relations for all requested IDs in one query
@@ -771,6 +790,16 @@ class MemoryStore:
         author: str | None = None,
     ) -> dict:
         """Update, inactivate, or reactivate a memory."""
+        # RBAC: check user has access to this memory's project (ca-124)
+        from cairn.core.user import current_user as _current_user
+        _user_ctx = _current_user()
+        if _user_ctx is not None and _user_ctx.role != "admin":
+            row = self.db.execute_one(
+                "SELECT project_id FROM memories WHERE id = %s", (memory_id,),
+            )
+            if row and row["project_id"] not in _user_ctx.project_ids:
+                return {"error": "Access denied", "id": memory_id}
+
         if action == MemoryAction.INACTIVATE:
             self.db.execute(
                 """
@@ -867,12 +896,24 @@ class MemoryStore:
     ) -> dict:
         """Retrieve active rule-type memories for project(s) and __global__.
 
+        When auth enabled: __global__ acts as __system__ (readable by all),
+        plus per-user personal rules from __personal__:<username>.
+        When auth disabled: __global__ as today — zero change.
+
         Returns dict with 'total', 'limit', 'offset', and 'items' keys.
         """
         if isinstance(project, list):
             project_names = list(set(project + ["__global__"]))
         else:
             project_names = ["__global__"] if not project else ["__global__", project]
+
+        # RBAC: add personal rules project when auth is active (ca-124)
+        from cairn.core.user import current_user as _current_user
+        _user_ctx = _current_user()
+        if _user_ctx is not None:
+            personal_project = f"__personal__:{_user_ctx.username}"
+            if personal_project not in project_names:
+                project_names.append(personal_project)
 
         count_row = self.db.execute_one(
             """

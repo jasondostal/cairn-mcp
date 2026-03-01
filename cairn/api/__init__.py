@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from cairn import __version__
-from cairn.api.utils import APIKeyAuthMiddleware
+from cairn.api.utils import APIKeyAuthMiddleware, JWTAuthMiddleware
 from cairn.core.services import Services
 from cairn.core.trace import new_trace, clear_trace
 
@@ -70,7 +70,17 @@ def create_api(svc: Services) -> FastAPI:
 
     app.add_middleware(TraceMiddleware)
 
-    if config.auth.enabled and config.auth.api_key:
+    # Auth middleware: JWT takes priority, API key as fallback
+    if config.auth.enabled and config.auth.jwt_secret and svc.user_manager:
+        app.add_middleware(
+            JWTAuthMiddleware,
+            jwt_secret=config.auth.jwt_secret,
+            user_manager=svc.user_manager,
+            api_key=config.auth.api_key,
+            api_key_header=config.auth.header_name,
+        )
+        logger.info("JWT auth enabled (with API key fallback)")
+    elif config.auth.enabled and config.auth.api_key:
         app.add_middleware(
             APIKeyAuthMiddleware,
             api_key=config.auth.api_key,
@@ -107,6 +117,7 @@ def create_api(svc: Services) -> FastAPI:
     from cairn.api.deliverables import register_routes as reg_deliverables
     from cairn.api.subscriptions import register_routes as reg_subscriptions
     from cairn.api.agents import register_routes as reg_agents
+    from cairn.api.auth_routes import register_routes as reg_auth
 
     reg_core(router, svc)
     reg_search(router, svc)
@@ -134,6 +145,7 @@ def create_api(svc: Services) -> FastAPI:
     reg_deliverables(router, svc)
     reg_subscriptions(router, svc)
     reg_agents(router, svc)
+    reg_auth(router, svc)
 
     app.include_router(router)
     return app

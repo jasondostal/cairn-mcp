@@ -154,6 +154,20 @@ def get_or_create_project(db: Database, project_name: str) -> int:
         "RETURNING id",
         (project_name, prefix),
     )
+
+    # RBAC: auto-add creator as project owner (ca-124)
+    from cairn.core.user import current_user
+    user_ctx = current_user()
+    if user_ctx is not None:
+        db.execute(
+            """
+            INSERT INTO user_projects (user_id, project_id, role)
+            VALUES (%s, %s, 'owner')
+            ON CONFLICT (user_id, project_id) DO NOTHING
+            """,
+            (user_ctx.user_id, row["id"]),
+        )
+
     db.commit()
     return row["id"]
 

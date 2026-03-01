@@ -192,6 +192,11 @@ class WorkItemManager:
         project_id = get_or_create_project(self.db, project)
         content_embedding = self._embed_content(title, description)
 
+        # RBAC: set created_by_user_id from current user context (ca-124)
+        from cairn.core.user import current_user as _current_user
+        _user_ctx = _current_user()
+        _created_by = _user_ctx.user_id if _user_ctx else None
+
         # Allocate sequential number
         seq_num = self._allocate_seq_num(project_id)
 
@@ -200,15 +205,15 @@ class WorkItemManager:
             INSERT INTO work_items
                 (project_id, title, description, acceptance_criteria, item_type,
                  priority, parent_id, session_name, embedding, metadata,
-                 constraints, risk_tier, seq_num)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s)
+                 constraints, risk_tier, seq_num, created_by_user_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s)
             RETURNING id, created_at
             """,
             (
                 project_id, title, description, acceptance_criteria, item_type,
                 priority, parent_id, session_name,
                 content_embedding, _json_dumps(metadata),
-                _json_dumps(constraints), risk_tier or 0, seq_num,
+                _json_dumps(constraints), risk_tier or 0, seq_num, _created_by,
             ),
         )
 
@@ -630,6 +635,13 @@ class WorkItemManager:
                 return {"total": 0, "limit": limit, "offset": offset, "items": []}
             conditions.append("wi.project_id = %s")
             params.append(project_id)
+
+        # RBAC: scope to user's accessible projects (ca-124)
+        from cairn.core.user import current_user
+        user_ctx = current_user()
+        if user_ctx is not None and user_ctx.role != "admin":
+            conditions.append("wi.project_id = ANY(%s)")
+            params.append(list(user_ctx.project_ids))
 
         if status:
             conditions.append("wi.status = %s")

@@ -31,7 +31,11 @@ import {
   Route,
   Share2,
   Coins,
+  UserCog,
+  LogOut,
 } from "lucide-react";
+import Link from "next/link";
+import { getUser, logout as authLogout } from "@/lib/auth";
 
 // --- Source badge ---
 
@@ -468,6 +472,35 @@ export default function SettingsPage() {
               <span>Settings have been changed. Restart the container to apply.</span>
             </div>
           )}
+
+          {/* User info card (ca-124) */}
+          {(() => {
+            const user = getUser();
+            if (!user) return null;
+            return (
+              <Card className="mb-4">
+                <CardContent className="flex items-center justify-between py-3">
+                  <div className="flex items-center gap-3 text-sm">
+                    <UserCog className="h-4 w-4 text-muted-foreground" />
+                    <span>Signed in as <strong>{user.username}</strong></span>
+                    <Badge variant={user.role === "admin" ? "destructive" : "secondary"}>
+                      {user.role}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {user.role === "admin" && (
+                      <Link href="/admin/users">
+                        <Button variant="outline" size="sm">Manage Users</Button>
+                      </Link>
+                    )}
+                    <Button variant="ghost" size="sm" onClick={authLogout}>
+                      <LogOut className="mr-1 h-3 w-3" /> Sign Out
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           <div className="grid gap-4 md:grid-cols-2">
             {/* 1. System Overview (read-only) */}
