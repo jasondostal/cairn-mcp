@@ -63,6 +63,7 @@ analytics_tracker = None
 rollup_worker = None
 workspace_manager = None
 ingest_pipeline = None
+working_memory_store = None
 
 
 def _init_services(svc):
@@ -73,7 +74,7 @@ def _init_services(svc):
     global event_bus, event_dispatcher, drift_detector
     global work_item_manager, deliverable_manager
     global analytics_tracker, rollup_worker, workspace_manager
-    global ingest_pipeline
+    global ingest_pipeline, working_memory_store
 
     _svc = svc
     config = svc.config
@@ -96,6 +97,7 @@ def _init_services(svc):
     rollup_worker = svc.rollup_worker
     workspace_manager = svc.workspace_manager
     ingest_pipeline = svc.ingest_pipeline
+    working_memory_store = svc.working_memory_store
 
 
 async def _in_thread(fn, *args, **kwargs):
@@ -828,24 +830,14 @@ async def tasks(
     memory_ids: list[int] | None = None,
     include_completed: bool = False,
 ) -> dict | list[dict]:
-    """Personal reminders and TODO items — human-only quick capture.
+    """DEPRECATED: Use working_memory() for loose thoughts or work_items() for structured work.
 
-    This is the HUMAN-ONLY quick-capture tool. Tasks here are personal reminders
-    ("buy milk", "review PR #42", "schedule dentist") that should NEVER appear
-    in the agent dispatch queue. Agents do not claim, execute, or heartbeat on
-    these items.
+    Personal reminders and TODO items — human-only quick capture.
+    This tool is deprecated as of v0.67.0. Use working_memory(action="capture")
+    for hypotheses, questions, and loose threads. Use work_items(action="create")
+    for structured, trackable work.
 
-    For structured, dispatchable work that agents and humans collaborate on,
-    use work_items() instead.
-
-    WHEN TO USE:
-    - User explicitly requests: "remind me to...", "TODO:", "create a task for..."
-    - Checking what's pending: "what tasks do we have", "what's outstanding"
-    - Completing work: "mark that done", "finished that task"
-    - Promoting a reminder to real work: "make this a work item"
-
-    DON'T proactively create tasks unless the user asks. Tasks are user-requested
-    reminders, not automatic tracking.
+    Existing tasks continue to work. No data is deleted.
 
     Actions:
     - 'create': Create a new personal reminder/task.
@@ -1583,6 +1575,7 @@ async def orient(project: str | None = None) -> dict:
                 work_item_manager=work_item_manager,
                 task_manager=task_manager,
                 graph_provider=graph_provider,
+                working_memory_store=working_memory_store,
             )
 
         return await _in_thread(_do_orient)
@@ -1592,7 +1585,138 @@ async def orient(project: str | None = None) -> dict:
 
 
 # ============================================================
-# Tool 15: drift_check
+# Tool 15: working_memory
+# ============================================================
+
+@mcp.tool()
+async def working_memory(
+    action: str,
+    project: str | None = None,
+    content: str | None = None,
+    item_type: str | None = None,
+    salience: float | None = None,
+    author: str | None = None,
+    session_name: str | None = None,
+    item_id: int | None = None,
+    resolved_into: str | None = None,
+    resolution_id: str | None = None,
+    resolution_note: str | None = None,
+    min_salience: float = 0.0,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict | list[dict]:
+    """Persistent working memory — active cognitive workspace that persists across sessions.
+
+    Stores pre-crystallized cognitive items: hypotheses, questions, tensions,
+    connections, threads, intuitions. These are NOT tasks, NOT memories, NOT beliefs.
+    They're the half-formed thoughts and active cognitive threads that represent
+    what you're currently thinking about.
+
+    TRIGGER: When you notice something interesting but aren't ready to act:
+    - "I think X might be causing Y" -> capture as hypothesis
+    - "Why does this happen?" -> capture as question
+    - "Something feels wrong about this" -> capture as tension or intuition
+    - "This reminds me of..." -> capture as connection
+    - "I was in the middle of..." -> capture as thread
+
+    Shared space: both agent and human items live in the same pool per project.
+
+    Actions:
+    - 'capture': Store a new cognitive item (project, content). Optional: item_type, salience, author, session_name.
+    - 'list': List active items (project). Optional: author, item_type, min_salience, limit, offset.
+    - 'get': Full detail for an item (item_id).
+    - 'resolve': Mark resolved into concrete entity (item_id, resolved_into). Optional: resolution_id, resolution_note.
+    - 'pin': Prevent salience decay (item_id).
+    - 'unpin': Resume salience decay (item_id).
+    - 'boost': Engaged with item — boost salience (item_id).
+    - 'archive': Manually archive (item_id).
+
+    Args:
+        action: One of 'capture', 'list', 'get', 'resolve', 'pin', 'unpin', 'boost', 'archive'.
+        project: Project name (required for capture, list).
+        content: The cognitive item content (required for capture).
+        item_type: hypothesis, question, tension, connection, thread, intuition.
+        salience: Override initial salience (0.0-1.0). Auto-set by type if omitted.
+        author: Who is thinking this (e.g., "human", "assistant", agent name).
+        session_name: Session that created this item (for capture).
+        item_id: Working memory item ID (required for get, resolve, pin, unpin, boost, archive).
+        resolved_into: What the item crystallized into: memory, belief, work_item, decision, thinking_sequence.
+        resolution_id: ID of the entity this resolved into.
+        resolution_note: Context about the resolution.
+        min_salience: Minimum salience filter for list (default 0.0).
+        limit: Max results for list (default 20).
+        offset: Pagination offset for list.
+    """
+    try:
+        def _do_working_memory():
+            if action == "capture":
+                if not project or not content:
+                    return {"error": "project and content are required for capture"}
+                return working_memory_store.capture(
+                    project, content,
+                    item_type=item_type or "thread",
+                    salience=salience,
+                    author=author,
+                    session_name=session_name,
+                )
+
+            if action == "list":
+                if not project:
+                    return {"error": "project is required for list"}
+                return working_memory_store.list_active(
+                    project,
+                    author=author,
+                    item_type=item_type,
+                    min_salience=min_salience,
+                    limit=min(limit, MAX_LIMIT),
+                    offset=offset,
+                )
+
+            if action == "get":
+                if not item_id:
+                    return {"error": "item_id is required for get"}
+                return working_memory_store.get(item_id)
+
+            if action == "resolve":
+                if not item_id or not resolved_into:
+                    return {"error": "item_id and resolved_into are required for resolve"}
+                return working_memory_store.resolve(
+                    item_id,
+                    resolved_into=resolved_into,
+                    resolution_id=resolution_id,
+                    resolution_note=resolution_note,
+                )
+
+            if action == "pin":
+                if not item_id:
+                    return {"error": "item_id is required for pin"}
+                return working_memory_store.pin(item_id)
+
+            if action == "unpin":
+                if not item_id:
+                    return {"error": "item_id is required for unpin"}
+                return working_memory_store.unpin(item_id)
+
+            if action == "boost":
+                if not item_id:
+                    return {"error": "item_id is required for boost"}
+                return working_memory_store.boost(item_id)
+
+            if action == "archive":
+                if not item_id:
+                    return {"error": "item_id is required for archive"}
+                return working_memory_store.archive(item_id)
+
+            return {"error": f"Unknown action: {action}"}
+
+        return await _in_thread(_do_working_memory)
+    except Exception as e:
+        logger.exception("working_memory failed")
+        return {"error": f"Internal error: {e}"}
+
+
+# ============================================================
+# Tool 16: drift_check
 # ============================================================
 
 @mcp.tool()

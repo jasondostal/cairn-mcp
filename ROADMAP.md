@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.66.6** — UI polish pass. See [CHANGELOG](CHANGELOG.md).
+Current: **v0.67.0** — Mind + Tasks deprecation. See below.
 
 ---
 
@@ -47,6 +47,15 @@ Exploring, not committed.
 ---
 
 ## Shipped
+
+### v0.67.0 — "Mind" ✓
+
+Working memory for agents and humans. A shared scratch pad for active thoughts that persists across sessions.
+
+- [x] **Mind** — new `/mind` page and `working_memory` MCP tool. Capture hypotheses, questions, tensions, loose threads. Items have salience scores that fade over time — important thoughts get pinned or boosted, stale ones decay naturally. Shows up in `orient()` session boot so agents pick up where they left off. 6 item types (hypothesis, question, tension, connection, thread, intuition), 8 REST endpoints, inline capture form, dense/card views.
+- [x] **Tasks deprecated** — `tasks` MCP tool marked deprecated. Use `working_memory` for loose thoughts, `work_items` for structured work. Tasks removed from primary navigation. Existing task data preserved.
+- [x] **Embedding reconciliation fix** — vector dimension auto-fix now runs independently for each embedding-bearing table, preventing dimension mismatches when new tables are added via migrations.
+- [x] Migration 044 (working_memory table with salience, embeddings, resolution tracking).
 
 ### v0.66.6 ✓
 

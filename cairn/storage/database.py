@@ -251,6 +251,16 @@ class Database:
             self.execute("UPDATE work_items SET embedding = NULL")
             self.execute(f"ALTER TABLE work_items ALTER COLUMN embedding TYPE vector({dimensions})")
 
+        # Reconcile working_memory.embedding if the table exists
+        wm_exists = self.execute_one("""
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'working_memory' AND column_name = 'embedding'
+        """)
+        if wm_exists:
+            self.execute("DROP INDEX IF EXISTS idx_working_memory_embedding")
+            self.execute("UPDATE working_memory SET embedding = NULL")
+            self.execute(f"ALTER TABLE working_memory ALTER COLUMN embedding TYPE vector({dimensions})")
+
         # Recreate HNSW indexes
         self.execute(f"""
             CREATE INDEX idx_memories_embedding
@@ -262,6 +272,13 @@ class Database:
             self.execute(f"""
                 CREATE INDEX idx_work_items_embedding
                 ON work_items USING hnsw (embedding vector_cosine_ops)
+                WITH (m = 16, ef_construction = 64)
+            """)
+
+        if wm_exists:
+            self.execute(f"""
+                CREATE INDEX idx_working_memory_embedding
+                ON working_memory USING hnsw (embedding vector_cosine_ops)
                 WITH (m = 16, ef_construction = 64)
             """)
 
@@ -287,17 +304,48 @@ class Database:
             return  # table or column doesn't exist yet
 
         wi_dim = wi_row["atttypmod"]
-        if wi_dim == dimensions:
-            return  # already correct
+        if wi_dim != dimensions:
+            logger.info("Reconciling work_items embedding: %d → %d", wi_dim, dimensions)
+            self.execute("DROP INDEX IF EXISTS idx_work_items_embedding")
+            self.execute("UPDATE work_items SET embedding = NULL")
+            self.execute(f"ALTER TABLE work_items ALTER COLUMN embedding TYPE vector({dimensions})")
+            self.execute(f"""
+                CREATE INDEX idx_work_items_embedding
+                ON work_items USING hnsw (embedding vector_cosine_ops)
+                WITH (m = 16, ef_construction = 64)
+            """)
+            self.commit()
+            logger.info("work_items embedding reconciled to %d dimensions", dimensions)
 
-        logger.info("Reconciling work_items embedding: %d → %d", wi_dim, dimensions)
-        self.execute("DROP INDEX IF EXISTS idx_work_items_embedding")
-        self.execute("UPDATE work_items SET embedding = NULL")
-        self.execute(f"ALTER TABLE work_items ALTER COLUMN embedding TYPE vector({dimensions})")
+        # Also check working_memory table
+        self._reconcile_table_embedding("working_memory", "idx_working_memory_embedding", dimensions)
+
+    def _reconcile_table_embedding(self, table: str, index: str, dimensions: int) -> None:
+        """Generic embedding column reconciliation for any table."""
+        try:
+            row = self.execute_one(f"""
+                SELECT atttypmod FROM pg_attribute
+                WHERE attrelid = '{table}'::regclass
+                  AND attname = 'embedding'
+            """)
+        except Exception:
+            return  # table doesn't exist yet
+
+        if row is None:
+            return
+
+        current_dim = row["atttypmod"]
+        if current_dim == dimensions:
+            return
+
+        logger.info("Reconciling %s embedding: %d → %d", table, current_dim, dimensions)
+        self.execute(f"DROP INDEX IF EXISTS {index}")
+        self.execute(f"UPDATE {table} SET embedding = NULL")
+        self.execute(f"ALTER TABLE {table} ALTER COLUMN embedding TYPE vector({dimensions})")
         self.execute(f"""
-            CREATE INDEX idx_work_items_embedding
-            ON work_items USING hnsw (embedding vector_cosine_ops)
+            CREATE INDEX {index}
+            ON {table} USING hnsw (embedding vector_cosine_ops)
             WITH (m = 16, ef_construction = 64)
         """)
         self.commit()
-        logger.info("work_items embedding reconciled to %d dimensions", dimensions)
+        logger.info("%s embedding reconciled to %d dimensions", table, dimensions)

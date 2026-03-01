@@ -35,6 +35,7 @@ from cairn.core.tasks import TaskManager
 from cairn.core.thinking import ThinkingEngine
 from cairn.core.deliverables import DeliverableManager
 from cairn.core.user import UserManager
+from cairn.core.working_memory import WorkingMemoryStore
 from cairn.core.work_items import WorkItemManager
 from cairn.core.stats import init_embedding_stats, init_event_bus_stats, init_llm_stats
 from cairn.embedding import get_embedding_engine
@@ -95,6 +96,7 @@ class Services:
     subscription_manager: "SubscriptionManager | None"
     agent_registry: "AgentRegistry | None"
     user_manager: UserManager | None
+    working_memory_store: WorkingMemoryStore
 
 
 def create_services(config: Config | None = None, db: Database | None = None) -> Services:
@@ -482,4 +484,5 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         subscription_manager=subscription_manager,
         agent_registry=agent_registry,
         user_manager=_user_manager,
+        working_memory_store=WorkingMemoryStore(db, embedding=embedding, event_bus=event_bus),
     )

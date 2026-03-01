@@ -20,6 +20,7 @@ import {
   Eye,
   Users,
   Users2,
+  Lightbulb,
 } from "lucide-react";
 
 export interface NavItem {
@@ -39,7 +40,6 @@ export const navGroups: NavGroup[] = [
     items: [
       { href: "/", label: "Dashboard", icon: Activity },
       { href: "/work-items", label: "Work Items", icon: Kanban },
-      { href: "/tasks", label: "Tasks", icon: ListTodo },
       { href: "/search", label: "Search", icon: Search },
       { href: "/capture", label: "Capture", icon: PenLine },
     ],
@@ -64,6 +64,7 @@ export const navGroups: NavGroup[] = [
   {
     label: "Deep Dive",
     items: [
+      { href: "/mind", label: "Mind", icon: Lightbulb },
       { href: "/clusters", label: "Clusters", icon: Network },
       { href: "/thinking", label: "Thinking", icon: Brain },
       { href: "/workspace", label: "Workspace", icon: Boxes },

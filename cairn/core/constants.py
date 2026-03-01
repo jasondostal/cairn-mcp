@@ -15,6 +15,32 @@ VALID_MEMORY_TYPES = [
 MEMORY_TYPE_DEFAULT = "note"
 IMPORTANCE_DEFAULT = 0.5
 
+# ============================================================
+# Working Memory
+# ============================================================
+
+VALID_WM_TYPES = [
+    "hypothesis", "question", "tension", "connection", "thread", "intuition",
+]
+
+VALID_WM_RESOLUTION_TYPES = [
+    "memory", "belief", "work_item", "decision", "thinking_sequence",
+]
+
+# Default salience by item type
+WM_DEFAULT_SALIENCE = {
+    "hypothesis": 0.7,
+    "question": 0.6,
+    "tension": 0.8,
+    "connection": 0.5,
+    "thread": 0.6,
+    "intuition": 0.7,
+}
+
+WM_SALIENCE_DECAY_RATE = 0.97     # per-day multiplier
+WM_SALIENCE_BOOST_FLOOR = 0.7     # minimum salience after boost
+WM_SALIENCE_ARCHIVE_THRESHOLD = 0.1
+
 # Content size management
 AUTO_SUMMARIZE_EMBED_THRESHOLD = 8000  # chars — use summary for embedding above this
 
@@ -281,10 +307,11 @@ BUDGET_WORKSPACE = 6000
 BUDGET_ORIENT = 6000
 
 # Orient() section allocation (percentage of total orient budget)
-ORIENT_ALLOC_RULES = 0.30
-ORIENT_ALLOC_LEARNINGS = 0.25
-ORIENT_ALLOC_TRAIL = 0.25
-ORIENT_ALLOC_WORK_ITEMS = 0.20
+ORIENT_ALLOC_RULES = 0.27
+ORIENT_ALLOC_LEARNINGS = 0.22
+ORIENT_ALLOC_TRAIL = 0.23
+ORIENT_ALLOC_WORKING_MEMORY = 0.10
+ORIENT_ALLOC_WORK_ITEMS = 0.18
 
 # Handler dispatch confidence threshold (SearchV2)
 HANDLER_CONFIDENCE_THRESHOLD = 0.6

@@ -355,6 +355,25 @@ export interface ThinkingDetail {
   }>;
 }
 
+export interface WorkingMemoryItem {
+  id: number;
+  project: string;
+  content: string;
+  item_type: string;
+  salience: number;
+  base_salience: number;
+  author: string | null;
+  pinned: boolean;
+  status: string;
+  session_name: string | null;
+  resolved_into?: string;
+  resolution_id?: string;
+  resolution_note?: string;
+  created_at: string;
+  updated_at: string;
+  archived_at?: string;
+}
+
 export interface Rule {
   id: number;
   content: string;
@@ -1727,4 +1746,30 @@ export const api = {
 
   authOidcLogin: (redirectUri?: string) =>
     get<{ authorization_url: string; state: string }>("/auth/oidc/login", redirectUri ? { redirect_uri: redirectUri } : {}),
+
+  // --- Working Memory (Mind) ---
+
+  workingMemory: (project?: string, opts?: Record<string, string>) =>
+    get<{ items: WorkingMemoryItem[]; total: number }>("/working-memory", { ...(project ? { project } : {}), ...opts }),
+
+  workingMemoryDetail: (id: number) =>
+    get<WorkingMemoryItem>(`/working-memory/${id}`),
+
+  workingMemoryCapture: (project: string, body: { content: string; item_type?: string; salience?: number; author?: string }) =>
+    post<WorkingMemoryItem>(`/working-memory?project=${encodeURIComponent(project)}`, body),
+
+  workingMemoryResolve: (id: number, body: { resolved_into: string; resolution_id?: string; resolution_note?: string }) =>
+    post<WorkingMemoryItem>(`/working-memory/${id}/resolve`, body),
+
+  workingMemoryBoost: (id: number) =>
+    post<WorkingMemoryItem>(`/working-memory/${id}/boost`, {}),
+
+  workingMemoryPin: (id: number) =>
+    post<WorkingMemoryItem>(`/working-memory/${id}/pin`, {}),
+
+  workingMemoryUnpin: (id: number) =>
+    post<WorkingMemoryItem>(`/working-memory/${id}/unpin`, {}),
+
+  workingMemoryArchive: (id: number) =>
+    post<WorkingMemoryItem>(`/working-memory/${id}/archive`, {}),
 };

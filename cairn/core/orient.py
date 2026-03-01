@@ -13,7 +13,8 @@ from cairn.core.budget import apply_list_budget, estimate_tokens_for_dict
 from cairn.core.constants import (
     BUDGET_RULES_PER_ITEM, BUDGET_SEARCH_PER_ITEM,
     ORIENT_ALLOC_RULES, ORIENT_ALLOC_LEARNINGS,
-    ORIENT_ALLOC_TRAIL, ORIENT_ALLOC_WORK_ITEMS,
+    ORIENT_ALLOC_TRAIL, ORIENT_ALLOC_WORKING_MEMORY,
+    ORIENT_ALLOC_WORK_ITEMS,
 )
 
 logger = logging.getLogger(__name__)
@@ -161,6 +162,7 @@ def run_orient(
     work_item_manager: Any,
     task_manager: Any,
     graph_provider: Any | None = None,
+    working_memory_store: Any | None = None,
 ) -> dict:
     """Single-pass session boot. Returns rules, trail, learnings, and work items.
 
@@ -171,6 +173,7 @@ def run_orient(
     budget_rules = int(total_budget * ORIENT_ALLOC_RULES)
     budget_learnings = int(total_budget * ORIENT_ALLOC_LEARNINGS)
     budget_trail = int(total_budget * ORIENT_ALLOC_TRAIL)
+    budget_working_memory = int(total_budget * ORIENT_ALLOC_WORKING_MEMORY)
     budget_work_items = int(total_budget * ORIENT_ALLOC_WORK_ITEMS)
 
     tokens_used = 0
@@ -243,12 +246,36 @@ def run_orient(
             trail_tokens = estimate_tokens_for_dict(trail_data)
         tokens_used += trail_tokens
         surplus = max(0, budget_trail - trail_tokens)
-        budget_work_items += surplus
+        budget_working_memory += surplus
     except Exception:
         logger.debug("orient: trail section failed", exc_info=True)
-        budget_work_items += budget_trail
+        budget_working_memory += budget_trail
 
-    # --- Section 4: Work Items (20% + surplus) ---
+    # --- Section 3.5: Working Memory (10% + surplus) ---
+    working_memory_data = []
+    if working_memory_store and project:
+        try:
+            wm_items = working_memory_store.orient_items(project, limit=5)
+            if wm_items:
+                working_memory_data, wm_meta = apply_list_budget(
+                    wm_items, budget_working_memory, "content",
+                    overflow_message="...{omitted} more active thoughts omitted.",
+                )
+                if wm_meta["omitted"] > 0:
+                    working_memory_data.append({"_overflow": wm_meta["overflow_message"]})
+                wm_tokens = estimate_tokens_for_dict(working_memory_data)
+                tokens_used += wm_tokens
+                surplus = max(0, budget_working_memory - wm_tokens)
+            else:
+                surplus = budget_working_memory
+            budget_work_items += surplus
+        except Exception:
+            logger.debug("orient: working memory section failed", exc_info=True)
+            budget_work_items += budget_working_memory
+    else:
+        budget_work_items += budget_working_memory
+
+    # --- Section 4: Work Items (18% + surplus) ---
     work_items_data = []
     try:
         if project:
@@ -295,6 +322,7 @@ def run_orient(
         "rules": rules_data,
         "trail": trail_data,
         "learnings": learnings_data,
+        "working_memory": working_memory_data,
         "work_items": work_items_data,
         "_budget": {"total": total_budget, "used": tokens_used},
     }
