@@ -146,7 +146,7 @@ class WorkingMemoryStore:
     @track_operation("working_memory.list")
     def list_active(
         self,
-        project: str,
+        project: str | list[str],
         *,
         author: str | None = None,
         item_type: str | None = None,
@@ -155,12 +155,15 @@ class WorkingMemoryStore:
         offset: int = 0,
     ) -> dict:
         """List active working memory items sorted by computed salience."""
-        project_id = get_project(self.db, project)
-        if project_id is None:
-            return {"items": [], "total": 0}
-
-        conditions = ["wm.project_id = %s", "wm.status = 'active'"]
-        params: list = [project_id]
+        if isinstance(project, list):
+            conditions = ["p.name = ANY(%s)", "wm.status = 'active'"]
+            params: list = [project]
+        else:
+            project_id = get_project(self.db, project)
+            if project_id is None:
+                return {"items": [], "total": 0}
+            conditions = ["wm.project_id = %s", "wm.status = 'active'"]
+            params = [project_id]
 
         if author:
             conditions.append("wm.author = %s")
@@ -172,8 +175,9 @@ class WorkingMemoryStore:
         where = " AND ".join(conditions)
 
         # Count total
+        count_join = " LEFT JOIN projects p ON wm.project_id = p.id" if isinstance(project, list) else ""
         count_row = self.db.execute_one(
-            f"SELECT count(*) as cnt FROM working_memory wm WHERE {where}",
+            f"SELECT count(*) as cnt FROM working_memory wm{count_join} WHERE {where}",
             tuple(params),
         )
         total = count_row["cnt"] if count_row else 0

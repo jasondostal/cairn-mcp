@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type VisualizationPoint } from "@/lib/api";
 import { useMemorySheet } from "@/lib/use-memory-sheet";
-import { useProjectSelector } from "@/lib/use-project-selector";
+import { usePageFilters } from "@/lib/use-page-filters";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/error-state";
@@ -36,8 +36,7 @@ export default function ClusterVisualizationPage() {
   const [hoveredPoint, setHoveredPoint] = useState<VisualizationPoint | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const { sheetId, sheetOpen, setSheetOpen, openSheet } = useMemorySheet();
-  const [project, setProject] = useState<string[]>([]);
-  const { projects } = useProjectSelector();
+  const filters = usePageFilters();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -47,7 +46,7 @@ export default function ClusterVisualizationPage() {
   const dragStartRef = useRef({ x: 0, y: 0 });
 
   function load(proj?: string[]) {
-    const p = proj ?? project;
+    const p = proj ?? filters.projectFilter;
     setLoading(true);
     setError(null);
     api
@@ -64,12 +63,10 @@ export default function ClusterVisualizationPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const projectOptions = projects.map((p) => ({ value: p.name, label: p.name }));
+  }, [filters.projectFilter]);
 
   function handleProjectChange(value: string[]) {
-    setProject(value);
+    filters.setProjectFilter(value);
     load(value);
   }
 
@@ -245,8 +242,8 @@ export default function ClusterVisualizationPage() {
       }
       filters={
         <MultiSelect
-          options={projectOptions}
-          value={project}
+          options={filters.projectOptions}
+          value={filters.projectFilter}
           onValueChange={handleProjectChange}
           placeholder="All projects"
           searchPlaceholder="Search projects…"

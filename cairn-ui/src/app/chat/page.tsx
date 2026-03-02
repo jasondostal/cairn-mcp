@@ -13,12 +13,13 @@ import {
   setOnConversationCreated,
   setOnStreamComplete,
 } from "@/lib/chat-adapter";
-import { api, type Conversation, type Project } from "@/lib/api";
+import { api, type Conversation } from "@/lib/api";
+import { usePageFilters } from "@/lib/use-page-filters";
 import { toThreadMessages } from "@/lib/chat-utils";
 import { ChatThread } from "@/components/chat/thread";
 import { ConversationSidebar } from "@/components/chat/conversation-sidebar";
 import { Button } from "@/components/ui/button";
-import { SingleSelect } from "@/components/ui/single-select";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { RotateCcw, PanelLeftClose, PanelLeft } from "lucide-react";
 
 export default function ChatPage() {
@@ -27,14 +28,9 @@ export default function ChatPage() {
   const [initialMessages, setInitialMessages] = useState<
     ThreadMessageLike[] | undefined
   >(undefined);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [activeProject, setActiveProject] = useState<string>("");
+  const filters = usePageFilters();
+  const activeProject = filters.projectFilter[0] || "";
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
-
-  // Load project list for the scope selector
-  useEffect(() => {
-    api.projects({ limit: "100" }).then((r) => setProjects(r.items)).catch(() => {});
-  }, []);
 
   // Sync project scope to the adapter
   useEffect(() => {
@@ -147,14 +143,13 @@ export default function ChatPage() {
                 </Button>
                 <h1 className="text-lg font-semibold">Chat</h1>
                 {/* Project scope selector */}
-                <SingleSelect
-                  options={[
-                    { value: "", label: "All projects" },
-                    ...projects.map((p) => ({ value: p.name, label: p.name })),
-                  ]}
-                  value={activeProject}
-                  onValueChange={setActiveProject}
-                  className="h-7 text-xs"
+                <MultiSelect
+                  options={filters.projectOptions}
+                  value={filters.projectFilter}
+                  onValueChange={filters.setProjectFilter}
+                  placeholder="All projects"
+                  searchPlaceholder="Search projects…"
+                  maxCount={1}
                 />
               </div>
               <div className="flex items-center gap-1">

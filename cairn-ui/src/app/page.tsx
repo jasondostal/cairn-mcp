@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import {
   api,
   type Status,
@@ -13,22 +12,17 @@ import {
 } from "@/lib/api";
 import { useFetch } from "@/lib/use-fetch";
 import { useDashboardLayout } from "@/lib/use-dashboard-layout";
-import { Button } from "@/components/ui/button";
+import { useSharedDays } from "@/lib/use-page-filters";
 import { PageLayout } from "@/components/page-layout";
+import { TimeRangeFilter } from "@/components/time-range-filter";
 
 import { ErrorState } from "@/components/error-state";
 import { SkeletonList } from "@/components/skeleton-list";
 import { DashboardGrid } from "@/components/dashboard/dashboard-grid";
 import { DashboardToolbar } from "@/components/dashboard/dashboard-toolbar";
 
-const DAY_PRESETS = [
-  { label: "7d", value: 7 },
-  { label: "30d", value: 30 },
-  { label: "90d", value: 90 },
-] as const;
-
 export default function Dashboard() {
-  const [days, setDays] = useState(7);
+  const [days, setDays] = useSharedDays(7);
   const daysStr = String(days);
   const granularity = days <= 7 ? "hour" : "day";
 
@@ -95,21 +89,7 @@ export default function Dashboard() {
       title="Dashboard"
       filters={
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Range</span>
-            <div className="flex gap-1">
-              {DAY_PRESETS.map((p) => (
-                <Button
-                  key={p.value}
-                  variant={days === p.value ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setDays(p.value)}
-                >
-                  {p.label}
-                </Button>
-              ))}
-            </div>
-          </div>
+          <TimeRangeFilter days={days} onChange={setDays} />
           <DashboardToolbar
             isEditing={isEditing}
             visibleWidgets={visibleWidgets}

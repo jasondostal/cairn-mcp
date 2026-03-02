@@ -11,7 +11,9 @@ import { EmptyState } from "@/components/empty-state";
 import { SkeletonList } from "@/components/skeleton-list";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { SingleSelect } from "@/components/ui/single-select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Button } from "@/components/ui/button";
+import { TimeRangeFilter } from "@/components/time-range-filter";
 import { Input } from "@/components/ui/input";
 import { WorkItemRow } from "@/components/work-items/work-item-row";
 import { WorkItemSheet } from "@/components/work-items/work-item-sheet";
@@ -33,13 +35,6 @@ const typeOptions: { value: string; label: string }[] = [
   { value: "subtask", label: "subtask" },
 ];
 
-const filterOptions: { value: string; label: string }[] = [
-  { value: "all", label: "All items" },
-  { value: "active", label: "Active" },
-  { value: "active-recent", label: "Active + recent" },
-  { value: "ready", label: "Ready only" },
-];
-
 const sortOptions: { value: string; label: string }[] = [
   { value: "default", label: "Default" },
   { value: "priority", label: "Priority" },
@@ -48,8 +43,47 @@ const sortOptions: { value: string; label: string }[] = [
   { value: "done-bottom", label: "Done to bottom" },
 ];
 
+const FILTER_MODES = [
+  { value: "all", label: "All" },
+  { value: "active", label: "Active" },
+  { value: "active-recent", label: "Recent" },
+  { value: "ready", label: "Ready" },
+] as const;
+
+const FILTER_ACCENT = "oklch(0.72 0.19 165)";
+
+function FilterModeToggle({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <ToggleGroup
+      type="single"
+      variant="outline"
+      size="sm"
+      value={value}
+      onValueChange={(v) => { if (v) onChange(v); }}
+    >
+      {FILTER_MODES.map((m) => (
+        <ToggleGroupItem
+          key={m.value}
+          value={m.value}
+          className="text-xs px-2.5 data-[state=on]:text-foreground"
+          style={
+            value === m.value
+              ? {
+                  backgroundColor: `color-mix(in oklch, ${FILTER_ACCENT} 15%, transparent)`,
+                  borderColor: `color-mix(in oklch, ${FILTER_ACCENT} 40%, transparent)`,
+                  color: FILTER_ACCENT,
+                }
+              : undefined
+          }
+        >
+          {m.label}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
+  );
+}
+
 const TERMINAL_STATUSES = new Set(["done", "cancelled"]);
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Build a tree from flat items list
 interface TreeNode {
@@ -121,7 +155,8 @@ const POLL_INTERVAL = 10_000;
 const POLL_BACKOFF_MAX = 60_000;
 
 export default function WorkItemsPage() {
-  const filters = usePageFilters();
+  const filters = usePageFilters({ defaultDays: 30 });
+  const days = filters.days ?? 30;
   const [items, setItems] = useState<WorkItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -263,10 +298,11 @@ export default function WorkItemsPage() {
     if (filterMode === "active") {
       filtered = filtered.filter((i) => !TERMINAL_STATUSES.has(i.status));
     } else if (filterMode === "active-recent") {
+      const recentMs = days * 24 * 60 * 60 * 1000;
       filtered = filtered.filter((i) => {
         if (!TERMINAL_STATUSES.has(i.status)) return true;
         const completedAt = i.completed_at ? new Date(i.completed_at).getTime() : 0;
-        return now - completedAt < SEVEN_DAYS_MS;
+        return now - completedAt < recentMs;
       });
     }
 
@@ -288,7 +324,7 @@ export default function WorkItemsPage() {
     }
 
     return flattenTree(tree, collapsedSet);
-  }, [items, filterMode, sortMode, assigneeFilter, collapsedSet]);
+  }, [items, filterMode, sortMode, assigneeFilter, collapsedSet, days]);
 
   // Filter for ready-only view mode
   const displayRows = filterMode === "ready"
@@ -382,11 +418,15 @@ export default function WorkItemsPage() {
             onValueChange={setAssigneeFilter}
             placeholder="Assignee"
           />
-          <SingleSelect
-            options={filterOptions}
-            value={filterMode}
-            onValueChange={setFilterMode}
-            placeholder="Filter"
+          <FilterModeToggle value={filterMode} onChange={setFilterMode} />
+          <TimeRangeFilter
+            days={days}
+            onChange={filters.setDays}
+            presets={[
+              { label: "7d", value: 7 },
+              { label: "30d", value: 30 },
+              { label: "90d", value: 90 },
+            ]}
           />
           <SingleSelect
             options={sortOptions}

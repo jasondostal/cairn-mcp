@@ -12,12 +12,14 @@ import {
   type RetentionStatus,
 } from "@/lib/api";
 import { PageLayout } from "@/components/page-layout";
+import { useSharedDays } from "@/lib/use-page-filters";
 import { SkeletonList } from "@/components/skeleton-list";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { TimeRangeFilter } from "@/components/time-range-filter";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
@@ -314,7 +316,8 @@ function AuditTab() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState({ actor: "", action: "", resource_type: "", days: "7" });
+  const [sharedDays, setSharedDays] = useSharedDays(7);
+  const [filters, setFilters] = useState({ actor: "", action: "", resource_type: "" });
   const [expanded, setExpanded] = useState<number | null>(null);
 
   const load = useCallback(async () => {
@@ -324,7 +327,7 @@ function AuditTab() {
       if (filters.actor) opts.actor = filters.actor;
       if (filters.action) opts.action = filters.action;
       if (filters.resource_type) opts.resource_type = filters.resource_type;
-      if (filters.days) opts.days = filters.days;
+      opts.days = String(sharedDays);
       const res = await api.auditQuery(opts);
       setEntries(res.items ?? []);
       setTotal(res.total ?? 0);
@@ -334,7 +337,7 @@ function AuditTab() {
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, sharedDays]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -360,16 +363,16 @@ function AuditTab() {
           onChange={(e) => setFilters((f) => ({ ...f, resource_type: e.target.value }))}
           className="h-8 rounded-md border border-input bg-background px-2 text-xs w-32"
         />
-        <select
-          value={filters.days}
-          onChange={(e) => setFilters((f) => ({ ...f, days: e.target.value }))}
-          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-        >
-          <option value="1">1d</option>
-          <option value="7">7d</option>
-          <option value="30">30d</option>
-          <option value="90">90d</option>
-        </select>
+        <TimeRangeFilter
+          days={sharedDays}
+          onChange={setSharedDays}
+          presets={[
+            { label: "1d", value: 1 },
+            { label: "7d", value: 7 },
+            { label: "30d", value: 30 },
+            { label: "90d", value: 90 },
+          ]}
+        />
         <Button variant="ghost" size="sm" onClick={load} className="h-8 px-2">
           <RefreshCw className="h-3.5 w-3.5" />
         </Button>

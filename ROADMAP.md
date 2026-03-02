@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.69.1** — mobile scroll fix, compact title bar. See below.
+Current: **v0.69.2** — unified filters, persistent page state, responsive heatmap. See below.
 
 ---
 

@@ -6,20 +6,15 @@ import {
   type AnalyticsOperation,
 } from "@/lib/api";
 import { useFetch } from "@/lib/use-fetch";
-import { Button } from "@/components/ui/button";
+import { useSharedDays } from "@/lib/use-page-filters";
 import { PageLayout } from "@/components/page-layout";
+import { TimeRangeFilter } from "@/components/time-range-filter";
 import { SkeletonList } from "@/components/skeleton-list";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { ChevronRight, AlertTriangle } from "lucide-react";
-
-const DAY_PRESETS = [
-  { label: "7d", value: 7 },
-  { label: "30d", value: 30 },
-  { label: "90d", value: 90 },
-] as const;
 
 function OpRow({ op }: { op: AnalyticsOperation }) {
   const [expanded, setExpanded] = useState(false);
@@ -143,7 +138,7 @@ function OpRow({ op }: { op: AnalyticsOperation }) {
 }
 
 export default function AnalyticsPage() {
-  const [days, setDays] = useState(7);
+  const [days, setDays] = useSharedDays(7);
   const daysStr = String(days);
 
   const { data: opsData, loading, error } =
@@ -155,23 +150,7 @@ export default function AnalyticsPage() {
   return (
     <PageLayout
       title="Operations Log"
-      filters={
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Range</span>
-          <div className="flex gap-1">
-            {DAY_PRESETS.map((p) => (
-              <Button
-                key={p.value}
-                variant={days === p.value ? "default" : "outline"}
-                size="sm"
-                onClick={() => setDays(p.value)}
-              >
-                {p.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-      }
+      filters={<TimeRangeFilter days={days} onChange={setDays} />}
     >
       {loading && <SkeletonList count={10} />}
 

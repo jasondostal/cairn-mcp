@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.69.2] — 2026-03-02 — "Unified Filters"
+
+### Added
+- **Shared `TimeRangeFilter` component** — segmented control (shadcn ToggleGroup)
+  with OKLCH teal accent replaces loose button groups across all pages. Configurable
+  presets per page. New `time-range-filter.tsx` component.
+- **Persistent filters across pages** — project selection and time range stored in
+  localStorage (`cairn-filter-projects`, `cairn-filter-days`). Navigate between pages
+  and your filters carry over. New `useSharedDays` hook for standalone use.
+- **Work items filter mode ToggleGroup** — "All / Active / Recent / Ready" rendered
+  as a segmented control matching the time range style. "Recent" window now respects
+  the shared time range instead of a hardcoded 7 days.
+
+### Changed
+- **Chat page** — project selector switched from standalone `SingleSelect` with own
+  state to shared `MultiSelect` via `usePageFilters`. Persists across pages.
+- **Cluster visualization** — migrated from deprecated `useProjectSelector` hook to
+  shared `usePageFilters`. Project selection now persists.
+- **Watchtower audit tab** — native `<select>` dropdown replaced with segmented
+  ToggleGroup for visual consistency.
+
+### Fixed
+- **Chat 401 errors** — chat adapter (`chat-adapter.ts`) was missing auth headers on
+  both `/chat/conversations` and `/chat/stream` fetch calls. Added `getAuthHeaders()`.
+- **Mind page multi-project** — selecting multiple projects only queried the first one.
+  Backend `list_active()` now accepts `str | list[str]` using PostgreSQL `ANY()`.
+- **Activity heatmap overflow** — dashboard widget rendered at fixed 730px width
+  regardless of container. Now uses `ResizeObserver` with dynamic cell sizing
+  (4px–11px) to fit any widget size.
+
 ## [0.69.1] — 2026-03-02 — "Touch Up (Opus and I)"
 
 ### Fixed

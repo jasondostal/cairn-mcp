@@ -10,6 +10,7 @@ import { usePageFilters } from "@/lib/use-page-filters";
 import { PageFilters, DenseToggle } from "@/components/page-filters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { TimeRangeFilter } from "@/components/time-range-filter";
 import { ErrorState } from "@/components/error-state";
 import { MemorySheet } from "@/components/memory-sheet";
 import { MemoryTypeBadge } from "@/components/memory-type-badge";
@@ -30,13 +31,13 @@ const MEMORY_TYPES = [
   "research", "discussion", "progress", "task", "debug", "design",
 ] as const;
 
-const DAY_PRESETS = [
+const MEMORIES_TIME_PRESETS = [
   { label: "7d", value: 7 },
   { label: "14d", value: 14 },
   { label: "30d", value: 30 },
   { label: "90d", value: 90 },
   { label: "1y", value: 365 },
-] as const;
+];
 
 const SORT_OPTIONS = [
   { label: "Recent", value: "recent" },
@@ -264,12 +265,12 @@ function TypeGroupSection({
 }
 
 export default function MemoriesPage() {
-  const filters = usePageFilters();
+  const filters = usePageFilters({ defaultDays: 7 });
+  const days = filters.days ?? 7;
   const [items, setItems] = useState<TimelineMemory[]>([]);
   const [typeGroups, setTypeGroups] = useState<TimelineGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [days, setDays] = useState(7);
   const [sort, setSort] = useState("recent");
   const [groupByType, setGroupByType] = useState(false);
   const { sheetId, sheetOpen, setSheetOpen, openSheet } = useMemorySheet();
@@ -355,21 +356,7 @@ export default function MemoriesPage() {
               </div>
 
               {/* Day range */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Range</span>
-                <div className="flex gap-1">
-                  {DAY_PRESETS.map((p) => (
-                    <Button
-                      key={p.value}
-                      variant={days === p.value ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setDays(p.value)}
-                    >
-                      {p.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
+              <TimeRangeFilter days={days} onChange={filters.setDays} presets={MEMORIES_TIME_PRESETS} />
 
               {/* Group by type toggle */}
               <Button

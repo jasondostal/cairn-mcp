@@ -17,6 +17,8 @@ import type {
   ThreadMessage,
 } from "@assistant-ui/react";
 
+import { getAuthHeaders } from "@/lib/auth";
+
 const BASE = "/api";
 
 /** Extract plain text from a ThreadMessage's content parts. */
@@ -102,7 +104,7 @@ async function* runStream(
     try {
       const convRes = await fetch(`${BASE}/chat/conversations`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({ project: state.getProjectScope() || undefined }),
       });
       if (convRes.ok) {
@@ -117,7 +119,7 @@ async function* runStream(
 
   const res = await fetch(`${BASE}/chat/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({
       messages: toApiMessages(messages),
       max_tokens: 2048,

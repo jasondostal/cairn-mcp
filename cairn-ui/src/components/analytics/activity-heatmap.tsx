@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import type { AnalyticsOperation, HeatmapDay } from "@/lib/api";
 
@@ -10,7 +11,26 @@ interface ActivityHeatmapProps {
   operations?: AnalyticsOperation[];
 }
 
+const GAP = 3;
+const MIN_CELL = 4;
+const MAX_CELL = 11;
+
 export function ActivityHeatmap({ heatmapData, operations }: ActivityHeatmapProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // Build day counts from either pre-aggregated data or raw operations
   const dayCounts = new Map<string, number>();
 
@@ -56,6 +76,12 @@ export function ActivityHeatmap({ heatmapData, operations }: ActivityHeatmapProp
   const maxCount = Math.max(1, ...days.map((d) => d.count));
   const totalWeeks = days.length > 0 ? days[days.length - 1].week + 1 : 0;
 
+  // Dynamic cell sizing based on container width
+  const rawCell = totalWeeks > 0 && containerWidth > 0
+    ? (containerWidth - GAP * (totalWeeks - 1)) / totalWeeks
+    : MAX_CELL;
+  const cellSize = Math.max(MIN_CELL, Math.min(MAX_CELL, Math.floor(rawCell)));
+
   function intensity(count: number): string {
     if (count === 0) return "bg-muted/30";
     const ratio = count / maxCount;
@@ -77,25 +103,38 @@ export function ActivityHeatmap({ heatmapData, operations }: ActivityHeatmapProp
     <Card>
       <CardContent className="p-4 space-y-2">
         <h3 className="text-sm font-medium">Activity</h3>
-        <div className="overflow-x-auto">
-          <div className="inline-grid gap-[3px]" style={{ gridTemplateColumns: `repeat(${totalWeeks}, 11px)`, gridTemplateRows: "repeat(7, 11px)" }}>
-            {grid.flat().map((cell, i) =>
-              cell ? (
-                <div
-                  key={cell.key}
-                  title={cell.label}
-                  className={`rounded-sm ${intensity(cell.count)} transition-colors`}
-                />
-              ) : (
-                <div key={`empty-${i}`} />
-              )
-            )}
-          </div>
+        <div ref={containerRef}>
+          {containerWidth > 0 && (
+            <div
+              className="inline-grid"
+              style={{
+                gridTemplateColumns: `repeat(${totalWeeks}, ${cellSize}px)`,
+                gridTemplateRows: `repeat(7, ${cellSize}px)`,
+                gap: `${GAP}px`,
+              }}
+            >
+              {grid.flat().map((cell, i) =>
+                cell ? (
+                  <div
+                    key={cell.key}
+                    title={cell.label}
+                    className={`rounded-sm ${intensity(cell.count)} transition-colors`}
+                  />
+                ) : (
+                  <div key={`empty-${i}`} />
+                )
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <span>Less</span>
           {["bg-muted/30", "bg-emerald-900/60", "bg-emerald-700/70", "bg-emerald-500/80", "bg-emerald-400"].map((c) => (
-            <div key={c} className={`h-2.5 w-2.5 rounded-sm ${c}`} />
+            <div
+              key={c}
+              className={`rounded-sm ${c}`}
+              style={{ height: Math.max(8, cellSize - 1), width: Math.max(8, cellSize - 1) }}
+            />
           ))}
           <span>More</span>
         </div>

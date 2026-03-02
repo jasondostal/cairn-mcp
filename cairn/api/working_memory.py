@@ -39,7 +39,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             raise HTTPException(status_code=400, detail="project is required")
         projects = parse_multi(project)
         return wm.list_active(
-            projects[0] if isinstance(projects, list) else project,
+            projects if projects else project,
             author=author,
             item_type=item_type,
             min_salience=min_salience,
