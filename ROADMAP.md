@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.69.0** — living memory lifecycle, consolidation, beliefs. See below.
+Current: **v0.69.1** — mobile scroll fix, compact title bar. See below.
 
 ---
 

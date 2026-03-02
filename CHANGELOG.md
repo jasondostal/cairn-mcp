@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.69.1] — 2026-03-02 — "Touch Up (Opus and I)"
+
+### Fixed
+- **Mobile scroll** — all pages now scroll properly on touch devices. Fixed nested
+  `overflow-y-auto` containers fighting for touch events by capping `SidebarInset`
+  to viewport height (`h-dvh`) with `min-h-0` on the content flex child.
+- **Compact mobile title bar** — smaller text, icons, and padding on mobile
+  (`text-lg`, `h-4 w-4`, tighter spacing). Scales back up at `md:` breakpoint.
+
+Bug found on mobile, diagnosed and deployed in the same session.
+
 ## [0.69.0] — 2026-03-02 — "Living Memory"
 
 ### Added
