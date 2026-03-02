@@ -23,10 +23,10 @@ export function PageLayout({ title, icon, iconColor, titleExtra, filters, childr
   return (
     <div className="flex flex-col h-full -m-4 md:-m-6">
       {/* Fixed header — never scrolls */}
-      <div className="shrink-0 px-4 md:px-6 pt-4 md:pt-6 pb-4 border-b border-border bg-background">
-        <div className={`flex items-center justify-between${filters ? " mb-3" : ""}`}>
-          <h1 className="flex items-center gap-2.5 text-2xl font-semibold">
-            {Icon && <Icon className="h-6 w-6" style={iconColor ? { color: iconColor } : undefined} />}
+      <div className="shrink-0 px-3 md:px-6 pt-2 md:pt-6 pb-2 md:pb-4 border-b border-border bg-background">
+        <div className={`flex items-center justify-between${filters ? " mb-2 md:mb-3" : ""}`}>
+          <h1 className="flex items-center gap-1.5 md:gap-2.5 text-lg md:text-2xl font-semibold">
+            {Icon && <Icon className="h-4 w-4 md:h-6 md:w-6" style={iconColor ? { color: iconColor } : undefined} />}
             {title}
           </h1>
           {titleExtra && <div className="flex items-center gap-2">{titleExtra}</div>}

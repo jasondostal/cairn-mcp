@@ -19,11 +19,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <>
       <SidebarProvider>
         <SidebarNav />
-        <SidebarInset>
+        <SidebarInset className="h-dvh overflow-hidden">
           <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4 md:hidden">
             <SidebarTrigger className="-ml-1" />
           </header>
-          <div className="flex-1 overflow-y-auto p-4 md:p-6">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6">
             <ErrorBoundary>{children}</ErrorBoundary>
           </div>
         </SidebarInset>
