@@ -292,6 +292,8 @@ async def store(
     related_ids: list[int] | None = None,
     file_hashes: dict[str, str] | None = None,
     author: str | None = None,
+    event_at: str | None = None,
+    valid_until: str | None = None,
 ) -> dict:
     """Store a memory with automatic embedding generation and optional LLM enrichment.
 
@@ -325,6 +327,10 @@ async def store(
         author: Who created this memory. Use "user" for human-authored, "assistant" for
             AI-authored, or a specific name. Both voices are valid — this is for attribution,
             not filtering.
+        event_at: When this event/fact occurred (ISO 8601). Distinct from created_at
+            (when we learned it). Use for temporal queries like "what happened last week?"
+        valid_until: When this knowledge stops being true (ISO 8601). NULL = still valid.
+            Use for docs, architecture decisions, or any knowledge with a shelf life.
     """
     try:
         validate_store(content, project, memory_type, importance, tags, session_name)
@@ -341,6 +347,8 @@ async def store(
                 related_ids=related_ids,
                 file_hashes=file_hashes,
                 author=author,
+                event_at=event_at,
+                valid_until=valid_until,
             )
 
         return await _in_thread(_do_store)
@@ -363,6 +371,9 @@ async def search(
     search_mode: str = "semantic",
     limit: int = 10,
     include_full: bool = False,
+    as_of: str | None = None,
+    event_after: str | None = None,
+    event_before: str | None = None,
 ) -> list[dict]:
     """Search memories using hybrid semantic search. YOUR PRIMARY KNOWLEDGE RETRIEVAL TOOL.
 
@@ -395,6 +406,12 @@ async def search(
         search_mode: 'semantic' (hybrid RRF, default), 'keyword' (exact text), or 'vector' (embedding only).
         limit: Maximum results to return (default 10).
         include_full: Return full content (True) or summaries only (False, default).
+        as_of: Bi-temporal filter: only return memories that existed at this point in time
+            (transaction time — filters on created_at). ISO 8601 format.
+        event_after: Bi-temporal filter: only return memories where the event occurred
+            at or after this timestamp (valid time — filters on event_at). ISO 8601 format.
+        event_before: Bi-temporal filter: only return memories where the event occurred
+            at or before this timestamp (valid time — filters on event_at). ISO 8601 format.
     """
     try:
         validate_search(query, limit)
@@ -409,6 +426,9 @@ async def search(
                 search_mode=search_mode,
                 limit=limit,
                 include_full=include_full,
+                as_of=as_of,
+                event_after=event_after,
+                event_before=event_before,
             )
 
             # Apply budget cap

@@ -82,6 +82,8 @@ class MemoryStore:
         file_hashes: dict[str, str] | None = None,
         enrich: bool = True,
         author: str | None = None,
+        event_at: str | None = None,
+        valid_until: str | None = None,
     ) -> dict:
         """Store a memory with embedding.
 
@@ -176,6 +178,22 @@ class MemoryStore:
         _user_ctx = _current_user()
         _owner_user_id = _user_ctx.user_id if _user_ctx else None
 
+        # Parse temporal fields
+        _event_at = None
+        _valid_until = None
+        if event_at:
+            from datetime import datetime as _dt, timezone as _tz
+            try:
+                _event_at = _dt.fromisoformat(event_at)
+            except (ValueError, TypeError):
+                pass
+        if valid_until:
+            from datetime import datetime as _dt, timezone as _tz
+            try:
+                _valid_until = _dt.fromisoformat(valid_until)
+            except (ValueError, TypeError):
+                pass
+
         row = self.db.execute_one(
             """
             INSERT INTO memories
@@ -183,12 +201,12 @@ class MemoryStore:
                  embedding, tags, auto_tags, summary, related_files, source_doc_id,
                  file_hashes, entities, author,
                  enrichment_status, enriched_at,
-                 owner_user_id)
+                 owner_user_id, event_at, valid_until)
             VALUES
                 (%s, %s, %s, %s, %s, %s::vector, %s, %s, %s, %s, %s,
                  %s::jsonb, %s, %s,
                  %s, CASE WHEN %s IN ('complete', 'partial') THEN NOW() ELSE NULL END,
-                 %s)
+                 %s, %s, %s)
             RETURNING id, created_at
             """,
             (
@@ -209,6 +227,8 @@ class MemoryStore:
                 enrichment_status,
                 enrichment_status,
                 _owner_user_id,
+                _event_at,
+                _valid_until,
             ),
         )
 

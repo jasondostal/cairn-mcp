@@ -84,23 +84,33 @@ class SearchV2:
         search_mode: str = "semantic",
         limit: int = 10,
         include_full: bool = False,
+        as_of: str | None = None,
+        event_after: str | None = None,
+        event_before: str | None = None,
     ) -> list[dict]:
         """Search memories.
 
         In passthrough mode, delegates directly to SearchEngine.
         In enhanced mode, runs the intent-routed pipeline with
         fallback to SearchEngine on any failure.
+
+        Bi-temporal filters:
+            as_of: Only memories that existed at this timestamp (transaction time).
+            event_after: Only memories where event_at >= this timestamp (valid time).
+            event_before: Only memories where event_at <= this timestamp (valid time).
         """
+        temporal = {"as_of": as_of, "event_after": event_after, "event_before": event_before}
+
         # Passthrough mode: delegate directly to SearchEngine
         if not self.enhanced:
             return self._fallback_search(
-                query, project, memory_type, search_mode, limit, include_full,
+                query, project, memory_type, search_mode, limit, include_full, **temporal,
             )
 
         # Enhanced mode: non-semantic modes bypass the v2 pipeline
         if search_mode != "semantic":
             return self._fallback_search(
-                query, project, memory_type, search_mode, limit, include_full,
+                query, project, memory_type, search_mode, limit, include_full, **temporal,
             )
 
         try:
@@ -108,7 +118,7 @@ class SearchV2:
         except Exception:
             logger.warning("Enhanced search pipeline failed, falling back to RRF", exc_info=True)
             return self._fallback_search(
-                query, project, memory_type, search_mode, limit, include_full,
+                query, project, memory_type, search_mode, limit, include_full, **temporal,
             )
 
     def assess_confidence(self, query: str, results: list[dict]) -> dict | None:
@@ -472,6 +482,9 @@ class SearchV2:
         search_mode: str,
         limit: int,
         include_full: bool,
+        as_of: str | None = None,
+        event_after: str | None = None,
+        event_before: str | None = None,
     ) -> list[dict]:
         """Delegate to SearchEngine (RRF hybrid search)."""
         if self.fallback_engine:
@@ -482,5 +495,8 @@ class SearchV2:
                 search_mode=search_mode,
                 limit=limit,
                 include_full=include_full,
+                as_of=as_of,
+                event_after=event_after,
+                event_before=event_before,
             )
         return []

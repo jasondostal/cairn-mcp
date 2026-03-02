@@ -111,6 +111,9 @@ class SearchEngine:
         limit: int = 10,
         include_full: bool = False,
         required_tags: list[str] | None = None,
+        as_of: str | None = None,
+        event_after: str | None = None,
+        event_before: str | None = None,
     ) -> list[dict]:
         """Search memories using hybrid RRF.
 
@@ -122,22 +125,37 @@ class SearchEngine:
             limit: Max results to return.
             include_full: If True, return full content. If False, return summary/truncated.
             required_tags: If set, only return memories containing ALL of these tags.
+            as_of: Bi-temporal: only memories that existed at this timestamp
+                   (transaction time filter on created_at).
+            event_after: Bi-temporal: only memories where event_at >= this timestamp.
+            event_before: Bi-temporal: only memories where event_at <= this timestamp.
 
         Returns:
             List of memory dicts with relevance scores.
         """
+        temporal = {"as_of": as_of, "event_after": event_after, "event_before": event_before}
         if search_mode == "keyword":
-            return self._keyword_search(query, project, memory_type, limit, include_full, required_tags)
+            return self._keyword_search(query, project, memory_type, limit, include_full, required_tags, **temporal)
         elif search_mode == "vector":
-            return self._vector_search(query, project, memory_type, limit, include_full, required_tags)
+            return self._vector_search(query, project, memory_type, limit, include_full, required_tags, **temporal)
         else:
-            return self._hybrid_search(query, query, project, memory_type, limit, include_full, required_tags)
+            return self._hybrid_search(query, query, project, memory_type, limit, include_full, required_tags, **temporal)
 
     def _build_filters(
         self, project: str | list[str] | None, memory_type: str | list[str] | None,
         required_tags: list[str] | None = None,
+        as_of: str | None = None,
+        event_after: str | None = None,
+        event_before: str | None = None,
     ) -> tuple[str, list]:
-        """Build WHERE clause fragments for common filters."""
+        """Build WHERE clause fragments for common filters.
+
+        Temporal filters:
+            as_of: Only return memories that existed at this point in time
+                   (filters on created_at — transaction time).
+            event_after: Only return memories where event_at >= this timestamp.
+            event_before: Only return memories where event_at <= this timestamp.
+        """
         clauses = ["m.is_active = true"]
         params = []
 
@@ -161,6 +179,17 @@ class SearchEngine:
             clauses.append("m.tags @> %s")
             params.append(required_tags)
 
+        # Bi-temporal filters
+        if as_of:
+            clauses.append("m.created_at <= %s")
+            params.append(as_of)
+        if event_after:
+            clauses.append("m.event_at >= %s")
+            params.append(event_after)
+        if event_before:
+            clauses.append("m.event_at <= %s")
+            params.append(event_before)
+
         # RBAC: scope to user's accessible projects (ca-124)
         from cairn.core.user import current_user
         user_ctx = current_user()
@@ -173,10 +202,14 @@ class SearchEngine:
     def _vector_search(
         self, query: str, project: str | None, memory_type: str | None,
         limit: int, include_full: bool, required_tags: list[str] | None = None,
+        as_of: str | None = None, event_after: str | None = None, event_before: str | None = None,
     ) -> list[dict]:
         """Pure vector similarity search."""
         query_vector = self.embedding.embed(query)
-        where, params = self._build_filters(project, memory_type, required_tags)
+        where, params = self._build_filters(
+            project, memory_type, required_tags,
+            as_of=as_of, event_after=event_after, event_before=event_before,
+        )
 
         # pgvector cosine distance: <=> returns distance (0 = identical)
         # We convert to similarity: 1 - distance
@@ -210,9 +243,13 @@ class SearchEngine:
     def _keyword_search(
         self, query: str, project: str | None, memory_type: str | None,
         limit: int, include_full: bool, required_tags: list[str] | None = None,
+        as_of: str | None = None, event_after: str | None = None, event_before: str | None = None,
     ) -> list[dict]:
         """PostgreSQL full-text search."""
-        where, params = self._build_filters(project, memory_type, required_tags)
+        where, params = self._build_filters(
+            project, memory_type, required_tags,
+            as_of=as_of, event_after=event_after, event_before=event_before,
+        )
 
         rows = self.db.execute(
             f"""
@@ -244,6 +281,7 @@ class SearchEngine:
     def _hybrid_search(
         self, query: str, expanded: str, project: str | None, memory_type: str | None,
         limit: int, include_full: bool, required_tags: list[str] | None = None,
+        as_of: str | None = None, event_after: str | None = None, event_before: str | None = None,
     ) -> list[dict]:
         """Hybrid search: vector + keyword + tag, fused via RRF.
 
@@ -252,7 +290,10 @@ class SearchEngine:
         """
         # Vector signal uses the expanded query for richer semantic matching
         query_vector = self.embedding.embed(expanded)
-        where, params = self._build_filters(project, memory_type, required_tags)
+        where, params = self._build_filters(
+            project, memory_type, required_tags,
+            as_of=as_of, event_after=event_after, event_before=event_before,
+        )
 
         # When reranking is enabled, widen the RRF pool to give the cross-encoder
         # more candidates to pick from. The reranker narrows back to `limit`.

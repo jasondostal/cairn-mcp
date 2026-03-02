@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Consolidated memory search demotion** — memories with `consolidated_into` set
   get demoted in search ranking so the synthesized parent ranks instead.
 
+- **Bi-temporal memory** — every memory now supports `event_at` (when it happened)
+  and `valid_until` (when it stops being true), distinct from `created_at` (when we
+  learned it). Search gains `as_of`, `event_after`, and `event_before` filters.
+  Enables "what did we know as of Tuesday?" and "what happened during v0.66?"
+  queries. Migration 046.
+
 ### Changed
 - **Memory lifecycle activated** — `DecayWorker` now enabled by default
   (`CAIRN_DECAY_ENABLED=true`, `CAIRN_DECAY_DRY_RUN=false`). Memories that go
