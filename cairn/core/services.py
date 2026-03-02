@@ -400,6 +400,9 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     from cairn.core.beliefs import BeliefStore
     _belief_store = BeliefStore(db, event_bus=event_bus)
 
+    # Cluster engine (needed by both insights and consolidation worker)
+    _cluster_engine = ClusterEngine(db, embedding, llm=llm_fast, config=config.clustering)
+
     # Consolidation worker (background thread for memory synthesis)
     _consolidation_worker = None
     if config.consolidation_worker.enabled:
@@ -409,7 +412,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
             engine=_consolidation_engine,
             db=db,
             config=config.consolidation_worker,
-            cluster_engine=cluster_engine,
+            cluster_engine=_cluster_engine,
             memory_store=memory_store,
             event_bus=event_bus,
         )
@@ -460,7 +463,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         knowledge_extractor=knowledge_extractor,
         memory_store=memory_store,
         search_engine=unified_search,
-        cluster_engine=ClusterEngine(db, embedding, llm=llm_fast, config=config.clustering),
+        cluster_engine=_cluster_engine,
         project_manager=project_manager,
         task_manager=TaskManager(db, graph=graph_provider, event_bus=event_bus),
         work_item_manager=_wi_mgr,
