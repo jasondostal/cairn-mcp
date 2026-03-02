@@ -119,6 +119,7 @@ def create_api(svc: Services) -> FastAPI:
     from cairn.api.agents import register_routes as reg_agents
     from cairn.api.auth_routes import register_routes as reg_auth
     from cairn.api.working_memory import register_routes as reg_working_memory
+    from cairn.api.beliefs import register_routes as reg_beliefs
 
     reg_core(router, svc)
     reg_search(router, svc)
@@ -148,6 +149,7 @@ def create_api(svc: Services) -> FastAPI:
     reg_agents(router, svc)
     reg_auth(router, svc)
     reg_working_memory(router, svc)
+    reg_beliefs(router, svc)
 
     app.include_router(router)
     return app

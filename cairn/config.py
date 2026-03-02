@@ -108,7 +108,7 @@ class LLMCapabilities:
     type_routing: bool = False          # EXPERIMENTAL: query intent classification + type boost
     spreading_activation: bool = False  # EXPERIMENTAL: graph-based spreading activation retrieval
     mca_gate: bool = False              # EXPERIMENTAL: keyword coverage pre-filter (MCA)
-    access_frequency: bool = False     # EXPERIMENTAL: access-count signal in search RRF
+    access_frequency: bool = True      # access-count signal in search RRF
     thought_extraction: str = "off"     # EXPERIMENTAL: extract entities from thinking sequences
                                         #   "off" = no extraction, "on_conclude" = extract on conclude,
                                         #   "on_every_thought" = extract on each add_thought()
@@ -135,7 +135,7 @@ class LLMCapabilities:
 EXPERIMENTAL_CAPABILITIES: frozenset[str] = frozenset({
     "confidence_gating", "type_routing",
     "spreading_activation", "mca_gate",
-    "access_frequency", "thought_extraction",
+    "thought_extraction",
 })
 
 
@@ -225,13 +225,23 @@ class ClusteringConfig:
 
 @dataclass(frozen=True)
 class DecayConfig:
-    enabled: bool = False              # Master switch for controlled forgetting
+    enabled: bool = True               # Master switch for controlled forgetting
     scan_interval_hours: int = 24      # How often to scan (hours)
     threshold: float = 0.05            # Decay score below which memories are forgotten
     min_age_days: int = 90             # Don't forget anything younger than this
     protect_importance: float = 0.8    # Memories with importance >= this are protected
     protect_types: tuple[str, ...] = ("rule",)  # Memory types exempt from forgetting
-    dry_run: bool = True               # Log what would be forgotten without acting
+    dry_run: bool = False              # Live mode — actually inactivate decayed memories
+
+
+@dataclass(frozen=True)
+class ConsolidationConfig:
+    enabled: bool = True               # Master switch for consolidation worker
+    interval_hours: int = 168          # How often to scan (hours) — weekly
+    min_cluster_size: int = 3          # Minimum cluster members for synthesis
+    similarity_threshold: float = 0.80 # Mean pairwise similarity for eligible clusters
+    dry_run: bool = True               # Log what would be consolidated without acting
+    max_per_run: int = 10              # Max clusters to consolidate per scan
 
 
 @dataclass(frozen=True)
@@ -308,6 +318,7 @@ class Config:
     ingest_chunk_overlap: int = 64     # overlap tokens between chunks
     decay_lambda: float = 0.01        # Exponential decay rate (half-life ~69 days at 0.01)
     decay: DecayConfig = field(default_factory=DecayConfig)
+    consolidation_worker: ConsolidationConfig = field(default_factory=ConsolidationConfig)
     audit: AuditConfig = field(default_factory=AuditConfig)
     webhooks: WebhookConfig = field(default_factory=WebhookConfig)
     alerting: AlertingConfig = field(default_factory=AlertingConfig)
@@ -691,6 +702,12 @@ _ENV_MAP: dict[str, str] = {
     "decay.min_age_days": "CAIRN_DECAY_MIN_AGE_DAYS",
     "decay.protect_importance": "CAIRN_DECAY_PROTECT_IMPORTANCE",
     "decay.dry_run": "CAIRN_DECAY_DRY_RUN",
+    "consolidation_worker.enabled": "CAIRN_CONSOLIDATION_ENABLED",
+    "consolidation_worker.interval_hours": "CAIRN_CONSOLIDATION_INTERVAL",
+    "consolidation_worker.dry_run": "CAIRN_CONSOLIDATION_DRY_RUN",
+    "consolidation_worker.min_cluster_size": "CAIRN_CONSOLIDATION_MIN_CLUSTER",
+    "consolidation_worker.similarity_threshold": "CAIRN_CONSOLIDATION_SIMILARITY",
+    "consolidation_worker.max_per_run": "CAIRN_CONSOLIDATION_MAX_PER_RUN",
     "audit.enabled": "CAIRN_AUDIT_ENABLED",
     "webhooks.enabled": "CAIRN_WEBHOOKS_ENABLED",
     "webhooks.delivery_interval": "CAIRN_WEBHOOKS_DELIVERY_INTERVAL",
@@ -780,7 +797,7 @@ def load_config() -> Config:
             type_routing=os.getenv("CAIRN_TYPE_ROUTING", "false").lower() in ("true", "1", "yes"),
             spreading_activation=os.getenv("CAIRN_SPREADING_ACTIVATION", "false").lower() in ("true", "1", "yes"),
             mca_gate=os.getenv("CAIRN_MCA_GATE", "false").lower() in ("true", "1", "yes"),
-            access_frequency=os.getenv("CAIRN_ACCESS_FREQUENCY", "false").lower() in ("true", "1", "yes"),
+            access_frequency=os.getenv("CAIRN_ACCESS_FREQUENCY", "true").lower() in ("true", "1", "yes"),
             knowledge_extraction=os.getenv("CAIRN_KNOWLEDGE_EXTRACTION", "false").lower() in ("true", "1", "yes"),
             code_intelligence=os.getenv("CAIRN_CODE_INTELLIGENCE", "false").lower() in ("true", "1", "yes"),
             search_v2=os.getenv("CAIRN_SEARCH_V2", "false").lower() in ("true", "1", "yes"),
@@ -896,13 +913,21 @@ def load_config() -> Config:
         ingest_chunk_overlap=int(os.getenv("CAIRN_INGEST_CHUNK_OVERLAP", "64")),
         decay_lambda=float(os.getenv("CAIRN_DECAY_LAMBDA", "0.01")),
         decay=DecayConfig(
-            enabled=os.getenv("CAIRN_DECAY_ENABLED", "false").lower() in ("true", "1", "yes"),
+            enabled=os.getenv("CAIRN_DECAY_ENABLED", "true").lower() in ("true", "1", "yes"),
             scan_interval_hours=int(os.getenv("CAIRN_DECAY_SCAN_INTERVAL", "24")),
             threshold=float(os.getenv("CAIRN_DECAY_THRESHOLD", "0.05")),
             min_age_days=int(os.getenv("CAIRN_DECAY_MIN_AGE_DAYS", "90")),
             protect_importance=float(os.getenv("CAIRN_DECAY_PROTECT_IMPORTANCE", "0.8")),
             protect_types=tuple(os.getenv("CAIRN_DECAY_PROTECT_TYPES", "rule").split(",")),
-            dry_run=os.getenv("CAIRN_DECAY_DRY_RUN", "true").lower() in ("true", "1", "yes"),
+            dry_run=os.getenv("CAIRN_DECAY_DRY_RUN", "false").lower() in ("true", "1", "yes"),
+        ),
+        consolidation_worker=ConsolidationConfig(
+            enabled=os.getenv("CAIRN_CONSOLIDATION_ENABLED", "true").lower() in ("true", "1", "yes"),
+            interval_hours=int(os.getenv("CAIRN_CONSOLIDATION_INTERVAL", "168")),
+            min_cluster_size=int(os.getenv("CAIRN_CONSOLIDATION_MIN_CLUSTER", "3")),
+            similarity_threshold=float(os.getenv("CAIRN_CONSOLIDATION_SIMILARITY", "0.80")),
+            dry_run=os.getenv("CAIRN_CONSOLIDATION_DRY_RUN", "true").lower() in ("true", "1", "yes"),
+            max_per_run=int(os.getenv("CAIRN_CONSOLIDATION_MAX_PER_RUN", "10")),
         ),
         audit=AuditConfig(
             enabled=os.getenv("CAIRN_AUDIT_ENABLED", "false").lower() in ("true", "1", "yes"),

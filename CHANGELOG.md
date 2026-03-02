@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.69.0] — 2026-03-02 — "Living Memory"
+
+### Added
+- **Beliefs** — durable epistemic state with confidence, domain, and evidence
+  tracking. New `beliefs` MCP tool (crystallize, list, get, challenge, retract).
+  REST API at `/beliefs`. Beliefs surface in `orient()` session boot alongside
+  rules, memories, and working memory.
+- **Memory consolidation (synthesize mode)** — background worker clusters related
+  memories via HDBSCAN and synthesizes higher-order insights using LLM. Originals
+  get demoted, not deleted. New `mode="synthesize"` parameter on `consolidate()`.
+  `ConsolidationWorker` runs weekly by default (configurable). Dry-run mode for
+  safe previews.
+- **Working memory graduation** — `resolve(resolved_into="memory")` now auto-creates
+  the target memory. `resolve(resolved_into="belief")` creates a belief record.
+  Item type maps to memory type (hypothesis→learning, tension→decision, etc.).
+  New `working_memory.graduated` event.
+- **`decay_scan` MCP tool** — inspect what the decay system would forget. Returns
+  candidates with decay scores and protected status.
+- **Consolidated memory search demotion** — memories with `consolidated_into` set
+  get demoted in search ranking so the synthesized parent ranks instead.
+
+### Changed
+- **Memory lifecycle activated** — `DecayWorker` now enabled by default
+  (`CAIRN_DECAY_ENABLED=true`, `CAIRN_DECAY_DRY_RUN=false`). Memories that go
+  unaccessed for extended periods are automatically inactivated. Protected classes:
+  rules, high-importance (≥0.8), recently created (<90 days).
+- **Access frequency promoted to stable** — `CAIRN_ACCESS_FREQUENCY` now defaults
+  to `true`. Log-normalized access count is signal 8 in RRF fusion (10% weight).
+  Frequently-accessed memories rank higher.
+- **Enhanced decay scoring** — exponential decay `e^(-λ × days)` based on last
+  access time now active in all search modes.
+
 ## [0.68.0] — 2026-03-01 — "Recall"
 
 ### Added

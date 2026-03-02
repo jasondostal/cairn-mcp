@@ -97,6 +97,8 @@ class Services:
     agent_registry: "AgentRegistry | None"
     user_manager: UserManager | None
     working_memory_store: WorkingMemoryStore
+    belief_store: "BeliefStore | None"
+    consolidation_worker: "ConsolidationWorker | None"
 
 
 def create_services(config: Config | None = None, db: Database | None = None) -> Services:
@@ -394,6 +396,25 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         decay_worker = DecayWorker(db, config.decay, decay_lambda=config.decay_lambda)
         logger.info("DecayWorker enabled (dry_run=%s)", config.decay.dry_run)
 
+    # Belief store
+    from cairn.core.beliefs import BeliefStore
+    _belief_store = BeliefStore(db, event_bus=event_bus)
+
+    # Consolidation worker (background thread for memory synthesis)
+    _consolidation_worker = None
+    if config.consolidation_worker.enabled:
+        from cairn.core.consolidation import ConsolidationWorker
+        _consolidation_engine = ConsolidationEngine(db, embedding, llm=llm_fast, capabilities=capabilities)
+        _consolidation_worker = ConsolidationWorker(
+            engine=_consolidation_engine,
+            db=db,
+            config=config.consolidation_worker,
+            cluster_engine=cluster_engine,
+            memory_store=memory_store,
+            event_bus=event_bus,
+        )
+        logger.info("ConsolidationWorker enabled (dry_run=%s)", config.consolidation_worker.dry_run)
+
     # Terminal host manager (optional, based on config)
     terminal_host_manager = None
     if config.terminal.backend != "disabled":
@@ -484,5 +505,10 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         subscription_manager=subscription_manager,
         agent_registry=agent_registry,
         user_manager=_user_manager,
-        working_memory_store=WorkingMemoryStore(db, embedding=embedding, event_bus=event_bus),
+        working_memory_store=WorkingMemoryStore(
+            db, embedding=embedding, event_bus=event_bus,
+            memory_store=memory_store, belief_store=_belief_store,
+        ),
+        belief_store=_belief_store,
+        consolidation_worker=_consolidation_worker,
     )

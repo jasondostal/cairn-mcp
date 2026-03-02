@@ -26,7 +26,9 @@ from cairn.core.constants import (
 from cairn.core.utils import get_or_create_project, get_project
 
 if TYPE_CHECKING:
+    from cairn.core.beliefs import BeliefStore
     from cairn.core.event_bus import EventBus
+    from cairn.core.memory import MemoryStore
     from cairn.embedding.interface import EmbeddingInterface
     from cairn.storage.database import Database
 
@@ -41,15 +43,29 @@ class WorkingMemoryStore:
     an item (boost) resets the decay clock.
     """
 
+    # Mapping from working memory item_type to memory_type for graduation
+    _GRADUATION_TYPE_MAP = {
+        "hypothesis": "learning",
+        "question": "note",
+        "tension": "decision",
+        "connection": "note",
+        "thread": "progress",
+        "intuition": "learning",
+    }
+
     def __init__(
         self,
         db: Database,
         embedding: EmbeddingInterface | None = None,
         event_bus: EventBus | None = None,
+        memory_store: MemoryStore | None = None,
+        belief_store: BeliefStore | None = None,
     ) -> None:
         self.db = db
         self.embedding = embedding
         self.event_bus = event_bus
+        self.memory_store = memory_store
+        self.belief_store = belief_store
 
     # ------------------------------------------------------------------
     # Core operations
@@ -223,9 +239,33 @@ class WorkingMemoryStore:
         resolution_id: str | None = None,
         resolution_note: str | None = None,
     ) -> dict:
-        """Mark a working memory item as resolved into a concrete entity."""
+        """Mark a working memory item as resolved into a concrete entity.
+
+        When resolved_into is "memory" or "belief" and no resolution_id is
+        provided, auto-creates the target entity (graduation).
+        """
         if resolved_into not in VALID_WM_RESOLUTION_TYPES:
             return {"error": f"Invalid resolved_into '{resolved_into}'. Must be one of: {VALID_WM_RESOLUTION_TYPES}"}
+
+        # Fetch item before updating (need content + project for graduation)
+        item = self.db.execute_one(
+            """
+            SELECT wm.id, wm.content, wm.item_type, wm.project_id, wm.author,
+                   p.name as project
+            FROM working_memory wm
+            LEFT JOIN projects p ON wm.project_id = p.id
+            WHERE wm.id = %s AND wm.status = 'active'
+            """,
+            (item_id,),
+        )
+        if not item:
+            return {"error": f"Working memory item {item_id} not found or not active"}
+
+        # Graduate: auto-create target entity if no explicit resolution_id
+        if resolution_id is None:
+            graduated_id = self._graduate(item, resolved_into, resolution_note)
+            if graduated_id is not None:
+                resolution_id = str(graduated_id)
 
         row = self.db.execute_one(
             """
@@ -249,7 +289,52 @@ class WorkingMemoryStore:
                        item_id=item_id, resolved_into=resolved_into,
                        resolution_id=resolution_id)
 
+        if resolution_id and resolved_into in ("memory", "belief"):
+            self._publish("working_memory.graduated", row["project_id"],
+                           item_id=item_id, resolved_into=resolved_into,
+                           entity_id=resolution_id)
+
         return self.get(item_id)
+
+    def _graduate(
+        self, item: dict, resolved_into: str, note: str | None,
+    ) -> int | None:
+        """Auto-create the target entity for graduation. Returns entity ID or None."""
+        project = item.get("project")
+        content = item["content"]
+
+        if resolved_into == "memory" and self.memory_store and project:
+            memory_type = self._GRADUATION_TYPE_MAP.get(item["item_type"], "note")
+            try:
+                result = self.memory_store.store(
+                    content=content,
+                    project=project,
+                    memory_type=memory_type,
+                    importance=0.6,
+                    tags=["graduated"],
+                    author=item.get("author"),
+                    enrich=False,
+                )
+                return result.get("id")
+            except Exception:
+                logger.warning("Failed to graduate WM #%d → memory", item["id"], exc_info=True)
+                return None
+
+        if resolved_into == "belief" and self.belief_store and project:
+            try:
+                result = self.belief_store.crystallize(
+                    project=project,
+                    content=content,
+                    confidence=0.7,
+                    agent_name=item.get("author"),
+                    provenance="crystallized",
+                )
+                return result.get("id")
+            except Exception:
+                logger.warning("Failed to graduate WM #%d → belief", item["id"], exc_info=True)
+                return None
+
+        return None
 
     @track_operation("working_memory.pin")
     def pin(self, item_id: int) -> dict:

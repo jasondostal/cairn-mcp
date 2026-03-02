@@ -163,6 +163,7 @@ def run_orient(
     task_manager: Any,
     graph_provider: Any | None = None,
     working_memory_store: Any | None = None,
+    belief_store: Any | None = None,
 ) -> dict:
     """Single-pass session boot. Returns rules, trail, learnings, and work items.
 
@@ -275,6 +276,14 @@ def run_orient(
     else:
         budget_work_items += budget_working_memory
 
+    # --- Section 3.6: Beliefs (compact, no budget — max 5 items) ---
+    beliefs_data = []
+    if belief_store and project:
+        try:
+            beliefs_data = belief_store.orient_beliefs(project, limit=5)
+        except Exception:
+            logger.debug("orient: beliefs section failed", exc_info=True)
+
     # --- Section 4: Work Items (18% + surplus) ---
     work_items_data = []
     try:
@@ -323,6 +332,7 @@ def run_orient(
         "trail": trail_data,
         "learnings": learnings_data,
         "working_memory": working_memory_data,
+        "beliefs": beliefs_data,
         "work_items": work_items_data,
         "_budget": {"total": total_budget, "used": tokens_used},
     }

@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.68.0** — shadcn Sidebar + Memories page. See below.
+Current: **v0.69.0** — living memory lifecycle, consolidation, beliefs. See below.
 
 ---
 
@@ -47,6 +47,18 @@ Exploring, not committed.
 ---
 
 ## Shipped
+
+### v0.69.0 — "Living Memory" ✓
+
+Memory lifecycle activation, true consolidation, beliefs foundation.
+
+- [x] **Active memory lifecycle** — DecayWorker enabled by default. Exponential decay scoring (`e^(-λ × days)`) active in all search modes. Access-frequency RRF signal promoted to stable (10% weight). Controlled forgetting with protected classes (rules, high-importance, recent).
+- [x] **Memory consolidation (synthesize)** — ConsolidationWorker clusters related memories via HDBSCAN and synthesizes higher-order insights. Originals demoted, parent memory created with `memory_type='learning'`. New `consolidated_into` column. `consolidate(mode="synthesize")` MCP tool. Weekly schedule, dry-run by default.
+- [x] **Beliefs** — `beliefs` MCP tool and REST API (`/beliefs`). Crystallize, list, get, challenge, retract. Confidence tracking, domain tagging, evidence linking, provenance. Surfaced in `orient()` session boot.
+- [x] **Working memory graduation** — `resolve(resolved_into="memory")` auto-creates memory. `resolve(resolved_into="belief")` auto-creates belief. Type mapping: hypothesis→learning, tension→decision, etc.
+- [x] **`decay_scan` tool** — inspect decay candidates with scores and protection status.
+- [x] **Consolidated memory search demotion** — synthesized parent ranks over demoted originals.
+- [x] Migration 045.
 
 ### v0.68.0 — "Recall" ✓
 

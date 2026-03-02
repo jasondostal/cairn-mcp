@@ -197,9 +197,10 @@ class SearchEngine:
             [str(query_vector)] + params + [str(query_vector), limit],
         )
 
-        # Apply contradiction penalty and re-sort
+        # Apply contradiction + consolidation penalties and re-sort
         scored = {r["id"]: r["score"] for r in rows}
         penalized = self._apply_contradiction_penalty(scored)
+        penalized = self._apply_consolidation_demotion(penalized)
         for r in rows:
             r["score"] = penalized[r["id"]]
         rows.sort(key=lambda r: r["score"], reverse=True)
@@ -230,9 +231,10 @@ class SearchEngine:
             [query] + params + [query, limit],
         )
 
-        # Apply contradiction penalty and re-sort
+        # Apply contradiction + consolidation penalties and re-sort
         scored = {r["id"]: r["score"] for r in rows}
         penalized = self._apply_contradiction_penalty(scored)
+        penalized = self._apply_consolidation_demotion(penalized)
         for r in rows:
             r["score"] = penalized[r["id"]]
         rows.sort(key=lambda r: r["score"], reverse=True)
@@ -550,8 +552,9 @@ class SearchEngine:
             scored[memory_id] = score
             score_components[memory_id] = components
 
-        # Penalize contradicted memories before ranking
+        # Penalize contradicted and consolidated memories before ranking
         scored = self._apply_contradiction_penalty(scored)
+        scored = self._apply_consolidation_demotion(scored)
 
         # Type routing: classify query intent and boost matching memory types
         query_intent = self._classify_query_intent(query)
@@ -725,6 +728,35 @@ class SearchEngine:
 
         return {
             mid: score * CONTRADICTION_PENALTY if mid in contradicted else score
+            for mid, score in scored.items()
+        }
+
+    def _apply_consolidation_demotion(self, scored: dict[int, float]) -> dict[int, float]:
+        """Demote memories that have been consolidated into a parent.
+
+        Consolidated memories (with consolidated_into set) get their score
+        halved — the synthesized parent memory should rank instead.
+        """
+        if not scored:
+            return scored
+
+        all_ids = list(scored.keys())
+        placeholders = ",".join(["%s"] * len(all_ids))
+        rows = self.db.execute(
+            f"""
+            SELECT id FROM memories
+            WHERE id IN ({placeholders})
+              AND consolidated_into IS NOT NULL
+            """,
+            tuple(all_ids),
+        )
+
+        consolidated = {r["id"] for r in rows}
+        if not consolidated:
+            return scored
+
+        return {
+            mid: score * 0.5 if mid in consolidated else score
             for mid, score in scored.items()
         }
 
