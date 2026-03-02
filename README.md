@@ -91,32 +91,36 @@ Search for it later:
 
 > "What did we decide about the storage layer?"
 
-That's it. 20 tools available. The ones you'll use most:
+That's it. 22 tools available. The ones you'll use most:
 
 | Tool | What it does |
 |------|-------------|
-| `store` | Save a memory with auto-enrichment |
-| `search` | Find memories (vector + keyword + recency + tags) |
+| `store` | Save a memory with auto-enrichment. Supports `event_at` and `valid_until` for bi-temporal tracking |
+| `search` | Find memories (vector + keyword + recency + tags). Temporal filters: `as_of`, `event_after`, `event_before` |
 | `recall` | Get full content for specific memory IDs |
-| `orient` | Boot a session with rules, recent activity, and open work |
+| `orient` | Boot a session with rules, recent activity, beliefs, and open work |
 | `rules` | Load behavioral guardrails (global or per-project) |
+| `beliefs` | Durable epistemic state — crystallize, challenge, retract knowledge with confidence tracking |
 | `work_items` | Create, claim, and complete tasks with dependencies and gates |
-| `working_memory` | Capture active thoughts — hypotheses, questions, tensions — with salience decay |
+| `working_memory` | Capture active thoughts — hypotheses, questions, tensions — with salience decay. Resolving graduates into memories or beliefs |
 | `projects` | Manage project docs (briefs, PRDs, plans) |
 | `code_index` | Parse a codebase with tree-sitter, build a code graph in Neo4j |
 | `code_query` | Structural queries: dependents, impact, hotspots, cross-project search |
-| `code_describe` | Generate NL descriptions of code symbols for semantic search |
 | `arch_check` | Validate architecture boundary rules against imports |
 
-The rest: `modify`, `insights`, `think`, `status`, `consolidate`, `drift_check`, `ingest`, `dispatch`.
+The rest: `modify`, `insights`, `think`, `status`, `consolidate`, `decay_scan`, `drift_check`, `ingest`, `dispatch`.
 
 ## What's in the box
 
-**Memory that persists across sessions.** Your agent makes a decision at 2am. Next morning, different session, it finds that decision. That's the core.
+**Memory that persists across sessions.** Your agent makes a decision at 2am. Next morning, different session, it finds that decision. That's the core. Bi-temporal tracking separates when something happened (`event_at`) from when you learned it (`created_at`). Memories that go unaccessed decay naturally; important ones are protected. Related memories get consolidated into higher-order insights automatically.
 
-**Search that fuses signals.** Vector similarity, recency, keyword matching, and tag overlap blended via Reciprocal Rank Fusion. Filter by project, type, or time range.
+**Beliefs.** Durable epistemic state — knowledge held with confidence. Crystallize hypotheses into beliefs, challenge them with counter-evidence, retract them when wrong. Beliefs surface in session boot alongside rules and memories, giving agents a clear picture of what the organization knows and how confident it is.
+
+**Search that fuses signals.** Vector similarity, recency, access frequency, keyword matching, and tag overlap blended via Reciprocal Rank Fusion. Filter by project, type, or time range. Temporal queries: "what did we know as of Tuesday?" via `as_of`, "what happened last week?" via `event_after`/`event_before`.
 
 **Knowledge graph.** With Neo4j enabled, entities and facts get extracted into a graph that connects memories through shared people, places, projects, and concepts. Optional, but powerful when you're working across domains.
+
+**Working memory.** Active cognitive workspace for hypotheses, questions, tensions, and intuitions. Salience decays over time — engage with an item to keep it alive. When a thought crystallizes, resolve it into a memory or belief and it graduates automatically.
 
 **Work management and multi-agent orchestration.** Hierarchical work items, dependency tracking, a dispatch queue, and gates that pause for human decisions. Typed agent definitions with capability enforcement, file-level resource locking, affinity-based routing, and persistent cross-dispatch learning. Agents accumulate institutional knowledge and get smarter with every task.
 

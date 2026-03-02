@@ -58,7 +58,7 @@ Memory lifecycle activation, true consolidation, beliefs foundation.
 - [x] **Working memory graduation** — `resolve(resolved_into="memory")` auto-creates memory. `resolve(resolved_into="belief")` auto-creates belief. Type mapping: hypothesis→learning, tension→decision, etc.
 - [x] **`decay_scan` tool** — inspect decay candidates with scores and protection status.
 - [x] **Consolidated memory search demotion** — synthesized parent ranks over demoted originals.
-- [x] **Bi-temporal memory** — `event_at` (when it happened) + `valid_until` (when it stops being true) on every memory. Search supports `as_of` (transaction time), `event_after`/`event_before` (valid time) filters. Zep-grade temporal awareness.
+- [x] **Bi-temporal memory** — `event_at` (when it happened) + `valid_until` (when it stops being true) on every memory. Search supports `as_of` (transaction time), `event_after`/`event_before` (valid time) filters. full bi-temporal awareness.
 - [x] Migrations 045, 046.
 
 ### v0.68.0 — "Recall" ✓
