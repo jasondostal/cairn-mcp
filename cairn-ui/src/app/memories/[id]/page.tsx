@@ -77,7 +77,7 @@ export default function MemoryDetail() {
             </Button>
           </>
         )}
-        <Link href="/timeline">
+        <Link href="/memories">
           <Button variant="ghost" size="sm" className="gap-1.5">
             <ArrowLeft className="h-4 w-4" />
             Back
@@ -87,7 +87,7 @@ export default function MemoryDetail() {
     >
       {memory && (
         <Breadcrumbs items={[
-          { label: "Timeline", href: "/timeline" },
+          { label: "Memories", href: "/memories" },
           { label: memory.project, href: `/projects/${encodeURIComponent(memory.project)}` },
           { label: `Memory #${id}` },
         ]} />

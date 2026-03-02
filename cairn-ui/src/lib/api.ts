@@ -402,8 +402,24 @@ export interface TimelineMemory {
   related_files: string[];
   is_active: boolean;
   session_name: string | null;
+  author?: string | null;
   created_at: string;
   updated_at: string;
+  cluster?: { id: number; label: string; size: number } | null;
+}
+
+export interface TimelineGroup {
+  type: string;
+  count: number;
+  items: TimelineMemory[];
+}
+
+export interface GroupedTimeline {
+  total: number;
+  limit: number;
+  offset: number;
+  group_by: "type";
+  groups: TimelineGroup[];
 }
 
 export interface VisualizationPoint {
@@ -1218,8 +1234,12 @@ export interface RetentionStatus {
 export const api = {
   status: () => get<Status>("/status"),
 
-  timeline: (opts?: { project?: string; type?: string; session_name?: string; days?: string; limit?: string; offset?: string }) =>
-    get<Paginated<TimelineMemory>>("/timeline", opts),
+  timeline: (opts?: {
+    project?: string; type?: string; session_name?: string; days?: string;
+    sort?: string; group_by?: string; include_clusters?: string;
+    limit?: string; offset?: string;
+  }) =>
+    get<Paginated<TimelineMemory> | GroupedTimeline>("/timeline", opts),
 
   search: (q: string, opts?: { project?: string; type?: string; mode?: string; limit?: string; offset?: string }) =>
     get<Paginated<Memory>>("/search", { q, ...opts }),

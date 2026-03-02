@@ -4,12 +4,40 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { navGroups } from "@/lib/nav";
-import {
-  Menu,
-  X,
-} from "lucide-react";
+import { ChevronRight, LogOut, Settings, User } from "lucide-react";
 import { useState, useEffect } from "react";
 import { NotificationBell } from "@/components/notification-bell";
+import { useAuth } from "@/components/auth-provider";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+} from "@/components/ui/sidebar";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+
+// Groups that are expanded by default
+const DEFAULT_OPEN_GROUPS = new Set(["Core", "Context"]);
 
 function useVisibilityPolling(pollFn: () => void, intervalMs: number) {
   useEffect(() => {
@@ -18,7 +46,9 @@ function useVisibilityPolling(pollFn: () => void, intervalMs: number) {
     const id = setInterval(() => {
       if (!document.hidden && active) pollFn();
     }, intervalMs);
-    const onVisible = () => { if (!document.hidden && active) pollFn(); };
+    const onVisible = () => {
+      if (!document.hidden && active) pollFn();
+    };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       active = false;
@@ -44,46 +74,6 @@ function useAttentionCount() {
   return count;
 }
 
-function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
-  const pathname = usePathname();
-  const attentionCount = useAttentionCount();
-
-  return (
-    <>
-      {navGroups.map((group, gi) => (
-        <div key={group.label} className={cn(gi > 0 && "mt-1.5 pt-1.5")}>
-          {gi > 0 && <div className="mx-auto mb-1.5 h-px w-8 rounded-full bg-border/30" />}
-          {group.items.map(({ href, label, icon: Icon }) => {
-            const active =
-              href === "/" ? pathname === "/" : pathname.startsWith(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={onNavigate}
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors",
-                  active
-                    ? "bg-accent text-accent-foreground font-medium"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-                {href === "/work-items" && attentionCount > 0 && (
-                  <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-status-gate px-1.5 text-[11px] font-medium leading-none text-white">
-                    {attentionCount}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-        </div>
-      ))}
-    </>
-  );
-}
-
 function useSidebarMeta() {
   const [time, setTime] = useState("");
   const [version, setVersion] = useState("");
@@ -91,7 +81,10 @@ function useSidebarMeta() {
   useEffect(() => {
     const tick = () =>
       setTime(
-        new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
       );
     tick();
     const id = setInterval(tick, 60_000);
@@ -108,66 +101,168 @@ function useSidebarMeta() {
   return { version, time };
 }
 
+function getInitials(name: string): string {
+  return name
+    .split(/[\s_-]+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
 export function SidebarNav() {
-  const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  const attentionCount = useAttentionCount();
   const { version, time } = useSidebarMeta();
+  const { user, authEnabled, logout } = useAuth();
 
   return (
-    <>
-      {/* Mobile header */}
-      <header className="flex h-14 items-center justify-between border-b border-border bg-card px-4 md:hidden">
-        <Link href="/" className="flex items-center gap-2 rounded-md px-1 -mx-1 hover:bg-accent/30 transition-colors">
-          <img src="/cairn-mark-trail.svg" alt="Cairn" className="h-5 w-5" />
-          <span className="text-lg font-semibold tracking-tight">Cairn</span>
-        </Link>
-        <div className="flex items-center gap-1">
-          <NotificationBell />
-          <button
-            onClick={() => setOpen(!open)}
-            className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-          >
-            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
-        </div>
-      </header>
+    <Sidebar collapsible="icon">
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild tooltip="Cairn">
+              <Link href="/">
+                <div className="flex aspect-square size-8 items-center justify-center">
+                  <img
+                    src="/cairn-mark-trail.svg"
+                    alt="Cairn"
+                    className="size-5"
+                  />
+                </div>
+                <div className="flex flex-col gap-0.5 leading-none">
+                  <span className="font-semibold tracking-tight">Cairn</span>
+                  {version && (
+                    <span className="text-[10px] text-muted-foreground">
+                      v{version}
+                    </span>
+                  )}
+                </div>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
 
-      {/* Mobile drawer */}
-      {open && (
-        <div
-          className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm md:hidden"
-          onClick={() => setOpen(false)}
-        >
-          <aside
-            className="fixed inset-y-0 left-0 z-50 w-56 border-r border-border bg-card pt-14"
-            onClick={(e) => e.stopPropagation()}
+      <SidebarContent>
+        {navGroups.map((group) => (
+          <Collapsible
+            key={group.label}
+            defaultOpen={DEFAULT_OPEN_GROUPS.has(group.label)}
+            className="group/collapsible"
           >
-            <nav className="flex flex-col gap-1 p-2">
-              <NavLinks onNavigate={() => setOpen(false)} />
-            </nav>
-          </aside>
-        </div>
-      )}
+            <SidebarGroup>
+              <SidebarGroupLabel asChild>
+                <CollapsibleTrigger className="flex w-full items-center">
+                  {group.label}
+                  <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                </CollapsibleTrigger>
+              </SidebarGroupLabel>
+              <CollapsibleContent>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {group.items.map(({ href, label, icon: Icon }) => {
+                      const active =
+                        href === "/"
+                          ? pathname === "/"
+                          : pathname.startsWith(href);
+                      return (
+                        <SidebarMenuItem key={href}>
+                          <SidebarMenuButton
+                            asChild
+                            isActive={active}
+                            tooltip={label}
+                          >
+                            <Link href={href}>
+                              <Icon className="size-4" />
+                              <span>{label}</span>
+                            </Link>
+                          </SidebarMenuButton>
+                          {href === "/work-items" && attentionCount > 0 && (
+                            <SidebarMenuBadge className="bg-status-gate text-white rounded-full">
+                              {attentionCount}
+                            </SidebarMenuBadge>
+                          )}
+                        </SidebarMenuItem>
+                      );
+                    })}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </CollapsibleContent>
+            </SidebarGroup>
+          </Collapsible>
+        ))}
+      </SidebarContent>
 
-      {/* Desktop sidebar */}
-      <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-card md:flex">
-        <div className="flex h-14 items-center justify-between border-b border-border px-4">
-          <Link href="/" className="flex items-center gap-2 rounded-md px-1 -mx-1 hover:bg-accent/30 transition-colors">
-            <img src="/cairn-mark-trail.svg" alt="Cairn" className="h-5 w-5" />
-            <span className="text-lg font-semibold tracking-tight">Cairn</span>
-          </Link>
-          <div className="flex items-center gap-1.5">
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
             <NotificationBell />
-            <div className="text-[10px] text-muted-foreground/50 tabular-nums text-right leading-tight">
-              {version && <div>v{version}</div>}
-              {time && <div>{time}</div>}
-            </div>
-          </div>
-        </div>
-        <nav className="flex flex-1 flex-col p-2 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border/40 hover:scrollbar-thumb-border/60"
-          style={{ scrollbarWidth: "thin", scrollbarColor: "hsl(var(--border) / 0.4) transparent" }}>
-          <NavLinks />
-        </nav>
-      </aside>
-    </>
+          </SidebarMenuItem>
+          {authEnabled && user ? (
+            <SidebarMenuItem>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <SidebarMenuButton
+                    size="lg"
+                    tooltip={user.username}
+                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                  >
+                    <Avatar className="size-8 rounded-lg">
+                      <AvatarFallback className="rounded-lg text-xs">
+                        {getInitials(user.username)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="grid flex-1 text-left text-sm leading-tight">
+                      <span className="truncate font-semibold">
+                        {user.username}
+                      </span>
+                      {user.role && (
+                        <span className="truncate text-xs text-muted-foreground">
+                          {user.role}
+                        </span>
+                      )}
+                    </div>
+                  </SidebarMenuButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
+                  side="top"
+                  align="end"
+                  sideOffset={4}
+                >
+                  <DropdownMenuItem asChild>
+                    <Link href="/settings" className="gap-2">
+                      <Settings className="size-4" />
+                      Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={logout} className="gap-2">
+                    <LogOut className="size-4" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </SidebarMenuItem>
+          ) : (
+            <SidebarMenuItem>
+              <SidebarMenuButton size="sm" asChild tooltip="Settings">
+                <Link href="/settings">
+                  <Settings className="size-4" />
+                  <span>Settings</span>
+                  {time && (
+                    <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
+                      {time}
+                    </span>
+                  )}
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
+        </SidebarMenu>
+      </SidebarFooter>
+
+      <SidebarRail />
+    </Sidebar>
   );
 }

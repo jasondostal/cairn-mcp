@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.67.0** — Mind + Tasks deprecation. See below.
+Current: **v0.68.0** — shadcn Sidebar + Memories page. See below.
 
 ---
 
@@ -47,6 +47,15 @@ Exploring, not committed.
 ---
 
 ## Shipped
+
+### v0.68.0 — "Recall" ✓
+
+Navigation and discovery overhaul.
+
+- [x] **shadcn Sidebar** — replaced hand-rolled sidebar with shadcn's Sidebar component. Collapsible nav groups (Core and Context open by default, Reference/Deep Dive/Ops collapsed). Icon-collapse mode with Cmd/Ctrl+B keyboard shortcut. User profile footer with avatar, role, and sign-out dropdown. Automatic Sheet-based mobile drawer. SidebarRail for quick collapse toggle.
+- [x] **Timeline → Memories** — renamed and enriched the primary memory browse page. Three sort modes (Recent, Important, Relevance), group-by-type toggle with collapsible type sections, cluster labels on memory cards linking to search. Backend: new `sort`, `group_by`, and `include_clusters` query params on the timeline endpoint.
+- [x] **Command palette updated** — Tasks removed, Mind and Memories added.
+- [x] New shadcn components: sidebar, collapsible, dropdown-menu, avatar.
 
 ### v0.67.0 — "Mind" ✓
 

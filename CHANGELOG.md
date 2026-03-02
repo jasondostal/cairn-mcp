@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.68.0] — 2026-03-01 — "Recall"
+
+### Added
+- **shadcn Sidebar** — replaced hand-rolled sidebar with shadcn's `Sidebar`
+  component. Collapsible nav groups (Core and Context default open, others
+  collapsed). Icon-collapse mode (`Cmd/Ctrl+B`). User profile footer with
+  avatar, role display, and sign-out dropdown. Automatic Sheet-based mobile
+  drawer. `SidebarRail` for quick collapse toggle on hover.
+- **Memories page** — renamed Timeline to Memories with enriched discovery.
+  Three sort modes (Recent, Important, Relevance). Group-by-type toggle
+  showing collapsible sections with type counts. Cluster labels on memory
+  cards linking to search. Backend: `sort`, `group_by`, `include_clusters`
+  query params on `/api/timeline`.
+- New shadcn components: `sidebar`, `collapsible`, `dropdown-menu`, `avatar`.
+
+### Changed
+- **Command palette** — Tasks entry removed, Mind and Memories added.
+- All `/timeline` references updated to `/memories` (with redirect from old
+  route).
+
 ## [0.67.0] — 2026-03-01 — "Mind"
 
 ### Added

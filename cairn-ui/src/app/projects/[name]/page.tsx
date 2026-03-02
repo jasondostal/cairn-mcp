@@ -237,7 +237,7 @@ export default function ProjectDetailPage() {
     [name]
   );
   const { data: memories } = useFetch<Paginated<TimelineMemory>>(
-    () => api.timeline({ project: name, limit: "100" }),
+    () => api.timeline({ project: name, limit: "100" }) as Promise<Paginated<TimelineMemory>>,
     [name]
   );
   const { data: workItems } = useFetch<Paginated<WorkItem>>(
@@ -323,7 +323,7 @@ export default function ProjectDetailPage() {
               totalCount={memories?.items.length}
               filter={memFilter}
               onFilterChange={setMemFilter}
-              viewAllHref={`/timeline?project=${encodeURIComponent(name)}`}
+              viewAllHref={`/memories?project=${encodeURIComponent(name)}`}
             />
             {filteredMemories.length > 0 ? (
               <div className="rounded-md border border-border divide-y divide-border max-h-96 overflow-y-auto">

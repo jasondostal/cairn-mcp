@@ -52,6 +52,9 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         type: str | None = Query(None),
         session_name: str | None = Query(None),
         days: int = Query(7, ge=1, le=365),
+        sort: str = Query("recent", pattern="^(recent|important|relevance)$"),
+        group_by: str = Query("none", pattern="^(none|type)$"),
+        include_clusters: bool = Query(False),
         limit: int = Query(50, ge=1, le=200),
         offset: int = Query(0, ge=0),
     ):
@@ -74,6 +77,14 @@ def register_routes(router: APIRouter, svc: Services, **kw):
 
         where_clause = " AND ".join(where)
 
+        # Sort clause
+        sort_clauses = {
+            "recent": "m.created_at DESC",
+            "important": "m.importance DESC, m.created_at DESC",
+            "relevance": "m.importance * (1.0 / (1 + EXTRACT(EPOCH FROM NOW() - m.created_at) / 86400.0)) DESC",
+        }
+        order_by = sort_clauses.get(sort, sort_clauses["recent"])
+
         count_row = db.execute_one(
             f"""
             SELECT COUNT(*) as total FROM memories m
@@ -84,6 +95,22 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         )
         total = count_row["total"]
 
+        # Optional cluster join
+        cluster_select = ""
+        cluster_join = ""
+        if include_clusters:
+            cluster_select = ", cl.id as cluster_id, cl.label as cluster_label, cl.member_count as cluster_size"
+            cluster_join = """
+                LEFT JOIN LATERAL (
+                    SELECT c.id, c.label, c.member_count
+                    FROM cluster_members cm
+                    JOIN clusters c ON c.id = cm.cluster_id
+                    WHERE cm.memory_id = m.id
+                    ORDER BY c.confidence DESC
+                    LIMIT 1
+                ) cl ON true
+            """
+
         query_params = list(params)
         query_params.extend([limit, offset])
 
@@ -93,17 +120,19 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                    m.tags, m.auto_tags, m.related_files, m.is_active,
                    m.session_name, m.author, m.created_at, m.updated_at,
                    p.name as project
+                   {cluster_select}
             FROM memories m
             LEFT JOIN projects p ON m.project_id = p.id
+            {cluster_join}
             WHERE {where_clause}
-            ORDER BY m.created_at DESC
+            ORDER BY {order_by}
             LIMIT %s OFFSET %s
             """,
             tuple(query_params),
         )
 
-        items = [
-            {
+        def row_to_item(r):
+            item = {
                 "id": r["id"],
                 "summary": r["summary"],
                 "content": r["content"],
@@ -119,8 +148,31 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 "created_at": r["created_at"].isoformat(),
                 "updated_at": r["updated_at"].isoformat(),
             }
-            for r in rows
-        ]
+            if include_clusters and r.get("cluster_id"):
+                item["cluster"] = {
+                    "id": r["cluster_id"],
+                    "label": r["cluster_label"],
+                    "size": r["cluster_size"],
+                }
+            return item
+
+        items = [row_to_item(r) for r in rows]
+
+        if group_by == "type":
+            groups: dict[str, list] = {}
+            for item in items:
+                mt = item["memory_type"]
+                groups.setdefault(mt, []).append(item)
+            return {
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "group_by": "type",
+                "groups": [
+                    {"type": t, "count": len(g), "items": g}
+                    for t, g in sorted(groups.items(), key=lambda x: -len(x[1]))
+                ],
+            }
 
         return {"total": total, "limit": limit, "offset": offset, "items": items}
 

@@ -152,7 +152,7 @@ function SessionDetail({
 
   useEffect(() => {
     fetchEvents();
-    api.timeline({ session_name: session.session_name, days: "365", limit: "50" })
+    (api.timeline({ session_name: session.session_name, days: "365", limit: "50" }) as Promise<Paginated<TimelineMemory>>)
       .then((r) => setMemories(r.items))
       .catch(() => setMemories([]));
     api.sessionWorkItems(session.session_name)

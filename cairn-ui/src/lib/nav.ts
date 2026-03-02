@@ -1,13 +1,12 @@
 import {
   Activity,
   BarChart3,
-  Clock,
+  BookOpen,
   Search,
   FolderOpen,
   FileText,
   Network,
   Share2,
-  ListTodo,
   Brain,
   Shield,
   PenLine,
@@ -49,7 +48,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { href: "/sessions", label: "Sessions", icon: Radio },
       { href: "/chat", label: "Chat", icon: MessageCircle },
-      { href: "/timeline", label: "Timeline", icon: Clock },
+      { href: "/memories", label: "Memories", icon: BookOpen },
     ],
   },
   {
