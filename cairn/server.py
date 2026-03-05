@@ -203,7 +203,19 @@ def _stop_workers(svc, db_instance):
 
 @asynccontextmanager
 async def lifespan(server: FastMCP):
-    """Connect to database, load overrides, create services, and run lifecycle."""
+    """Connect to database, load overrides, create services, and run lifecycle.
+
+    In HTTP mode, main() handles DB/services/workers before uvicorn starts,
+    so this lifespan only runs the MCP session manager (via FastMCP internals).
+    The actual DB lifecycle is managed by combined_lifespan in main().
+    """
+    if _base_config.transport == "http":
+        # HTTP mode: main() already created the DB pool, services, and workers.
+        # Yielding here just lets the MCP session manager do its thing.
+        yield {}
+        return
+
+    # Stdio mode: full lifecycle
     db_instance = Database(_base_config.db)
     db_instance.connect()
     db_instance.run_migrations()
