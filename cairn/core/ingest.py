@@ -129,7 +129,9 @@ class IngestPipeline:
         """
 
         ingest_dir = Path(self.config.ingest_dir).resolve()
-        target = Path(file_path).resolve()
+        raw = Path(file_path)
+        # Resolve relative paths against ingest_dir, not process CWD
+        target = (ingest_dir / raw if not raw.is_absolute() else raw).resolve()
 
         # Path traversal protection: must be under ingest_dir
         try:
