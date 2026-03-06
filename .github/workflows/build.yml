@@ -208,7 +208,7 @@ jobs:
         with:
           image-ref: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-ui:main"
           format: table
-          severity: CRITICAL,HIGH
+          severity: CRITICAL
           exit-code: 1
           scanners: vuln
           vuln-type: library

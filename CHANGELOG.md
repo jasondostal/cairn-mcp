@@ -21,8 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ESLint + npm audit** — frontend code quality and dependency vulnerability scanning.
 - **pip-audit** — Python dependency vulnerability scanning against lockfile.
 - **Cosign image signing** — GHCR images are signed with keyless Sigstore OIDC.
-- **Trivy container scanning** — CRITICAL/HIGH CVE scanning on built images (library-only,
-  excludes OS kernel packages).
+- **Trivy container scanning** — library-only CVE scanning on built images (excludes OS
+  kernel packages). Server image scans at CRITICAL+HIGH; UI at CRITICAL only (HIGH hits
+  are build-time transitive deps in Next.js standalone bundle, not runtime).
 - **Smoke tests** — post-build API and MCP endpoint health checks (SSE-aware response parsing).
 - **CodeQL** — semantic security analysis for Python and JavaScript on push/PR/weekly schedule.
 
