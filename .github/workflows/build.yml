@@ -201,8 +201,7 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: 1
           scanners: vuln
-          pkg-types: library
-          trivy-config: ""
+          vuln-type: library
 
       - name: Trivy (UI image)
         uses: aquasecurity/trivy-action@0.34.2
@@ -212,8 +211,7 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: 1
           scanners: vuln
-          pkg-types: library
-          trivy-config: ""
+          vuln-type: library
 
   smoke:
     needs: build
