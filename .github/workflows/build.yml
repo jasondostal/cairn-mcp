@@ -194,7 +194,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Trivy (server image)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.31.0
         with:
           image-ref: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main"
           format: table
@@ -203,7 +203,7 @@ jobs:
           vuln-type: library
 
       - name: Trivy (UI image)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.31.0
         with:
           image-ref: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-ui:main"
           format: table
