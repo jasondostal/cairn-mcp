@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Trusted reverse proxy authentication** — `CAIRN_AUTH_PROXY_HEADER` and
+  `CAIRN_TRUSTED_PROXY_IPS` env vars. Only accepts auth headers from configured
+  IP/CIDR sources. Applied to both REST and MCP middleware. Startup warning if
+  proxy header is set without trusted IPs. Uvicorn `proxy_headers` and
+  `forwarded_allow_ips` enabled automatically when configured.
+- **Trusted proxy tests** — 8 tests covering exact IP, CIDR ranges, multiple
+  entries, empty/invalid inputs.
+
 ## [0.72.0] — 2026-03-06 — "Chromatic"
 
 ### Added
