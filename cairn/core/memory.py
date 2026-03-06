@@ -13,10 +13,10 @@ from cairn.core.constants import (
     CONTRADICTION_ESCALATION_THRESHOLD,
     EPHEMERAL_MEMORY_TYPES,
     GRADUATION_TYPE_MAP,
-    MemoryAction,
     WM_DEFAULT_SALIENCE,
     WM_SALIENCE_BOOST_FLOOR,
     WM_SALIENCE_DECAY_RATE,
+    MemoryAction,
 )
 from cairn.core.utils import extract_json, get_or_create_project
 from cairn.embedding.interface import EmbeddingInterface

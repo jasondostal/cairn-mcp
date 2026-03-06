@@ -1841,8 +1841,6 @@ async def working_memory(
         def _do_working_memory():
             # ca-173: Working memory is now unified into memories table.
             # All operations delegate to MemoryStore with salience-based lifecycle.
-            from cairn.core.constants import GRADUATION_TYPE_MAP
-
             if action == "capture":
                 if not project or not content:
                     return {"error": "project and content are required for capture"}
