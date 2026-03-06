@@ -12,6 +12,7 @@ import {
   CommandItem,
   CommandSeparator,
 } from "@/components/ui/command";
+import { ProjectPill } from "@/components/project-pill";
 import {
   Activity,
   BarChart3,
@@ -143,8 +144,8 @@ export function CommandPalette() {
                     <span className="truncate text-sm">
                       {m.summary || m.content.slice(0, 80)}
                     </span>
-                    <span className="text-xs text-muted-foreground">
-                      #{m.id} &middot; {m.memory_type} &middot; {m.project}
+                    <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                      #{m.id} &middot; {m.memory_type} &middot; <ProjectPill name={m.project} />
                     </span>
                   </div>
                 </CommandItem>

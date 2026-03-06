@@ -17,6 +17,7 @@ import { MemorySheet } from "@/components/memory-sheet";
 import { MemoryTypeBadge } from "@/components/memory-type-badge";
 import { ImportanceBadge } from "@/components/importance-badge";
 import { PageLayout } from "@/components/page-layout";
+import { ProjectPill } from "@/components/project-pill";
 import { EmptyState } from "@/components/empty-state";
 import {
   ArrowLeft,
@@ -149,7 +150,7 @@ export default function CairnDetailPage() {
             <Link href={`/sessions?selected=${encodeURIComponent(detail.session_name)}`}>
               <Badge variant="outline" className="hover:bg-accent cursor-pointer">{detail.session_name}</Badge>
             </Link>
-            <Link href={`/projects/${encodeURIComponent(detail.project)}`} className="text-primary hover:underline">{detail.project}</Link>
+            <Link href={`/projects/${encodeURIComponent(detail.project)}`} className="hover:underline"><ProjectPill name={detail.project} /></Link>
             <span>&middot;</span>
             <span className="flex items-center gap-1">
               <Layers className="h-3.5 w-3.5" />

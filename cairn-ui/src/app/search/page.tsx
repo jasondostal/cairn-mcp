@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/error-state";
 import { MemorySheet } from "@/components/memory-sheet";
 import { MemoryTypeBadge } from "@/components/memory-type-badge";
+import { ProjectPill } from "@/components/project-pill";
 import { ImportanceBadge } from "@/components/importance-badge";
 import { TagList } from "@/components/tag-list";
 import { SkeletonList } from "@/components/skeleton-list";
@@ -86,9 +87,7 @@ function MemoryCard({ memory, onSelect, isActive }: { memory: Memory; onSelect?:
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2">
             <MemoryTypeBadge type={memory.memory_type} />
-            <span className="text-xs text-muted-foreground">
-              {memory.project}
-            </span>
+            <ProjectPill name={memory.project} />
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {memory.score !== undefined && (
@@ -150,7 +149,7 @@ function MemoryDenseRow({ memory, onSelect, isActive, expanded, onToggleExpand }
         <span className="font-mono text-xs text-muted-foreground shrink-0">#{memory.id}</span>
         <MemoryTypeBadge type={memory.memory_type} />
         <span className="flex-1 truncate">{truncated}</span>
-        <span className="text-xs text-muted-foreground shrink-0">{memory.project}</span>
+        <span className="shrink-0"><ProjectPill name={memory.project} /></span>
         {memory.score !== undefined && (
           <span className="font-mono text-xs text-muted-foreground shrink-0">
             {(memory.score * 100).toFixed(0)}%

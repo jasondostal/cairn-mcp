@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { api, type Conversation } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { ProjectPill } from "@/components/project-pill";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -182,7 +183,7 @@ export function ConversationSidebar({
                     {showProjectLabels && conv.project && (
                       <>
                         <span>&middot;</span>
-                        <span className="truncate max-w-[60px]">{conv.project}</span>
+                        <ProjectPill name={conv.project} />
                       </>
                     )}
                   </div>

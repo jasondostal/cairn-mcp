@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ProjectPill } from "@/components/project-pill";
 import { ErrorState } from "@/components/error-state";
 import { TaskSheet } from "@/components/task-sheet";
 import { PaginatedList } from "@/components/paginated-list";
@@ -33,9 +34,7 @@ function TaskCard({ task, showProject, onClick }: { task: Task; showProject?: bo
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>#{task.id}</span>
             {showProject && task.project && (
-              <Badge variant="secondary" className="text-xs">
-                {task.project}
-              </Badge>
+              <ProjectPill name={task.project} />
             )}
             <Badge
               variant={done ? "secondary" : "default"}
@@ -81,7 +80,7 @@ function TaskDenseRow({ task, showProject, onClick }: { task: Task; showProject?
       <span className="font-mono text-xs text-muted-foreground shrink-0">#{task.id}</span>
       <span className="flex-1 truncate">{task.description}</span>
       {showProject && task.project && (
-        <Badge variant="secondary" className="text-xs shrink-0">{task.project}</Badge>
+        <ProjectPill name={task.project} />
       )}
       {task.linked_memories.length > 0 && (
         <span className="text-xs text-muted-foreground shrink-0">

@@ -13,6 +13,7 @@ import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { PageLayout } from "@/components/page-layout";
 import { DocTypeBadge } from "@/components/doc-type-badge";
+import { ProjectPill } from "@/components/project-pill";
 import { DownloadMenu } from "@/components/download-menu";
 import { ArrowLeft } from "lucide-react";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -112,7 +113,7 @@ export default function DocDetailPage() {
           <div className="flex items-center gap-2">
             <DocTypeBadge type={doc.doc_type} />
             <Link href={`/projects/${encodeURIComponent(doc.project)}`}>
-              <Badge variant="secondary" className="text-xs hover:bg-secondary/80 cursor-pointer">{doc.project}</Badge>
+              <ProjectPill name={doc.project} />
             </Link>
             <span className="text-xs text-muted-foreground">{formatDate(doc.updated_at)}</span>
           </div>

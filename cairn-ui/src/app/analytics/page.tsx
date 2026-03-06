@@ -13,6 +13,7 @@ import { SkeletonList } from "@/components/skeleton-list";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
+import { ProjectPill } from "@/components/project-pill";
 import Link from "next/link";
 import { ChevronRight, AlertTriangle } from "lucide-react";
 
@@ -43,8 +44,8 @@ function OpRow({ op }: { op: AnalyticsOperation }) {
           </span>
         )}
         {op.project && (
-          <span className="text-muted-foreground truncate max-w-[120px] hidden sm:inline">
-            {op.project}
+          <span className="truncate max-w-[120px] hidden sm:inline">
+            <ProjectPill name={op.project} />
           </span>
         )}
         <span className="tabular-nums text-muted-foreground ml-auto shrink-0">

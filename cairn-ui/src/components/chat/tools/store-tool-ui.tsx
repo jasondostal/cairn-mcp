@@ -2,6 +2,7 @@
 
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { Save, Loader2, CheckCircle2 } from "lucide-react";
+import { ProjectPill } from "@/components/project-pill";
 
 interface StoreOutput {
   stored: boolean;
@@ -32,8 +33,8 @@ export function StoreToolUI({
           <Save className="h-3 w-3 text-muted-foreground" />
         )}
         <span className="text-xs font-medium">store memory</span>
-        <span className="text-xs text-muted-foreground">
-          in {args.project}
+        <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
+          in <ProjectPill name={args.project} />
         </span>
         {result?.stored && (
           <div className="ml-auto flex items-center gap-1 text-[10px] text-green-400">

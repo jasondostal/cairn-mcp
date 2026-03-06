@@ -18,6 +18,7 @@ import { SingleSelect } from "@/components/ui/single-select";
 import { Separator } from "@/components/ui/separator";
 import { StatusDot, StatusText, PriorityLabel } from "./status-dot";
 import { RiskTierBadge } from "./risk-tier-badge";
+import { ProjectPill } from "@/components/project-pill";
 import { DispatchDialog } from "./dispatch-dialog";
 import {
   Bot,
@@ -225,9 +226,7 @@ export function WorkItemSheet({
                   {detail.item_type}
                 </Badge>
                 <Link href={`/projects/${encodeURIComponent(detail.project)}`} onClick={() => onOpenChange(false)}>
-                  <Badge variant="outline" className="text-xs hover:bg-accent cursor-pointer">
-                    {detail.project}
-                  </Badge>
+                  <ProjectPill name={detail.project} />
                 </Link>
                 <PriorityLabel priority={detail.priority} />
                 <RiskTierBadge tier={detail.risk_tier} />

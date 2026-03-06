@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { SingleSelect } from "@/components/ui/single-select";
 import { Badge } from "@/components/ui/badge";
+import { ProjectPill } from "@/components/project-pill";
 import { ErrorState } from "@/components/error-state";
 import {
   Dialog,
@@ -133,9 +134,7 @@ function SessionSidebar({
               </div>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="text-[10px] opacity-60">{s.agent}</span>
-                <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5">
-                  {s.project}
-                </Badge>
+                <ProjectPill name={s.project} />
                 {s.backend && (
                   <Badge
                     variant="outline"
@@ -585,9 +584,7 @@ function SessionView({
         <Badge variant="outline" className="text-[10px] shrink-0">
           {session.agent}
         </Badge>
-        <Badge variant="outline" className="text-[10px] shrink-0">
-          {session.project}
-        </Badge>
+        <ProjectPill name={session.project} />
         <div className="flex-1" />
         <Button
           variant="ghost"

@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { WorkItemRow } from "@/components/work-items/work-item-row";
 import { WorkItemSheet } from "@/components/work-items/work-item-sheet";
 import { CreateWorkItemDialog } from "@/components/work-items/create-dialog";
+import { ProjectPill } from "@/components/project-pill";
 import { FileCheck, Hand, Plus } from "lucide-react";
 
 const statusOptions: { value: string; label: string }[] = [
@@ -459,7 +460,7 @@ export default function WorkItemsPage() {
                     {g.gate_data.question}
                   </span>
                 )}
-                <span className="font-mono text-xs text-muted-foreground/60 shrink-0">{g.project}</span>
+                <ProjectPill name={g.project} />
               </div>
             ))}
           </div>
@@ -489,7 +490,7 @@ export default function WorkItemsPage() {
                   </span>
                 )}
                 {d.project_name && (
-                  <span className="font-mono text-xs text-muted-foreground/60 shrink-0">{d.project_name}</span>
+                  <ProjectPill name={d.project_name} />
                 )}
               </div>
             ))}

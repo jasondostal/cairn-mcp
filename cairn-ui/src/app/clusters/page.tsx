@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { MemoryTypeBadge } from "@/components/memory-type-badge";
 import { MemorySheet } from "@/components/memory-sheet";
@@ -209,17 +210,7 @@ export default function ClustersPage() {
       {error && <ErrorState message="Failed to load clusters" detail={error} />}
 
       {!loading && !error && data && data.cluster_count === 0 && (
-        <div className="flex h-[200px] items-center justify-center rounded-lg border border-border bg-card">
-          <div className="text-center">
-            <p className="text-sm text-muted-foreground">
-              No clusters found.
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Clustering needs 10+ memories in a project. Try selecting a
-              specific project or storing more memories.
-            </p>
-          </div>
-        </div>
+        <EmptyState icon={Network} title="No clusters found" description="Clustering needs 10+ memories in a project. Try selecting a specific project or storing more memories." />
       )}
 
       {!loading && !error && data && data.cluster_count > 0 && (

@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { ProjectBreakdown as PB } from "@/lib/api";
+import { ProjectPill } from "@/components/project-pill";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 function formatTokens(v: number): string {
@@ -54,7 +55,7 @@ export function ProjectBreakdown({ items }: { items: PB[] }) {
             <TableBody>
               {items.map((p) => (
                 <TableRow key={p.project}>
-                  <TableCell className="font-medium">{p.project}</TableCell>
+                  <TableCell className="font-medium"><ProjectPill name={p.project} /></TableCell>
                   <TableCell className="text-right tabular-nums">{p.operations.toLocaleString()}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatTokens(p.tokens)}</TableCell>
                   <TableCell className="text-right tabular-nums">{p.avg_latency.toFixed(0)}ms</TableCell>

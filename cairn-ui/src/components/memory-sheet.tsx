@@ -30,14 +30,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { MemoryTypeBadge } from "@/components/memory-type-badge";
 import { ImportanceBadge } from "@/components/importance-badge";
-
-const RELATION_COLORS: Record<string, string> = {
-  extends: "text-blue-400",
-  contradicts: "text-red-400",
-  implements: "text-green-400",
-  depends_on: "text-amber-400",
-  related: "text-muted-foreground",
-};
+import { relationClasses } from "@/lib/colors";
 import { StatusDot } from "@/components/work-items/status-dot";
 import {
   Tag,
@@ -409,7 +402,7 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
                           )}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5">
-                              <span className={`text-xs font-medium ${RELATION_COLORS[rel.relation] || "text-muted-foreground"}`}>
+                              <span className={`text-xs font-medium ${relationClasses(rel.relation).text}`}>
                                 {rel.relation.replace("_", " ")}
                               </span>
                               <MemoryTypeBadge type={rel.memory_type} />

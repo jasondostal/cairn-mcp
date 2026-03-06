@@ -8,6 +8,7 @@ import { usePageFilters } from "@/lib/use-page-filters";
 import { PageFilters, DenseToggle } from "@/components/page-filters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ProjectPill } from "@/components/project-pill";
 import { ErrorState } from "@/components/error-state";
 import { SkeletonList } from "@/components/skeleton-list";
 import { EmptyState } from "@/components/empty-state";
@@ -45,9 +46,7 @@ function CairnCard({ cairn, showProject }: { cairn: Cairn; showProject?: boolean
 
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             {showProject && cairn.project && (
-              <Badge variant="secondary" className="text-xs">
-                {cairn.project}
-              </Badge>
+              <ProjectPill name={cairn.project} />
             )}
             <span className="flex items-center gap-1">
               <Layers className="h-3 w-3" />
@@ -81,7 +80,7 @@ function CairnDenseRow({ cairn, showProject }: { cairn: Cairn; showProject?: boo
         </Badge>
       )}
       {showProject && cairn.project && (
-        <Badge variant="secondary" className="text-xs shrink-0">{cairn.project}</Badge>
+        <ProjectPill name={cairn.project} />
       )}
       <Badge variant="outline" className="text-xs shrink-0">{cairn.session_name}</Badge>
       <span className="text-xs text-muted-foreground shrink-0 flex items-center gap-1">

@@ -6,18 +6,22 @@ import { useMemorySheet } from "@/lib/use-memory-sheet";
 import { usePageFilters } from "@/lib/use-page-filters";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { MemorySheet } from "@/components/memory-sheet";
 import { PageLayout } from "@/components/page-layout";
+import { ScatterChart } from "lucide-react";
 
-// Deterministic color palette for clusters
+// Deterministic OKLCH palette for clusters
 const CLUSTER_COLORS = [
-  "#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6",
-  "#ec4899", "#06b6d4", "#f97316", "#14b8a6", "#6366f1",
-  "#84cc16", "#e11d48", "#0ea5e9", "#d946ef", "#facc15",
+  "oklch(0.55 0.20 264)", "oklch(0.60 0.22 16)",  "oklch(0.65 0.17 162)",
+  "oklch(0.70 0.18 70)",  "oklch(0.55 0.22 290)", "oklch(0.65 0.22 340)",
+  "oklch(0.60 0.15 200)", "oklch(0.65 0.18 45)",  "oklch(0.60 0.15 175)",
+  "oklch(0.50 0.20 264)", "oklch(0.65 0.19 120)", "oklch(0.55 0.24 16)",
+  "oklch(0.60 0.18 220)", "oklch(0.60 0.24 304)", "oklch(0.72 0.18 85)",
 ];
-const NOISE_COLOR = "#6b7280";
+const NOISE_COLOR = "oklch(0.50 0.04 264)";
 
 function getColor(clusterId: number | null, clusterIds: number[]): string {
   if (clusterId === null) return NOISE_COLOR;
@@ -258,16 +262,7 @@ export default function ClusterVisualizationPage() {
       )}
 
       {!loading && !error && points.length === 0 && (
-        <div className="flex h-[300px] items-center justify-center rounded-lg border border-border bg-card">
-          <div className="text-center">
-            <p className="text-sm text-muted-foreground">
-              No memories with embeddings to visualize.
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Store some memories first, then come back to see the scatter plot.
-            </p>
-          </div>
-        </div>
+        <EmptyState icon={ScatterChart} title="No memories with embeddings to visualize" description="Store some memories first, then come back to see the scatter plot." />
       )}
 
       {!loading && !error && points.length > 0 && (

@@ -17,6 +17,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { ProjectPill } from "@/components/project-pill";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
@@ -108,7 +109,7 @@ function SessionList({
               <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
             </div>
             <div className="flex items-center gap-4 mt-1.5 text-xs text-muted-foreground">
-              <Link href={`/projects/${encodeURIComponent(s.project)}`} className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>{s.project}</Link>
+              <Link href={`/projects/${encodeURIComponent(s.project)}`} onClick={(e) => e.stopPropagation()}><ProjectPill name={s.project} /></Link>
               <span>{s.event_count} events</span>
               {s.started_at && <span>{timeAgo(s.started_at)}</span>}
             </div>
@@ -183,7 +184,7 @@ function SessionDetail({
             )}
           </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-            <Link href={`/projects/${encodeURIComponent(session.project)}`} className="text-primary hover:underline">{session.project}</Link>
+            <Link href={`/projects/${encodeURIComponent(session.project)}`}><ProjectPill name={session.project} /></Link>
             <span>{events.length} events</span>
             <span>{toolEvents.length} tool calls</span>
           </div>

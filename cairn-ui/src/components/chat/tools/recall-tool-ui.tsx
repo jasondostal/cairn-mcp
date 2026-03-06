@@ -2,6 +2,7 @@
 
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { BookOpen, Loader2 } from "lucide-react";
+import { ProjectPill } from "@/components/project-pill";
 
 interface MemoryDetail {
   id: number;
@@ -49,9 +50,7 @@ export function RecallToolUI({
               <span className="rounded bg-muted px-1 py-0.5 text-[10px] font-medium">
                 {m.memory_type}
               </span>
-              <span className="text-[10px] text-muted-foreground">
-                {m.project}
-              </span>
+              <ProjectPill name={m.project} />
               <span className="ml-auto text-[10px] text-muted-foreground">
                 imp: {m.importance}
               </span>

@@ -7,6 +7,7 @@ import { StatusDot, StatusText, PriorityLabel } from "./status-dot";
 import { RiskTierBadge } from "./risk-tier-badge";
 import { DispatchDialog } from "./dispatch-dialog";
 import { ChevronRight, Hand, Bot } from "lucide-react";
+import { ProjectPill } from "@/components/project-pill";
 
 interface WorkItemRowProps {
   item: WorkItem;
@@ -147,9 +148,7 @@ export function WorkItemRow({
       )}
 
       {showProject && (
-        <span className="font-mono text-xs text-muted-foreground shrink-0">
-          {item.project}
-        </span>
+        <ProjectPill name={item.project} />
       )}
     </div>
   );

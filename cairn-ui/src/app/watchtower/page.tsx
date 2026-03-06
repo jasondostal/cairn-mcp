@@ -12,6 +12,7 @@ import {
   type RetentionStatus,
 } from "@/lib/api";
 import { PageLayout } from "@/components/page-layout";
+import { ProjectPill } from "@/components/project-pill";
 import { useSharedDays } from "@/lib/use-page-filters";
 import { SkeletonList } from "@/components/skeleton-list";
 import { ErrorState } from "@/components/error-state";
@@ -402,7 +403,7 @@ function AuditTab() {
                 <span className="font-mono text-xs text-muted-foreground w-16 shrink-0">{e.actor}</span>
                 <Badge variant="secondary" className="text-[10px]">{e.action}</Badge>
                 <span className="text-muted-foreground">{e.resource_type}</span>
-                {e.project && <span className="text-xs text-muted-foreground/60">{e.project}</span>}
+                {e.project && <ProjectPill name={e.project} />}
                 <span className="text-xs text-muted-foreground ml-auto shrink-0">{timeAgo(e.created_at)}</span>
               </button>
               {expanded === e.id && (

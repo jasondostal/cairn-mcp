@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Centralized color registry** (`lib/colors/`) — 7 modules (memory-type, project, relation,
+  ephemeral, scale, thinking, index) as single source of truth for all semantic colors. Eliminates
+  3 independent memory type color systems (OKLCH in dashboard, hex in graph, none in badge).
+- **30+ OKLCH CSS custom properties** — `--type-*`, `--eph-*`, `--rel-*` tokens in `globals.css`
+  with light/dark mode variants and Tailwind theme mappings.
+- **Color-aware `MemoryTypeBadge`** — colored dot indicator for all memory types (crystallized
+  and ephemeral). Used across 7 pages.
+- **Shared `ProjectPill` component** — extracted from memories page, adopted in 29 locations
+  across 22 files. Every surface showing a project name now carries its deterministic OKLCH color.
+- **Color-aware `DocTypeBadge`** — converted from Tailwind hex to OKLCH with colored dot.
+- **Color-aware `ImportanceBadge`** — uses `scoreColor()` gradient from registry.
+- **`EmptyState` icon prop** — component now accepts optional `icon`, `title`, `description`
+  props (backward compatible with existing `message`/`detail` API).
+
+### Changed
+- **Graph page** — all hex color palettes (entity, aspect, cluster, relation, memory type)
+  converted to OKLCH. Memory type and relation colors sourced from shared registry.
+- **Cluster visualization** — hex palette converted to OKLCH.
+- **Thinking page** — thought type border colors sourced from `lib/colors/thinking.ts` via
+  inline styles (OKLCH).
+- **Memory sheet** — relation colors sourced from shared registry.
+- **Dashboard `MemoryTypeBar`** — uses shared `memoryTypeColor()` instead of local palette.
+- **Memories page** — removed local `projectColor`, `projectHue`, `scoreColor`, `salienceColor`,
+  `EPHEMERAL_TYPE_STYLES`. All sourced from shared modules. Ephemeral types now use
+  `MemoryTypeBadge` instead of separate badge variants.
+- **Projects list** — project card titles render in deterministic project color.
+- **4 custom empty states** replaced with shared `EmptyState` component (projects, clusters,
+  cluster visualization, admin groups).
+
 ## [0.71.0] — 2026-03-06 — "Unified Memory"
 
 ### Added

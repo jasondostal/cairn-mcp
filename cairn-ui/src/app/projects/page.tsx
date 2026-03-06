@@ -4,9 +4,11 @@ import Link from "next/link";
 import { api, type Project } from "@/lib/api";
 import { useFetch } from "@/lib/use-fetch";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { SkeletonList } from "@/components/skeleton-list";
 import { PageLayout } from "@/components/page-layout";
+import { projectColor } from "@/lib/colors";
 import { Brain, FileText, CheckSquare, FolderOpen } from "lucide-react";
 
 function relativeTime(dateStr: string | null): string {
@@ -40,13 +42,7 @@ export default function ProjectsPage() {
       {error && <ErrorState message="Failed to load projects" detail={error} />}
 
       {!loading && !error && (projects ?? []).length === 0 && (
-        <div className="text-center py-12 text-muted-foreground">
-          <FolderOpen className="mx-auto mb-3 h-10 w-10 opacity-30" />
-          <p className="text-sm">No projects yet.</p>
-          <p className="text-xs mt-1 opacity-60">
-            Projects are created automatically when you store your first memory.
-          </p>
-        </div>
+        <EmptyState icon={FolderOpen} title="No projects yet" description="Projects are created automatically when you store your first memory." />
       )}
 
       {!loading && !error && (projects ?? []).length > 0 && (
@@ -55,7 +51,7 @@ export default function ProjectsPage() {
             <Link key={p.id} href={`/projects/${encodeURIComponent(p.name)}`}>
               <Card className="transition-colors hover:border-primary/30">
                 <CardContent className="p-4 space-y-2">
-                  <div className="font-semibold text-sm truncate">{p.name}</div>
+                  <div className="font-semibold text-sm truncate" style={{ color: projectColor(p.name) }}>{p.name}</div>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Brain className="h-3 w-3" />

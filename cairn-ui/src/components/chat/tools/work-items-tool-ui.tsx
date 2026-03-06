@@ -2,6 +2,7 @@
 
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { ListChecks, Loader2, Plus, CheckCircle2 } from "lucide-react";
+import { ProjectPill } from "@/components/project-pill";
 
 /* ---------- list_work_items ---------- */
 
@@ -47,7 +48,7 @@ export function ListWorkItemsToolUI({
       <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/30 border-b border-border/30">
         <ListChecks className="h-3 w-3 text-muted-foreground" />
         <span className="text-xs font-medium">work items</span>
-        <span className="text-xs text-muted-foreground">{args.project}</span>
+        <ProjectPill name={args.project} />
         {args.status && (
           <span className="text-[10px] text-muted-foreground">
             ({args.status})

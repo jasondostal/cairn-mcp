@@ -6,8 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { ProjectPill } from "@/components/project-pill";
 import { SingleSelect } from "@/components/ui/single-select";
 import { PageLayout } from "@/components/page-layout";
+import { EmptyState } from "@/components/empty-state";
 import { SkeletonList } from "@/components/skeleton-list";
 import { toast } from "sonner";
 import { useAuth } from "@/components/auth-provider";
@@ -192,7 +194,7 @@ function GroupRow({
                   <div className="space-y-1">
                     {detail.projects.map((p) => (
                       <div key={p.project_id} className="flex items-center justify-between text-xs">
-                        <span>{p.project_name} <Badge variant="outline" className="text-[10px] ml-1">{p.role}</Badge></span>
+                        <span className="inline-flex items-center gap-1"><ProjectPill name={p.project_name} /> <Badge variant="outline" className="text-[10px] ml-1">{p.role}</Badge></span>
                         <Button variant="ghost" size="xs" onClick={() => handleRemoveProject(p.project_name)}>
                           <Trash2 className="h-3 w-3" />
                         </Button>
@@ -334,10 +336,7 @@ export default function AdminGroupsPage() {
         )}
 
         {groups.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            <Users2 className="h-8 w-8 mx-auto mb-3 opacity-50" />
-            <p className="text-sm">No groups yet. Create one to organize user access.</p>
-          </div>
+          <EmptyState icon={Users2} title="No groups yet" description="Create one to organize user access." />
         ) : (
           <div className="space-y-2">
             {groups.map((g) => (

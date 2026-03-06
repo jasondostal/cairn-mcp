@@ -2,6 +2,7 @@
 
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { Search, Loader2 } from "lucide-react";
+import { ProjectPill } from "@/components/project-pill";
 
 interface SearchResult {
   id: number;
@@ -55,9 +56,7 @@ export function SearchToolUI({
                 <span className="rounded bg-muted px-1 py-0.5 text-[10px] font-medium">
                   {r.memory_type}
                 </span>
-                <span className="text-[10px] text-muted-foreground">
-                  {r.project}
-                </span>
+                <ProjectPill name={r.project} />
                 {r.score != null && (
                   <span className="ml-auto text-[10px] text-muted-foreground">
                     {(r.score * 100).toFixed(0)}%

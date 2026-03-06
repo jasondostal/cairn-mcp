@@ -7,6 +7,7 @@ import { usePageFilters } from "@/lib/use-page-filters";
 import { PageFilters, DenseToggle } from "@/components/page-filters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ProjectPill } from "@/components/project-pill";
 import { ErrorState } from "@/components/error-state";
 import { ImportanceBadge } from "@/components/importance-badge";
 import { RuleSheet } from "@/components/rule-sheet";
@@ -23,9 +24,7 @@ function RuleCard({ rule, onClick }: { rule: Rule; onClick: () => void }) {
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2">
             <Shield className="h-4 w-4 text-muted-foreground" />
-            <Badge variant="outline" className="text-xs">
-              {rule.project}
-            </Badge>
+            <ProjectPill name={rule.project} />
           </div>
           <div className="shrink-0">
             <ImportanceBadge importance={rule.importance} />
@@ -62,7 +61,7 @@ function RuleDenseRow({ rule, onClick }: { rule: Rule; onClick: () => void }) {
       onClick={onClick}
     >
       <Shield className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      <Badge variant="outline" className="text-xs shrink-0">{rule.project}</Badge>
+      <ProjectPill name={rule.project} />
       <span className="flex-1 truncate">{truncated}</span>
       <span className="shrink-0"><ImportanceBadge importance={rule.importance} /></span>
       <span className="text-xs text-muted-foreground shrink-0">{formatDate(rule.created_at)}</span>

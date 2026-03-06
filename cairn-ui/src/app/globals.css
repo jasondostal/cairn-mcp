@@ -56,6 +56,33 @@
   --color-status-cancelled: var(--status-cancelled);
   --color-status-gate: var(--status-gate);
   --color-priority-p4: var(--priority-p4);
+
+  /* Memory types */
+  --color-type-note: var(--type-note);
+  --color-type-decision: var(--type-decision);
+  --color-type-rule: var(--type-rule);
+  --color-type-code-snippet: var(--type-code-snippet);
+  --color-type-learning: var(--type-learning);
+  --color-type-research: var(--type-research);
+  --color-type-discussion: var(--type-discussion);
+  --color-type-progress: var(--type-progress);
+  --color-type-task: var(--type-task);
+  --color-type-debug: var(--type-debug);
+  --color-type-design: var(--type-design);
+
+  /* Ephemeral types */
+  --color-eph-hypothesis: var(--eph-hypothesis);
+  --color-eph-question: var(--eph-question);
+  --color-eph-tension: var(--eph-tension);
+  --color-eph-connection: var(--eph-connection);
+  --color-eph-thread: var(--eph-thread);
+  --color-eph-intuition: var(--eph-intuition);
+
+  /* Relation types */
+  --color-rel-extends: var(--rel-extends);
+  --color-rel-contradicts: var(--rel-contradicts);
+  --color-rel-implements: var(--rel-implements);
+  --color-rel-depends-on: var(--rel-depends-on);
 }
 
 :root {
@@ -91,6 +118,34 @@
   --status-cancelled: oklch(0.556 0 0);
   --status-gate: oklch(0.627 0.265 304);
   --priority-p4: oklch(0.705 0.213 47);
+
+  /* Memory type tokens (light — boosted lightness for white bg) */
+  --type-note: oklch(0.45 0.20 264);
+  --type-decision: oklch(0.55 0.18 70);
+  --type-rule: oklch(0.50 0.22 16);
+  --type-code-snippet: oklch(0.50 0.17 162);
+  --type-learning: oklch(0.50 0.24 304);
+  --type-research: oklch(0.48 0.15 200);
+  --type-discussion: oklch(0.52 0.18 45);
+  --type-progress: oklch(0.48 0.18 145);
+  --type-task: oklch(0.45 0.20 290);
+  --type-debug: oklch(0.52 0.20 30);
+  --type-design: oklch(0.45 0.18 250);
+
+  /* Ephemeral type tokens (light) */
+  --eph-hypothesis: oklch(0.55 0.18 70);
+  --eph-question: oklch(0.50 0.24 304);
+  --eph-tension: oklch(0.50 0.22 16);
+  --eph-connection: oklch(0.50 0.17 162);
+  --eph-thread: oklch(0.45 0.20 264);
+  --eph-intuition: oklch(0.50 0.19 165);
+
+  /* Relation type tokens (light) */
+  --rel-extends: oklch(0.45 0.20 264);
+  --rel-contradicts: oklch(0.50 0.22 16);
+  --rel-implements: oklch(0.50 0.17 162);
+  --rel-depends-on: oklch(0.55 0.18 70);
+
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -133,6 +188,34 @@
   --status-cancelled: oklch(0.556 0 0);
   --status-gate: oklch(0.627 0.265 304);
   --priority-p4: oklch(0.705 0.213 47);
+
+  /* Memory type tokens (dark — full saturation for dark bg) */
+  --type-note: oklch(0.55 0.20 264);
+  --type-decision: oklch(0.70 0.18 70);
+  --type-rule: oklch(0.60 0.22 16);
+  --type-code-snippet: oklch(0.65 0.17 162);
+  --type-learning: oklch(0.60 0.24 304);
+  --type-research: oklch(0.60 0.15 200);
+  --type-discussion: oklch(0.65 0.18 45);
+  --type-progress: oklch(0.60 0.18 145);
+  --type-task: oklch(0.55 0.20 290);
+  --type-debug: oklch(0.65 0.20 30);
+  --type-design: oklch(0.55 0.18 250);
+
+  /* Ephemeral type tokens (dark) */
+  --eph-hypothesis: oklch(0.70 0.18 70);
+  --eph-question: oklch(0.60 0.24 304);
+  --eph-tension: oklch(0.60 0.22 16);
+  --eph-connection: oklch(0.65 0.17 162);
+  --eph-thread: oklch(0.55 0.20 264);
+  --eph-intuition: oklch(0.72 0.19 165);
+
+  /* Relation type tokens (dark) */
+  --rel-extends: oklch(0.55 0.20 264);
+  --rel-contradicts: oklch(0.60 0.22 16);
+  --rel-implements: oklch(0.65 0.17 162);
+  --rel-depends-on: oklch(0.70 0.18 70);
+
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);

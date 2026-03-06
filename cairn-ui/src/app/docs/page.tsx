@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { ErrorState } from "@/components/error-state";
 import { SkeletonList } from "@/components/skeleton-list";
 import { DocTypeBadge } from "@/components/doc-type-badge";
+import { ProjectPill } from "@/components/project-pill";
 import { EmptyState } from "@/components/empty-state";
 import { PageLayout } from "@/components/page-layout";
 import { FileText } from "lucide-react";
@@ -42,7 +43,7 @@ function DocDenseRow({ doc, showProject }: { doc: Document; showProject?: boolea
       <span className="flex-1 truncate">{title}</span>
       <DocTypeBadge type={doc.doc_type} />
       {showProject && (
-        <Badge variant="secondary" className="text-xs shrink-0">{doc.project}</Badge>
+        <ProjectPill name={doc.project} />
       )}
       <span className="text-xs text-muted-foreground shrink-0">
         {formatDate(doc.updated_at)}
@@ -67,9 +68,7 @@ function DocCard({ doc, showProject }: { doc: Document; showProject?: boolean })
             <div className="flex items-center gap-1.5 shrink-0">
               <DocTypeBadge type={doc.doc_type} />
               {showProject && (
-                <Badge variant="secondary" className="text-xs">
-                  {doc.project}
-                </Badge>
+                <ProjectPill name={doc.project} />
               )}
             </div>
           </div>

@@ -13,6 +13,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
+import { ProjectPill } from "@/components/project-pill";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { CheckCircle, Circle, Link2, ArrowUpRight } from "lucide-react";
@@ -78,9 +79,7 @@ export function TaskSheet({ task, open, onOpenChange, onCompleted }: TaskSheetPr
                   {task.status}
                 </Badge>
                 {task.project && (
-                  <Badge variant="outline" className="text-xs">
-                    {task.project}
-                  </Badge>
+                  <ProjectPill name={task.project} />
                 )}
               </div>
               <SheetTitle className="text-base">

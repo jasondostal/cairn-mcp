@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ProjectPill } from "@/components/project-pill";
 import {
   forceSimulation,
   forceLink,
@@ -37,6 +38,7 @@ import { SingleSelect } from "@/components/ui/single-select";
 import { ErrorState } from "@/components/error-state";
 import { MemorySheet } from "@/components/memory-sheet";
 import { PageLayout } from "@/components/page-layout";
+import { MEMORY_TYPE_OKLCH, MEMORY_TYPE_FALLBACK_OKLCH, relationColor } from "@/lib/colors";
 
 import { EntityCreateDialog } from "@/components/graph/entity-create-dialog";
 
@@ -51,29 +53,29 @@ type GraphMode = "neo4j" | "postgres";
 // ────────────────────────────────────────────────────
 
 const ENTITY_COLORS: Record<string, string> = {
-  Person: "#f59e0b",
-  Organization: "#ef4444",
-  Place: "#22c55e",
-  Event: "#ec4899",
-  Project: "#3b82f6",
-  Task: "#f97316",
-  Technology: "#8b5cf6",
-  Product: "#06b6d4",
-  Concept: "#6b7280",
+  Person:       "oklch(0.70 0.18 70)",    // amber
+  Organization: "oklch(0.60 0.22 16)",    // red
+  Place:        "oklch(0.65 0.17 162)",   // green
+  Event:        "oklch(0.65 0.22 340)",   // pink
+  Project:      "oklch(0.55 0.20 264)",   // blue
+  Task:         "oklch(0.65 0.18 45)",    // orange
+  Technology:   "oklch(0.55 0.22 290)",   // purple
+  Product:      "oklch(0.60 0.15 200)",   // cyan
+  Concept:      "oklch(0.50 0.04 264)",   // gray
 };
 
 const ASPECT_COLORS: Record<string, string> = {
-  Identity: "#f59e0b",
-  Knowledge: "#3b82f6",
-  Belief: "#8b5cf6",
-  Preference: "#ec4899",
-  Action: "#22c55e",
-  Goal: "#14b8a6",
-  Directive: "#ef4444",
-  Decision: "#f97316",
-  Event: "#06b6d4",
-  Problem: "#e11d48",
-  Relationship: "#6366f1",
+  Identity:     "oklch(0.70 0.18 70)",    // amber
+  Knowledge:    "oklch(0.55 0.20 264)",   // blue
+  Belief:       "oklch(0.55 0.22 290)",   // purple
+  Preference:   "oklch(0.65 0.22 340)",   // pink
+  Action:       "oklch(0.65 0.17 162)",   // green
+  Goal:         "oklch(0.60 0.15 175)",   // teal
+  Directive:    "oklch(0.60 0.22 16)",    // red
+  Decision:     "oklch(0.65 0.18 45)",    // orange
+  Event:        "oklch(0.60 0.15 200)",   // cyan
+  Problem:      "oklch(0.55 0.24 16)",    // dark red
+  Relationship: "oklch(0.50 0.20 264)",   // indigo
 };
 
 const ENTITY_TYPES = [
@@ -90,37 +92,26 @@ const ENTITY_TYPES = [
 ] as const;
 
 // ────────────────────────────────────────────────────
-// Postgres memory type colors
+// Colors — sourced from lib/colors registry
 // ────────────────────────────────────────────────────
 
-const TYPE_COLORS: Record<string, string> = {
-  note: "#3b82f6",
-  decision: "#f59e0b",
-  rule: "#ef4444",
-  "code-snippet": "#22c55e",
-  learning: "#8b5cf6",
-  research: "#06b6d4",
-  discussion: "#ec4899",
-  progress: "#14b8a6",
-  task: "#f97316",
-  debug: "#e11d48",
-  design: "#6366f1",
-};
-
+const TYPE_COLORS = MEMORY_TYPE_OKLCH;
 const RELATION_COLORS: Record<string, string> = {
-  extends: "#3b82f6",
-  contradicts: "#ef4444",
-  implements: "#22c55e",
-  depends_on: "#f59e0b",
-  related: "#6b7280",
+  extends: relationColor("extends"),
+  contradicts: relationColor("contradicts"),
+  implements: relationColor("implements"),
+  depends_on: relationColor("depends_on"),
+  related: relationColor("related"),
 };
 
 const CLUSTER_PALETTE = [
-  "#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6",
-  "#06b6d4", "#ec4899", "#14b8a6", "#f97316", "#6366f1",
-  "#84cc16", "#e11d48", "#0ea5e9", "#d946ef", "#facc15",
+  "oklch(0.55 0.20 264)", "oklch(0.60 0.22 16)",  "oklch(0.65 0.17 162)",
+  "oklch(0.70 0.18 70)",  "oklch(0.55 0.22 290)", "oklch(0.60 0.15 200)",
+  "oklch(0.65 0.22 340)", "oklch(0.60 0.15 175)", "oklch(0.65 0.18 45)",
+  "oklch(0.50 0.20 264)", "oklch(0.65 0.19 120)", "oklch(0.55 0.24 16)",
+  "oklch(0.60 0.18 220)", "oklch(0.60 0.24 304)", "oklch(0.72 0.18 85)",
 ];
-const CLUSTER_UNASSIGNED_COLOR = "#4b5563";
+const CLUSTER_UNASSIGNED_COLOR = "oklch(0.40 0.02 264)";
 
 const RELATION_TYPES = [
   "all", "extends", "contradicts", "implements", "depends_on", "related",
@@ -130,8 +121,8 @@ const RELATION_TYPES = [
 // Shared defaults
 // ────────────────────────────────────────────────────
 
-const DEFAULT_NODE_COLOR = "#6b7280";
-const DEFAULT_EDGE_COLOR = "#475569";
+const DEFAULT_NODE_COLOR = MEMORY_TYPE_FALLBACK_OKLCH;
+const DEFAULT_EDGE_COLOR = "oklch(0.45 0.02 264)";
 const CANVAS_HEIGHT = 600;
 
 // ────────────────────────────────────────────────────
@@ -1256,9 +1247,7 @@ export default function GraphPage() {
                     </p>
                   )}
                   {hoveredNode.meta.project && (
-                    <p className="text-xs text-muted-foreground">
-                      {hoveredNode.meta.project}
-                    </p>
+                    <ProjectPill name={hoveredNode.meta.project} />
                   )}
                 </div>
               )}

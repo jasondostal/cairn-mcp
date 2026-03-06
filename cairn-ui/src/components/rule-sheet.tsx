@@ -10,6 +10,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
+import { ProjectPill } from "@/components/project-pill";
 import { Separator } from "@/components/ui/separator";
 import { ImportanceBadge } from "@/components/importance-badge";
 
@@ -27,9 +28,7 @@ export function RuleSheet({ rule, open, onOpenChange }: RuleSheetProps) {
           <>
             <SheetHeader>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs">
-                  {rule.project}
-                </Badge>
+                <ProjectPill name={rule.project} />
                 <ImportanceBadge importance={rule.importance} />
               </div>
               <SheetTitle className="text-base">

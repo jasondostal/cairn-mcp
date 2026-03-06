@@ -11,16 +11,18 @@ import { usePageFilters } from "@/lib/use-page-filters";
 import { DenseToggle } from "@/components/page-filters";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { TimeRangeFilter } from "@/components/time-range-filter";
 import { ErrorState } from "@/components/error-state";
 import { MemorySheet } from "@/components/memory-sheet";
 import { MemoryTypeBadge } from "@/components/memory-type-badge";
+import { ProjectPill } from "@/components/project-pill";
 import { TagList } from "@/components/tag-list";
 import { SkeletonList } from "@/components/skeleton-list";
 import { PageLayout } from "@/components/page-layout";
+import { projectColor, scoreColor, salienceColor } from "@/lib/colors";
 import {
   Collapsible,
   CollapsibleContent,
@@ -65,31 +67,7 @@ const LC = {
   ephemeral:    "oklch(0.78 0.18 75)",    // amber
 } as const;
 
-/* Deterministic OKLCH hue from project name */
-function projectHue(name: string): number {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
-  return ((h % 360) + 360) % 360;
-}
-
-function projectColor(name: string): string {
-  return `oklch(0.72 0.15 ${projectHue(name)})`;
-}
-
-/* Score → OKLCH color (low=cool muted, high=warm vivid) */
-function scoreColor(value: number): string {
-  const chroma = 0.04 + value * 0.20;       // 0.04 → 0.24
-  const lightness = 0.50 + value * 0.24;    // 0.50 → 0.74
-  const hue = 250 - value * 120;            // 250 (lavender) → 130 (emerald)
-  return `oklch(${lightness.toFixed(2)} ${chroma.toFixed(2)} ${hue.toFixed(0)})`;
-}
-
-function salienceColor(value: number): string {
-  const chroma = 0.04 + value * 0.20;
-  const lightness = 0.50 + value * 0.28;
-  const hue = 40 + value * 35;              // 40 (peach) → 75 (amber)
-  return `oklch(${lightness.toFixed(2)} ${chroma.toFixed(2)} ${hue.toFixed(0)})`;
-}
+/* projectColor, scoreColor, salienceColor — sourced from lib/colors */
 
 type Lifecycle = "all" | "crystallized" | "ephemeral";
 
@@ -99,14 +77,7 @@ const LIFECYCLE_OPTIONS: { label: string; value: Lifecycle; color: string }[] = 
   { label: "Ephemeral",    value: "ephemeral",     color: LC.ephemeral },
 ];
 
-const EPHEMERAL_TYPE_STYLES: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  hypothesis: { label: "Hypothesis", variant: "default" },
-  question:   { label: "Question",   variant: "secondary" },
-  tension:    { label: "Tension",    variant: "destructive" },
-  connection: { label: "Connection", variant: "outline" },
-  thread:     { label: "Thread",     variant: "secondary" },
-  intuition:  { label: "Intuition",  variant: "default" },
-};
+/* Ephemeral type styles removed — MemoryTypeBadge now handles both crystallized and ephemeral */
 
 /* ------------------------------------------------------------------ */
 /*  Lifecycle Toggle                                                   */
@@ -297,26 +268,7 @@ function groupByDate(items: TimelineMemory[]): Map<string, TimelineMemory[]> {
   return groups;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Project Pill                                                       */
-/* ------------------------------------------------------------------ */
-
-function ProjectPill({ name }: { name: string }) {
-  const c = projectColor(name);
-  return (
-    <span
-      className="inline-flex items-center rounded-full px-1.5 py-0 text-[11px] font-medium shrink-0"
-      style={{
-        backgroundColor: `color-mix(in oklch, ${c} 15%, transparent)`,
-        borderColor: `color-mix(in oklch, ${c} 35%, transparent)`,
-        border: "1px solid",
-        color: c,
-      }}
-    >
-      {name}
-    </span>
-  );
-}
+/* ProjectPill — sourced from components/project-pill.tsx */
 
 /* ------------------------------------------------------------------ */
 /*  Score Bar (importance or salience)                                  */
@@ -362,7 +314,7 @@ function MemoryCard({
       ? memory.content.slice(0, 200) + "\u2026"
       : memory.content;
   const eph = isEphemeral(memory);
-  const ephStyle = eph ? EPHEMERAL_TYPE_STYLES[memory.memory_type] : null;
+
 
   return (
     <Card
@@ -376,13 +328,7 @@ function MemoryCard({
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
               {eph && <Lightbulb className="h-4 w-4 text-muted-foreground shrink-0" />}
-              {ephStyle ? (
-                <Badge variant={ephStyle.variant} className="text-xs shrink-0">
-                  {ephStyle.label}
-                </Badge>
-              ) : (
-                <MemoryTypeBadge type={memory.memory_type} />
-              )}
+              <MemoryTypeBadge type={memory.memory_type} />
               <ProjectPill name={memory.project} />
               {eph && memory.pinned && <Pin className="h-3 w-3 text-amber-500 shrink-0" />}
             </div>
@@ -450,7 +396,7 @@ function MemoryDenseRow({
   cardRef?: React.RefObject<HTMLDivElement | null>;
 }) {
   const eph = isEphemeral(memory);
-  const ephStyle = eph ? EPHEMERAL_TYPE_STYLES[memory.memory_type] : null;
+
 
   return (
     <div
@@ -468,13 +414,7 @@ function MemoryDenseRow({
         />
       )}
       <span className="font-mono text-xs text-muted-foreground shrink-0">#{memory.id}</span>
-      {ephStyle ? (
-        <Badge variant={ephStyle.variant} className="text-xs shrink-0">
-          {ephStyle.label}
-        </Badge>
-      ) : (
-        <MemoryTypeBadge type={memory.memory_type} />
-      )}
+      <MemoryTypeBadge type={memory.memory_type} />
       {eph && memory.pinned && <Pin className="h-3 w-3 text-amber-500 shrink-0" />}
       <span className="flex-1 truncate">{memory.summary || memory.content}</span>
       <ProjectPill name={memory.project} />

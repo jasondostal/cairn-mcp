@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { PageLayout } from "@/components/page-layout";
+import { thoughtTypeColor } from "@/lib/colors";
 import {
   Brain,
   Eye,
@@ -55,23 +56,7 @@ const typeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   response: Reply,
 };
 
-const typeColors: Record<string, string> = {
-  observation: "border-l-blue-500/50",
-  hypothesis: "border-l-amber-500/50",
-  question: "border-l-purple-500/50",
-  reasoning: "border-l-cyan-500/50",
-  conclusion: "border-l-green-500/50",
-  alternative: "border-l-orange-500/50",
-  branch: "border-l-orange-500/50",
-  assumption: "border-l-rose-500/50",
-  analysis: "border-l-indigo-500/50",
-  insight: "border-l-yellow-500/50",
-  realization: "border-l-emerald-500/50",
-  pattern: "border-l-teal-500/50",
-  challenge: "border-l-red-500/50",
-  response: "border-l-slate-500/50",
-  general: "border-l-border",
-};
+// Type colors sourced from lib/colors/thinking.ts
 
 const thoughtTypeOptions = [
   "observation", "hypothesis", "question", "reasoning",
@@ -180,7 +165,7 @@ function buildTree(thoughts: Thought[]): TreeNode[] {
 function TreeThoughtNode({ node, isLast }: { node: TreeNode; isLast: boolean }) {
   const [collapsed, setCollapsed] = useState(false);
   const Icon = typeIcons[node.thought.type] || MessageSquare;
-  const colorClass = typeColors[node.thought.type] || typeColors.general;
+  const borderColor = thoughtTypeColor(node.thought.type);
   const hasBranches = node.children.length > 0;
 
   return (
@@ -190,7 +175,7 @@ function TreeThoughtNode({ node, isLast }: { node: TreeNode; isLast: boolean }) 
         <div className="absolute -left-4 top-0 bottom-0 w-px bg-border" />
       )}
 
-      <div className={`border-l-2 ${colorClass} pl-3 mb-2`}>
+      <div className="border-l-2 pl-3 mb-2" style={borderColor ? { borderLeftColor: borderColor } : undefined}>
         <div className="flex items-start gap-2">
           {/* Branch toggle */}
           {hasBranches ? (

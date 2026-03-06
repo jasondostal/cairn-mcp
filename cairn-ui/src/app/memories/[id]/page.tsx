@@ -7,6 +7,7 @@ import { formatDate } from "@/lib/format";
 import { useFetch } from "@/lib/use-fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ProjectPill } from "@/components/project-pill";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/error-state";
@@ -162,7 +163,7 @@ export default function MemoryDetail() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Project</p>
-                  <Link href={`/projects/${encodeURIComponent(memory.project)}`} className="text-sm font-medium text-primary hover:underline">{memory.project}</Link>
+                  <Link href={`/projects/${encodeURIComponent(memory.project)}`}><ProjectPill name={memory.project} /></Link>
                 </div>
               </CardContent>
             </Card>

@@ -2,27 +2,7 @@
 
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-
-// OKLCH colors — saturated, perceptually distinct, dark-mode optimized
-const TYPE_COLORS: Record<string, string> = {
-  note: "oklch(0.55 0.2 264)",
-  decision: "oklch(0.7 0.18 70)",
-  rule: "oklch(0.6 0.22 16)",
-  "code-snippet": "oklch(0.65 0.17 162)",
-  learning: "oklch(0.6 0.24 304)",
-  research: "oklch(0.6 0.15 200)",
-  discussion: "oklch(0.65 0.18 45)",
-  progress: "oklch(0.6 0.18 145)",
-  task: "oklch(0.55 0.2 290)",
-  debug: "oklch(0.65 0.2 30)",
-  design: "oklch(0.55 0.18 250)",
-};
-
-const FALLBACK_COLOR = "oklch(0.45 0 0)";
-
-function getColor(type: string): string {
-  return TYPE_COLORS[type] ?? FALLBACK_COLOR;
-}
+import { memoryTypeColor } from "@/lib/colors";
 
 interface Props {
   types: Record<string, number>;
@@ -51,7 +31,7 @@ export function MemoryTypeBar({ types }: Props) {
               className="h-full transition-opacity"
               style={{
                 width: `${(count / total) * 100}%`,
-                backgroundColor: getColor(type),
+                backgroundColor: memoryTypeColor(type),
                 opacity: hovered && hovered !== type ? 0.3 : 1,
               }}
               onMouseEnter={() => setHovered(type)}
@@ -71,7 +51,7 @@ export function MemoryTypeBar({ types }: Props) {
             >
               <span
                 className="inline-block h-2 w-2 rounded-sm shrink-0"
-                style={{ backgroundColor: getColor(type) }}
+                style={{ backgroundColor: memoryTypeColor(type) }}
               />
               <span
                 className={`text-[10px] tabular-nums transition-colors ${
