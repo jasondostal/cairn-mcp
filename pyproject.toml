@@ -95,6 +95,46 @@ Repository = "https://github.com/jasondostal/cairn-mcp"
 [tool.setuptools.packages.find]
 include = ["cairn*"]
 
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I", "UP", "S"]
+ignore = [
+    "E402",   # module-level import ordering (intentional delayed imports)
+    "E501",   # line length (not enforced)
+    "E741",   # ambiguous variable name (`l` in comprehensions)
+    "B008",   # function-call-in-default-arg (FastAPI Query() pattern)
+    "S101",   # assert usage (fine in non-web code)
+    "S105",   # hardcoded password (false positives on config defaults)
+    "S106",   # hardcoded password in func arg (same)
+    "S108",   # /tmp usage (acceptable in container)
+    "S110",   # try-except-pass (intentional in many places)
+    "S310",   # suspicious URL open (validated before use)
+    "S603",   # subprocess call (not user-facing)
+    "S607",   # partial executable path (not user-facing)
+    "S104",   # bind-all-interfaces (intentional in container)
+    "S608",   # hardcoded SQL (raw SQL by design, not ORM)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"cairn/core/services.py" = ["F821"]         # forward-reference strings in dataclass
+"cairn/core/subscriptions.py" = ["F821"]    # forward-reference string
+"tests/*" = ["S", "B"]                      # security/bugbear relaxed in tests
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+
+[pydantic-mypy]
+init_forbid_extra = false
+init_typed = false
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B101"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
