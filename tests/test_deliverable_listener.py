@@ -143,8 +143,9 @@ class TestDeliverableListener:
         listener.handle({"payload": {"work_item_id": 42}})
 
         # Verify LLM prompt included memory
-        prompt = llm.generate.call_args[0][0]
-        assert "We learned X" in prompt
+        messages = llm.generate.call_args[0][0]
+        prompt_text = messages[0]["content"] if isinstance(messages, list) else messages
+        assert "We learned X" in prompt_text
 
     def test_metrics_computed(self):
         listener, dm, wim, db, _ = self._make_listener(with_llm=False)
