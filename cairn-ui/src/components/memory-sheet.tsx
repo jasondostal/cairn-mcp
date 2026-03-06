@@ -200,7 +200,7 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="overflow-y-auto">
+      <SheetContent className="overflow-y-auto sm:max-w-xl lg:max-w-2xl">
         {loading && (
           <SheetHeader>
             <Skeleton className="h-6 w-48" />

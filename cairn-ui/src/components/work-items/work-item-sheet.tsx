@@ -209,7 +209,7 @@ export function WorkItemSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="overflow-y-auto">
+      <SheetContent className="overflow-y-auto sm:max-w-xl lg:max-w-2xl">
         {loading && (
           <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
             Loading...

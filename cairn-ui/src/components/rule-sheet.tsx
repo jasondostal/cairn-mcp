@@ -22,7 +22,7 @@ interface RuleSheetProps {
 export function RuleSheet({ rule, open, onOpenChange }: RuleSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="overflow-y-auto">
+      <SheetContent className="overflow-y-auto sm:max-w-xl lg:max-w-2xl">
         {rule && (
           <>
             <SheetHeader>

@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.70.0] — 2026-03-06 — "Guardrails"
 
 ### Added
 - **Unified CI pipeline** (`build.yml`) — consolidated `ci.yml` + `publish.yml` into a
@@ -42,6 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   guards, and `window` cast after dependency updates. Removed unused imports.
 
 ### Changed
+- **Wider preview sheets** — memory, work item, task, and rule preview panes expanded
+  to `max-w-xl` on tablet and `max-w-2xl` on desktop (was `max-w-sm`/384px).
 - **Language registry** (`cairn/code/languages/__init__.py`) — replaced 30-branch
   if/elif import chain with `importlib.import_module` dispatch table.
 - **Auth routes** (`cairn/api/auth_routes.py`) — added `_checked_mgr()` helper to

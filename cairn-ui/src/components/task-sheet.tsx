@@ -61,7 +61,7 @@ export function TaskSheet({ task, open, onOpenChange, onCompleted }: TaskSheetPr
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="overflow-y-auto">
+      <SheetContent className="overflow-y-auto sm:max-w-xl lg:max-w-2xl">
         {task && (
           <>
             <SheetHeader>
