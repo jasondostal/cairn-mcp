@@ -9,10 +9,11 @@ Built-in templates provide common rule configs that get stored as normal rules.
 
 from __future__ import annotations
 
+import builtins
 import json
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Any, TYPE_CHECKING
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from cairn.config import AlertingConfig
@@ -120,6 +121,7 @@ class AlertManager:
                 severity, cooldown_minutes,
             ),
         )
+        assert row is not None
         self.db.commit()
         logger.info("Alert rule created: id=%d name='%s' type=%s", row["id"], name, condition_type)
         return self._row_to_dict(row)
@@ -328,7 +330,7 @@ class AlertManager:
 
     def _evaluate_health_status(self, condition: dict) -> dict | None:
         """Evaluate real-time health from in-memory stats singletons."""
-        from cairn.core.stats import embedding_stats, llm_stats, event_bus_stats
+        from cairn.core.stats import embedding_stats, event_bus_stats, llm_stats
 
         component = condition.get("component", "")
         check = condition.get("check", "health")
@@ -370,7 +372,7 @@ class AlertManager:
             if last_event is None:
                 age_minutes = float('inf')
             else:
-                age_minutes = (datetime.now(timezone.utc) - last_event).total_seconds() / 60.0
+                age_minutes = (datetime.now(UTC) - last_event).total_seconds() / 60.0
             if compare(age_minutes, threshold):
                 return {
                     "message": f"{component}.last_event_age = {age_minutes:.1f}m {operator} {threshold}m",
@@ -418,6 +420,7 @@ class AlertManager:
             """,
             (rule_id, severity, message, json.dumps(context or {}), delivered),
         )
+        assert row is not None
         # Update last_fired_at on the rule
         self.db.execute(
             "UPDATE alert_rules SET last_fired_at = NOW() WHERE id = %s",
@@ -450,7 +453,7 @@ class AlertManager:
             where.append("ah.severity = %s")
             params.append(severity)
         if days:
-            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+            cutoff = datetime.now(UTC) - timedelta(days=days)
             where.append("ah.created_at >= %s")
             params.append(cutoff)
 
@@ -494,9 +497,9 @@ class AlertManager:
 
         return {"total": total, "limit": limit, "offset": offset, "items": items}
 
-    def active_alerts(self, *, hours: int = 24) -> list[dict]:
+    def active_alerts(self, *, hours: int = 24) -> builtins.list[dict]:
         """Recent alerts grouped by rule, within the given time window."""
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        cutoff = datetime.now(UTC) - timedelta(hours=hours)
         rows = self.db.execute(
             """
             SELECT ah.id, ah.rule_id, ah.severity, ah.message, ah.context,

@@ -15,8 +15,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Generator
 from dataclasses import dataclass, field
-from typing import Any, Generator
+from typing import Any
 
 logger = logging.getLogger(__name__)
 

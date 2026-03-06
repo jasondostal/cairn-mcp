@@ -39,8 +39,8 @@ class CodeIndexListener:
             return
 
         try:
-            from cairn.code.parser import CodeParser
             from cairn.code.indexer import CodeIndexer
+            from cairn.code.parser import CodeParser
             from cairn.core.utils import get_or_create_project
 
             project_id = get_or_create_project(self.db, project)

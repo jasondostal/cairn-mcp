@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Path, HTTPException
+from fastapi import APIRouter, HTTPException, Path, Query
 
 from cairn.core.services import Services
 
@@ -56,7 +56,9 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         return workspace_manager.delete_session(session_id)
 
     @router.post("/workspace/sessions/{session_id}/message")
-    def api_workspace_send_message(session_id: str = Path(...), body: dict = {}):
+    def api_workspace_send_message(session_id: str = Path(...), body: dict | None = None):
+        if body is None:
+            body = {}
         text = body.get("text")
         if not text:
             raise HTTPException(status_code=400, detail="text is required")

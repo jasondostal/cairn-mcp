@@ -43,7 +43,7 @@ export default function ChatPage() {
   });
 
   const runtimeRef = useRef(runtime);
-  runtimeRef.current = runtime;
+  useEffect(() => { runtimeRef.current = runtime; }, [runtime]);
 
   const handleNewChat = useCallback(() => {
     setSidebarRefreshKey((k) => k + 1);

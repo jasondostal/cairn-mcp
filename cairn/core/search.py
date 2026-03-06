@@ -37,10 +37,10 @@ from cairn.core.constants import (
     CONTRADICTION_PENALTY,
     QUERY_TYPE_AFFINITY,
     RRF_WEIGHTS_DEFAULT,
-    RRF_WEIGHTS_WITH_ACTIVATION,
-    RRF_WEIGHTS_WITH_ENTITIES,
     RRF_WEIGHTS_WITH_ACCESS,
     RRF_WEIGHTS_WITH_ACCESS_ENTITIES,
+    RRF_WEIGHTS_WITH_ACTIVATION,
+    RRF_WEIGHTS_WITH_ENTITIES,
     RRF_WEIGHTS_WITH_GRAPH,
     TYPE_ROUTING_BOOST,
 )
@@ -84,7 +84,7 @@ class SearchEngine:
         activation_engine: ActivationEngine | None = None,
         graph_provider: GraphProvider | None = None,
         decay_lambda: float = 0.01,
-        memory_store: "MemoryStore | None" = None,
+        memory_store: MemoryStore | None = None,
     ):
         self.db = db
         self.embedding = embedding
@@ -157,7 +157,7 @@ class SearchEngine:
             event_before: Only return memories where event_at <= this timestamp.
         """
         clauses = ["m.is_active = true"]
-        params = []
+        params: list = []
 
         if project:
             if isinstance(project, list):
@@ -200,7 +200,7 @@ class SearchEngine:
         return " AND ".join(clauses), params
 
     def _vector_search(
-        self, query: str, project: str | None, memory_type: str | None,
+        self, query: str, project: str | list[str] | None, memory_type: str | list[str] | None,
         limit: int, include_full: bool, required_tags: list[str] | None = None,
         as_of: str | None = None, event_after: str | None = None, event_before: str | None = None,
     ) -> list[dict]:
@@ -241,7 +241,7 @@ class SearchEngine:
         return self._format_results(rows, include_full)
 
     def _keyword_search(
-        self, query: str, project: str | None, memory_type: str | None,
+        self, query: str, project: str | list[str] | None, memory_type: str | list[str] | None,
         limit: int, include_full: bool, required_tags: list[str] | None = None,
         as_of: str | None = None, event_after: str | None = None, event_before: str | None = None,
     ) -> list[dict]:
@@ -279,7 +279,7 @@ class SearchEngine:
         return self._format_results(rows, include_full)
 
     def _hybrid_search(
-        self, query: str, expanded: str, project: str | None, memory_type: str | None,
+        self, query: str, expanded: str, project: str | list[str] | None, memory_type: str | list[str] | None,
         limit: int, include_full: bool, required_tags: list[str] | None = None,
         as_of: str | None = None, event_after: str | None = None, event_before: str | None = None,
     ) -> list[dict]:
@@ -436,7 +436,7 @@ class SearchEngine:
             try:
                 # Use vector + keyword anchors as activation seeds
                 anchor_ids = list(set(list(vector_ranks.keys())[:10] + list(keyword_ranks.keys())[:5]))
-                anchor_scores = {}
+                anchor_scores: dict[int, float] = {}
                 for aid in anchor_ids:
                     # Normalize: rank-1 gets 1.0, lower ranks get less
                     if aid in vector_ranks:
@@ -453,6 +453,7 @@ class SearchEngine:
                     if proj_row:
                         act_project_id = proj_row["id"]
 
+                assert self.activation_engine is not None
                 activations = self.activation_engine.activate(
                     anchor_ids, anchor_scores, project_id=act_project_id,
                 )
@@ -611,7 +612,7 @@ class SearchEngine:
             scored = self._apply_type_boost(scored, memory_types, query_intent)
 
         # Sort by fused score, take top N (or wider pool for MCA/reranking)
-        top_ids = sorted(scored, key=scored.get, reverse=True)[:effective_limit]
+        top_ids = sorted(scored, key=lambda mid: scored[mid], reverse=True)[:effective_limit]
 
         if not top_ids:
             return []
@@ -646,6 +647,7 @@ class SearchEngine:
 
         # MCA gate: filter by keyword coverage
         if use_mca:
+            assert self._mca_gate is not None
             filtered, _mca_stats = self._mca_gate.filter(query, candidates)
             if filtered:
                 candidates = filtered
@@ -655,6 +657,7 @@ class SearchEngine:
 
         # Reranking: cross-encoder picks the best `limit` from the (possibly filtered) pool
         if use_reranker:
+            assert self.reranker is not None
             try:
                 reranked = self.reranker.rerank(query, candidates, limit=limit)
             except Exception:
@@ -708,9 +711,10 @@ class SearchEngine:
             from cairn.core.utils import extract_json
             from cairn.llm.prompts import build_query_classification_messages
             messages = build_query_classification_messages(query)
+            assert self.llm is not None
             raw = self.llm.generate(messages, max_tokens=64)
             data = extract_json(raw, json_type="object")
-            if data and "intent" in data:
+            if data and isinstance(data, dict) and "intent" in data:
                 intent = str(data["intent"]).lower()
                 if intent in QUERY_TYPE_AFFINITY:
                     logger.debug("Query classified as: %s", intent)
@@ -872,9 +876,10 @@ class SearchEngine:
             from cairn.core.utils import extract_json
             from cairn.llm.prompts import build_confidence_gating_messages
             messages = build_confidence_gating_messages(query, results)
+            assert self.llm is not None
             raw = self.llm.generate(messages, max_tokens=512)
             assessment = extract_json(raw, json_type="object")
-            if assessment and "confidence" in assessment:
+            if assessment and isinstance(assessment, dict) and "confidence" in assessment:
                 return assessment
         except Exception:
             logger.warning("Confidence gating failed", exc_info=True)

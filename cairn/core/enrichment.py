@@ -46,13 +46,13 @@ class Enricher:
     def _parse_response(self, raw: str) -> dict:
         """Parse LLM response into enrichment dict. Handles markdown fences."""
         data = extract_json(raw, json_type="object")
-        if data is None:
+        if not isinstance(data, dict):
             raise ValueError(f"No JSON object found in response: {raw[:200]}")
         return self._validate(data)
 
     def _validate(self, data: dict) -> dict:
         """Validate and normalize enrichment fields."""
-        result = {}
+        result: dict[str, str | float | list[str]] = {}
 
         # Tags: list of lowercase strings
         tags = data.get("tags", [])

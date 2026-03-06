@@ -18,13 +18,18 @@ from cairn.core.constants import (
     WorkItemStatus,
     WorkItemType,
 )
-from cairn.core.utils import get_or_create_project, get_project, make_display_id, parse_display_id
+from cairn.core.utils import (
+    get_or_create_project,
+    get_project,
+    make_display_id,
+    parse_display_id,
+)
 from cairn.storage.database import Database
 
 if TYPE_CHECKING:
     from cairn.core.event_bus import EventBus
-    from cairn.embedding.interface import EmbeddingInterface
     from cairn.core.extraction import KnowledgeExtractor
+    from cairn.embedding.interface import EmbeddingInterface
     from cairn.graph.interface import GraphProvider
 
 logger = logging.getLogger(__name__)
@@ -84,6 +89,7 @@ class WorkItemManager:
                RETURNING work_item_next_seq - 1 AS seq_num""",
             (project_id,),
         )
+        assert row is not None
         return row["seq_num"]
 
     def _display_id(self, item: dict) -> str:
@@ -216,6 +222,7 @@ class WorkItemManager:
                 _json_dumps(constraints), risk_tier or 0, seq_num, _created_by,
             ),
         )
+        assert row is not None
 
         # Compute display_id
         prefix_row = self.db.execute_one(
@@ -1350,7 +1357,6 @@ class WorkItemManager:
         been decomposed, and what dependencies exist.
         """
         briefing = self.generate_briefing(work_item_id)
-        wi = briefing["work_item"]
 
         # Fetch existing children
         item = self._resolve_id(work_item_id)
@@ -1464,7 +1470,6 @@ class WorkItemManager:
         done = status_counts.get("done", 0)
         in_progress = status_counts.get("in_progress", 0)
         blocked = status_counts.get("blocked", 0)
-        open_count = status_counts.get("open", 0) + status_counts.get("ready", 0)
 
         # Human-readable progress line
         progress_line = f"{done}/{total} complete"

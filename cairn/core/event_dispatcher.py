@@ -18,8 +18,9 @@ import threading
 import time
 import traceback
 from collections import defaultdict, deque
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
-from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -127,13 +128,13 @@ class HandlerMetrics:
             if timeout:
                 m["timeouts"] += 1
                 m["failures"] += 1
-                m["last_failure"] = datetime.now(timezone.utc).isoformat()
+                m["last_failure"] = datetime.now(UTC).isoformat()
             elif success:
                 m["successes"] += 1
-                m["last_success"] = datetime.now(timezone.utc).isoformat()
+                m["last_success"] = datetime.now(UTC).isoformat()
             else:
                 m["failures"] += 1
-                m["last_failure"] = datetime.now(timezone.utc).isoformat()
+                m["last_failure"] = datetime.now(UTC).isoformat()
 
     def to_dict(self) -> dict[str, dict]:
         with self._lock:

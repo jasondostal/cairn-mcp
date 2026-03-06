@@ -133,7 +133,8 @@ class DeliverableListener:
         )
 
         try:
-            response = self.llm.generate(prompt, max_tokens=1000)
+            assert self.llm is not None
+            response = self.llm.generate([{"role": "user", "content": prompt}], max_tokens=1000)
             parsed = json.loads(response)
 
             self.deliverable_manager.create(

@@ -14,9 +14,9 @@ Defines agent roles (worker, coordinator, researcher, planner, reviewer) with:
 
 from __future__ import annotations
 
+import builtins
 import fnmatch
 from dataclasses import dataclass, field
-
 
 # Recognized capability names
 CAPABILITIES = frozenset({
@@ -328,11 +328,11 @@ class AgentRegistry:
         """List all registered agent definitions."""
         return sorted(self._agents.values(), key=lambda d: d.name)
 
-    def list_by_role(self, role: str) -> list[AgentDefinition]:
+    def list_by_role(self, role: str) -> builtins.list[AgentDefinition]:
         """List agents with a specific role."""
         return [d for d in self._agents.values() if d.role == role]
 
-    def to_dict(self) -> list[dict]:
+    def to_dict(self) -> builtins.list[dict]:
         return [d.to_dict() for d in self.list()]
 
 

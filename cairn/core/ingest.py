@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -87,7 +86,7 @@ class IngestPipeline:
         # Resolve hostname and block private/reserved IPs
         try:
             resolved = socket.getaddrinfo(parsed.hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
-            for family, _, _, _, sockaddr in resolved:
+            for _, _, _, _, sockaddr in resolved:
                 ip = ipaddress.ip_address(sockaddr[0])
                 if ip.is_private or ip.is_reserved or ip.is_loopback or ip.is_link_local:
                     raise ValueError(f"Fetching from private/reserved IP ({ip}) is not allowed")
@@ -136,21 +135,21 @@ class IngestPipeline:
         # Path traversal protection: must be under ingest_dir
         try:
             target.relative_to(ingest_dir)
-        except ValueError:
+        except ValueError as e:
             raise ValueError(
                 f"file_path must be under the ingest directory ({ingest_dir}), "
                 f"got: {file_path}"
-            )
+            ) from e
 
         # No symlink following outside the staging dir
         if target.is_symlink():
             real = target.resolve()
             try:
                 real.relative_to(ingest_dir)
-            except ValueError:
+            except ValueError as e:
                 raise ValueError(
                     f"Symlink target is outside the ingest directory: {file_path}"
-                )
+                ) from e
 
         if not target.is_file():
             raise ValueError(f"File not found: {file_path}")
@@ -255,7 +254,7 @@ class IngestPipeline:
         if target_type in ("memory", "both"):
             chunks = self._chunk(content)
             chunk_count = len(chunks)
-            for i, chunk in enumerate(chunks):
+            for _, chunk in enumerate(chunks):
                 mem = self.memory_store.store(
                     content=chunk.text,
                     project=project,
@@ -269,7 +268,7 @@ class IngestPipeline:
 
         # 5. Log
         target_ids = ([doc_id] if doc_id else []) + memory_ids
-        self._log(source, project, content_hash, target_type, target_ids, chunk_count)
+        self._log(source, project or "", content_hash, target_type, target_ids, chunk_count)
 
         return {
             "status": "ingested",
@@ -291,7 +290,7 @@ class IngestPipeline:
             messages = build_classification_messages(content[:3000])
             raw = self.llm.generate(messages, max_tokens=64)
             parsed = extract_json(raw, json_type="object")
-            if parsed and parsed.get("type") in ("doc", "memory", "both"):
+            if isinstance(parsed, dict) and parsed.get("type") in ("doc", "memory", "both"):
                 return parsed["type"]
         except Exception:
             logger.warning("Classification failed, defaulting to memory", exc_info=True)

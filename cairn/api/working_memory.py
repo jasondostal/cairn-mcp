@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Path, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Path, Query
 from pydantic import BaseModel
 
 from cairn.api.utils import parse_multi
@@ -57,7 +57,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
     @router.post("/working-memory")
     def api_wm_capture(
         project: str = Query(...),
-        body: CaptureRequest = ...,
+        body: CaptureRequest = Body(...),
     ):
         return wm.capture(
             project, body.content,
@@ -68,7 +68,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         )
 
     @router.post("/working-memory/{item_id}/resolve")
-    def api_wm_resolve(item_id: int = Path(...), body: ResolveRequest = ...):
+    def api_wm_resolve(item_id: int = Path(...), body: ResolveRequest = Body(...)):
         result = wm.resolve(
             item_id,
             resolved_into=body.resolved_into,

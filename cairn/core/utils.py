@@ -20,7 +20,10 @@ class ValidationError(Exception):
 def validate_store(content, project, memory_type, importance, tags, session_name):
     """Validate store tool inputs. Raises ValidationError on bad input."""
     from cairn.core.constants import (
-        MAX_CONTENT_SIZE, MAX_NAME_LENGTH, MAX_TAGS, MAX_TAG_LENGTH,
+        MAX_CONTENT_SIZE,
+        MAX_NAME_LENGTH,
+        MAX_TAG_LENGTH,
+        MAX_TAGS,
         VALID_MEMORY_TYPES,
     )
     if not content or not content.strip():
@@ -47,7 +50,7 @@ def validate_store(content, project, memory_type, importance, tags, session_name
 
 def validate_search(query, limit):
     """Validate search tool inputs."""
-    from cairn.core.constants import MAX_SEARCH_QUERY, MAX_LIMIT
+    from cairn.core.constants import MAX_LIMIT, MAX_SEARCH_QUERY
     if not query or not query.strip():
         raise ValidationError("query is required")
     if len(query) > MAX_SEARCH_QUERY:
@@ -90,7 +93,8 @@ def _generate_prefix(db: Database, project_name: str) -> str:
     default_len = DEFAULT_PREFIX_LENGTH
     try:
         from cairn.storage import settings_store
-        val = settings_store.load_one(db, "work_items.default_prefix_length")
+        all_settings = settings_store.load_all(db)
+        val = all_settings.get("work_items.default_prefix_length")
         if val is not None:
             default_len = int(val)
     except Exception:
@@ -154,6 +158,7 @@ def get_or_create_project(db: Database, project_name: str) -> int:
         "RETURNING id",
         (project_name, prefix),
     )
+    assert row is not None
 
     # RBAC: auto-add creator as project owner (ca-124)
     from cairn.core.user import current_user

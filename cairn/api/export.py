@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Query
 from fastapi.responses import Response
@@ -22,11 +22,11 @@ def register_routes(router: APIRouter, svc: Services, **kw):
 
         if format == "markdown":
             lines = [f"# {project} — Memory Export\n"]
-            lines.append(f"Exported: {datetime.now(timezone.utc).isoformat()}")
+            lines.append(f"Exported: {datetime.now(UTC).isoformat()}")
             lines.append(f"Total memories: {len(memories)}\n")
 
             for m in memories:
-                lines.append(f"---\n")
+                lines.append("---\n")
                 lines.append(f"## Memory #{m['id']} — {m['memory_type']}")
                 lines.append(f"**Importance:** {m['importance']}")
                 lines.append(f"**Created:** {m['created_at']}")
@@ -47,7 +47,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
 
         return {
             "project": project,
-            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "exported_at": datetime.now(UTC).isoformat(),
             "memory_count": len(memories),
             "memories": memories,
         }

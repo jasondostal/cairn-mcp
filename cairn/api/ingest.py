@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 def register_routes(router: APIRouter, svc: Services, **kw):
-    db = svc.db
     memory_store = svc.memory_store
     project_manager = svc.project_manager
     ingest_pipeline = svc.ingest_pipeline
@@ -151,7 +150,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 file_path=file_path,
             )
         except ValueError as e:
-            raise HTTPException(status_code=422, detail=str(e))
+            raise HTTPException(status_code=422, detail=str(e)) from e
 
         if result["status"] == "duplicate":
             return JSONResponse(content=result, status_code=200)

@@ -6,8 +6,6 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-import numpy as np
-
 from cairn.config import EmbeddingConfig
 from cairn.core import stats
 from cairn.embedding.interface import EmbeddingInterface

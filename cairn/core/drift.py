@@ -15,7 +15,6 @@ import logging
 from typing import TYPE_CHECKING
 
 from cairn.core.analytics import track_operation
-from cairn.core.utils import get_or_create_project
 
 if TYPE_CHECKING:
     from cairn.storage.database import Database

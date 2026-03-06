@@ -19,7 +19,6 @@ import {
   CheckCircle,
   Info,
   TriangleAlert,
-  X,
 } from "lucide-react";
 
 const POLL_INTERVAL = 15_000;

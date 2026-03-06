@@ -6,46 +6,62 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from cairn.config import Config, LLMCapabilities, load_config
-from cairn.core.analytics import AnalyticsQueryEngine, RollupWorker, UsageTracker, init_analytics_tracker
+from cairn.config import Config, load_config
+from cairn.core.activation import ActivationEngine
+from cairn.core.analytics import (
+    AnalyticsQueryEngine,
+    RollupWorker,
+    UsageTracker,
+    init_analytics_tracker,
+)
+
 # CairnManager removed in v0.37.0 — orient() + temporal graph queries replace cairns
 from cairn.core.clustering import ClusterEngine
-from cairn.core.conversations import ConversationManager
 from cairn.core.consolidation import ConsolidationEngine
-from cairn.core.event_bus import EventBus
-from cairn.core.event_dispatcher import EventDispatcher
+from cairn.core.conversations import ConversationManager
+from cairn.core.deliverables import DeliverableManager
 from cairn.core.drift import DriftDetector
 from cairn.core.enrichment import Enricher
+from cairn.core.event_bus import EventBus
+from cairn.core.event_dispatcher import EventDispatcher
 from cairn.core.extraction import KnowledgeExtractor
 from cairn.core.ingest import IngestPipeline
-from cairn.core.activation import ActivationEngine
 from cairn.core.memory import MemoryStore
-
-from cairn.core.terminal import TerminalHostManager
-from cairn.core.workspace import WorkspaceManager
-from cairn.integrations.interface import WorkspaceBackend
-from cairn.integrations.opencode import OpenCodeClient, OpenCodeBackend
 from cairn.core.projects import ProjectManager
 from cairn.core.reranker import get_reranker
-from cairn.core.reranker.interface import RerankerInterface
 from cairn.core.search import SearchEngine
 from cairn.core.search_v2 import SearchV2
+from cairn.core.stats import init_embedding_stats, init_event_bus_stats, init_llm_stats
 from cairn.core.synthesis import SessionSynthesizer
 from cairn.core.tasks import TaskManager
+from cairn.core.terminal import TerminalHostManager
 from cairn.core.thinking import ThinkingEngine
-from cairn.core.deliverables import DeliverableManager
 from cairn.core.user import UserManager
-from cairn.core.working_memory import WorkingMemoryStore
 from cairn.core.work_items import WorkItemManager
-from cairn.core.stats import init_embedding_stats, init_event_bus_stats, init_llm_stats
+from cairn.core.working_memory import WorkingMemoryStore
+from cairn.core.workspace import WorkspaceManager
 from cairn.embedding import get_embedding_engine
 from cairn.embedding.interface import EmbeddingInterface
 from cairn.graph import get_graph_provider
 from cairn.graph.interface import GraphProvider
+from cairn.integrations.interface import WorkspaceBackend
+from cairn.integrations.opencode import OpenCodeBackend, OpenCodeClient
 from cairn.llm import get_llm
 from cairn.storage.database import Database
 
 if TYPE_CHECKING:
+    from cairn.core.agents import AgentRegistry
+    from cairn.core.alert_worker import AlertEvaluator
+    from cairn.core.alerting import AlertManager
+    from cairn.core.audit import AuditManager
+    from cairn.core.beliefs import BeliefStore
+    from cairn.core.consolidation import ConsolidationWorker
+    from cairn.core.decay import DecayWorker
+    from cairn.core.retention import RetentionManager
+    from cairn.core.retention_worker import RetentionWorker
+    from cairn.core.subscriptions import SubscriptionManager
+    from cairn.core.webhook_worker import WebhookDeliveryWorker
+    from cairn.core.webhooks import WebhookManager
     from cairn.llm.interface import LLMInterface
 
 logger = logging.getLogger(__name__)
@@ -84,21 +100,21 @@ class Services:
     event_dispatcher: EventDispatcher | None
     analytics_tracker: UsageTracker | None
     rollup_worker: RollupWorker | None
-    decay_worker: "DecayWorker | None"
+    decay_worker: DecayWorker | None
     analytics_engine: AnalyticsQueryEngine | None
-    audit_manager: "AuditManager | None"
-    webhook_manager: "WebhookManager | None"
-    webhook_worker: "WebhookDeliveryWorker | None"
-    alert_manager: "AlertManager | None"
-    alert_worker: "AlertEvaluator | None"
-    retention_manager: "RetentionManager | None"
-    retention_worker: "RetentionWorker | None"
-    subscription_manager: "SubscriptionManager | None"
-    agent_registry: "AgentRegistry | None"
+    audit_manager: AuditManager | None
+    webhook_manager: WebhookManager | None
+    webhook_worker: WebhookDeliveryWorker | None
+    alert_manager: AlertManager | None
+    alert_worker: AlertEvaluator | None
+    retention_manager: RetentionManager | None
+    retention_worker: RetentionWorker | None
+    subscription_manager: SubscriptionManager | None
+    agent_registry: AgentRegistry | None
     user_manager: UserManager | None
     working_memory_store: WorkingMemoryStore
-    belief_store: "BeliefStore | None"
-    consolidation_worker: "ConsolidationWorker | None"
+    belief_store: BeliefStore | None
+    consolidation_worker: ConsolidationWorker | None
 
 
 def create_services(config: Config | None = None, db: Database | None = None) -> Services:
@@ -139,11 +155,11 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     init_event_bus_stats()
 
     # LLM enrichment (optional, graceful if disabled)
-    llm = None
-    llm_capable = None
-    llm_fast = None
-    llm_chat = None
-    enricher = None
+    llm: LLMInterface | None = None
+    llm_capable: LLMInterface | None = None
+    llm_fast: LLMInterface | None = None
+    llm_chat: LLMInterface | None = None
+    enricher: Enricher | None = None
     if config.enrichment_enabled:
         try:
             if config.router.enabled:
@@ -299,8 +315,8 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     webhook_manager = None
     webhook_worker = None
     if config.webhooks.enabled:
-        from cairn.core.webhooks import WebhookManager
         from cairn.core.webhook_worker import WebhookDeliveryWorker
+        from cairn.core.webhooks import WebhookManager
         from cairn.listeners.webhook_listener import WebhookListener
         webhook_manager = WebhookManager(db, config.webhooks)
         _webhook_listener = WebhookListener(webhook_manager)
@@ -312,8 +328,8 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     alert_manager = None
     alert_worker = None
     if config.alerting.enabled:
-        from cairn.core.alerting import AlertManager
         from cairn.core.alert_worker import AlertEvaluator
+        from cairn.core.alerting import AlertManager
         alert_manager = AlertManager(db, config.alerting)
         alert_worker = AlertEvaluator(db, alert_manager, webhook_manager, config.alerting)
         logger.info("AlertEvaluator enabled (interval=%ds)", config.alerting.eval_interval_seconds)

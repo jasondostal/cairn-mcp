@@ -9,10 +9,6 @@ Adding a new language:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import tree_sitter as ts
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +89,46 @@ def supported_extensions() -> set[str]:
     return set(_EXTENSION_MAP.keys())
 
 
-def get_language_module(lang: str):
+import importlib
+import types
+
+# Language name -> module path within cairn.code.languages
+_LANG_MODULES: dict[str, str] = {
+    "python": "python",
+    "typescript": "typescript",
+    "typescript_tsx": "typescript",
+    "golang": "go",
+    "rust": "rust",
+    "java": "java",
+    "c": "c",
+    "cpp": "cpp",
+    "php": "php",
+    "ruby": "ruby",
+    "json": "json",
+    "yaml": "yaml",
+    "bash": "bash",
+    "sql": "sql",
+    "markdown": "markdown",
+    "swift": "swift",
+    "scala": "scala",
+    "kotlin": "kotlin",
+    "csharp": "csharp",
+    "hcl": "hcl",
+    "toml": "toml",
+    "dockerfile": "dockerfile",
+    "html": "html",
+    "css": "css",
+    "lua": "lua",
+    "groovy": "groovy",
+    "makefile": "makefile",
+    "objc": "objc",
+    "zig": "zig",
+    "ocaml": "ocaml",
+    "matlab": "matlab",
+}
+
+
+def get_language_module(lang: str) -> types.ModuleType:
     """Lazily load and return a language module.
 
     Each module must expose:
@@ -101,70 +136,12 @@ def get_language_module(lang: str):
       - extract_symbols(tree, source, file_path) -> list[CodeSymbol]
     """
     if lang in _LOADED:
-        return _LOADED[lang]
+        return _LOADED[lang]  # type: ignore[return-value]
 
-    if lang == "python":
-        from cairn.code.languages import python as mod
-    elif lang in ("typescript", "typescript_tsx"):
-        from cairn.code.languages import typescript as mod
-    elif lang == "golang":
-        from cairn.code.languages import go as mod
-    elif lang == "rust":
-        from cairn.code.languages import rust as mod
-    elif lang == "java":
-        from cairn.code.languages import java as mod
-    elif lang == "c":
-        from cairn.code.languages import c as mod
-    elif lang == "cpp":
-        from cairn.code.languages import cpp as mod
-    elif lang == "php":
-        from cairn.code.languages import php as mod
-    elif lang == "ruby":
-        from cairn.code.languages import ruby as mod
-    elif lang == "json":
-        from cairn.code.languages import json as mod
-    elif lang == "yaml":
-        from cairn.code.languages import yaml as mod
-    elif lang == "bash":
-        from cairn.code.languages import bash as mod
-    elif lang == "sql":
-        from cairn.code.languages import sql as mod
-    elif lang == "markdown":
-        from cairn.code.languages import markdown as mod
-    elif lang == "swift":
-        from cairn.code.languages import swift as mod
-    elif lang == "scala":
-        from cairn.code.languages import scala as mod
-    elif lang == "kotlin":
-        from cairn.code.languages import kotlin as mod
-    elif lang == "csharp":
-        from cairn.code.languages import csharp as mod
-    elif lang == "hcl":
-        from cairn.code.languages import hcl as mod
-    elif lang == "toml":
-        from cairn.code.languages import toml as mod
-    elif lang == "dockerfile":
-        from cairn.code.languages import dockerfile as mod
-    elif lang == "html":
-        from cairn.code.languages import html as mod
-    elif lang == "css":
-        from cairn.code.languages import css as mod
-    elif lang == "lua":
-        from cairn.code.languages import lua as mod
-    elif lang == "groovy":
-        from cairn.code.languages import groovy as mod
-    elif lang == "makefile":
-        from cairn.code.languages import makefile as mod
-    elif lang == "objc":
-        from cairn.code.languages import objc as mod
-    elif lang == "zig":
-        from cairn.code.languages import zig as mod
-    elif lang == "ocaml":
-        from cairn.code.languages import ocaml as mod
-    elif lang == "matlab":
-        from cairn.code.languages import matlab as mod
-    else:
+    module_name = _LANG_MODULES.get(lang)
+    if module_name is None:
         raise ValueError(f"Unsupported language: {lang}")
 
+    mod = importlib.import_module(f"cairn.code.languages.{module_name}")
     _LOADED[lang] = mod
     return mod

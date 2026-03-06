@@ -12,12 +12,11 @@ from __future__ import annotations
 import json
 import logging
 import shlex
-import shutil
 import subprocess
 import tempfile
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -166,16 +165,16 @@ class ClaudeCodeBackend(WorkspaceBackend):
 
         try:
             result = self._run_cmd(args, timeout=600)
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as e:
             raise WorkspaceBackendError(
                 f"Claude CLI timed out after 600s for session {session_id}",
                 backend="claude_code",
-            )
-        except FileNotFoundError:
+            ) from e
+        except FileNotFoundError as e:
             raise WorkspaceBackendError(
                 "claude CLI not found — is Claude Code installed?",
                 backend="claude_code",
-            )
+            ) from e
 
         if result.returncode != 0 and not result.stdout.strip():
             raise WorkspaceBackendError(

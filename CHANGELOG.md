@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Unified CI pipeline** (`build.yml`) — consolidated `ci.yml` + `publish.yml` into a
+  single workflow: lint → test → build → Trivy scan → smoke test. Runs on push to main
+  and PRs.
+- **Mypy type checking** — zero-error strict pass across 182 source files. Added mypy
+  config to `pyproject.toml` with pydantic plugin. CI enforces on every push.
+- **Ruff linting** — full ruff pass with import sorting (`I`), security (`S`), bugbear
+  (`B`), and pyupgrade (`UP`) rules. Configured in `pyproject.toml`.
+- **Bandit security scanning** — high-severity security checks in CI.
+- **Hadolint** — Dockerfile best-practices checks for both server and UI images.
+- **ShellCheck** — shell script linting for `entrypoint.sh`.
+- **ESLint + npm audit** — frontend code quality and dependency vulnerability scanning.
+- **pip-audit** — Python dependency vulnerability scanning against lockfile.
+- **Cosign image signing** — GHCR images are signed with keyless Sigstore OIDC.
+- **Trivy container scanning** — CRITICAL/HIGH CVE scanning on built images.
+- **Smoke tests** — post-build API and MCP endpoint health checks.
+
+### Fixed
+- **339 mypy type errors** — added null guards, proper type annotations, narrowed
+  Optional types across 64 source files. Fixed real bugs: `settings_store.load_one()`
+  call to nonexistent method (now uses `load_all()`), `chat_tools.recent_activity()`
+  missing required `since` argument.
+- **Ruff auto-fixes** — import sorting, unused import removal, pyupgrade modernization
+  across ~95 Python files.
+
+### Changed
+- **Language registry** (`cairn/code/languages/__init__.py`) — replaced 30-branch
+  if/elif import chain with `importlib.import_module` dispatch table.
+- **Auth routes** (`cairn/api/auth_routes.py`) — added `_checked_mgr()` helper to
+  narrow `UserManager | None` after auth validation, eliminating 33 union-attr errors.
+
 ## [0.69.2] — 2026-03-02 — "Unified Filters"
 
 ### Added

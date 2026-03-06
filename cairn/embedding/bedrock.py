@@ -48,7 +48,7 @@ class BedrockEmbedding(EmbeddingInterface):
         })
 
         t0 = time.monotonic()
-        last_error = None
+        last_error: Exception | None = None
         for attempt in range(3):
             try:
                 response = self._client.invoke_model(
@@ -88,6 +88,7 @@ class BedrockEmbedding(EmbeddingInterface):
             "embed", self._model_id, latency_ms=latency_ms,
             success=False, error_message=str(last_error),
         )
+        assert last_error is not None
         raise last_error  # All retries exhausted
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:

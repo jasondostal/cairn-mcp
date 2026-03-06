@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Path, HTTPException
+from fastapi import APIRouter, HTTPException, Path, Query
 
 from cairn.api.utils import parse_multi
 from cairn.core.constants import ActivityType

@@ -152,6 +152,9 @@ class QueryRouter:
             if data is None:
                 logger.warning("Router: no JSON in response")
                 return RouterOutput()
+            if not isinstance(data, dict):
+                logger.warning("Router: response is not a JSON object")
+                return RouterOutput()
             result = RouterOutput(**data)
             logger.debug("Routed query to %s (confidence=%.2f)", result.query_type, result.confidence)
             return result

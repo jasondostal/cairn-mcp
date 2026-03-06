@@ -176,6 +176,7 @@ function buildTree(thoughts: Thought[]): TreeNode[] {
 
 // ── Tree view components ───────────────────────────────────
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function TreeThoughtNode({ node, isLast }: { node: TreeNode; isLast: boolean }) {
   const [collapsed, setCollapsed] = useState(false);
   const Icon = typeIcons[node.thought.type] || MessageSquare;

@@ -13,7 +13,7 @@ import { PaginatedList } from "@/components/paginated-list";
 import { SkeletonList } from "@/components/skeleton-list";
 import { EmptyState } from "@/components/empty-state";
 import { PageLayout } from "@/components/page-layout";
-import { Lightbulb, Pin, Zap, Archive, ArrowRight, Plus } from "lucide-react";
+import { Lightbulb, Pin, Zap, Archive, Plus } from "lucide-react";
 
 const TYPE_STYLES: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   hypothesis: { label: "Hypothesis", variant: "default" },

@@ -156,7 +156,7 @@ class ActivationEngine:
 
         nodes = {r["id"] for r in node_rows}
         if not nodes:
-            graph = {"nodes": set(), "edges": {}, "fan_out": {}}
+            graph: dict = {"nodes": set(), "edges": {}, "fan_out": {}}
             self._graph_cache[project_id] = graph
             return graph
 

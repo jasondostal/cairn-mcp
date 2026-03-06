@@ -8,14 +8,14 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import Depends, FastAPI, APIRouter, Request
+from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from cairn import __version__
 from cairn.api.utils import APIKeyAuthMiddleware, JWTAuthMiddleware
 from cairn.core.services import Services
-from cairn.core.trace import new_trace, clear_trace
+from cairn.core.trace import clear_trace, new_trace
 
 
 class TraceMiddleware(BaseHTTPMiddleware):
@@ -91,35 +91,35 @@ def create_api(svc: Services) -> FastAPI:
     router = APIRouter()
 
     # Register all route modules
-    from cairn.api.core import register_routes as reg_core
-    from cairn.api.search import register_routes as reg_search
-    from cairn.api.knowledge import register_routes as reg_knowledge
-    from cairn.api.tasks import register_routes as reg_tasks
-    from cairn.api.thinking import register_routes as reg_thinking
-    from cairn.api.deprecated import register_routes as reg_deprecated
-    from cairn.api.events import register_routes as reg_events
-    from cairn.api.ingest import register_routes as reg_ingest
-    from cairn.api.sessions import register_routes as reg_sessions
-    from cairn.api.analytics import register_routes as reg_analytics
-    from cairn.api.chat import register_routes as reg_chat
-    from cairn.api.conversations import register_routes as reg_conversations
-    from cairn.api.terminal import register_routes as reg_terminal
-    from cairn.api.workspace import register_routes as reg_workspace
-    from cairn.api.export import register_routes as reg_export
-    from cairn.api.work_items import register_routes as reg_work_items
-    from cairn.api.code import register_routes as reg_code
-    from cairn.api.dispatch import register_routes as reg_dispatch
-    from cairn.api.graph_edit import register_routes as reg_graph_edit
-    from cairn.api.audit import register_routes as reg_audit
-    from cairn.api.webhooks import register_routes as reg_webhooks
-    from cairn.api.alerting import register_routes as reg_alerting
-    from cairn.api.retention import register_routes as reg_retention
-    from cairn.api.deliverables import register_routes as reg_deliverables
-    from cairn.api.subscriptions import register_routes as reg_subscriptions
     from cairn.api.agents import register_routes as reg_agents
+    from cairn.api.alerting import register_routes as reg_alerting
+    from cairn.api.analytics import register_routes as reg_analytics
+    from cairn.api.audit import register_routes as reg_audit
     from cairn.api.auth_routes import register_routes as reg_auth
-    from cairn.api.working_memory import register_routes as reg_working_memory
     from cairn.api.beliefs import register_routes as reg_beliefs
+    from cairn.api.chat import register_routes as reg_chat
+    from cairn.api.code import register_routes as reg_code
+    from cairn.api.conversations import register_routes as reg_conversations
+    from cairn.api.core import register_routes as reg_core
+    from cairn.api.deliverables import register_routes as reg_deliverables
+    from cairn.api.deprecated import register_routes as reg_deprecated
+    from cairn.api.dispatch import register_routes as reg_dispatch
+    from cairn.api.events import register_routes as reg_events
+    from cairn.api.export import register_routes as reg_export
+    from cairn.api.graph_edit import register_routes as reg_graph_edit
+    from cairn.api.ingest import register_routes as reg_ingest
+    from cairn.api.knowledge import register_routes as reg_knowledge
+    from cairn.api.retention import register_routes as reg_retention
+    from cairn.api.search import register_routes as reg_search
+    from cairn.api.sessions import register_routes as reg_sessions
+    from cairn.api.subscriptions import register_routes as reg_subscriptions
+    from cairn.api.tasks import register_routes as reg_tasks
+    from cairn.api.terminal import register_routes as reg_terminal
+    from cairn.api.thinking import register_routes as reg_thinking
+    from cairn.api.webhooks import register_routes as reg_webhooks
+    from cairn.api.work_items import register_routes as reg_work_items
+    from cairn.api.working_memory import register_routes as reg_working_memory
+    from cairn.api.workspace import register_routes as reg_workspace
 
     reg_core(router, svc)
     reg_search(router, svc)

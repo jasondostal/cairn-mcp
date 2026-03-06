@@ -164,15 +164,12 @@ def _extract_type_spec(
 
     # Determine kind from the type body
     kind = "type_alias"
-    type_body = None
     for child in spec.children:
         if child.type == "struct_type":
             kind = "struct"
-            type_body = child
             break
         elif child.type == "interface_type":
             kind = "interface"
-            type_body = child
             break
 
     sig_text = _node_text(spec, source).split("\n")[0].rstrip()

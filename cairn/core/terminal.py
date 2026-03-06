@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
 
 from cairn.config import TerminalConfig
 from cairn.core.analytics import track_operation
@@ -85,6 +84,7 @@ class TerminalHostManager:
                 json.dumps(metadata or {}),
             ),
         )
+        assert row is not None
         self.db.commit()
 
         logger.info("Created SSH host '%s' (id=%d, backend=%s)", name, row["id"], backend)

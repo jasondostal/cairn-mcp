@@ -207,7 +207,6 @@ def _extract_method_common(
     """Common method extraction for both declarations and definitions."""
     # Method prefix: - (instance) or + (class)
     full_text = _node_text(node, source).strip()
-    is_class_method = full_text.startswith("+")
 
     # Find the method selector (identifier children)
     name_node = _find_child(node, "identifier")
@@ -230,7 +229,6 @@ def _extract_method_common(
     if not name:
         return None
 
-    prefix = "+" if is_class_method else "-"
     qualified = f"{parent_name}.{name}" if parent_name else name
     sig = full_text.split("{")[0].strip().rstrip(";").strip()
 

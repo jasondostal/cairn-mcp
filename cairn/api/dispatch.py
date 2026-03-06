@@ -42,7 +42,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 assignee=body.assignee,
             )
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:
             logger.exception("dispatch failed")
-            raise HTTPException(status_code=500, detail=f"Dispatch failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Dispatch failed: {e}") from e

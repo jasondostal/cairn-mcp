@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from cairn.core.analytics import track_operation
-from cairn.core.constants import AUTO_SUMMARIZE_EMBED_THRESHOLD, CONTRADICTION_ESCALATION_THRESHOLD, MemoryAction
+from cairn.core.constants import (
+    AUTO_SUMMARIZE_EMBED_THRESHOLD,
+    CONTRADICTION_ESCALATION_THRESHOLD,
+    MemoryAction,
+)
 from cairn.core.utils import extract_json, get_or_create_project
 from cairn.embedding.interface import EmbeddingInterface
 from cairn.storage.database import Database
@@ -107,6 +110,7 @@ class MemoryStore:
         )
         extraction_result = None
         if use_extraction:
+            assert self.knowledge_extractor is not None
             try:
                 # Fetch known entities for canonicalization
                 known_entities = None
@@ -124,9 +128,10 @@ class MemoryStore:
                 logger.warning("Knowledge extraction failed, falling back to enrichment", exc_info=True)
 
         # --- Enrichment (skip for chunks/bulk, or when extraction succeeded) ---
-        enrichment = {}
+        enrichment: dict = {}
         enrichment_status = "none"  # default for enrich=False
         if extraction_result is not None:
+            assert self.knowledge_extractor is not None
             enrichment = self.knowledge_extractor.extract_enrichment_fields(extraction_result)
             enrichment_status = "complete"
         elif enrich and self.enricher:
@@ -182,13 +187,13 @@ class MemoryStore:
         _event_at = None
         _valid_until = None
         if event_at:
-            from datetime import datetime as _dt, timezone as _tz
+            from datetime import datetime as _dt
             try:
                 _event_at = _dt.fromisoformat(event_at)
             except (ValueError, TypeError):
                 pass
         if valid_until:
-            from datetime import datetime as _dt, timezone as _tz
+            from datetime import datetime as _dt
             try:
                 _valid_until = _dt.fromisoformat(valid_until)
             except (ValueError, TypeError):
@@ -232,6 +237,7 @@ class MemoryStore:
             ),
         )
 
+        assert row is not None
         memory_id = row["id"]
 
         # Create caller-specified relationships (part of core write)
@@ -393,6 +399,7 @@ class MemoryStore:
 
         try:
             if extraction_result is not None:
+                assert self.knowledge_extractor is not None
                 try:
                     graph_stats = self.knowledge_extractor.resolve_and_persist(
                         extraction_result, memory_id, project_id,
@@ -504,6 +511,7 @@ class MemoryStore:
 
             from cairn.llm.prompts import build_relationship_extraction_messages
             messages = build_relationship_extraction_messages(content, candidates)
+            assert self.llm is not None
             raw = self.llm.generate(messages, max_tokens=512)
             relations = extract_json(raw, json_type="array")
 
@@ -659,6 +667,7 @@ class MemoryStore:
 
             from cairn.llm.prompts import build_rule_conflict_messages
             messages = build_rule_conflict_messages(content, existing_rules)
+            assert self.llm is not None
             raw = self.llm.generate(messages, max_tokens=512)
             conflicts = extract_json(raw, json_type="array")
 
@@ -719,7 +728,7 @@ class MemoryStore:
         )
 
         # Fetch relations for all requested IDs in one query
-        all_relations = {}
+        all_relations: dict[int, list[dict]] = {}
         if ids:
             rel_placeholders = ",".join(["%s"] * len(ids))
             rel_rows = self.db.execute(
@@ -856,8 +865,8 @@ class MemoryStore:
             return {"id": memory_id, "action": "reactivated"}
 
         if action == MemoryAction.UPDATE:
-            updates = []
-            params = []
+            updates: list[str] = []
+            params: list = []
 
             if content is not None:
                 updates.append("content = %s")
@@ -944,6 +953,7 @@ class MemoryStore:
             """,
             (project_names,),
         )
+        assert count_row is not None
         total = count_row["total"]
 
         query = """

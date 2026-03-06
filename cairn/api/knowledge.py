@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Body, Query, Path, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Path, Query
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -98,7 +98,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
     @router.get("/docs/{doc_id}/pdf")
     def api_doc_pdf(doc_id: int = Path(...)):
         """Export a document as PDF via server-side markdown→HTML→PDF."""
-        import markdown as md
+        import markdown as md  # type: ignore[import-untyped]
         import weasyprint
 
         doc = project_manager.get_doc(doc_id)
@@ -270,7 +270,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             tuple(id_list),
         )
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         nodes = []
         for r in nodes_raw:
             updated = r["updated_at"] if r["updated_at"] else r["created_at"]
@@ -338,7 +338,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
 
         entity_types = [entity_type] if entity_type else None
 
-        return graph_provider.get_knowledge_graph_visualization(
+        return graph_provider.get_knowledge_graph_visualization(  # type: ignore[attr-defined]
             project_id=project_id,
             entity_types=entity_types,
             limit=limit,
@@ -368,7 +368,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             )
         except Exception as e:
             logger.exception("orient failed")
-            raise HTTPException(status_code=500, detail=f"Orient failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Orient failed: {e}") from e
 
     # --- Project mutations ---
 
@@ -377,14 +377,14 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         try:
             return project_manager.link(name, body.target, body.link_type)
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     @router.patch("/projects/{name}/prefix")
     def api_update_prefix(name: str = Path(...), body: UpdatePrefixBody = Body(...)):
         try:
             return project_manager.update_prefix(name, body.prefix)
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     @router.patch("/docs/{doc_id}")
     def api_update_doc(doc_id: int = Path(...), body: UpdateDocBody = Body(...)):

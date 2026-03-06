@@ -13,7 +13,11 @@ from pathlib import Path
 
 import tree_sitter as ts
 
-from cairn.code.languages import get_language_module, language_for_extension, language_for_filename
+from cairn.code.languages import (
+    get_language_module,
+    language_for_extension,
+    language_for_filename,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -156,8 +160,9 @@ class CodeParser:
         Returns:
             List of ParseResult, one per supported file found.
         """
-        from cairn.code.languages import supported_extensions
         import pathspec
+
+        from cairn.code.languages import supported_extensions
 
         exclude = exclude or set()
         # .git is always excluded — it's not source code

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -75,7 +75,7 @@ class ClusterEngine:
             return True
 
         # Check time staleness
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         age_hours = (now - run["created_at"]).total_seconds() / 3600
         if age_hours > self.config.staleness_hours:
             return True
@@ -231,7 +231,7 @@ class ClusterEngine:
             len(cluster_data), noise_count, memory_count, duration_ms,
         )
 
-        result = {
+        result: dict[str, int | str] = {
             "cluster_count": len(cluster_data),
             "noise_count": noise_count,
             "memory_count": memory_count,
@@ -355,7 +355,7 @@ class ClusterEngine:
             )
 
         if not rows:
-            return {"points": [], "generated_at": datetime.now(timezone.utc).isoformat()}
+            return {"points": [], "generated_at": datetime.now(UTC).isoformat()}
 
         # Sample down if too many memories (t-SNE is O(n^2))
         total_available = len(rows)
@@ -376,7 +376,7 @@ class ClusterEngine:
         # t-SNE needs at least 2 samples; perplexity must be < n_samples
         n = len(embeddings)
         if n < 2:
-            return {"points": [], "generated_at": datetime.now(timezone.utc).isoformat()}
+            return {"points": [], "generated_at": datetime.now(UTC).isoformat()}
 
         perplexity = min(30, max(2, n - 1))
         tsne = TSNE(n_components=2, perplexity=perplexity, random_state=42, metric="cosine")
@@ -406,9 +406,9 @@ class ClusterEngine:
                 "cluster_label": cinfo[1] if cinfo else None,
             })
 
-        result = {
+        result: dict[str, list | str | bool | int] = {
             "points": points,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
         if sampled:
             result["sampled"] = True
@@ -631,6 +631,7 @@ class ClusterEngine:
                     cd["confidence"],
                 ),
             )
+            assert row is not None
             cluster_id = row["id"]
 
             # Insert members

@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from cairn.graph.config import Neo4jConfig
-from cairn.graph.interface import Entity, GraphProvider, Statement, ThinkingSequenceNode, ThoughtNode, TaskNode, WorkItemNode
+from cairn.graph.interface import Entity, GraphProvider, Statement
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class Neo4jGraphProvider(GraphProvider):
             auth=(self.config.user, self.config.password),
         )
         # Verify connectivity
-        self._driver.verify_connectivity()
+        self._driver.verify_connectivity()  # type: ignore[attr-defined]
         logger.info("Connected to Neo4j at %s", self.config.uri)
 
     def close(self) -> None:
@@ -158,7 +158,7 @@ class Neo4jGraphProvider(GraphProvider):
                 embedding=embedding,
                 project_id=project_id,
                 attributes=attrs_json,
-                now=datetime.now(timezone.utc).isoformat(),
+                now=datetime.now(UTC).isoformat(),
             )
         return entity_uuid
 
@@ -231,7 +231,7 @@ class Neo4jGraphProvider(GraphProvider):
                 project_id=project_id,
                 valid_at=valid_at,
                 attributes=attrs_json,
-                now=datetime.now(timezone.utc).isoformat(),
+                now=datetime.now(UTC).isoformat(),
             )
         return stmt_uuid
 
@@ -321,7 +321,7 @@ class Neo4jGraphProvider(GraphProvider):
                 SET s.invalid_at = $now, s.invalidated_by = $invalidated_by
                 """,
                 statement_id=statement_id,
-                now=datetime.now(timezone.utc).isoformat(),
+                now=datetime.now(UTC).isoformat(),
                 invalidated_by=invalidated_by,
             )
 
@@ -852,7 +852,7 @@ class Neo4jGraphProvider(GraphProvider):
                 project_id=project_id,
                 goal=goal,
                 status=status,
-                now=datetime.now(timezone.utc).isoformat(),
+                now=datetime.now(UTC).isoformat(),
             )
         return seq_uuid
 
@@ -882,7 +882,7 @@ class Neo4jGraphProvider(GraphProvider):
                 thought_type=thought_type,
                 content=content,
                 embedding=content_embedding,
-                now=datetime.now(timezone.utc).isoformat(),
+                now=datetime.now(UTC).isoformat(),
             )
             # CONTAINS edge: sequence -> thought
             session.run(
@@ -904,7 +904,7 @@ class Neo4jGraphProvider(GraphProvider):
                 SET ts.status = 'completed', ts.completed_at = $now
                 """,
                 uuid=sequence_uuid,
-                now=datetime.now(timezone.utc).isoformat(),
+                now=datetime.now(UTC).isoformat(),
             )
 
     def create_task(
@@ -932,7 +932,7 @@ class Neo4jGraphProvider(GraphProvider):
                 project_id=project_id,
                 description=description,
                 status=status,
-                now=datetime.now(timezone.utc).isoformat(),
+                now=datetime.now(UTC).isoformat(),
             )
         return task_uuid
 
@@ -944,7 +944,7 @@ class Neo4jGraphProvider(GraphProvider):
                 SET tk.status = 'completed', tk.completed_at = $now
                 """,
                 uuid=task_uuid,
-                now=datetime.now(timezone.utc).isoformat(),
+                now=datetime.now(UTC).isoformat(),
             )
 
     def link_task_to_memory(self, task_uuid: str, episode_id: int) -> None:
@@ -1049,7 +1049,7 @@ class Neo4jGraphProvider(GraphProvider):
                 """,
                 uuid=work_item_uuid,
                 risk_tier=risk_tier,
-                now=datetime.now(timezone.utc).isoformat(),
+                now=datetime.now(UTC).isoformat(),
             )
 
     def link_work_item_to_memory(self, work_item_uuid: str, episode_id: int) -> None:
@@ -1104,7 +1104,7 @@ class Neo4jGraphProvider(GraphProvider):
 
     def ensure_work_item(self, pg_id: int, project_id: int, **fields) -> str:
         """MERGE WorkItem by pg_id. Creates if missing, updates if exists."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         props = {k: v for k, v in fields.items() if v is not None}
         props["updated_at"] = now
         with self._session() as session:
@@ -1126,7 +1126,7 @@ class Neo4jGraphProvider(GraphProvider):
 
     def ensure_task(self, pg_id: int, project_id: int, **fields) -> str:
         """MERGE Task by pg_id. Creates if missing, updates if exists."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         props = {k: v for k, v in fields.items() if v is not None}
         props["updated_at"] = now
         with self._session() as session:
@@ -1148,7 +1148,7 @@ class Neo4jGraphProvider(GraphProvider):
 
     def ensure_thinking_sequence(self, pg_id: int, project_id: int, **fields) -> str:
         """MERGE ThinkingSequence by pg_id."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         props = {k: v for k, v in fields.items() if v is not None}
         props["updated_at"] = now
         with self._session() as session:
@@ -1170,7 +1170,7 @@ class Neo4jGraphProvider(GraphProvider):
 
     def ensure_thought(self, pg_id: int, sequence_pg_id: int, **fields) -> str:
         """MERGE Thought by pg_id and link to parent sequence."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         props = {k: v for k, v in fields.items() if v is not None}
         props["updated_at"] = now
         with self._session() as session:
@@ -1276,7 +1276,7 @@ class Neo4jGraphProvider(GraphProvider):
         language: str,
         content_hash: str,
     ) -> str:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         with self._session() as session:
             result = session.run(
                 """
@@ -1310,7 +1310,7 @@ class Neo4jGraphProvider(GraphProvider):
         docstring: str | None = None,
         parent_name: str | None = None,
     ) -> str:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         props = {
             "name": name,
             "kind": kind,
@@ -1433,7 +1433,7 @@ class Neo4jGraphProvider(GraphProvider):
         Splits work into chunks of `chunk_size` files per transaction to avoid
         blowing Neo4j's transaction memory limit on large codebases.
         """
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         path_to_uuid: dict[str, str] = {}
 
         with self._session() as session:
@@ -1571,7 +1571,7 @@ class Neo4jGraphProvider(GraphProvider):
             if import_edges:
                 edge_rows = [{"src": src, "dst": dst} for src, dst in import_edges]
                 for i in range(0, len(edge_rows), chunk_size * 4):
-                    chunk = edge_rows[i : i + chunk_size * 4]
+                    edge_chunk = edge_rows[i : i + chunk_size * 4]
                     with session.begin_transaction() as tx:
                         tx.run(
                             """
@@ -1580,7 +1580,7 @@ class Neo4jGraphProvider(GraphProvider):
                             MATCH (b:CodeFile {path: e.dst, project_id: $pid})
                             MERGE (a)-[:IMPORTS]->(b)
                             """,
-                            edges=chunk,
+                            edges=edge_chunk,
                             pid=project_id,
                         )
                         tx.commit()
@@ -1652,14 +1652,13 @@ class Neo4jGraphProvider(GraphProvider):
     ) -> list[dict]:
         with self._session() as session:
             result = session.run(
-                """
-                MATCH p = (affected:CodeFile)-[:IMPORTS*1..%(depth)s]->(target:CodeFile {path: $path, project_id: $pid})
+                f"""
+                MATCH p = (affected:CodeFile)-[:IMPORTS*1..{int(max_depth)}]->(target:CodeFile {{path: $path, project_id: $pid}})
                 WHERE affected.project_id = $pid AND affected <> target
                 WITH affected, min(length(p)) AS depth
                 RETURN affected.path AS path, affected.language AS language, depth
                 ORDER BY depth, affected.path
-                """
-                % {"depth": int(max_depth)},
+                """,
                 path=path,
                 pid=project_id,
             )

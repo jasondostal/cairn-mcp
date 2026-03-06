@@ -252,7 +252,6 @@ def _extract_property(
     sig = _node_text(node, source).split("\n")[0].strip()
 
     # Determine if var or let
-    binding = _find_child(node, "value_binding_pattern")
     prop_kind = "property"
 
     return CodeSymbol(

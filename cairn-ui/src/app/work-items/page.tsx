@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type WorkItem, type GatedItem, type WorkItemStatus, type WorkItemDetail, type WorkspaceBackendInfo, type Deliverable } from "@/lib/api";
+import { api, type WorkItem, type GatedItem, type WorkspaceBackendInfo, type Deliverable } from "@/lib/api";
 import { usePageFilters } from "@/lib/use-page-filters";
 import { useLocalStorage } from "@/lib/use-local-storage";
 import { useKeyboardNav } from "@/lib/use-keyboard-nav";

@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Any, TYPE_CHECKING
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from cairn.storage.database import Database
@@ -56,6 +56,7 @@ class AuditManager:
                 json.dumps(metadata or {}),
             ),
         )
+        assert row is not None
         self.db.commit()
         audit_id = row["id"]
         logger.debug(
@@ -100,7 +101,7 @@ class AuditManager:
             where.append("a.project_id = (SELECT id FROM projects WHERE name = %s)")
             params.append(project)
         if days:
-            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+            cutoff = datetime.now(UTC) - timedelta(days=days)
             where.append("a.created_at >= %s")
             params.append(cutoff)
 

@@ -86,7 +86,7 @@ class CodeSummarizer:
         else:
             embeddings = []
 
-        for sym, desc, emb in zip(symbols, descriptions, embeddings):
+        for sym, desc, emb in zip(symbols, descriptions, embeddings, strict=True):
             results.append({
                 "qualified_name": sym.get("qualified_name", ""),
                 "file_path": sym.get("file_path", ""),

@@ -129,7 +129,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                                 stats.event_bus_stats.record_sse_event()
                             last_heartbeat = time.monotonic()
                             break  # Process one at a time to check heartbeat
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         pass
 
                     # Send heartbeat if needed
@@ -241,7 +241,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                                 stats.event_bus_stats.record_sse_event()
                             last_heartbeat = time.monotonic()
                             break
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         pass
 
                     now = time.monotonic()

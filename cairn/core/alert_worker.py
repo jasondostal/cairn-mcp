@@ -8,10 +8,9 @@ Follows the same thread lifecycle pattern as WebhookDeliveryWorker and DecayWork
 
 from __future__ import annotations
 
-import json
 import logging
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from cairn.core.alerting import AlertManager
@@ -125,7 +124,7 @@ class AlertEvaluator:
                         "severity": rule["severity"],
                         "message": result["message"],
                         "context": result.get("context", {}),
-                        "fired_at": datetime.now(timezone.utc).isoformat(),
+                        "fired_at": datetime.now(UTC).isoformat(),
                     }
                     self.webhook_manager.create_delivery(
                         webhook_id=webhook_id,

@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -81,7 +81,7 @@ def create_access_token(
     """Create a JWT access token."""
     import jwt
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": str(user_id),
         "username": username,
@@ -119,6 +119,7 @@ class UserManager:
     def is_first_user(self) -> bool:
         """Check if no users exist yet (for bootstrap admin)."""
         row = self.db.execute_one("SELECT COUNT(*) AS cnt FROM users")
+        assert row is not None
         return row["cnt"] == 0
 
     def create_user(
@@ -142,6 +143,7 @@ class UserManager:
             """,
             (username, email, pw_hash, role),
         )
+        assert row is not None
         self.db.commit()
         return {
             "id": row["id"],
@@ -208,8 +210,8 @@ class UserManager:
         email: str | None = None,
     ) -> dict | None:
         """Update user fields (admin endpoint)."""
-        updates = []
-        params = []
+        updates: list[str] = []
+        params: list[str | int | bool] = []
         if role is not None:
             updates.append("role = %s")
             params.append(role)
@@ -331,6 +333,7 @@ class UserManager:
             """,
             (user_id, name, token_hash, token_prefix, expires_at),
         )
+        assert row is not None
         self.db.commit()
         return {
             "id": row["id"],
@@ -388,7 +391,7 @@ class UserManager:
         )
         if not row:
             return None
-        if row["expires_at"] and row["expires_at"] < datetime.now(timezone.utc):
+        if row["expires_at"] and row["expires_at"] < datetime.now(UTC):
             return None
         # Update last_used_at
         self.db.execute(
@@ -424,6 +427,7 @@ class UserManager:
             """,
             (username, email, role, external_id),
         )
+        assert row is not None
         self.db.commit()
         return {
             "id": row["id"],
@@ -446,6 +450,7 @@ class UserManager:
             """,
             (name, description, source),
         )
+        assert row is not None
         self.db.commit()
         return {
             "id": row["id"], "name": row["name"], "description": row["description"],
@@ -459,11 +464,13 @@ class UserManager:
             "SELECT id, name, description, source, created_at, updated_at FROM groups WHERE id = %s",
             (group_id,),
         )
+        if not row:
+            return None
         return {
             "id": row["id"], "name": row["name"], "description": row["description"],
             "source": row["source"], "created_at": row["created_at"].isoformat(),
             "updated_at": row["updated_at"].isoformat(),
-        } if row else None
+        }
 
     def get_group_by_name(self, name: str) -> dict | None:
         """Fetch a group by name."""
@@ -471,11 +478,13 @@ class UserManager:
             "SELECT id, name, description, source, created_at, updated_at FROM groups WHERE name = %s",
             (name,),
         )
+        if not row:
+            return None
         return {
             "id": row["id"], "name": row["name"], "description": row["description"],
             "source": row["source"], "created_at": row["created_at"].isoformat(),
             "updated_at": row["updated_at"].isoformat(),
-        } if row else None
+        }
 
     def list_groups(self, limit: int = 50, offset: int = 0) -> dict:
         """List all groups with member/project counts."""
@@ -506,7 +515,8 @@ class UserManager:
 
     def update_group(self, group_id: int, *, name: str | None = None, description: str | None = None) -> dict | None:
         """Update group fields."""
-        updates, params = [], []
+        updates: list[str] = []
+        params: list[str | int] = []
         if name is not None:
             updates.append("name = %s")
             params.append(name)

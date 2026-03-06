@@ -8,7 +8,6 @@ import {
   Kanban,
   AlertTriangle,
   Radio,
-  Workflow,
 } from "lucide-react";
 
 interface SessionsResponse {

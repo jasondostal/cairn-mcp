@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Query, Path
+from fastapi import APIRouter, Body, HTTPException, Path, Query
 from pydantic import BaseModel
 
 from cairn.core.services import Services
-from cairn.core.utils import get_project, get_or_create_project
+from cairn.core.utils import get_or_create_project, get_project
+from cairn.graph.interface import GraphProvider
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +30,13 @@ class MergeEntitiesBody(BaseModel):
     duplicate_id: str
 
 
-def _require_graph(graph_provider):
+def _require_graph(graph_provider: GraphProvider | None) -> GraphProvider:
     if not graph_provider:
         raise HTTPException(
             status_code=503,
             detail="Knowledge graph not available (Neo4j not configured)",
         )
+    return graph_provider
 
 
 def register_routes(router: APIRouter, svc: Services, **kw):
@@ -49,11 +51,11 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         entity_type: str | None = Query(None),
         limit: int = Query(50, ge=1, le=500),
     ):
-        _require_graph(graph_provider)
+        graph = _require_graph(graph_provider)
         project_id = get_project(db, project)
         if project_id is None:
             return {"items": [], "total": 0}
-        entities = graph_provider.list_entities(
+        entities = graph.list_entities(
             project_id=project_id,
             search=search,
             entity_type=entity_type,
@@ -63,12 +65,12 @@ def register_routes(router: APIRouter, svc: Services, **kw):
 
     @router.get("/entities/{entity_uuid}")
     def api_get_entity(entity_uuid: str = Path(...)):
-        _require_graph(graph_provider)
-        entity = graph_provider.get_entity(entity_uuid)
+        graph = _require_graph(graph_provider)
+        entity = graph.get_entity(entity_uuid)
         if not entity:
             raise HTTPException(status_code=404, detail="Entity not found")
         # Also fetch statements
-        statements = graph_provider.find_entity_statements(entity_uuid)
+        statements = graph.find_entity_statements(entity_uuid)
         return {
             "uuid": entity.uuid,
             "name": entity.name,
@@ -90,10 +92,10 @@ def register_routes(router: APIRouter, svc: Services, **kw):
 
     @router.post("/entities")
     def api_create_entity(body: CreateEntityBody):
-        _require_graph(graph_provider)
+        graph = _require_graph(graph_provider)
         project_id = get_or_create_project(db, body.project)
         name_embedding = embedding.embed(body.name)
-        entity_uuid = graph_provider.create_entity(
+        entity_uuid = graph.create_entity(
             name=body.name,
             entity_type=body.entity_type,
             embedding=name_embedding,
@@ -107,13 +109,13 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         }
 
     @router.patch("/entities/{entity_uuid}")
-    def api_update_entity(entity_uuid: str = Path(...), body: UpdateEntityBody = ...):
-        _require_graph(graph_provider)
+    def api_update_entity(entity_uuid: str = Path(...), body: UpdateEntityBody = Body(...)):
+        graph = _require_graph(graph_provider)
         # Re-embed if name changed
         new_embedding = None
         if body.name:
             new_embedding = embedding.embed(body.name)
-        found = graph_provider.update_entity(
+        found = graph.update_entity(
             entity_id=entity_uuid,
             name=body.name,
             entity_type=body.entity_type,
@@ -121,7 +123,9 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         )
         if not found:
             raise HTTPException(status_code=404, detail="Entity not found")
-        entity = graph_provider.get_entity(entity_uuid)
+        entity = graph.get_entity(entity_uuid)
+        if entity is None:
+            raise HTTPException(status_code=404, detail="Entity not found after update")
         return {
             "uuid": entity.uuid,
             "name": entity.name,
@@ -131,25 +135,25 @@ def register_routes(router: APIRouter, svc: Services, **kw):
 
     @router.delete("/entities/{entity_uuid}")
     def api_delete_entity(entity_uuid: str = Path(...)):
-        _require_graph(graph_provider)
+        graph = _require_graph(graph_provider)
         # Verify it exists first
-        entity = graph_provider.get_entity(entity_uuid)
+        entity = graph.get_entity(entity_uuid)
         if not entity:
             raise HTTPException(status_code=404, detail="Entity not found")
-        result = graph_provider.delete_entity(entity_uuid)
+        result = graph.delete_entity(entity_uuid)
         return result
 
     @router.post("/entities/merge")
     def api_merge_entities(body: MergeEntitiesBody):
-        _require_graph(graph_provider)
+        graph = _require_graph(graph_provider)
         # Verify both exist
-        canonical = graph_provider.get_entity(body.canonical_id)
+        canonical = graph.get_entity(body.canonical_id)
         if not canonical:
             raise HTTPException(status_code=404, detail="Canonical entity not found")
-        duplicate = graph_provider.get_entity(body.duplicate_id)
+        duplicate = graph.get_entity(body.duplicate_id)
         if not duplicate:
             raise HTTPException(status_code=404, detail="Duplicate entity not found")
-        result = graph_provider.merge_entities(body.canonical_id, body.duplicate_id)
+        result = graph.merge_entities(body.canonical_id, body.duplicate_id)
         return result
 
     @router.get("/entities/{entity_uuid}/statements")
@@ -157,12 +161,12 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         entity_uuid: str = Path(...),
         aspects: str | None = Query(None),
     ):
-        _require_graph(graph_provider)
-        entity = graph_provider.get_entity(entity_uuid)
+        graph = _require_graph(graph_provider)
+        entity = graph.get_entity(entity_uuid)
         if not entity:
             raise HTTPException(status_code=404, detail="Entity not found")
         aspect_list = aspects.split(",") if aspects else None
-        statements = graph_provider.find_entity_statements(entity_uuid, aspects=aspect_list)
+        statements = graph.find_entity_statements(entity_uuid, aspects=aspect_list)
         return {
             "entity_uuid": entity_uuid,
             "statements": [
@@ -183,9 +187,9 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         statement_uuid: str = Path(...),
         invalidated_by: str = Query("user"),
     ):
-        _require_graph(graph_provider)
+        graph = _require_graph(graph_provider)
         try:
-            graph_provider.invalidate_statement(statement_uuid, invalidated_by=invalidated_by)
+            graph.invalidate_statement(statement_uuid, invalidated_by=invalidated_by)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from e
         return {"invalidated": True, "uuid": statement_uuid}

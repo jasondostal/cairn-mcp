@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from cairn.core.analytics import track_operation
@@ -135,7 +135,7 @@ class CairnManager:
         title = f"Session: {session_name}" if memory_count > 0 else f"Empty session: {session_name}"
         narrative = None
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Find earliest stone timestamp for started_at
         started_at = now
@@ -155,6 +155,7 @@ class CairnManager:
              _json_or_none(events), memory_count, started_at, now),
         )
 
+        assert row is not None
         cairn_id = row["id"]
 
         # Link stones to cairn
@@ -231,6 +232,7 @@ class CairnManager:
             "SELECT id, title, narrative, memory_count, started_at, set_at FROM cairns WHERE id = %s",
             (cairn_id,),
         )
+        assert row is not None
 
         return {
             "id": row["id"],

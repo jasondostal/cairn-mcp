@@ -10,7 +10,7 @@ import queue
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -37,7 +37,7 @@ def init_analytics_tracker(tracker: UsageTracker | None) -> None:
 class UsageEvent:
     """Single MCP tool invocation record."""
     operation: str
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     project_id: int | None = None
     session_name: str | None = None
     tokens_in: int = 0
@@ -152,7 +152,7 @@ class UsageTracker:
                         success=ev.success,
                         tokens_in=ev.tokens_in,
                         tokens_out=ev.tokens_out,
-                        project_id=ev.project_id,
+                        project_id=str(ev.project_id) if ev.project_id is not None else None,
                         model=ev.model,
                         error_message=ev.error_message,
                     )
@@ -187,7 +187,7 @@ def _find_db(args):
     return None
 
 
-def track_operation(operation_name: str, tracker: UsageTracker | None = _SENTINEL):
+def track_operation(operation_name: str, tracker: UsageTracker | None | object = _SENTINEL):
     """Decorator that records operation invocations and manages DB connections.
 
     Applied to core service methods so all transports (MCP, REST, CLI)
@@ -210,7 +210,7 @@ def track_operation(operation_name: str, tracker: UsageTracker | None = _SENTINE
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            from cairn.core.trace import current_trace, new_trace, clear_trace
+            from cairn.core.trace import clear_trace, current_trace, new_trace
 
             # Resolve which tracker to use
             active_tracker = tracker if tracker is not _SENTINEL else _analytics_tracker
@@ -414,7 +414,6 @@ class RollupWorker:
             p95 = self._percentile(latencies, 95)
             p99 = self._percentile(latencies, 99)
 
-            coalesce_pid = project_id if project_id is not None else 0
 
             self.db.execute(
                 """
@@ -452,7 +451,7 @@ class RollupWorker:
 
     def _cleanup_old_events(self) -> None:
         """Delete raw events older than retention period."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=self.retention_days)
+        cutoff = datetime.now(UTC) - timedelta(days=self.retention_days)
         self.db.execute(
             "DELETE FROM usage_events WHERE timestamp < %s", (cutoff,),
         )
@@ -484,7 +483,7 @@ class AnalyticsQueryEngine:
 
     def overview(self, days: int = 7) -> dict:
         """KPI values + sparkline arrays."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
 
         # Totals from raw events
         totals = self.db.execute_one(
@@ -528,7 +527,7 @@ class AnalyticsQueryEngine:
         project: str | None = None, operation: str | None = None,
     ) -> dict:
         """Time series of operations, tokens, errors."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
 
         if granularity == "hour":
             trunc = "hour"
@@ -582,7 +581,7 @@ class AnalyticsQueryEngine:
         limit: int = 50, offset: int = 0,
     ) -> dict:
         """Raw event log with pagination."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
 
         where = ["ue.timestamp >= %s"]
         params: list[Any] = [cutoff]
@@ -650,7 +649,7 @@ class AnalyticsQueryEngine:
 
     def projects_breakdown(self, days: int = 7) -> dict:
         """Per-project stats with trend direction."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
         prev_cutoff = cutoff - timedelta(days=days)
 
         # Current period
@@ -712,7 +711,7 @@ class AnalyticsQueryEngine:
 
     def models_performance(self, days: int = 7) -> dict:
         """Per-model latency percentiles, error rates, token totals."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
 
         rows = self.db.execute(
             """
@@ -752,7 +751,7 @@ class AnalyticsQueryEngine:
 
     def daily_token_budget(self, days: int = 7) -> dict:
         """Per-model daily token usage with estimated cost for budget monitoring."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
 
         # Cost rates from config (USD per 1k tokens)
         input_rate = self._config.cost_llm_input_per_1k if self._config else 0.003
@@ -829,7 +828,7 @@ class AnalyticsQueryEngine:
 
     def memory_type_growth(self, days: int = 90, granularity: str = "day") -> dict:
         """Cumulative memory counts by type per time bucket. Stacked area chart data."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
         trunc = "day" if granularity == "day" else "hour"
 
         rows = self.db.execute(
@@ -872,7 +871,7 @@ class AnalyticsQueryEngine:
 
     def entity_counts_sparkline(self, days: int = 30) -> dict:
         """Daily creation counts for memories, projects, cairns, clusters. KPI sparkline data."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
 
         def _daily_counts(table: str, ts_col: str) -> list[dict]:
             rows = self.db.execute(
@@ -928,7 +927,7 @@ class AnalyticsQueryEngine:
 
     def activity_heatmap(self, days: int = 365) -> dict:
         """Daily operation counts from usage_events. Pre-aggregated heatmap data."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
 
         rows = self.db.execute(
             """

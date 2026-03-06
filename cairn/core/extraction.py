@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, field_validator
 
-from cairn.core.constants import VALID_MEMORY_TYPES
 from cairn.core.extraction_prompt import (
     build_extraction_messages,
     build_extraction_retry_messages,
@@ -207,7 +206,7 @@ class KnowledgeExtractor:
     def _parse(self, raw: str) -> ExtractionResult:
         """Parse LLM JSON response into validated ExtractionResult."""
         data = extract_json(raw, json_type="object")
-        if data is None:
+        if not isinstance(data, dict):
             raise ValueError(f"No JSON object found in response: {raw[:200]}")
         return ExtractionResult(**data)
 

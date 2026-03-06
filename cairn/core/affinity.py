@@ -14,7 +14,7 @@ Returns ranked agent suggestions for the ready queue and dispatch.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from cairn.core.agents import AgentDefinition, AgentRegistry, validate_dispatch
 from cairn.core.antipatterns import extract_file_paths

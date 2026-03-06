@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from cairn import __version__
-from cairn.config import Config, EXPERIMENTAL_CAPABILITIES
+from cairn.config import EXPERIMENTAL_CAPABILITIES, Config
 from cairn.core import stats
 from cairn.core.analytics import track_operation
 from cairn.storage.database import Database
@@ -12,10 +12,14 @@ from cairn.storage.database import Database
 @track_operation("status")
 def get_status(db: Database, config: Config, graph_provider=None) -> dict:
     """Aggregate system health metrics."""
-    memory_count = db.execute_one(
+    memory_count_row = db.execute_one(
         "SELECT COUNT(*) as count FROM memories WHERE is_active = true"
     )
-    project_count = db.execute_one("SELECT COUNT(*) as count FROM projects")
+    assert memory_count_row is not None
+    memory_count = memory_count_row
+    project_count_row = db.execute_one("SELECT COUNT(*) as count FROM projects")
+    assert project_count_row is not None
+    project_count = project_count_row
     type_counts = db.execute(
         """
         SELECT memory_type, COUNT(*) as count
@@ -24,7 +28,9 @@ def get_status(db: Database, config: Config, graph_provider=None) -> dict:
         """
     )
 
-    cluster_count = db.execute_one("SELECT COUNT(*) as count FROM clusters")
+    cluster_count_row = db.execute_one("SELECT COUNT(*) as count FROM clusters")
+    assert cluster_count_row is not None
+    cluster_count = cluster_count_row
     last_clustering = db.execute_one(
         "SELECT created_at, cluster_count, memory_count FROM clustering_runs "
         "ORDER BY created_at DESC LIMIT 1"

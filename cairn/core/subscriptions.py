@@ -5,14 +5,15 @@ Part of ca-146: pattern-based subscribe/notify for human/agent collaboration.
 
 from __future__ import annotations
 
+import builtins
 import fnmatch
 import logging
-from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from cairn.core.utils import get_or_create_project
 
 if TYPE_CHECKING:
+    from cairn.listeners.push_notifier import PushNotifier
     from cairn.storage.database import Database
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ _SEVERITY_MAP: dict[str, str] = {
 class SubscriptionManager:
     """Manages event subscriptions and creates in-app notifications."""
 
-    def __init__(self, db: Database, push_notifier: "PushNotifier | None" = None):
+    def __init__(self, db: Database, push_notifier: PushNotifier | None = None):
         self.db = db
         self.push_notifier = push_notifier
 
@@ -71,6 +72,7 @@ class SubscriptionManager:
              project_id),
         )
         self.db.commit()
+        assert row is not None
         return self._sub_to_dict(row)
 
     def list(
@@ -78,7 +80,7 @@ class SubscriptionManager:
         channel: str | None = None,
         project: str | None = None,
         active_only: bool = True,
-    ) -> list[dict]:
+    ) -> builtins.list[dict]:
         """List subscriptions with optional filters."""
         where = []
         params: list = []
@@ -154,7 +156,7 @@ class SubscriptionManager:
     # Pattern matching
     # ------------------------------------------------------------------
 
-    def find_matching(self, event_type: str, project_id: int | None = None) -> list[dict]:
+    def find_matching(self, event_type: str, project_id: int | None = None) -> builtins.list[dict]:
         """Find active subscriptions whose patterns match an event type.
 
         Pattern syntax:
@@ -211,6 +213,7 @@ class SubscriptionManager:
              json.dumps(metadata or {})),
         )
         self.db.commit()
+        assert row is not None
         return self._notif_to_dict(row)
 
     def list_notifications(
@@ -236,6 +239,8 @@ class SubscriptionManager:
         unread_row = self.db.execute_one(
             "SELECT COUNT(*) AS total FROM notifications WHERE is_read = false",
         )
+        assert count_row is not None
+        assert unread_row is not None
         return {
             "items": [self._notif_to_dict(r) for r in rows],
             "total": count_row["total"],
@@ -266,6 +271,7 @@ class SubscriptionManager:
         row = self.db.execute_one(
             "SELECT COUNT(*) AS total FROM notifications WHERE is_read = false",
         )
+        assert row is not None
         return row["total"]
 
     # ------------------------------------------------------------------

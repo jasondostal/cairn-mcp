@@ -40,11 +40,13 @@ def init(config: OTelConfig) -> None:
 
     try:
         from opentelemetry import trace
-        from opentelemetry.trace import StatusCode
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+            OTLPSpanExporter,
+        )
+        from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.trace import StatusCode
     except ImportError:
         logger.warning(
             "OTel enabled but opentelemetry packages not installed. "
@@ -117,12 +119,13 @@ def export_span(
             if ctx.entry_point:
                 span.set_attribute("cairn.entry_point", ctx.entry_point)
 
-        if success:
-            span.set_status(_StatusCode.OK)
-        else:
-            span.set_status(_StatusCode.ERROR, error_message or "operation failed")
-            if error_message:
-                span.set_attribute("cairn.error", error_message)
+        if _StatusCode is not None:
+            if success:
+                span.set_status(_StatusCode.OK)
+            else:
+                span.set_status(_StatusCode.ERROR, error_message or "operation failed")
+                if error_message:
+                    span.set_attribute("cairn.error", error_message)
 
         span.end(end_time=int(time.time() * 1e9))
 

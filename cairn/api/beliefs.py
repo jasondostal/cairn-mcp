@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Path, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Path, Query
 from pydantic import BaseModel
 
 from cairn.core.services import Services
@@ -56,7 +56,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
     @router.post("/beliefs")
     def api_belief_crystallize(
         project: str = Query(...),
-        body: CrystallizeRequest = ...,
+        body: CrystallizeRequest = Body(...),
     ):
         return bs.crystallize(
             project, body.content,
@@ -68,7 +68,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
     @router.patch("/beliefs/{belief_id}/challenge")
     def api_belief_challenge(
         belief_id: int = Path(...),
-        body: ChallengeRequest = ...,
+        body: ChallengeRequest = Body(...),
     ):
         result = bs.challenge(
             belief_id,
@@ -83,7 +83,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
     @router.patch("/beliefs/{belief_id}/retract")
     def api_belief_retract(
         belief_id: int = Path(...),
-        body: RetractRequest = ...,
+        body: RetractRequest = Body(...),
     ):
         result = bs.retract(belief_id, reason=body.reason)
         if "error" in result:

@@ -74,7 +74,7 @@ class BedrockLLM(LLMInterface):
             kwargs["system"] = system_prompts
 
         t0 = time.monotonic()
-        last_error = None
+        last_error: Exception | None = None
         for attempt in range(3):
             try:
                 response = self._client.converse(**kwargs)
@@ -120,6 +120,7 @@ class BedrockLLM(LLMInterface):
             "llm.generate", self.model_id, latency_ms=latency_ms,
             success=False, error_message=str(last_error),
         )
+        assert last_error is not None
         raise last_error  # All retries exhausted
 
     # -- Tool calling support --
@@ -135,8 +136,8 @@ class BedrockLLM(LLMInterface):
     ) -> LLMResponse:
         """Generate with tool calling via Bedrock Converse API."""
         if self._tools_unsupported:
-            text = self.generate(messages, max_tokens)
-            return LLMResponse(text=text, stop_reason="end_turn")
+            fallback_text = self.generate(messages, max_tokens)
+            return LLMResponse(text=fallback_text, stop_reason="end_turn")
 
         system_prompts, converse_messages = self._prepare_tool_messages(messages)
 
@@ -163,7 +164,7 @@ class BedrockLLM(LLMInterface):
             kwargs["system"] = system_prompts
 
         t0 = time.monotonic()
-        last_error = None
+        last_error: Exception | None = None
         for attempt in range(3):
             try:
                 response = self._client.converse(**kwargs)
@@ -173,7 +174,7 @@ class BedrockLLM(LLMInterface):
                 content = message.get("content", [])
                 stop_reason = response.get("stopReason", "end_turn")
 
-                text = None
+                text: str | None = None
                 tool_calls = []
                 for block in content:
                     if "text" in block:
@@ -231,6 +232,7 @@ class BedrockLLM(LLMInterface):
             "llm.generate_with_tools", self.model_id, latency_ms=latency_ms,
             success=False, error_message=str(last_error),
         )
+        assert last_error is not None
         raise last_error
 
     def generate_stream(

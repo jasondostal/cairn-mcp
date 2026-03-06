@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 
-from fastapi import APIRouter, Path, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Path, WebSocket, WebSocketDisconnect
 
 from cairn.core.services import Services
 
@@ -46,7 +46,7 @@ def register_routes(router: APIRouter, svc: Services, *, app=None, **kw):
                 metadata=body.get("metadata"),
             )
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     @router.get("/terminal/hosts/{host_id}")
     def api_terminal_get_host(host_id: int = Path(...)):

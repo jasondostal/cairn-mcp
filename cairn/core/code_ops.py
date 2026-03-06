@@ -41,8 +41,8 @@ def run_code_index(
     if not config.capabilities.code_intelligence:
         return {"error": "Code intelligence is disabled. Set CAIRN_CODE_INTELLIGENCE=true."}
 
-    from cairn.code.parser import CodeParser
     from cairn.code.indexer import CodeIndexer
+    from cairn.code.parser import CodeParser
     from cairn.core.utils import get_or_create_project
 
     project_id = get_or_create_project(db, project)
@@ -111,8 +111,8 @@ def run_code_query(
         return {"error": "Code intelligence is disabled. Set CAIRN_CODE_INTELLIGENCE=true."}
 
     from cairn.code.query import (
-        query_dependents,
         query_dependencies,
+        query_dependents,
         query_impact,
         query_search,
         query_structure,
@@ -300,10 +300,16 @@ def run_arch_check(
         return {"error": "Code intelligence is disabled. Set CAIRN_CODE_INTELLIGENCE=true."}
 
     from cairn.code.arch_rules import (
-        load_config as load_arch_config,
-        load_config_from_string,
         check as arch_check_source,
+    )
+    from cairn.code.arch_rules import (
         check_graph as arch_check_graph,
+    )
+    from cairn.code.arch_rules import (
+        load_config as load_arch_config,
+    )
+    from cairn.code.arch_rules import (
+        load_config_from_string,
     )
     from cairn.core.utils import get_or_create_project
 

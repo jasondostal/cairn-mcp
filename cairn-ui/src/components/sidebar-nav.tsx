@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { cn } from "@/lib/utils";
 import { navGroups } from "@/lib/nav";
-import { ChevronRight, LogOut, Settings, User } from "lucide-react";
+import { ChevronRight, LogOut, Settings } from "lucide-react";
 import { useState, useEffect } from "react";
 import { NotificationBell } from "@/components/notification-bell";
 import { useAuth } from "@/components/auth-provider";
@@ -123,6 +122,7 @@ export function SidebarNav() {
             <SidebarMenuButton size="lg" asChild tooltip="Cairn">
               <Link href="/">
                 <div className="flex aspect-square size-8 items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src="/cairn-mark-trail.svg"
                     alt="Cairn"

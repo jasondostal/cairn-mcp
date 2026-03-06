@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Task } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { usePageFilters } from "@/lib/use-page-filters";
@@ -126,7 +126,7 @@ export default function TasksPage() {
   const [quickCreating, setQuickCreating] = useState(false);
   const quickInputRef = useRef<HTMLInputElement>(null);
 
-  function reload() {
+  const reload = useCallback(() => {
     setLoading(true);
     setError(null);
     api
@@ -136,9 +136,9 @@ export default function TasksPage() {
       .then((r) => setTasks(r.items))
       .catch((err) => setError(err?.message || "Failed to load tasks"))
       .finally(() => setLoading(false));
-  }
+  }, [filters.projectFilter, showCompleted, filters.showAllProjects]);
 
-  useEffect(() => { reload(); }, [filters.projectFilter, showCompleted, filters.showAllProjects]);
+  useEffect(() => { reload(); }, [reload]);
 
   async function handleQuickCreate() {
     const desc = quickDesc.trim();

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Body, Query, Path, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Path, Query
 from pydantic import BaseModel
 
 from cairn.api.utils import parse_multi
@@ -58,7 +58,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         limit: int = Query(50, ge=1, le=200),
         offset: int = Query(0, ge=0),
     ):
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
         projects = parse_multi(project)
         types = parse_multi(type)
 
@@ -93,6 +93,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             """,
             tuple(params),
         )
+        assert count_row is not None
         total = count_row["total"]
 
         # Optional cluster join

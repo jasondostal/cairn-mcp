@@ -17,7 +17,8 @@ MAX_AGENT_ITERATIONS = 10
 
 
 def register_routes(router: APIRouter, svc: Services, **kw):
-    from cairn.chat_tools import CHAT_TOOLS, SYSTEM_PROMPT as CHAT_SYSTEM_PROMPT, ChatToolExecutor
+    from cairn.chat_tools import CHAT_TOOLS, ChatToolExecutor
+    from cairn.chat_tools import SYSTEM_PROMPT as CHAT_SYSTEM_PROMPT
 
     llm = svc.llm
     conv_mgr = svc.conversation_manager
@@ -40,7 +41,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 response = llm.generate(messages, max_tokens=max_tokens)
                 return {"response": response, "model": llm.get_model_name()}
             except Exception as e:
-                raise HTTPException(status_code=502, detail=f"LLM error: {e}")
+                raise HTTPException(status_code=502, detail=f"LLM error: {e}") from e
 
         executor = ChatToolExecutor(svc)
 
@@ -94,7 +95,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             }
         except Exception as e:
             logger.error("Agentic chat error: %s", e, exc_info=True)
-            raise HTTPException(status_code=502, detail=f"LLM error: {e}")
+            raise HTTPException(status_code=502, detail=f"LLM error: {e}") from e
 
     # ---- SSE streaming endpoint ----
 
@@ -113,6 +114,9 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         and the final assistant response to the conversation store.
         If project is set, adds project context to the system prompt.
         """
+        if llm is None:
+            yield _sse_event("error", {"message": "LLM backend not configured"})
+            return
         model_name = llm.get_model_name()
         use_tools = llm.supports_tool_use()
 

@@ -196,8 +196,8 @@ export default function GraphPage() {
   const [error, setError] = useState<string | null>(null);
   const [nodeCount, setNodeCount] = useState(0);
   const [edgeCount, setEdgeCount] = useState(0);
-  const [pgRelationTypes, setPgRelationTypes] = useState<Record<string, number>>({});
-  const [neo4jEntityTypes, setNeo4jEntityTypes] = useState<Record<string, number>>({});
+  const [, setPgRelationTypes] = useState<Record<string, number>>({});
+  const [, setNeo4jEntityTypes] = useState<Record<string, number>>({});
 
   // --- Filters ---
   const filters = usePageFilters();
@@ -267,7 +267,6 @@ export default function GraphPage() {
         setMode("postgres");
       })
       .finally(() => setProbing(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load data after probing completes

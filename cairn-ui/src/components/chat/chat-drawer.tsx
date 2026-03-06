@@ -198,15 +198,8 @@ function DemoChat() {
 /* ---------- Real chat drawer ---------- */
 
 export function ChatDrawer({ open, onOpenChange, demo }: ChatDrawerProps) {
-  // Demo mode — static content, no runtime
-  if (demo) return open ? <DemoChat /> : null;
-
   // Create adapter instance once — persists for component lifetime
-  const adapterRef = useRef<ChatAdapterInstance | null>(null);
-  if (!adapterRef.current) {
-    adapterRef.current = createChatAdapter();
-  }
-  const chatAdapter = adapterRef.current;
+  const [chatAdapter] = useState(() => createChatAdapter());
 
   const [activeConvId, setActiveConvId] = useState<number | null>(null);
   const [initialMessages, setInitialMessages] = useState<
@@ -219,19 +212,21 @@ export function ChatDrawer({ open, onOpenChange, demo }: ChatDrawerProps) {
 
   // Load projects when drawer first opens
   useEffect(() => {
+    if (demo) return;
     if (open && projects.length === 0) {
       api.projects({ limit: "100" }).then((r) => setProjects(r.items)).catch(() => {});
     }
-  }, [open, projects.length]);
+  }, [open, projects.length, demo]);
 
   // Sync project scope to adapter
   useEffect(() => {
+    if (demo) return;
     chatAdapter.setProjectScope(activeProject || null);
-  }, [activeProject, chatAdapter]);
+  }, [activeProject, chatAdapter, demo]);
 
   const runtime = useLocalRuntime(chatAdapter.adapter, { initialMessages });
   const runtimeRef = useRef(runtime);
-  runtimeRef.current = runtime;
+  useEffect(() => { runtimeRef.current = runtime; }, [runtime]);
 
   const handleNewChat = useCallback(() => {
     setActiveConvId(null);
@@ -260,6 +255,7 @@ export function ChatDrawer({ open, onOpenChange, demo }: ChatDrawerProps) {
 
   // Wire adapter callbacks
   useEffect(() => {
+    if (demo) return;
     chatAdapter.setOnConversationCreated((id) => setActiveConvId(id));
     chatAdapter.setOnStreamComplete(() => {
       setSidebarRefreshKey((k) => k + 1);
@@ -268,15 +264,17 @@ export function ChatDrawer({ open, onOpenChange, demo }: ChatDrawerProps) {
       chatAdapter.setOnConversationCreated(null);
       chatAdapter.setOnStreamComplete(null);
     };
-  }, [chatAdapter]);
+  }, [chatAdapter, demo]);
 
   // Sync conversation ID to adapter
   useEffect(() => {
+    if (demo) return;
     if (!activeConvId) chatAdapter.setConversationId(null);
-  }, [activeConvId, chatAdapter]);
+  }, [activeConvId, chatAdapter, demo]);
 
   // Reload messages when reopening with an existing conversation
   useEffect(() => {
+    if (demo) return;
     if (open && activeConvId) {
       api.conversationMessages(activeConvId).then((r) => {
         const msgs = toThreadMessages(r.messages);
@@ -284,7 +282,10 @@ export function ChatDrawer({ open, onOpenChange, demo }: ChatDrawerProps) {
         chatAdapter.setConversationId(activeConvId);
       }).catch(() => {});
     }
-  }, [open, activeConvId, chatAdapter]);
+  }, [open, activeConvId, chatAdapter, demo]);
+
+  // Demo mode — static content, no runtime
+  if (demo) return open ? <DemoChat /> : null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

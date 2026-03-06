@@ -7,13 +7,14 @@ delivery records for the WebhookDeliveryWorker to process.
 
 from __future__ import annotations
 
+import builtins
 import hashlib
 import hmac
 import json
 import logging
 import os
-from datetime import datetime, timezone
-from typing import Any, TYPE_CHECKING
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from cairn.config import WebhookConfig
@@ -93,6 +94,7 @@ class WebhookManager:
                 json.dumps(metadata or {}),
             ),
         )
+        assert row is not None
         self.db.commit()
         logger.info("Webhook created: id=%d name='%s' url=%s", row["id"], name, url)
         return self._row_to_dict(row)
@@ -223,7 +225,7 @@ class WebhookManager:
     # Matching
     # ------------------------------------------------------------------
 
-    def find_matching_webhooks(self, event_type: str, project_id: int | None) -> list[dict]:
+    def find_matching_webhooks(self, event_type: str, project_id: int | None) -> builtins.list[dict]:
         """Find all active webhooks that match an event type.
 
         Checks webhooks scoped to the event's project AND global webhooks
@@ -278,6 +280,7 @@ class WebhookManager:
             """,
             (webhook_id, event_id, json.dumps(request_body), self.config.max_attempts),
         )
+        assert row is not None
         self.db.commit()
         return row["id"]
 
@@ -293,7 +296,7 @@ class WebhookManager:
             "payload": event.get("payload", {}),
             "webhook_id": webhook["id"],
             "webhook_name": webhook["name"],
-            "delivered_at": datetime.now(timezone.utc).isoformat(),
+            "delivered_at": datetime.now(UTC).isoformat(),
         }
 
     # ------------------------------------------------------------------

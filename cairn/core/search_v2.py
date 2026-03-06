@@ -21,7 +21,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from cairn.core.budget import estimate_tokens
-from cairn.core.handlers import HANDLERS, SearchContext, _blend_results, _fetch_memories_by_ids
+from cairn.core.handlers import HANDLERS, SearchContext, _blend_results
 from cairn.core.router import QueryRouter
 
 if TYPE_CHECKING:
@@ -323,6 +323,7 @@ class SearchV2:
             and self.capabilities.reranking
         )
         if use_reranker:
+            assert self.reranker is not None
             try:
                 candidates = self.reranker.rerank(query, candidates, limit=limit)
             except Exception:
@@ -396,6 +397,8 @@ class SearchV2:
         project_id: int,
     ) -> bool:
         """Check if a memory's graph statements reference any of the query entities."""
+        if self.graph is None:
+            return True
         try:
             for entity_uuid in query_entity_uuids:
                 episodes = self.graph.find_entity_episodes(entity_uuid)
@@ -412,7 +415,7 @@ class SearchV2:
     ) -> list[dict]:
         """Drop least relevant candidates from tail until under token budget."""
         total_tokens = 0
-        result = []
+        result: list[dict] = []
 
         for c in candidates:
             content = c.get("content", "")

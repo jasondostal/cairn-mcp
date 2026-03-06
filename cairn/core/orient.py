@@ -6,15 +6,18 @@ Extracted from server.py so both transports call identical code.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from cairn.core.budget import apply_list_budget, estimate_tokens_for_dict
 from cairn.core.constants import (
-    BUDGET_RULES_PER_ITEM, BUDGET_SEARCH_PER_ITEM,
-    ORIENT_ALLOC_RULES, ORIENT_ALLOC_LEARNINGS,
-    ORIENT_ALLOC_TRAIL, ORIENT_ALLOC_WORKING_MEMORY,
+    BUDGET_RULES_PER_ITEM,
+    BUDGET_SEARCH_PER_ITEM,
+    ORIENT_ALLOC_LEARNINGS,
+    ORIENT_ALLOC_RULES,
+    ORIENT_ALLOC_TRAIL,
     ORIENT_ALLOC_WORK_ITEMS,
+    ORIENT_ALLOC_WORKING_MEMORY,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,7 +39,7 @@ def fetch_trail_data(
     Neither source can suppress the other.
     """
     if not since:
-        since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        since = (datetime.now(UTC) - timedelta(days=7)).isoformat()
 
     project_id = None
     if project:
@@ -180,7 +183,7 @@ def run_orient(
     tokens_used = 0
 
     # --- Section 1: Rules (30%) ---
-    rules_data = []
+    rules_data: list[dict] = []
     try:
         result = memory_store.get_rules(project)
         rules_items = result.get("items", [])
@@ -203,7 +206,7 @@ def run_orient(
         budget_learnings += budget_rules
 
     # --- Section 2: Learnings (25% + surplus) ---
-    learnings_data = []
+    learnings_data: list[dict] = []
     try:
         learnings_results = search_engine.search(
             query="learning",
@@ -253,7 +256,7 @@ def run_orient(
         budget_working_memory += budget_trail
 
     # --- Section 3.5: Working Memory (10% + surplus) ---
-    working_memory_data = []
+    working_memory_data: list[dict] = []
     if working_memory_store and project:
         try:
             wm_items = working_memory_store.orient_items(project, limit=5)

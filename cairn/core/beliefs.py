@@ -77,6 +77,7 @@ class BeliefStore:
             (project_id, agent_name, content, domain, confidence,
              evidence_ids or [], provenance),
         )
+        assert row is not None
         self.db.commit()
 
         belief_id = row["id"]

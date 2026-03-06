@@ -100,7 +100,7 @@ class Database:
         with self.conn.cursor() as cur:
             cur.execute(query, params)
             if cur.description:
-                return cur.fetchall()
+                return cur.fetchall()  # type: ignore[return-value]
             return []
 
     def execute_one(self, query: str, params: tuple | list | None = None) -> dict | None:
@@ -108,7 +108,7 @@ class Database:
         with self.conn.cursor() as cur:
             cur.execute(query, params)
             if cur.description:
-                return cur.fetchone()
+                return cur.fetchone()  # type: ignore[return-value]
             return None
 
     def commit(self) -> None:
@@ -262,21 +262,21 @@ class Database:
             self.execute(f"ALTER TABLE working_memory ALTER COLUMN embedding TYPE vector({dimensions})")
 
         # Recreate HNSW indexes
-        self.execute(f"""
+        self.execute("""
             CREATE INDEX idx_memories_embedding
             ON memories USING hnsw (embedding vector_cosine_ops)
             WITH (m = 16, ef_construction = 64)
         """)
 
         if wi_exists:
-            self.execute(f"""
+            self.execute("""
                 CREATE INDEX idx_work_items_embedding
                 ON work_items USING hnsw (embedding vector_cosine_ops)
                 WITH (m = 16, ef_construction = 64)
             """)
 
         if wm_exists:
-            self.execute(f"""
+            self.execute("""
                 CREATE INDEX idx_working_memory_embedding
                 ON working_memory USING hnsw (embedding vector_cosine_ops)
                 WITH (m = 16, ef_construction = 64)
@@ -309,7 +309,7 @@ class Database:
             self.execute("DROP INDEX IF EXISTS idx_work_items_embedding")
             self.execute("UPDATE work_items SET embedding = NULL")
             self.execute(f"ALTER TABLE work_items ALTER COLUMN embedding TYPE vector({dimensions})")
-            self.execute(f"""
+            self.execute("""
                 CREATE INDEX idx_work_items_embedding
                 ON work_items USING hnsw (embedding vector_cosine_ops)
                 WITH (m = 16, ef_construction = 64)

@@ -7,7 +7,7 @@ Register custom providers via ``register_reranker_provider(name, factory_fn)``.
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 from cairn.config import RerankerConfig
 from cairn.core.reranker.interface import RerankerInterface

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import json as _json
 import logging
 from typing import TYPE_CHECKING
@@ -35,6 +36,7 @@ class ConversationManager:
                          metadata, created_at, updated_at""",
             (title, project, model, _json.dumps(metadata or {})),
         )
+        assert row is not None
         self.db.commit()
         return row
 
@@ -53,9 +55,11 @@ class ConversationManager:
 
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
-        total = self.db.execute_one(
+        total_row = self.db.execute_one(
             f"SELECT COUNT(*) AS count FROM conversations {where}", params,
-        )["count"]
+        )
+        assert total_row is not None
+        total = total_row["count"]
 
         items = self.db.execute(
             f"""SELECT id, title, project, model, message_count,
@@ -102,7 +106,7 @@ class ConversationManager:
         conversation_id: int,
         role: str,
         content: str | None = None,
-        tool_calls: list[dict] | None = None,
+        tool_calls: builtins.list[dict] | None = None,
         model: str | None = None,
         token_count: int | None = None,
     ) -> dict:
@@ -114,6 +118,7 @@ class ConversationManager:
                          model, token_count, created_at""",
             (conversation_id, role, content, _json.dumps(tool_calls) if tool_calls else None, model, token_count),
         )
+        assert row is not None
         # Update conversation metadata
         self.db.execute(
             """UPDATE conversations
@@ -131,7 +136,7 @@ class ConversationManager:
         conversation_id: int,
         limit: int = 200,
         offset: int = 0,
-    ) -> list[dict]:
+    ) -> builtins.list[dict]:
         return self.db.execute(
             """SELECT id, conversation_id, role, content, tool_calls,
                       model, token_count, created_at

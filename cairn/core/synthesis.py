@@ -78,6 +78,7 @@ class SessionSynthesizer:
         )
 
         if can_synthesize:
+            assert self.llm is not None
             try:
                 messages = build_session_synthesis_messages(rows, project, session_name)
                 narrative = self.llm.generate(messages, max_tokens=1024)

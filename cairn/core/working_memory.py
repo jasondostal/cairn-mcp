@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from cairn.core.analytics import track_operation
 from cairn.core.constants import (
-    VALID_WM_TYPES,
     VALID_WM_RESOLUTION_TYPES,
+    VALID_WM_TYPES,
     WM_DEFAULT_SALIENCE,
     WM_SALIENCE_BOOST_FLOOR,
     WM_SALIENCE_DECAY_RATE,
@@ -120,6 +120,7 @@ class WorkingMemoryStore:
             (project_id, content, item_type, salience, author,
              embedding_vec, session_name),
         )
+        assert row is not None
         self.db.commit()
 
         item_id = row["id"]
@@ -499,9 +500,9 @@ class WorkingMemoryStore:
         if pinned:
             return base_salience
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if updated_at.tzinfo is None:
-            updated_at = updated_at.replace(tzinfo=timezone.utc)
+            updated_at = updated_at.replace(tzinfo=UTC)
 
         elapsed = (now - updated_at).total_seconds() / 86400.0  # days
         if elapsed <= 0:

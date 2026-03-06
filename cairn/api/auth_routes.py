@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -80,7 +81,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
     user_mgr: UserManager | None = svc.user_manager
     config = svc.config
 
-    def _require_auth_enabled():
+    def _require_auth_enabled() -> JSONResponse | None:
         if not config.auth.enabled or not config.auth.jwt_secret:
             return JSONResponse(
                 status_code=404,
@@ -92,6 +93,11 @@ def register_routes(router: APIRouter, svc: Services) -> None:
                 content={"detail": "UserManager not initialized"},
             )
         return None
+
+    def _checked_mgr() -> UserManager:
+        """Return user_mgr after auth is verified (narrows Optional type)."""
+        assert user_mgr is not None
+        return user_mgr
 
     def _require_admin():
         ctx = current_user()
@@ -111,14 +117,14 @@ def register_routes(router: APIRouter, svc: Services) -> None:
             return err
 
         # Check if user already exists
-        existing = user_mgr.get_by_username(body.username)
+        existing = _checked_mgr().get_by_username(body.username)
         if existing:
             return JSONResponse(
                 status_code=409,
                 content={"detail": "Username already taken"},
             )
 
-        user = user_mgr.create_user(
+        user = _checked_mgr().create_user(
             body.username, body.password, email=body.email,
         )
         token = create_access_token(
@@ -134,7 +140,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if err:
             return err
 
-        user = user_mgr.get_by_username(body.username)
+        user = _checked_mgr().get_by_username(body.username)
         if not user or not user.get("password_hash") or not verify_password(body.password, user["password_hash"]):
             return JSONResponse(
                 status_code=401,
@@ -171,7 +177,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if not ctx:
             return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
 
-        user = user_mgr.get_by_id(ctx.user_id)
+        user = _checked_mgr().get_by_id(ctx.user_id)
         if not user:
             return JSONResponse(status_code=404, content={"detail": "User not found"})
 
@@ -189,7 +195,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         enabled = config.auth.enabled and bool(config.auth.jwt_secret)
         has_users = True
         if enabled and user_mgr:
-            has_users = not user_mgr.is_first_user()
+            has_users = not _checked_mgr().is_first_user()
         oidc_enabled = (
             config.auth.oidc.enabled
             and bool(config.auth.oidc.provider_url)
@@ -215,14 +221,14 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if err:
             return err
 
-        existing = user_mgr.get_by_username(body.username)
+        existing = _checked_mgr().get_by_username(body.username)
         if existing:
             return JSONResponse(
                 status_code=409,
                 content={"detail": "Username already taken"},
             )
 
-        user = user_mgr.create_user(
+        user = _checked_mgr().create_user(
             body.username, body.password, email=body.email, role=body.role,
         )
         return user
@@ -236,7 +242,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if err:
             return err
 
-        return user_mgr.list_users(limit=limit, offset=offset)
+        return _checked_mgr().list_users(limit=limit, offset=offset)
 
     @router.patch("/auth/users/{user_id}")
     def update_user(user_id: int, body: UpdateUserRequest):
@@ -247,7 +253,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if err:
             return err
 
-        result = user_mgr.update_user(
+        result = _checked_mgr().update_user(
             user_id, role=body.role, is_active=body.is_active, email=body.email,
         )
         if not result:
@@ -334,7 +340,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
             # Get or create user
             oidc_cfg = config.auth.oidc
             admin_groups = [g.strip() for g in oidc_cfg.admin_groups.split(",") if g.strip()] if oidc_cfg.admin_groups else None
-            user = user_mgr.get_or_create_oidc_user(
+            user = _checked_mgr().get_or_create_oidc_user(
                 external_id=external_id,
                 claims=claims,
                 default_role=oidc_cfg.default_role,
@@ -345,7 +351,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
             oidc_groups = claims.get("groups", [])
             if isinstance(oidc_groups, list) and oidc_groups:
                 try:
-                    user_mgr.sync_oidc_groups(user["id"], oidc_groups)
+                    _checked_mgr().sync_oidc_groups(user["id"], oidc_groups)
                 except Exception:
                     logger.warning("OIDC group sync failed for user %s", user["id"], exc_info=True)
 
@@ -381,7 +387,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
 
         # Only admin or project owner can add members
         if ctx.role != "admin":
-            members = user_mgr.list_project_members(project_id)
+            members = _checked_mgr().list_project_members(project_id)
             is_owner = any(
                 m["user_id"] == ctx.user_id and m["project_role"] == "owner"
                 for m in members
@@ -392,7 +398,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
                     content={"detail": "Only project owners or admins can add members"},
                 )
 
-        user_mgr.add_project_member(body.user_id, project_id, body.role)
+        _checked_mgr().add_project_member(body.user_id, project_id, body.role)
         return {"status": "ok"}
 
     @router.delete("/projects/{project_name}/members/{member_user_id}")
@@ -410,7 +416,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
             return JSONResponse(status_code=404, content={"detail": "Project not found"})
 
         if ctx.role != "admin":
-            members = user_mgr.list_project_members(project_id)
+            members = _checked_mgr().list_project_members(project_id)
             is_owner = any(
                 m["user_id"] == ctx.user_id and m["project_role"] == "owner"
                 for m in members
@@ -421,7 +427,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
                     content={"detail": "Only project owners or admins can remove members"},
                 )
 
-        user_mgr.remove_project_member(member_user_id, project_id)
+        _checked_mgr().remove_project_member(member_user_id, project_id)
         return {"status": "ok"}
 
     # --- Personal Access Tokens ---
@@ -437,12 +443,12 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if not ctx:
             return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
 
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
         expires_at = None
         if body.expires_in_days:
-            expires_at = datetime.now(timezone.utc) + timedelta(days=body.expires_in_days)
+            expires_at = datetime.now(UTC) + timedelta(days=body.expires_in_days)
 
-        result = user_mgr.create_api_token(ctx.user_id, body.name, expires_at)
+        result = _checked_mgr().create_api_token(ctx.user_id, body.name, expires_at)
         return result
 
     @router.get("/auth/tokens")
@@ -456,7 +462,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if not ctx:
             return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
 
-        return user_mgr.list_api_tokens(ctx.user_id)
+        return _checked_mgr().list_api_tokens(ctx.user_id)
 
     @router.delete("/auth/tokens/{token_id}")
     def revoke_token(token_id: int):
@@ -469,7 +475,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if not ctx:
             return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
 
-        user_mgr.revoke_api_token(token_id, ctx.user_id)
+        _checked_mgr().revoke_api_token(token_id, ctx.user_id)
         return {"status": "ok"}
 
     @router.get("/projects/{project_name}/members")
@@ -493,7 +499,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
                 content={"detail": "Not a member of this project"},
             )
 
-        return user_mgr.list_project_members(project_id)
+        return _checked_mgr().list_project_members(project_id)
 
     # --- Group management (ca-171) ---
 
@@ -506,11 +512,11 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if err:
             return err
 
-        existing = user_mgr.get_group_by_name(body.name)
+        existing = _checked_mgr().get_group_by_name(body.name)
         if existing:
             return JSONResponse(status_code=409, content={"detail": "Group name already taken"})
 
-        return user_mgr.create_group(body.name, body.description)
+        return _checked_mgr().create_group(body.name, body.description)
 
     @router.get("/auth/groups")
     def list_groups(limit: int = 50, offset: int = 0):
@@ -521,7 +527,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if err:
             return err
 
-        return user_mgr.list_groups(limit=limit, offset=offset)
+        return _checked_mgr().list_groups(limit=limit, offset=offset)
 
     @router.get("/auth/groups/{group_id}")
     def get_group(group_id: int):
@@ -532,12 +538,12 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if err:
             return err
 
-        group = user_mgr.get_group(group_id)
+        group = _checked_mgr().get_group(group_id)
         if not group:
             return JSONResponse(status_code=404, content={"detail": "Group not found"})
 
-        group["members"] = user_mgr.list_group_members(group_id)
-        group["projects"] = user_mgr.list_group_projects(group_id)
+        group["members"] = _checked_mgr().list_group_members(group_id)
+        group["projects"] = _checked_mgr().list_group_projects(group_id)
         return group
 
     @router.patch("/auth/groups/{group_id}")
@@ -549,11 +555,11 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if err:
             return err
 
-        group = user_mgr.get_group(group_id)
+        group = _checked_mgr().get_group(group_id)
         if not group:
             return JSONResponse(status_code=404, content={"detail": "Group not found"})
 
-        result = user_mgr.update_group(group_id, name=body.name, description=body.description)
+        result = _checked_mgr().update_group(group_id, name=body.name, description=body.description)
         return result
 
     @router.delete("/auth/groups/{group_id}")
@@ -565,11 +571,11 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if err:
             return err
 
-        group = user_mgr.get_group(group_id)
+        group = _checked_mgr().get_group(group_id)
         if not group:
             return JSONResponse(status_code=404, content={"detail": "Group not found"})
 
-        user_mgr.delete_group(group_id)
+        _checked_mgr().delete_group(group_id)
         return {"status": "ok"}
 
     @router.post("/auth/groups/{group_id}/members")
@@ -581,15 +587,15 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if err:
             return err
 
-        group = user_mgr.get_group(group_id)
+        group = _checked_mgr().get_group(group_id)
         if not group:
             return JSONResponse(status_code=404, content={"detail": "Group not found"})
 
-        user = user_mgr.get_by_id(body.user_id)
+        user = _checked_mgr().get_by_id(body.user_id)
         if not user:
             return JSONResponse(status_code=404, content={"detail": "User not found"})
 
-        user_mgr.add_group_member(group_id, body.user_id)
+        _checked_mgr().add_group_member(group_id, body.user_id)
         return {"status": "ok"}
 
     @router.delete("/auth/groups/{group_id}/members/{member_user_id}")
@@ -601,7 +607,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if err:
             return err
 
-        user_mgr.remove_group_member(group_id, member_user_id)
+        _checked_mgr().remove_group_member(group_id, member_user_id)
         return {"status": "ok"}
 
     @router.post("/auth/groups/{group_id}/projects")
@@ -613,7 +619,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if err:
             return err
 
-        group = user_mgr.get_group(group_id)
+        group = _checked_mgr().get_group(group_id)
         if not group:
             return JSONResponse(status_code=404, content={"detail": "Group not found"})
 
@@ -621,7 +627,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if project_id is None:
             return JSONResponse(status_code=404, content={"detail": "Project not found"})
 
-        user_mgr.add_group_project(group_id, project_id, body.role)
+        _checked_mgr().add_group_project(group_id, project_id, body.role)
         return {"status": "ok"}
 
     @router.delete("/auth/groups/{group_id}/projects/{project_name}")
@@ -637,5 +643,5 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if project_id is None:
             return JSONResponse(status_code=404, content={"detail": "Project not found"})
 
-        user_mgr.remove_group_project(group_id, project_id)
+        _checked_mgr().remove_group_project(group_id, project_id)
         return {"status": "ok"}

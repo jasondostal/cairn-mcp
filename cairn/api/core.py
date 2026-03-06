@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Path, HTTPException
+from fastapi import APIRouter, HTTPException, Path
 
 from cairn.config import (
-    EDITABLE_KEYS, EXPERIMENTAL_CAPABILITIES, PROFILE_PRESETS,
-    apply_overrides, config_to_flat, env_values,
+    EDITABLE_KEYS,
+    EXPERIMENTAL_CAPABILITIES,
+    PROFILE_PRESETS,
+    apply_overrides,
+    config_to_flat,
+    env_values,
 )
 from cairn.core.services import Services
 from cairn.storage import settings_store

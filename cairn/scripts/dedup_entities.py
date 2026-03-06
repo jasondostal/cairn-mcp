@@ -15,11 +15,9 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import sys
 from collections import defaultdict
 
 from cairn.config import load_config
-from cairn.graph.config import Neo4jConfig
 from cairn.graph.neo4j_provider import Neo4jGraphProvider
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
@@ -33,7 +31,7 @@ IDENTITY_ALIASES: list[list[str]] = [
 ]
 
 
-def get_entity_statement_counts(driver, database: str) -> dict[str, int]:
+def get_entity_statement_counts(driver, database: str) -> dict[str, dict]:
     """Count statements per entity UUID."""
     with driver.session(database=database) as session:
         result = session.run(

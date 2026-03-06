@@ -49,12 +49,13 @@ class LocalReranker(RerankerInterface):
         pairs = [(query, c["content"]) for c in candidates]
 
         try:
+            assert self._model is not None
             scores = self._model.predict(pairs)
         except Exception:
             logger.warning("Reranking failed, returning candidates as-is", exc_info=True)
             return candidates[:limit]
 
-        for candidate, score in zip(candidates, scores):
+        for candidate, score in zip(candidates, scores, strict=True):
             candidate["rerank_score"] = float(score)
 
         candidates.sort(key=lambda c: c["rerank_score"], reverse=True)

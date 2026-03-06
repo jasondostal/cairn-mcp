@@ -12,13 +12,12 @@ daily token budgets. Over-budget tiers fall back to the "fast" tier.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from dataclasses import replace
 from datetime import date
 
 from cairn.config import LLMConfig, RouterConfig
 from cairn.llm import get_llm
-from collections.abc import Iterator
-
 from cairn.llm.interface import LLMInterface, LLMResponse, StreamEvent
 
 logger = logging.getLogger(__name__)

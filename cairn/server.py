@@ -8,21 +8,25 @@ from contextlib import asynccontextmanager
 from mcp.server.fastmcp import FastMCP
 
 from cairn.config import apply_overrides, load_config
-from cairn.core.budget import apply_list_budget, truncate_to_budget
+from cairn.core.budget import apply_list_budget
 from cairn.core.constants import (
     BUDGET_INSIGHTS_PER_ITEM,
-    BUDGET_RECALL_PER_ITEM, BUDGET_RULES_PER_ITEM, BUDGET_SEARCH_PER_ITEM,
-    MAX_CONTENT_SIZE, MAX_LIMIT, MAX_NAME_LENGTH,
-    MAX_RECALL_IDS, VALID_MEMORY_TYPES, VALID_SEARCH_MODES,
-    ORIENT_ALLOC_RULES, ORIENT_ALLOC_LEARNINGS,
-    ORIENT_ALLOC_TRAIL, ORIENT_ALLOC_WORK_ITEMS,
-    ActivityType, MemoryAction,
+    BUDGET_RECALL_PER_ITEM,
+    BUDGET_RULES_PER_ITEM,
+    BUDGET_SEARCH_PER_ITEM,
+    MAX_CONTENT_SIZE,
+    MAX_LIMIT,
+    MAX_RECALL_IDS,
+    VALID_MEMORY_TYPES,
+    VALID_SEARCH_MODES,
+    ActivityType,
+    MemoryAction,
 )
 from cairn.core.services import create_services
 from cairn.core.status import get_status
 from cairn.core.utils import ValidationError, validate_search, validate_store
-from cairn.storage.database import Database
 from cairn.storage import settings_store
+from cairn.storage.database import Database
 
 # Configure logging
 logging.basicConfig(
@@ -58,6 +62,7 @@ deliverable_manager = None
 
 # Resource locking — in-memory singleton (ca-156)
 from cairn.core.resource_lock import ResourceLockManager
+
 _lock_manager = ResourceLockManager()
 analytics_tracker = None
 rollup_worker = None
@@ -428,7 +433,7 @@ async def search(
     try:
         validate_search(query, limit)
         if search_mode not in VALID_SEARCH_MODES:
-            return {"error": f"invalid search_mode: {search_mode}. Must be one of: {', '.join(VALID_SEARCH_MODES)}"}
+            return [{"error": f"invalid search_mode: {search_mode}. Must be one of: {', '.join(VALID_SEARCH_MODES)}"}]
 
         def _do_search():
             results = search_engine.search(
@@ -485,10 +490,10 @@ async def search(
 
         return await _in_thread(_do_search)
     except ValidationError as e:
-        return {"error": str(e)}
+        return [{"error": str(e)}]
     except Exception as e:
         logger.exception("search failed")
-        return {"error": f"Internal error: {e}"}
+        return [{"error": f"Internal error: {e}"}]
 
 
 # ============================================================
@@ -512,9 +517,9 @@ async def recall(ids: list[int]) -> list[dict]:
     """
     try:
         if not ids:
-            return {"error": "ids list is required and cannot be empty"}
+            return [{"error": "ids list is required and cannot be empty"}]
         if len(ids) > MAX_RECALL_IDS:
-            return {"error": f"Maximum {MAX_RECALL_IDS} IDs per recall. Batch into multiple calls."}
+            return [{"error": f"Maximum {MAX_RECALL_IDS} IDs per recall. Batch into multiple calls."}]
 
         def _do_recall():
             results = memory_store.recall(ids)
@@ -553,7 +558,7 @@ async def recall(ids: list[int]) -> list[dict]:
         return await _in_thread(_do_recall)
     except Exception as e:
         logger.exception("recall failed")
-        return {"error": f"Internal error: {e}"}
+        return [{"error": f"Internal error: {e}"}]
 
 
 # ============================================================
@@ -674,7 +679,7 @@ async def rules(project: str | None = None) -> list[dict]:
         return await _in_thread(_do_rules)
     except Exception as e:
         logger.exception("rules failed")
-        return {"error": f"Internal error: {e}"}
+        return [{"error": f"Internal error: {e}"}]
 
 
 # ============================================================
@@ -1399,6 +1404,8 @@ async def dispatch(
         assignee: Name for the agent claim (auto-generated if omitted).
     """
     try:
+        if workspace_manager is None:
+            return {"error": "workspace manager not available"}
         return await _in_thread(
             workspace_manager.dispatch,
             work_item_id=work_item_id,
@@ -1561,6 +1568,8 @@ async def consolidate(
     try:
         if not project or not project.strip():
             return {"error": "project is required"}
+        if consolidation_engine is None:
+            return {"error": "consolidation engine not available"}
         if mode == "synthesize":
             return await _in_thread(
                 consolidation_engine.synthesize, project, dry_run=dry_run,
@@ -1910,6 +1919,8 @@ async def drift_check(
                Use sha256 or any consistent hash of file contents.
     """
     try:
+        if drift_detector is None:
+            return {"error": "drift detector not available"}
         return await _in_thread(drift_detector.check, project=project, files=files)
     except Exception as e:
         logger.exception("drift_check failed")
@@ -2091,7 +2102,7 @@ async def code_query(
             action=action, project=project, target=target, query=query,
             kind=kind, depth=depth, limit=limit, mode=mode,
             graph_provider=graph_provider, db=db, config=config,
-            embedding_engine=_svc.embedding,
+            embedding_engine=_svc.embedding if _svc else None,
         )
     except Exception as e:
         logger.exception("code_query failed")
@@ -2129,7 +2140,7 @@ async def code_describe(
             run_code_describe,
             project=project, target=target, kind=kind, limit=limit,
             graph_provider=graph_provider, db=db, config=config,
-            llm=_svc.llm, embedding_engine=_svc.embedding,
+            llm=_svc.llm if _svc else None, embedding_engine=_svc.embedding if _svc else None,
         )
     except Exception as e:
         logger.exception("code_describe failed")
@@ -2194,6 +2205,7 @@ def main():
     """Run the Cairn MCP server."""
     if _base_config.transport == "http":
         import uvicorn
+
         from cairn.api import create_api
 
         # Get MCP's Starlette app (parent — owns lifespan, serves /mcp)
@@ -2219,8 +2231,9 @@ def main():
 
         # MCP HTTP: enforce auth on /mcp/* when auth is enabled (ca-162)
         if final_config.auth.enabled and final_config.auth.jwt_secret and svc.user_manager:
-            from starlette.middleware.base import BaseHTTPMiddleware
             from fastapi.responses import JSONResponse
+            from starlette.middleware.base import BaseHTTPMiddleware
+
             from cairn.core.auth import resolve_bearer_token
             from cairn.core.user import clear_user, set_user
 

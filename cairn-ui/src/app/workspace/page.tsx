@@ -11,7 +11,6 @@ import {
   type Project,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { SingleSelect } from "@/components/ui/single-select";
 import { Badge } from "@/components/ui/badge";
 import { ErrorState } from "@/components/error-state";
@@ -36,7 +35,6 @@ import {
   ChevronRight,
   FileCode,
   Wrench,
-  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 

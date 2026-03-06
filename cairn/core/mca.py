@@ -165,7 +165,7 @@ class MCAGate:
             from cairn.core import analytics
             tracker = analytics._analytics_tracker
             if tracker is not None:
-                tracker.record(analytics.UsageEvent(
+                tracker.track(analytics.UsageEvent(
                     operation="mca_gate",
                     metadata=stats,
                 ))

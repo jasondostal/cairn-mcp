@@ -3,7 +3,7 @@
 import threading
 import time as _time
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 class ModelStats:
@@ -26,13 +26,13 @@ class ModelStats:
         with self._lock:
             self._calls += 1
             self._tokens_est += tokens_est
-            self._last_call = datetime.now(timezone.utc)
+            self._last_call = datetime.now(UTC)
             self._recent.append(True)
 
     def record_error(self, msg: str = "") -> None:
         with self._lock:
             self._errors += 1
-            self._last_error = datetime.now(timezone.utc)
+            self._last_error = datetime.now(UTC)
             self._last_error_msg = msg
             self._recent.append(False)
 
@@ -100,14 +100,14 @@ class EventBusStats:
         self._last_event_at: datetime | None = None
         self._last_error: datetime | None = None
         self._last_error_msg: str | None = None
-        self._started_at = datetime.now(timezone.utc)
+        self._started_at = datetime.now(UTC)
         self._recent: deque[bool] = deque(maxlen=10)
 
     def record_publish(self, event_type: str) -> None:
         with self._lock:
             self._events_published += 1
             self._events_by_type[event_type] = self._events_by_type.get(event_type, 0) + 1
-            self._last_event_at = datetime.now(timezone.utc)
+            self._last_event_at = datetime.now(UTC)
             self._recent.append(True)
 
     def record_session_opened(self) -> None:
@@ -134,7 +134,7 @@ class EventBusStats:
     def record_error(self, msg: str = "") -> None:
         with self._lock:
             self._errors += 1
-            self._last_error = datetime.now(timezone.utc)
+            self._last_error = datetime.now(UTC)
             self._last_error_msg = msg
             self._recent.append(False)
 
@@ -195,7 +195,7 @@ def emit_usage_event(
 
     Uses deferred import to avoid circular deps with analytics module.
     """
-    from cairn.core.analytics import _analytics_tracker, UsageEvent
+    from cairn.core.analytics import UsageEvent, _analytics_tracker
 
     if _analytics_tracker is None:
         return

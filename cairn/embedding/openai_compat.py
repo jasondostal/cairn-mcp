@@ -14,8 +14,8 @@ No SDK dependency — uses urllib like the LLM provider.
 import json
 import logging
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 
 from cairn.config import EmbeddingConfig
 from cairn.core import stats
@@ -69,7 +69,7 @@ class OpenAICompatibleEmbedding(EmbeddingInterface):
         req = self._build_request(payload)
 
         t0 = time.monotonic()
-        last_error = None
+        last_error: Exception | None = None
         for attempt in range(3):
             try:
                 with urllib.request.urlopen(req, timeout=60) as resp:
@@ -120,6 +120,7 @@ class OpenAICompatibleEmbedding(EmbeddingInterface):
             "embed", self._model, latency_ms=latency_ms,
             success=False, error_message=str(last_error),
         )
+        assert last_error is not None
         raise last_error  # All retries exhausted
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
@@ -139,7 +140,7 @@ class OpenAICompatibleEmbedding(EmbeddingInterface):
         req = self._build_request(payload)
 
         t0 = time.monotonic()
-        last_error = None
+        last_error: Exception | None = None
         for attempt in range(3):
             try:
                 with urllib.request.urlopen(req, timeout=120) as resp:
@@ -194,4 +195,5 @@ class OpenAICompatibleEmbedding(EmbeddingInterface):
             "embed.batch", self._model, latency_ms=latency_ms,
             success=False, error_message=str(last_error),
         )
+        assert last_error is not None
         raise last_error  # All retries exhausted

@@ -40,7 +40,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from cairn.code.imports import FileImports, extract_imports_from_directory
 
@@ -158,7 +158,7 @@ def _match(value: str, pattern: str) -> bool:
         val_parts = value.split(".")
         if len(pat_parts) != len(val_parts):
             return False
-        return all(fnmatch.fnmatch(v, p) for v, p in zip(val_parts, pat_parts))
+        return all(fnmatch.fnmatch(v, p) for v, p in zip(val_parts, pat_parts, strict=True))
     return False
 
 

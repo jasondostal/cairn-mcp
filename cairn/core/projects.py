@@ -6,7 +6,10 @@ import logging
 
 from cairn.core.analytics import track_operation
 from cairn.core.constants import (
-    MAX_PREFIX_LENGTH, MIN_PREFIX_LENGTH, VALID_DOC_TYPES, VALID_LINK_TYPES,
+    MAX_PREFIX_LENGTH,
+    MIN_PREFIX_LENGTH,
+    VALID_DOC_TYPES,
+    VALID_LINK_TYPES,
 )
 from cairn.core.utils import get_or_create_project, get_project
 from cairn.storage.database import Database
@@ -27,6 +30,7 @@ class ProjectManager:
         Returns dict with 'total', 'limit', 'offset', and 'items' keys.
         """
         count_row = self.db.execute_one("SELECT COUNT(*) as total FROM projects")
+        assert count_row is not None
         total = count_row["total"]
 
         query = """
@@ -123,6 +127,7 @@ class ProjectManager:
             """,
             (project_id, doc_type, content, title),
         )
+        assert row is not None
         self.db.commit()
 
         logger.info("Created %s doc for project %s (id=%d)", doc_type, project, row["id"])
@@ -212,6 +217,7 @@ class ProjectManager:
             """,
             tuple(params) if params else None,
         )
+        assert count_row is not None
         total = count_row["total"]
 
         query = f"""

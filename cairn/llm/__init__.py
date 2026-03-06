@@ -7,7 +7,7 @@ Register custom providers via ``register_llm_provider(name, factory_fn)``.
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 from cairn.config import LLMConfig
 from cairn.llm.interface import LLMInterface

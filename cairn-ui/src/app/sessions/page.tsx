@@ -6,7 +6,6 @@ import { useSearchParams } from "next/navigation";
 import { api, SessionInfo, SessionEvent, type TimelineMemory, type WorkItemSessionLink, type Paginated } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
-  Radio,
   ChevronRight,
   ArrowLeft,
   Wrench,
@@ -64,13 +63,11 @@ function SessionList({
   onSelect,
   loading,
   error,
-  onRefresh,
 }: {
   sessions: SessionInfo[];
   onSelect: (s: SessionInfo) => void;
   loading: boolean;
   error: string | null;
-  onRefresh: () => void;
 }) {
   return (
     <>
@@ -402,7 +399,6 @@ function SessionsPageInner() {
           onSelect={setSelected}
           loading={loading}
           error={error}
-          onRefresh={fetchSessions}
         />
       )}
     </PageLayout>

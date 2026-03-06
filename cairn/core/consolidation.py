@@ -137,6 +137,7 @@ class ConsolidationEngine:
 
         # Ask LLM for recommendations
         try:
+            assert self.llm is not None
             messages = build_consolidation_messages(candidates, project)
             raw = self.llm.generate(messages, max_tokens=1024)
             recommendations = extract_json(raw, json_type="array") or []
@@ -160,7 +161,7 @@ class ConsolidationEngine:
         }
 
         # Apply if not dry_run
-        if not dry_run and recommendations:
+        if not dry_run and recommendations and isinstance(recommendations, list):
             applied_count = self._apply_recommendations(recommendations)
             result["applied"] = True
             result["applied_count"] = applied_count
@@ -386,6 +387,7 @@ class ConsolidationEngine:
         ]
 
         try:
+            assert self.llm is not None
             synthesis_text = self.llm.generate(messages, max_tokens=512)
         except Exception:
             logger.warning("LLM synthesis failed for cluster %s", cluster["cluster_id"], exc_info=True)
@@ -417,6 +419,7 @@ class ConsolidationEngine:
                 """,
                 (project_id, synthesis_text.strip(), ["synthesized", "consolidation"]),
             )
+            assert row is not None
             parent_id = row["id"]
 
         if not parent_id:

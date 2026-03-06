@@ -45,10 +45,10 @@ class ArchCheckBody(BaseModel):
 
 def register_routes(router: APIRouter, svc: Services, **kw):
     from cairn.core.code_ops import (
+        run_arch_check,
+        run_code_describe,
         run_code_index,
         run_code_query,
-        run_code_describe,
-        run_arch_check,
     )
 
     @router.post("/code/index")
@@ -64,7 +64,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             )
         except Exception as e:
             logger.exception("code_index failed")
-            raise HTTPException(status_code=500, detail=f"Code index failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Code index failed: {e}") from e
 
     @router.post("/code/query")
     def api_code_query(body: CodeQueryBody = Body(...)):
@@ -85,7 +85,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             )
         except Exception as e:
             logger.exception("code_query failed")
-            raise HTTPException(status_code=500, detail=f"Code query failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Code query failed: {e}") from e
 
     @router.post("/code/describe")
     def api_code_describe(body: CodeDescribeBody = Body(...)):
@@ -103,7 +103,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             )
         except Exception as e:
             logger.exception("code_describe failed")
-            raise HTTPException(status_code=500, detail=f"Code describe failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Code describe failed: {e}") from e
 
     @router.post("/code/arch-check")
     def api_arch_check(body: ArchCheckBody = Body(...)):
@@ -120,4 +120,4 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             )
         except Exception as e:
             logger.exception("arch_check failed")
-            raise HTTPException(status_code=500, detail=f"Architecture check failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Architecture check failed: {e}") from e

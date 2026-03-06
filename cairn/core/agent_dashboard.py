@@ -101,7 +101,6 @@ class AgentDashboard:
 
         # Lock summary
         locks_by_project: dict[str, int] = {}
-        lock_conflicts: int = 0
         if self.lock_manager:
             # Gather locks from all projects mentioned in active work
             seen_projects: set[str] = set()

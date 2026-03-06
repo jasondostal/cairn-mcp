@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 from collections.abc import Iterator
 
 from cairn.config import LLMConfig
@@ -41,7 +41,7 @@ class OllamaLLM(LLMInterface):
         )
 
         t0 = time.monotonic()
-        last_error = None
+        last_error: Exception | None = None
         for attempt in range(3):
             try:
                 with urllib.request.urlopen(req, timeout=60) as resp:
@@ -79,6 +79,7 @@ class OllamaLLM(LLMInterface):
             "llm.generate", self.model, latency_ms=latency_ms,
             success=False, error_message=str(last_error),
         )
+        assert last_error is not None
         raise last_error  # All retries exhausted
 
     def generate_stream(

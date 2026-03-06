@@ -62,6 +62,7 @@ class TaskManager:
             """,
             (project_id, description),
         )
+        assert row is not None
         self.db.commit()
 
         # Event-driven graph projection
@@ -128,6 +129,7 @@ class TaskManager:
             f"SELECT COUNT(*) as total FROM tasks t{count_join} WHERE {where}{status_filter}",
             tuple(count_params),
         )
+        assert count_row is not None
         total = count_row["total"]
 
         query = f"""

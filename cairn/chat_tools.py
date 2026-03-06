@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import UTC
 from typing import TYPE_CHECKING
 
 from cairn.core.code_ops import run_arch_check, run_code_query
 from cairn.core.status import get_status
+from cairn.core.utils import get_or_create_project
 
 if TYPE_CHECKING:
     from cairn.core.services import Services
@@ -295,7 +297,7 @@ CHAT_TOOLS: list[dict] = [
 class ChatToolExecutor:
     """Executes chat tool calls against Cairn services."""
 
-    def __init__(self, svc: "Services"):
+    def __init__(self, svc: Services):
         self.svc = svc
 
     def execute(self, name: str, input_data: dict) -> str:
@@ -358,8 +360,11 @@ class ChatToolExecutor:
         # Trail (recent graph activity)
         try:
             if self.svc.graph_provider:
+                from datetime import datetime, timedelta
+                since = (datetime.now(UTC) - timedelta(days=7)).isoformat()
+                project_id = get_or_create_project(self.svc.db, project) if project else None
                 trail = self.svc.graph_provider.recent_activity(
-                    project=project, limit=10,
+                    project_id=project_id, since=since, limit=10,
                 )
                 sections["trail"] = trail
         except Exception:

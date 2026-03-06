@@ -7,10 +7,9 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
-from cairn.core.constants import DeliverableStatus, ActivityType
+from cairn.core.constants import DeliverableStatus
 from cairn.storage.database import Database
 
 logger = logging.getLogger(__name__)
@@ -42,6 +41,7 @@ class DeliverableManager:
             "SELECT COALESCE(MAX(version), 0) + 1 AS next_ver FROM deliverables WHERE work_item_id = %s",
             (work_item_id,),
         )
+        assert row is not None
         next_version = row["next_ver"]
 
         result = self.db.execute_one(
@@ -61,6 +61,7 @@ class DeliverableManager:
                 json.dumps(metrics or {}),
             ),
         )
+        assert result is not None
 
         self._publish("deliverable.created", {
             "deliverable_id": result["id"],
@@ -138,7 +139,7 @@ class DeliverableManager:
             "reject": DeliverableStatus.REJECTED,
         }
         new_status = status_map[action]
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         self.db.execute(
             """
@@ -223,7 +224,7 @@ class DeliverableManager:
         if deliverable["status"] != DeliverableStatus.DRAFT:
             raise ValueError(f"Deliverable is '{deliverable['status']}', not 'draft'")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         self.db.execute(
             "UPDATE deliverables SET status = %s, updated_at = %s WHERE id = %s",
             (DeliverableStatus.PENDING_REVIEW, now, deliverable["id"]),

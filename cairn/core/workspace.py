@@ -11,15 +11,16 @@ import logging
 import time
 from typing import Any
 
+from cairn.core.agents import AgentRegistry, validate_dispatch
 from cairn.core.analytics import track_operation
 from cairn.core.budget import estimate_tokens, truncate_to_budget
 from cairn.core.constants import (
-    WORKSPACE_ALLOC_MEMORIES, WORKSPACE_ALLOC_RULES,
-    WORKSPACE_ALLOC_TASKS, WORKSPACE_ALLOC_TRAIL,
+    WORKSPACE_ALLOC_MEMORIES,
+    WORKSPACE_ALLOC_RULES,
+    WORKSPACE_ALLOC_TASKS,
+    WORKSPACE_ALLOC_TRAIL,
     ActivityType,
 )
-
-from cairn.core.agents import AgentRegistry, validate_dispatch
 from cairn.core.utils import get_or_create_project, get_project
 from cairn.core.work_items import WorkItemManager
 from cairn.integrations.interface import WorkspaceBackend, WorkspaceBackendError
@@ -401,6 +402,7 @@ class WorkspaceManager:
             (project_id, session.id, agent, session_title, instructions,
              backend_name, json.dumps(backend_metadata)),
         )
+        assert row is not None
         self.db.commit()
         result["id"] = row["id"]
         result["created_at"] = row["created_at"].isoformat()

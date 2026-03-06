@@ -70,6 +70,7 @@ class AgentMemoryStore:
             """,
             (agent_name, project_id, content, work_item_id, learning_type, importance),
         )
+        assert row is not None
         self.db.commit()
 
         logger.info(

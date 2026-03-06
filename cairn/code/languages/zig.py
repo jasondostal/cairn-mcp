@@ -67,7 +67,6 @@ def _extract_function(
     node: ts.Node, source: bytes, file_path: str, parent_name: str | None,
 ) -> CodeSymbol | None:
     """Extract a function declaration."""
-    is_pub = any(c.type == "pub" for c in node.children)
     name_node = _find_child(node, "identifier")
     if not name_node:
         return None

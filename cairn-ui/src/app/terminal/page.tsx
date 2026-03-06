@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { api, type TerminalConfig, type TerminalHost } from "@/lib/api";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SingleSelect } from "@/components/ui/single-select";
@@ -22,8 +21,6 @@ import {
   Wifi,
   WifiOff,
   Loader2,
-  Info,
-  X,
   Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -344,14 +341,14 @@ function HostDialog({
 function NativeTerminal({ host }: { host: TerminalHost }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
-  const termRef = useRef<any>(null);
+  const termRef = useRef<{ dispose: () => void; write: (data: string) => void; loadAddon: (addon: unknown) => void; open: (el: HTMLElement) => void; onData: (cb: (data: string) => void) => void } | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    let terminal: any = null;
-    let fitAddon: any = null;
+    let terminal: InstanceType<typeof import("@xterm/xterm").Terminal> | null = null;
+    let fitAddon: InstanceType<typeof import("@xterm/addon-fit").FitAddon> | null = null;
     let ws: WebSocket | null = null;
     let disposed = false;
 
@@ -381,7 +378,7 @@ function NativeTerminal({ host }: { host: TerminalHost }) {
       terminal.write(`Connecting to ${host.hostname}...\r\n`);
 
       // Determine WebSocket URL
-      const wsEnv = (typeof window !== "undefined" && (window as any).__NEXT_PUBLIC_CAIRN_WS_URL) || "";
+      const wsEnv = (typeof window !== "undefined" && (window as Record<string, unknown>).__NEXT_PUBLIC_CAIRN_WS_URL as string) || "";
       let wsBase: string;
       if (wsEnv) {
         wsBase = wsEnv;

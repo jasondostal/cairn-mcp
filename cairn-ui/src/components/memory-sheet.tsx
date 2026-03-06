@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, type Memory, type UpdateMemoryRequest } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
@@ -90,13 +90,13 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
     if (draftKey) sessionStorage.setItem(draftKey, JSON.stringify(data));
   };
 
-  const loadDraft = (): Partial<UpdateMemoryRequest> | null => {
+  const loadDraft = useCallback((): Partial<UpdateMemoryRequest> | null => {
     if (!draftKey) return null;
     try {
       const raw = sessionStorage.getItem(draftKey);
       return raw ? JSON.parse(raw) : null;
     } catch { return null; }
-  };
+  }, [draftKey]);
 
   const clearDraft = () => {
     if (draftKey) sessionStorage.removeItem(draftKey);
@@ -127,7 +127,7 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
       setEditing(false);
     }
     fetchMemory(memoryId);
-  }, [memoryId, open]);
+  }, [memoryId, open, loadDraft]);
 
   const startEditing = () => {
     if (!memory) return;

@@ -104,6 +104,7 @@ class ThinkingEngine:
             """,
             (project_id, goal),
         )
+        assert row is not None
         self.db.commit()
 
         # Event-driven graph projection
@@ -153,6 +154,7 @@ class ThinkingEngine:
             """,
             (sequence_id, thought_type, thought, branch_name if is_branch else None, author),
         )
+        assert row is not None
         self.db.commit()
 
         # Event-driven graph projection
@@ -325,6 +327,7 @@ class ThinkingEngine:
             f"SELECT COUNT(*) as total FROM thinking_sequences ts{count_join} WHERE {where}{status_filter}",
             tuple(count_params),
         )
+        assert count_row is not None
         total = count_row["total"]
 
         query = f"""

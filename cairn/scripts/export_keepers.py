@@ -15,8 +15,8 @@ import argparse
 import json
 import os
 import sys
-import urllib.request
 import urllib.error
+import urllib.request
 from datetime import datetime
 
 # ── Curated keeper memory IDs ──────────────────────────────────────────────
@@ -105,7 +105,6 @@ KEEPER_IDS = {
     417,  # THE_ARC.md published + Builder's Foundations
     464,  # Cairn eval framework
     466,  # Eval tests — 40 passing
-    609,  # MCP server config across IDEs (research)
     616,  # Tool descriptions as agent UX
     651,  # Competitor architecture analysis
 

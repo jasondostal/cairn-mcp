@@ -15,8 +15,8 @@ from __future__ import annotations
 import json
 import logging
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 from collections.abc import Iterator
 
 from cairn.config import LLMConfig
@@ -65,7 +65,7 @@ class OpenAICompatibleLLM(LLMInterface):
 
         max_retries = 5
         t0 = time.monotonic()
-        last_error = None
+        last_error: Exception | None = None
         for attempt in range(max_retries):
             try:
                 with urllib.request.urlopen(req, timeout=120) as resp:
@@ -123,6 +123,7 @@ class OpenAICompatibleLLM(LLMInterface):
             "llm.generate", self.model, latency_ms=latency_ms,
             success=False, error_message=str(last_error),
         )
+        assert last_error is not None
         raise last_error  # All retries exhausted
 
     def generate_stream(
@@ -239,7 +240,7 @@ class OpenAICompatibleLLM(LLMInterface):
         )
 
         t0 = time.monotonic()
-        last_error = None
+        last_error: Exception | None = None
         for attempt in range(5):
             try:
                 with urllib.request.urlopen(req, timeout=120) as resp:
@@ -335,6 +336,7 @@ class OpenAICompatibleLLM(LLMInterface):
             "llm.generate_with_tools", self.model, latency_ms=latency_ms,
             success=False, error_message=str(last_error),
         )
+        assert last_error is not None
         raise last_error
 
     def generate_with_tools_stream(

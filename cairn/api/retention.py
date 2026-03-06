@@ -42,7 +42,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 legal_hold=body.legal_hold,
             )
         except ValueError as e:
-            raise HTTPException(status_code=422, detail=str(e))
+            raise HTTPException(status_code=422, detail=str(e)) from e
 
     @router.get("/retention/policies")
     def list_policies(

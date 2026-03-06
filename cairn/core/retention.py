@@ -9,10 +9,9 @@ Follows the AlertManager pattern (db + config constructor, CRUD + domain logic).
 
 from __future__ import annotations
 
-import json
+import builtins
 import logging
-from datetime import datetime, timezone
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from cairn.config import RetentionConfig
@@ -284,7 +283,7 @@ class RetentionManager:
     # Cleanup execution
     # ------------------------------------------------------------------
 
-    def preview(self, policy_id: int | None = None) -> list[dict]:
+    def preview(self, policy_id: int | None = None) -> builtins.list[dict]:
         """Dry-run: show how many rows each policy would delete."""
         if policy_id:
             policy = self.get(policy_id)
@@ -321,7 +320,7 @@ class RetentionManager:
             previews.append({**p, "would_delete": count})
         return previews
 
-    def run_cleanup(self, *, dry_run: bool = True) -> list[dict]:
+    def run_cleanup(self, *, dry_run: bool = True) -> builtins.list[dict]:
         """Execute all active retention policies.
 
         Returns list of results per policy with deleted count.
@@ -431,7 +430,7 @@ class RetentionManager:
     # Helpers
     # ------------------------------------------------------------------
 
-    def _build_params(self, query: str, ttl: int, project_id: str | None, batch: bool = False) -> list:
+    def _build_params(self, query: str, ttl: int, project_id: str | None, batch: bool = False) -> builtins.list:
         """Build query params based on whether project filter is present."""
         params: list[Any] = [ttl]
         if "{project_filter}" in query and project_id is not None:

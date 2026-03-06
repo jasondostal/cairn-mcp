@@ -51,11 +51,12 @@ export function useSSE(
   const [reconnectCount, setReconnectCount] = useState(0);
 
   const onEventRef = useRef(onEvent);
-  onEventRef.current = onEvent;
+  useEffect(() => { onEventRef.current = onEvent; }, [onEvent]);
 
   const retryCountRef = useRef(0);
   const sourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectRef = useRef<() => void>(() => {});
 
   const connect = useCallback(() => {
     // Clean up existing connection
@@ -111,11 +112,13 @@ export function useSSE(
 
       reconnectTimerRef.current = setTimeout(() => {
         if (!document.hidden) {
-          connect();
+          connectRef.current();
         }
       }, delay);
     };
   }, [patterns, project]);
+
+  useEffect(() => { connectRef.current = connect; }, [connect]);
 
   // Visibility handling
   useEffect(() => {

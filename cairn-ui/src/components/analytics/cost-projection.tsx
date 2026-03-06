@@ -26,18 +26,15 @@ export function CostProjection({ models, days, costRates }: CostProjectionProps)
   };
 
   // Calculate costs per model
-  let totalCost = 0;
-  const modelCosts = models.map((m) => {
+  function computeCost(m: ModelPerformance) {
     const isEmbedding = m.model.includes("embed") || m.model.includes("titan");
     const inputRate = isEmbedding ? rates.embedding_per_1k : rates.llm_input_per_1k;
     const outputRate = isEmbedding ? rates.embedding_per_1k : rates.llm_output_per_1k;
+    return (m.tokens_in / 1000) * inputRate + (m.tokens_out / 1000) * outputRate;
+  }
 
-    const inputCost = (m.tokens_in / 1000) * inputRate;
-    const outputCost = (m.tokens_out / 1000) * outputRate;
-    const cost = inputCost + outputCost;
-    totalCost += cost;
-    return { model: m.model, cost };
-  });
+  const modelCosts = models.map((m) => ({ model: m.model, cost: computeCost(m) }));
+  const totalCost = modelCosts.reduce((sum, m) => sum + m.cost, 0);
 
   // Project monthly/annual
   const dailyRate = days > 0 ? totalCost / days : 0;

@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from cairn.core import stats
 from cairn.core.utils import get_or_create_project
@@ -93,6 +94,7 @@ class EventBus:
         - session_end events auto-close the session (set closed_at).
         """
         import json
+
         from cairn.core.trace import current_trace
 
         # Read trace context (if active)
@@ -122,6 +124,7 @@ class EventBus:
                 trace_id,
             ),
         )
+        assert row is not None
         self.db.commit()
 
         event_id = row["id"]
@@ -272,6 +275,7 @@ class EventBus:
                 json.dumps(metadata or {}),
             ),
         )
+        assert row is not None
         self.db.commit()
 
         if stats.event_bus_stats:
@@ -284,7 +288,7 @@ class EventBus:
 
     def close_session(self, session_name: str) -> dict:
         """Set closed_at on the session. No LLM."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         row = self.db.execute_one(
             """

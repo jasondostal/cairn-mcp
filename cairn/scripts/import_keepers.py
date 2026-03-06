@@ -20,8 +20,8 @@ import os
 import subprocess
 import sys
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 
 # Postgres connection for --preserve-dates
 # Postgres connection defaults — override via env vars
@@ -216,7 +216,6 @@ def main():
 
     memories = export.get("memories", [])
     documents = export.get("documents", [])
-    stats = export.get("stats", {})
 
     print(f"  Memories: {len(memories)}")
     print(f"  Documents: {len(documents)}")
@@ -350,15 +349,15 @@ def main():
         print("  Dry run complete — no changes made")
         print(f"  Would import: {len(memories)} memories, {len(documents)} documents")
         if args.preserve_dates:
-            print(f"  Would restore original timestamps on all memories")
+            print("  Would restore original timestamps on all memories")
     else:
         # Check final state
         final_status = api_get(args.api_base, "/status")
         if final_status:
-            print(f"  Import complete!")
+            print("  Import complete!")
             print(f"  Final memory count: {final_status.get('memories', '?')}")
             if args.preserve_dates:
-                print(f"  Original timestamps: RESTORED")
+                print("  Original timestamps: RESTORED")
         else:
             print("  Import finished (could not verify final state)")
     print("=" * 60)

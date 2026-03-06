@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Path
+from fastapi import APIRouter, Path, Query
 
 from cairn.core.services import Services
 

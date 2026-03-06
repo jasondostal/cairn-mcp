@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Query, Path
+from fastapi import APIRouter, Path, Query
 
 from cairn.core.services import Services
 
@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 def register_routes(router: APIRouter, svc: Services, **kw):
     event_bus = svc.event_bus
     wim = svc.work_item_manager
-    db = svc.db
 
     @router.get("/sessions")
     def api_sessions(
