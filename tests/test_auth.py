@@ -489,3 +489,47 @@ class TestOIDCStateStore:
         from cairn.core.oidc import OIDCStateStore
         store = OIDCStateStore()
         assert store.consume("nonexistent") is None
+
+
+# ---------------------------------------------------------------------------
+# Trusted proxy IP tests
+# ---------------------------------------------------------------------------
+
+class TestTrustedProxy:
+    def test_exact_ip_match(self):
+        from cairn.core.auth import is_trusted_proxy
+        assert is_trusted_proxy("172.19.0.15", "172.19.0.15")
+
+    def test_exact_ip_no_match(self):
+        from cairn.core.auth import is_trusted_proxy
+        assert not is_trusted_proxy("172.19.0.99", "172.19.0.15")
+
+    def test_cidr_match(self):
+        from cairn.core.auth import is_trusted_proxy
+        assert is_trusted_proxy("172.19.0.15", "172.19.0.0/16")
+        assert is_trusted_proxy("172.19.255.255", "172.19.0.0/16")
+
+    def test_cidr_no_match(self):
+        from cairn.core.auth import is_trusted_proxy
+        assert not is_trusted_proxy("10.0.0.1", "172.19.0.0/16")
+
+    def test_multiple_entries(self):
+        from cairn.core.auth import is_trusted_proxy
+        trusted = "10.0.0.1, 172.19.0.0/16, 192.168.1.0/24"
+        assert is_trusted_proxy("10.0.0.1", trusted)
+        assert is_trusted_proxy("172.19.0.50", trusted)
+        assert is_trusted_proxy("192.168.1.100", trusted)
+        assert not is_trusted_proxy("8.8.8.8", trusted)
+
+    def test_empty_trusted_ips(self):
+        from cairn.core.auth import is_trusted_proxy
+        assert not is_trusted_proxy("172.19.0.15", "")
+
+    def test_invalid_client_ip(self):
+        from cairn.core.auth import is_trusted_proxy
+        assert not is_trusted_proxy("not-an-ip", "172.19.0.0/16")
+
+    def test_invalid_cidr_entry_skipped(self):
+        from cairn.core.auth import is_trusted_proxy
+        # Bad entries are skipped, valid ones still work
+        assert is_trusted_proxy("10.0.0.1", "garbage, 10.0.0.0/8")
