@@ -1,0 +1,4 @@
+ignored:
+  - DL3008  # apt pin versions (slim base rebuilds frequently)
+  - DL3013  # pip pin versions (we use requirements.lock)
+  - DL3059  # consecutive RUN (intentional for layer caching)
