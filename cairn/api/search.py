@@ -51,19 +51,30 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         project: str | None = Query(None),
         type: str | None = Query(None),
         session_name: str | None = Query(None),
-        days: int = Query(7, ge=1, le=365),
+        days: int | None = Query(7, ge=1),
         sort: str = Query("recent", pattern="^(recent|important|relevance)$"),
         group_by: str = Query("none", pattern="^(none|type)$"),
         include_clusters: bool = Query(False),
         limit: int = Query(50, ge=1, le=200),
         offset: int = Query(0, ge=0),
+        ephemeral: bool | None = Query(None),
     ):
-        cutoff = datetime.now(UTC) - timedelta(days=days)
         projects = parse_multi(project)
         types = parse_multi(type)
 
-        where = ["m.is_active = true", "m.created_at >= %s"]
-        params: list = [cutoff]
+        where = ["m.is_active = true"]
+        params: list = []
+
+        if days and days < 9999:
+            cutoff = datetime.now(UTC) - timedelta(days=days)
+            where.append("m.created_at >= %s")
+            params.append(cutoff)
+
+        # Ephemeral lifecycle filter (ca-173)
+        if ephemeral is True:
+            where.append("m.salience IS NOT NULL")
+        elif ephemeral is False:
+            where.append("m.salience IS NULL")
 
         if projects:
             where.append("p.name = ANY(%s)")
@@ -119,7 +130,8 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             f"""
             SELECT m.id, m.summary, m.content, m.memory_type, m.importance,
                    m.tags, m.auto_tags, m.related_files, m.is_active,
-                   m.session_name, m.author, m.created_at, m.updated_at,
+                   m.session_name, m.author, m.salience, m.pinned,
+                   m.created_at, m.updated_at,
                    p.name as project
                    {cluster_select}
             FROM memories m
@@ -146,6 +158,8 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 "is_active": r["is_active"],
                 "session_name": r["session_name"],
                 "author": r.get("author"),
+                "salience": r["salience"],
+                "pinned": r["pinned"],
                 "created_at": r["created_at"].isoformat(),
                 "updated_at": r["updated_at"].isoformat(),
             }
@@ -185,6 +199,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         mode: str = Query("semantic"),
         limit: int = Query(10, ge=1, le=100),
         offset: int = Query(0, ge=0),
+        ephemeral: bool | None = Query(None),
     ):
         results = search_engine.search(
             query=q,
@@ -193,6 +208,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
             search_mode=mode,
             limit=limit + offset,
             include_full=True,
+            ephemeral=ephemeral,
         )
         items = results[offset:offset + limit]
         return {"total": len(results), "limit": limit, "offset": offset, "items": items}

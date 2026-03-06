@@ -257,9 +257,9 @@ def run_orient(
 
     # --- Section 3.5: Working Memory (10% + surplus) ---
     working_memory_data: list[dict] = []
-    if working_memory_store and project:
+    if memory_store and project:
         try:
-            wm_items = working_memory_store.orient_items(project, limit=5)
+            wm_items = memory_store.orient_items(project, limit=5)
             if wm_items:
                 working_memory_data, wm_meta = apply_list_budget(
                     wm_items, budget_working_memory, "content",

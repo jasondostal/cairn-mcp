@@ -102,7 +102,7 @@ That's it. 22 tools available. The ones you'll use most:
 | `rules` | Load behavioral guardrails (global or per-project) |
 | `beliefs` | Durable epistemic state — crystallize, challenge, retract knowledge with confidence tracking |
 | `work_items` | Create, claim, and complete tasks with dependencies and gates |
-| `working_memory` | Capture active thoughts — hypotheses, questions, tensions — with salience decay. Resolving graduates into memories or beliefs |
+| `working_memory` | Capture ephemeral thoughts — hypotheses, questions, tensions — with salience decay. Lives alongside crystallized memories; resolving graduates into permanent memories or beliefs |
 | `projects` | Manage project docs (briefs, PRDs, plans) |
 | `code_index` | Parse a codebase with tree-sitter, build a code graph in Neo4j |
 | `code_query` | Structural queries: dependents, impact, hotspots, cross-project search |
@@ -120,11 +120,11 @@ The rest: `modify`, `insights`, `think`, `status`, `consolidate`, `decay_scan`, 
 
 **Knowledge graph.** With Neo4j enabled, entities and facts get extracted into a graph that connects memories through shared people, places, projects, and concepts. Optional, but powerful when you're working across domains.
 
-**Working memory.** Active cognitive workspace for hypotheses, questions, tensions, and intuitions. Salience decays over time — engage with an item to keep it alive. When a thought crystallizes, resolve it into a memory or belief and it graduates automatically.
+**Ephemeral memory.** Hypotheses, questions, tensions, and intuitions live alongside crystallized memories with decaying salience. Engage with an item to keep it alive, or let it fade naturally. When a thought crystallizes, resolve it into a permanent memory or belief and it graduates automatically. The Memories page unifies both lifecycles with OKLCH-accented toggle filters.
 
 **Work management and multi-agent orchestration.** Hierarchical work items, dependency tracking, a dispatch queue, and gates that pause for human decisions. Typed agent definitions with capability enforcement, file-level resource locking, affinity-based routing, and persistent cross-dispatch learning. Agents accumulate institutional knowledge and get smarter with every task.
 
-**Web dashboard.** Browse memories, explore the knowledge graph, view analytics, manage work items, chat with your memory. Port 3000.
+**Web dashboard.** Browse memories with OKLCH-colored toggle filters, score gradient bars, and shareable URL state. Explore the knowledge graph, view analytics, manage work items, chat with your memory. Port 3000.
 
 <p align="center">
   <img src="images/cairn-dashboard.jpg" alt="Cairn dashboard with memory growth and token usage" width="700">

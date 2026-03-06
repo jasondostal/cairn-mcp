@@ -403,6 +403,8 @@ export interface TimelineMemory {
   is_active: boolean;
   session_name: string | null;
   author?: string | null;
+  salience: number | null;
+  pinned: boolean;
   created_at: string;
   updated_at: string;
   cluster?: { id: number; label: string; size: number } | null;
@@ -1237,7 +1239,7 @@ export const api = {
   timeline: (opts?: {
     project?: string; type?: string; session_name?: string; days?: string;
     sort?: string; group_by?: string; include_clusters?: string;
-    limit?: string; offset?: string;
+    limit?: string; offset?: string; ephemeral?: string;
   }) =>
     get<Paginated<TimelineMemory> | GroupedTimeline>("/timeline", opts),
 

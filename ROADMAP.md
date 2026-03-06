@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.69.2** — unified filters, persistent page state, responsive heatmap. See below.
+Current: **v0.71.0** — unified memory page, OKLCH lifecycle toggles, Mind page merged into Memories. See below.
 
 ---
 
@@ -47,6 +47,30 @@ Exploring, not committed.
 ---
 
 ## Shipped
+
+### v0.71.0 — "Unified Memory" ✓
+
+Mind page merged into Memories. One page, all memory types, polished filtering UX.
+
+- [x] **Unified Memories page** — OKLCH lifecycle toggle (All | Crystallized | Ephemeral) with teal/indigo/amber color-mix accents. Ephemeral items show salience bars, pin indicators, and inline boost/pin/archive actions.
+- [x] **Capture form on Memories** — create ephemeral items (hypotheses, questions, tensions, intuitions) directly from the Memories page.
+- [x] **Mind page removed** — `/mind` route and nav entry deleted. All functionality lives in the Ephemeral toggle on Memories.
+- [x] **OKLCH toggle groups** — every toggle group has per-option colors: sort (blue/rose/violet), time range (mint → sky → periwinkle → orchid → blush), view mode (emerald/tangerine). Reusable `OklchToggle` component.
+- [x] **Project color pills** — deterministic hash-based OKLCH hue per project name.
+- [x] **Score gradient bars** — importance (lavender → emerald) and salience (peach → amber) mini bars replace static badges.
+- [x] **Active filter pills** — dismissible pills with OKLCH colors, filter count badge, "Clear all" action.
+- [x] **URL state** — filters sync to query params. Shareable, bookmarkable views.
+- [x] **Smart empty state** — actionable "Try 30d" / "Clear filters" buttons.
+- [x] **"All" time range** — unbounded timeline queries (no 365-day cap).
+- [x] **Toolbar hierarchy** — vertical divider separates data filters from display controls.
+- [x] Part of ca-173 (Merge working memory into memories) / ca-184 (Phase 8: UI updates).
+
+### v0.70.0 — "Guardrails" ✓
+
+Unified CI pipeline with security scanning, type checking, and image signing.
+
+- [x] **CI pipeline** — lint → test → build → Trivy scan → smoke test. Mypy strict, ruff, bandit, hadolint, ShellCheck, ESLint, pip-audit, npm audit, CodeQL, Cosign signing.
+- [x] **339 mypy errors fixed** — zero-error strict pass across 182 source files.
 
 ### v0.69.0 — "Living Memory" ✓
 

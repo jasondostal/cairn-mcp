@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.71.0] — 2026-03-06 — "Unified Memory"
+
+### Added
+- **Unified Memories page** — crystallized and ephemeral memories now live on a single
+  page. OKLCH lifecycle toggle (All | Crystallized | Ephemeral) with teal/indigo/amber
+  color-mix accents. Ephemeral items show salience bars, salience %, pin indicators, and
+  inline boost/pin/archive actions in both card and dense views.
+- **Capture form on Memories page** — the Mind page's capture form is now embedded
+  directly in the Memories page (visible in All and Ephemeral modes). Create hypotheses,
+  questions, tensions, and intuitions without leaving the page.
+- **Ephemeral types in type filter** — hypothesis, question, tension, connection, thread,
+  and intuition now appear in the Memories page type multiselect alongside crystallized types.
+- **OKLCH toggle groups everywhere** — sort (blue/rose/violet), time range (mint → sky →
+  periwinkle → orchid → blush), view mode (emerald/tangerine), and lifecycle toggles all
+  use per-option OKLCH `color-mix` styling. Reusable `OklchToggle` component.
+- **Project color pills** — deterministic hash-based OKLCH hue per project name. Each
+  project gets a unique, consistent color across card and dense views.
+- **Score gradient bars** — mini horizontal bars with OKLCH color gradients replace the
+  static importance badge. Importance sweeps lavender → emerald; salience sweeps
+  peach → amber. Bar width and color intensity both scale with the value.
+- **Active filter pills** — dismissible pills below the toolbar showing active data
+  filters (project, type, lifecycle) with OKLCH colors and a "Clear all" action.
+- **Filter count badge** — badge next to the dense toggle showing active filter count.
+- **URL state** — all filters sync to query params (`?lifecycle=ephemeral&sort=important
+  &days=30&project=cairn`). Shareable, bookmarkable. Defaults omitted for clean URLs.
+- **Smart empty state** — actionable buttons to expand time range or clear filters when
+  no results match. Context-aware messaging per lifecycle mode.
+- **"All" time range** — replaces the 1y cap. Backend timeline endpoint now accepts
+  unbounded queries (days >= 9999 skips the cutoff filter).
+- **Toolbar visual hierarchy** — vertical divider separates data filters (project, type,
+  lifecycle) from display controls (sort, time range, view mode).
+- **Timeline endpoint returns salience + pinned** — `GET /timeline` now includes `salience`
+  and `pinned` fields for every memory, enabling the UI to distinguish ephemeral items.
+
+### Removed
+- **Mind page** — `/mind` page and nav entry removed. All functionality merged into the
+  Memories page with the Ephemeral lifecycle toggle. The `working_memory` MCP tool and
+  REST endpoints remain unchanged.
+
+### Changed
+- **Nav** — "Deep Dive" group no longer includes Mind (Clusters, Thinking, Workspace remain).
+- **Timeline endpoint** — `days` parameter cap raised from 365 to unbounded; values >= 9999
+  skip the time cutoff entirely.
+- **TimeRangeFilter component** — now accepts optional per-preset `color` for OKLCH variety.
+
 ## [0.70.0] — 2026-03-06 — "Guardrails"
 
 ### Added

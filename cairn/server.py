@@ -311,6 +311,7 @@ async def store(
     author: str | None = None,
     event_at: str | None = None,
     valid_until: str | None = None,
+    salience: float | None = None,
 ) -> dict:
     """Store a memory with automatic embedding generation and optional LLM enrichment.
 
@@ -328,8 +329,12 @@ async def store(
     - Duplicate information already stored (search first!)
 
     MEMORY TYPES: note, decision, rule, code-snippet, learning, research,
-    discussion, progress, task, debug, design.
+    discussion, progress, task, debug, design,
+    hypothesis, question, tension, connection, thread, intuition.
     Use 'rule' for behavioral guardrails. Use '__global__' project for cross-project rules.
+    Ephemeral types (hypothesis, question, tension, connection, thread, intuition) are
+    stored with salience that decays over time. Use the working_memory tool for these
+    or pass salience here directly.
 
     Args:
         content: The memory content. Can be plain text, markdown, or code.
@@ -348,6 +353,9 @@ async def store(
             (when we learned it). Use for temporal queries like "what happened last week?"
         valid_until: When this knowledge stops being true (ISO 8601). NULL = still valid.
             Use for docs, architecture decisions, or any knowledge with a shelf life.
+        salience: Ephemeral salience score (0.0-1.0). When set, memory decays over time.
+            Auto-set for ephemeral types (hypothesis, question, tension, etc.) if omitted.
+            NULL = crystallized (permanent) memory.
     """
     try:
         validate_store(content, project, memory_type, importance, tags, session_name)
@@ -366,6 +374,7 @@ async def store(
                 author=author,
                 event_at=event_at,
                 valid_until=valid_until,
+                salience=salience,
             )
 
         return await _in_thread(_do_store)
@@ -391,6 +400,7 @@ async def search(
     as_of: str | None = None,
     event_after: str | None = None,
     event_before: str | None = None,
+    ephemeral: bool | None = None,
 ) -> list[dict]:
     """Search memories using hybrid semantic search. YOUR PRIMARY KNOWLEDGE RETRIEVAL TOOL.
 
@@ -429,6 +439,8 @@ async def search(
             at or after this timestamp (valid time — filters on event_at). ISO 8601 format.
         event_before: Bi-temporal filter: only return memories where the event occurred
             at or before this timestamp (valid time — filters on event_at). ISO 8601 format.
+        ephemeral: Lifecycle filter. True=only ephemeral (decaying salience),
+            False=only crystallized (permanent), None=all memories (default).
     """
     try:
         validate_search(query, limit)
@@ -446,6 +458,7 @@ async def search(
                 as_of=as_of,
                 event_after=event_after,
                 event_before=event_before,
+                ephemeral=ephemeral,
             )
 
             # Apply budget cap
@@ -1752,7 +1765,6 @@ async def orient(project: str | None = None) -> dict:
                 work_item_manager=work_item_manager,
                 task_manager=task_manager,
                 graph_provider=graph_provider,
-                working_memory_store=working_memory_store,
                 belief_store=belief_store,
             )
 
@@ -1827,12 +1839,17 @@ async def working_memory(
     """
     try:
         def _do_working_memory():
+            # ca-173: Working memory is now unified into memories table.
+            # All operations delegate to MemoryStore with salience-based lifecycle.
+            from cairn.core.constants import GRADUATION_TYPE_MAP
+
             if action == "capture":
                 if not project or not content:
                     return {"error": "project and content are required for capture"}
-                return working_memory_store.capture(
-                    project, content,
-                    item_type=item_type or "thread",
+                return memory_store.store(
+                    content=content,
+                    project=project,
+                    memory_type=item_type or "thread",
                     salience=salience,
                     author=author,
                     session_name=session_name,
@@ -1841,49 +1858,38 @@ async def working_memory(
             if action == "list":
                 if not project:
                     return {"error": "project is required for list"}
-                return working_memory_store.list_active(
-                    project,
-                    author=author,
-                    item_type=item_type,
-                    min_salience=min_salience,
-                    limit=min(limit, MAX_LIMIT),
-                    offset=offset,
-                )
+                return memory_store.orient_items(project, limit=min(limit, MAX_LIMIT))
 
             if action == "get":
                 if not item_id:
                     return {"error": "item_id is required for get"}
-                return working_memory_store.get(item_id)
+                results = memory_store.recall([item_id])
+                return results[0] if results else {"error": f"Item {item_id} not found"}
 
             if action == "resolve":
-                if not item_id or not resolved_into:
-                    return {"error": "item_id and resolved_into are required for resolve"}
-                return working_memory_store.resolve(
-                    item_id,
-                    resolved_into=resolved_into,
-                    resolution_id=resolution_id,
-                    resolution_note=resolution_note,
-                )
+                if not item_id:
+                    return {"error": "item_id is required for resolve"}
+                return memory_store.modify(item_id, action="graduate")
 
             if action == "pin":
                 if not item_id:
                     return {"error": "item_id is required for pin"}
-                return working_memory_store.pin(item_id)
+                return memory_store.modify(item_id, action="pin")
 
             if action == "unpin":
                 if not item_id:
                     return {"error": "item_id is required for unpin"}
-                return working_memory_store.unpin(item_id)
+                return memory_store.modify(item_id, action="unpin")
 
             if action == "boost":
                 if not item_id:
                     return {"error": "item_id is required for boost"}
-                return working_memory_store.boost(item_id)
+                return memory_store.modify(item_id, action="boost")
 
             if action == "archive":
                 if not item_id:
                     return {"error": "item_id is required for archive"}
-                return working_memory_store.archive(item_id)
+                return memory_store.modify(item_id, action="inactivate", reason="archived via working_memory tool")
 
             return {"error": f"Unknown action: {action}"}
 

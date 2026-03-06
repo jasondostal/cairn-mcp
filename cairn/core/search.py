@@ -114,6 +114,7 @@ class SearchEngine:
         as_of: str | None = None,
         event_after: str | None = None,
         event_before: str | None = None,
+        ephemeral: bool | None = None,
     ) -> list[dict]:
         """Search memories using hybrid RRF.
 
@@ -134,12 +135,13 @@ class SearchEngine:
             List of memory dicts with relevance scores.
         """
         temporal = {"as_of": as_of, "event_after": event_after, "event_before": event_before}
+        filter_kw = {**temporal, "ephemeral": ephemeral}
         if search_mode == "keyword":
-            return self._keyword_search(query, project, memory_type, limit, include_full, required_tags, **temporal)
+            return self._keyword_search(query, project, memory_type, limit, include_full, required_tags, **filter_kw)
         elif search_mode == "vector":
-            return self._vector_search(query, project, memory_type, limit, include_full, required_tags, **temporal)
+            return self._vector_search(query, project, memory_type, limit, include_full, required_tags, **filter_kw)
         else:
-            return self._hybrid_search(query, query, project, memory_type, limit, include_full, required_tags, **temporal)
+            return self._hybrid_search(query, query, project, memory_type, limit, include_full, required_tags, **filter_kw)
 
     def _build_filters(
         self, project: str | list[str] | None, memory_type: str | list[str] | None,
@@ -147,6 +149,7 @@ class SearchEngine:
         as_of: str | None = None,
         event_after: str | None = None,
         event_before: str | None = None,
+        ephemeral: bool | None = None,
     ) -> tuple[str, list]:
         """Build WHERE clause fragments for common filters.
 
@@ -155,6 +158,10 @@ class SearchEngine:
                    (filters on created_at — transaction time).
             event_after: Only return memories where event_at >= this timestamp.
             event_before: Only return memories where event_at <= this timestamp.
+        Lifecycle filters:
+            ephemeral: True=only ephemeral (salience IS NOT NULL),
+                       False=only crystallized (salience IS NULL),
+                       None=all memories.
         """
         clauses = ["m.is_active = true"]
         params: list = []
@@ -190,6 +197,12 @@ class SearchEngine:
             clauses.append("m.event_at <= %s")
             params.append(event_before)
 
+        # Ephemeral filter (ca-173)
+        if ephemeral is True:
+            clauses.append("m.salience IS NOT NULL")
+        elif ephemeral is False:
+            clauses.append("m.salience IS NULL")
+
         # RBAC: scope to user's accessible projects (ca-124)
         from cairn.core.user import current_user
         user_ctx = current_user()
@@ -203,12 +216,14 @@ class SearchEngine:
         self, query: str, project: str | list[str] | None, memory_type: str | list[str] | None,
         limit: int, include_full: bool, required_tags: list[str] | None = None,
         as_of: str | None = None, event_after: str | None = None, event_before: str | None = None,
+        ephemeral: bool | None = None,
     ) -> list[dict]:
         """Pure vector similarity search."""
         query_vector = self.embedding.embed(query)
         where, params = self._build_filters(
             project, memory_type, required_tags,
             as_of=as_of, event_after=event_after, event_before=event_before,
+            ephemeral=ephemeral,
         )
 
         # pgvector cosine distance: <=> returns distance (0 = identical)
@@ -244,11 +259,13 @@ class SearchEngine:
         self, query: str, project: str | list[str] | None, memory_type: str | list[str] | None,
         limit: int, include_full: bool, required_tags: list[str] | None = None,
         as_of: str | None = None, event_after: str | None = None, event_before: str | None = None,
+        ephemeral: bool | None = None,
     ) -> list[dict]:
         """PostgreSQL full-text search."""
         where, params = self._build_filters(
             project, memory_type, required_tags,
             as_of=as_of, event_after=event_after, event_before=event_before,
+            ephemeral=ephemeral,
         )
 
         rows = self.db.execute(
@@ -282,6 +299,7 @@ class SearchEngine:
         self, query: str, expanded: str, project: str | list[str] | None, memory_type: str | list[str] | None,
         limit: int, include_full: bool, required_tags: list[str] | None = None,
         as_of: str | None = None, event_after: str | None = None, event_before: str | None = None,
+        ephemeral: bool | None = None,
     ) -> list[dict]:
         """Hybrid search: vector + keyword + tag, fused via RRF.
 
@@ -293,6 +311,7 @@ class SearchEngine:
         where, params = self._build_filters(
             project, memory_type, required_tags,
             as_of=as_of, event_after=event_after, event_before=event_before,
+            ephemeral=ephemeral,
         )
 
         # When reranking is enabled, widen the RRF pool to give the cross-encoder
@@ -622,8 +641,8 @@ class SearchEngine:
         rows = self.db.execute(
             f"""
             SELECT m.id, m.content, m.summary, m.memory_type, m.importance,
-                   m.tags, m.auto_tags, m.created_at,
-                   m.enrichment_status,
+                   m.tags, m.auto_tags, m.created_at, m.updated_at,
+                   m.enrichment_status, m.salience, m.pinned,
                    p.name as project
             FROM memories m
             LEFT JOIN projects p ON m.project_id = p.id
@@ -644,6 +663,19 @@ class SearchEngine:
                     "rrf_score": scored[memory_id],
                     "score_components": score_components.get(memory_id, {}),
                 })
+
+        # Salience weighting: ephemeral items with decayed salience rank lower (ca-173)
+        from cairn.core.memory import MemoryStore as _MS
+        for c in candidates:
+            row = c["row"]
+            if row.get("salience") is not None:
+                computed = _MS._compute_salience(
+                    float(row["salience"]), row["updated_at"], row["pinned"],
+                )
+                c["rrf_score"] *= max(computed, 0.1)
+
+        # Re-sort after salience weighting
+        candidates.sort(key=lambda c: c["rrf_score"], reverse=True)
 
         # MCA gate: filter by keyword coverage
         if use_mca:
@@ -851,6 +883,13 @@ class SearchEngine:
             }
             if r.get("score_components"):
                 result["score_components"] = r["score_components"]
+            if r.get("salience") is not None:
+                from cairn.core.memory import MemoryStore as _MS
+                computed = _MS._compute_salience(
+                    float(r["salience"]), r["updated_at"], r["pinned"],
+                )
+                result["salience"] = round(computed, 3)
+                result["pinned"] = r["pinned"]
             results.append(result)
 
         # JIT enrichment: queue background enrichment for unenriched top results

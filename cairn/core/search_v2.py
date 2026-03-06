@@ -87,6 +87,7 @@ class SearchV2:
         as_of: str | None = None,
         event_after: str | None = None,
         event_before: str | None = None,
+        ephemeral: bool | None = None,
     ) -> list[dict]:
         """Search memories.
 
@@ -98,27 +99,29 @@ class SearchV2:
             as_of: Only memories that existed at this timestamp (transaction time).
             event_after: Only memories where event_at >= this timestamp (valid time).
             event_before: Only memories where event_at <= this timestamp (valid time).
+        Lifecycle filters:
+            ephemeral: True=only ephemeral, False=only crystallized, None=all.
         """
-        temporal = {"as_of": as_of, "event_after": event_after, "event_before": event_before}
+        filter_kw = {"as_of": as_of, "event_after": event_after, "event_before": event_before, "ephemeral": ephemeral}
 
         # Passthrough mode: delegate directly to SearchEngine
         if not self.enhanced:
             return self._fallback_search(
-                query, project, memory_type, search_mode, limit, include_full, **temporal,
+                query, project, memory_type, search_mode, limit, include_full, **filter_kw,
             )
 
         # Enhanced mode: non-semantic modes bypass the v2 pipeline
         if search_mode != "semantic":
             return self._fallback_search(
-                query, project, memory_type, search_mode, limit, include_full, **temporal,
+                query, project, memory_type, search_mode, limit, include_full, **filter_kw,
             )
 
         try:
-            return self._routed_search(query, project, memory_type, limit, include_full)
+            return self._routed_search(query, project, memory_type, limit, include_full, ephemeral=ephemeral)
         except Exception:
             logger.warning("Enhanced search pipeline failed, falling back to RRF", exc_info=True)
             return self._fallback_search(
-                query, project, memory_type, search_mode, limit, include_full, **temporal,
+                query, project, memory_type, search_mode, limit, include_full, **filter_kw,
             )
 
     def assess_confidence(self, query: str, results: list[dict]) -> dict | None:
@@ -228,6 +231,7 @@ class SearchV2:
         memory_type: str | list[str] | None,
         limit: int,
         include_full: bool,
+        ephemeral: bool | None = None,
     ) -> list[dict]:
         """Graph-primary search pipeline.
 
@@ -287,6 +291,7 @@ class SearchV2:
                 search_mode="semantic",
                 limit=self.rerank_candidates,
                 include_full=True,
+                ephemeral=ephemeral,
             )
 
         if candidates:
@@ -488,6 +493,7 @@ class SearchV2:
         as_of: str | None = None,
         event_after: str | None = None,
         event_before: str | None = None,
+        ephemeral: bool | None = None,
     ) -> list[dict]:
         """Delegate to SearchEngine (RRF hybrid search)."""
         if self.fallback_engine:
@@ -501,5 +507,6 @@ class SearchV2:
                 as_of=as_of,
                 event_after=event_after,
                 event_before=event_before,
+                ephemeral=ephemeral,
             )
         return []

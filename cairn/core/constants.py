@@ -9,7 +9,22 @@ from __future__ import annotations
 VALID_MEMORY_TYPES = [
     "note", "decision", "rule", "code-snippet", "learning",
     "research", "discussion", "progress", "task", "debug", "design",
+    # Ephemeral types (formerly working memory) — stored with salience, decay over time
+    "hypothesis", "question", "tension", "connection", "thread", "intuition",
 ]
+
+# Ephemeral memory types — these get auto-salience when stored without explicit salience
+EPHEMERAL_MEMORY_TYPES = {"hypothesis", "question", "tension", "connection", "thread", "intuition"}
+
+# Graduation: ephemeral type -> crystallized type (used by modify action='graduate')
+GRADUATION_TYPE_MAP = {
+    "hypothesis": "learning",
+    "question": "note",
+    "tension": "decision",
+    "connection": "note",
+    "thread": "progress",
+    "intuition": "learning",
+}
 
 MEMORY_TYPE_DEFAULT = "note"
 IMPORTANCE_DEFAULT = 0.5
@@ -133,8 +148,12 @@ class MemoryAction:
     UPDATE = "update"
     INACTIVATE = "inactivate"
     REACTIVATE = "reactivate"
+    GRADUATE = "graduate"
+    PIN = "pin"
+    UNPIN = "unpin"
+    BOOST = "boost"
 
-    ALL = {UPDATE, INACTIVATE, REACTIVATE}
+    ALL = {UPDATE, INACTIVATE, REACTIVATE, GRADUATE, PIN, UNPIN, BOOST}
 
 
 # ============================================================

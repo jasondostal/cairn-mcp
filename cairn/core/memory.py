@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 import logging
+import math
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from cairn.core.analytics import track_operation
 from cairn.core.constants import (
     AUTO_SUMMARIZE_EMBED_THRESHOLD,
     CONTRADICTION_ESCALATION_THRESHOLD,
+    EPHEMERAL_MEMORY_TYPES,
+    GRADUATION_TYPE_MAP,
     MemoryAction,
+    WM_DEFAULT_SALIENCE,
+    WM_SALIENCE_BOOST_FLOOR,
+    WM_SALIENCE_DECAY_RATE,
 )
 from cairn.core.utils import extract_json, get_or_create_project
 from cairn.embedding.interface import EmbeddingInterface
@@ -87,6 +94,8 @@ class MemoryStore:
         author: str | None = None,
         event_at: str | None = None,
         valid_until: str | None = None,
+        salience: float | None = None,
+        pinned: bool = False,
     ) -> dict:
         """Store a memory with embedding.
 
@@ -174,6 +183,12 @@ class MemoryStore:
                 vector = self.embedding.embed(content[:2000])
                 logger.info("Large content (%d chars) — embedded truncated content", len(content))
 
+        # Auto-salience for ephemeral types
+        if final_type in EPHEMERAL_MEMORY_TYPES and salience is None:
+            salience = WM_DEFAULT_SALIENCE.get(final_type, 0.6)
+        if salience is not None:
+            salience = max(0.0, min(1.0, salience))
+
         # Insert memory
         import json as _json
         file_hashes_json = _json.dumps(file_hashes) if file_hashes else "{}"
@@ -206,12 +221,14 @@ class MemoryStore:
                  embedding, tags, auto_tags, summary, related_files, source_doc_id,
                  file_hashes, entities, author,
                  enrichment_status, enriched_at,
-                 owner_user_id, event_at, valid_until)
+                 owner_user_id, event_at, valid_until,
+                 salience, pinned)
             VALUES
                 (%s, %s, %s, %s, %s, %s::vector, %s, %s, %s, %s, %s,
                  %s::jsonb, %s, %s,
                  %s, CASE WHEN %s IN ('complete', 'partial') THEN NOW() ELSE NULL END,
-                 %s, %s, %s)
+                 %s, %s, %s,
+                 %s, %s)
             RETURNING id, created_at
             """,
             (
@@ -234,6 +251,8 @@ class MemoryStore:
                 _owner_user_id,
                 _event_at,
                 _valid_until,
+                salience,
+                pinned,
             ),
         )
 
@@ -303,6 +322,9 @@ class MemoryStore:
             "rule_conflicts": enrichment_result.get("rule_conflicts"),
             "created_at": row["created_at"].isoformat(),
         }
+        if salience is not None:
+            result["salience"] = salience
+            result["pinned"] = pinned
         if enrichment_result.get("graph_stats"):
             result["graph"] = enrichment_result["graph_stats"]
         return result
@@ -714,6 +736,7 @@ class MemoryStore:
                    m.tags, m.auto_tags, m.related_files, m.is_active,
                    m.inactive_reason, m.session_name, m.entities, m.author,
                    m.created_at, m.updated_at,
+                   m.salience, m.pinned,
                    p.name as project,
                    c.id as cluster_id, c.label as cluster_label,
                    c.member_count as cluster_size
@@ -794,6 +817,13 @@ class MemoryStore:
                     "label": r["cluster_label"],
                     "size": r["cluster_size"],
                 }
+            if r.get("salience") is not None:
+                computed = self._compute_salience(
+                    float(r["salience"]), r["updated_at"], r["pinned"],
+                )
+                entry["salience"] = round(computed, 3)
+                entry["base_salience"] = float(r["salience"])
+                entry["pinned"] = r["pinned"]
             results.append(entry)
 
         return results
@@ -863,6 +893,83 @@ class MemoryStore:
                 project_id=self._get_memory_project_id(memory_id),
             )
             return {"id": memory_id, "action": "reactivated"}
+
+        if action == MemoryAction.GRADUATE:
+            # Read current state to get type for remapping
+            current = self.db.execute_one(
+                "SELECT memory_type, salience FROM memories WHERE id = %s AND is_active = true",
+                (memory_id,),
+            )
+            if not current:
+                return {"error": f"Memory #{memory_id} not found or inactive"}
+            if current["salience"] is None:
+                return {"error": f"Memory #{memory_id} is already crystallized (no salience)"}
+            graduated_type = memory_type or GRADUATION_TYPE_MAP.get(current["memory_type"], current["memory_type"])
+            self.db.execute(
+                """
+                UPDATE memories
+                SET salience = NULL, pinned = FALSE, memory_type = %s, updated_at = NOW()
+                WHERE id = %s
+                """,
+                (graduated_type, memory_id),
+            )
+            self.db.commit()
+            self._publish(
+                "memory.graduated", memory_id=memory_id,
+                project_id=self._get_memory_project_id(memory_id),
+                from_type=current["memory_type"], to_type=graduated_type,
+            )
+            return {"id": memory_id, "action": "graduated", "memory_type": graduated_type}
+
+        if action == MemoryAction.PIN:
+            self.db.execute(
+                "UPDATE memories SET pinned = TRUE, updated_at = NOW() WHERE id = %s AND is_active = true",
+                (memory_id,),
+            )
+            self.db.commit()
+            return {"id": memory_id, "action": "pinned"}
+
+        if action == MemoryAction.UNPIN:
+            current = self.db.execute_one(
+                "SELECT salience, updated_at, pinned FROM memories WHERE id = %s AND is_active = true",
+                (memory_id,),
+            )
+            if not current:
+                return {"error": f"Memory #{memory_id} not found or inactive"}
+            computed = self._compute_salience(
+                float(current["salience"]) if current["salience"] is not None else 0.0,
+                current["updated_at"], current["pinned"],
+            )
+            self.db.execute(
+                "UPDATE memories SET pinned = FALSE, salience = %s, updated_at = NOW() WHERE id = %s",
+                (computed, memory_id),
+            )
+            self.db.commit()
+            return {"id": memory_id, "action": "unpinned", "salience": round(computed, 3)}
+
+        if action == MemoryAction.BOOST:
+            current = self.db.execute_one(
+                "SELECT salience, updated_at, pinned, project_id FROM memories WHERE id = %s AND is_active = true",
+                (memory_id,),
+            )
+            if not current:
+                return {"error": f"Memory #{memory_id} not found or inactive"}
+            if current["salience"] is None:
+                return {"error": f"Memory #{memory_id} is crystallized (no salience to boost)"}
+            computed = self._compute_salience(
+                float(current["salience"]), current["updated_at"], current["pinned"],
+            )
+            new_salience = max(computed, WM_SALIENCE_BOOST_FLOOR)
+            self.db.execute(
+                "UPDATE memories SET salience = %s, updated_at = NOW() WHERE id = %s",
+                (new_salience, memory_id),
+            )
+            self.db.commit()
+            self._publish(
+                "memory.boosted", memory_id=memory_id,
+                project_id=current["project_id"], salience=new_salience,
+            )
+            return {"id": memory_id, "action": "boosted", "salience": round(new_salience, 3)}
 
         if action == MemoryAction.UPDATE:
             updates: list[str] = []
@@ -986,6 +1093,78 @@ class MemoryStore:
             for r in rows
         ]
         return {"total": total, "limit": limit, "offset": offset, "items": items}
+
+    # ------------------------------------------------------------------
+    # Ephemeral memory support (formerly working memory)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _compute_salience(
+        base_salience: float,
+        updated_at: datetime,
+        pinned: bool,
+    ) -> float:
+        """Compute current salience with time-based decay.
+
+        Decay formula: base * (0.97 ^ days_elapsed)
+        Pinned items skip decay entirely.
+        """
+        if pinned:
+            return base_salience
+
+        now = datetime.now(UTC)
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=UTC)
+
+        elapsed = (now - updated_at).total_seconds() / 86400.0  # days
+        if elapsed <= 0:
+            return base_salience
+
+        decayed = base_salience * math.pow(WM_SALIENCE_DECAY_RATE, elapsed)
+        return max(0.0, min(1.0, decayed))
+
+    @track_operation("orient_items")
+    def orient_items(self, project: str, *, limit: int = 5) -> list[dict]:
+        """Return top active ephemeral items for orient() injection.
+
+        Compact format, sorted by computed salience (highest first).
+        """
+        from cairn.core.utils import get_project
+        project_id = get_project(self.db, project)
+        if project_id is None:
+            return []
+
+        rows = self.db.execute(
+            """
+            SELECT id, content, memory_type, salience, author, pinned,
+                   updated_at, created_at
+            FROM memories
+            WHERE project_id = %s AND is_active = true AND salience IS NOT NULL
+            ORDER BY salience DESC, created_at DESC
+            LIMIT %s
+            """,
+            (project_id, limit * 2),  # fetch extra to account for post-decay filtering
+        )
+
+        items = []
+        for r in rows:
+            computed = self._compute_salience(
+                float(r["salience"]), r["updated_at"], r["pinned"],
+            )
+            if computed < 0.05:  # skip nearly-faded items
+                continue
+            items.append({
+                "id": r["id"],
+                "item_type": r["memory_type"],
+                "content": r["content"],
+                "salience": round(computed, 3),
+                "author": r["author"],
+                "pinned": r["pinned"],
+            })
+            if len(items) >= limit:
+                break
+
+        return items
 
     def export_project(self, project: str) -> list[dict]:
         """Export all active memories for a project."""
