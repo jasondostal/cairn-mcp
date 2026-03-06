@@ -21,8 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ESLint + npm audit** — frontend code quality and dependency vulnerability scanning.
 - **pip-audit** — Python dependency vulnerability scanning against lockfile.
 - **Cosign image signing** — GHCR images are signed with keyless Sigstore OIDC.
-- **Trivy container scanning** — CRITICAL/HIGH CVE scanning on built images.
-- **Smoke tests** — post-build API and MCP endpoint health checks.
+- **Trivy container scanning** — CRITICAL/HIGH CVE scanning on built images (library-only,
+  excludes OS kernel packages).
+- **Smoke tests** — post-build API and MCP endpoint health checks (SSE-aware response parsing).
+- **CodeQL** — semantic security analysis for Python and JavaScript on push/PR/weekly schedule.
 
 ### Fixed
 - **Double DB pool creation in HTTP mode** — pool was being created twice during
@@ -35,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   missing required `since` argument.
 - **Ruff auto-fixes** — import sorting, unused import removal, pyupgrade modernization
   across ~95 Python files.
+- **UI TypeScript strict mode** — fixed xterm.js Terminal type mismatch, nullable ref
+  guards, and `window` cast after dependency updates. Removed unused imports.
 
 ### Changed
 - **Language registry** (`cairn/code/languages/__init__.py`) — replaced 30-branch

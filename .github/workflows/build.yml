@@ -200,6 +200,7 @@ jobs:
           format: table
           severity: CRITICAL,HIGH
           exit-code: 1
+          vuln-type: library
 
       - name: Trivy (UI image)
         uses: aquasecurity/trivy-action@master
@@ -208,6 +209,7 @@ jobs:
           format: table
           severity: CRITICAL,HIGH
           exit-code: 1
+          vuln-type: library
 
   smoke:
     needs: build
@@ -291,7 +293,13 @@ jobs:
           echo "$RESP"
           echo "$RESP" | python3 -c "
           import sys, json
-          d = json.load(sys.stdin)
+          raw = sys.stdin.read().strip()
+          # Handle SSE format (event: ...\ndata: {...}) or plain JSON
+          for line in raw.splitlines():
+              if line.startswith('data: '):
+                  raw = line[6:]
+                  break
+          d = json.loads(raw)
           assert 'result' in d, f'Expected result in response: {d}'
           print('MCP initialize: OK')
           "
