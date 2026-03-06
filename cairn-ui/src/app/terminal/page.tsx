@@ -341,7 +341,8 @@ function HostDialog({
 function NativeTerminal({ host }: { host: TerminalHost }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
-  const termRef = useRef<{ dispose: () => void; write: (data: string) => void; loadAddon: (addon: unknown) => void; open: (el: HTMLElement) => void; onData: (cb: (data: string) => void) => void } | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const termRef = useRef<any>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {

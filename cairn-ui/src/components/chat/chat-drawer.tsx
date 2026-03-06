@@ -6,7 +6,7 @@ import {
   AssistantRuntimeProvider,
   type ThreadMessageLike,
 } from "@assistant-ui/react";
-import { createChatAdapter, type ChatAdapterInstance } from "@/lib/chat-adapter";
+import { createChatAdapter } from "@/lib/chat-adapter";
 import { toThreadMessages } from "@/lib/chat-utils";
 import { api, type Conversation, type Project } from "@/lib/api";
 import { ChatThread } from "@/components/chat/thread";
