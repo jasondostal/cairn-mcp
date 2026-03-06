@@ -379,7 +379,7 @@ function NativeTerminal({ host }: { host: TerminalHost }) {
       terminal.write(`Connecting to ${host.hostname}...\r\n`);
 
       // Determine WebSocket URL
-      const wsEnv = (typeof window !== "undefined" && (window as Record<string, unknown>).__NEXT_PUBLIC_CAIRN_WS_URL as string) || "";
+      const wsEnv = (typeof window !== "undefined" && (window as unknown as Record<string, unknown>).__NEXT_PUBLIC_CAIRN_WS_URL as string) || "";
       let wsBase: string;
       if (wsEnv) {
         wsBase = wsEnv;
