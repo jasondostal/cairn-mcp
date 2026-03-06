@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Smoke tests** — post-build API and MCP endpoint health checks.
 
 ### Fixed
+- **Double DB pool creation in HTTP mode** — pool was being created twice during
+  startup when running with `CAIRN_TRANSPORT=http`, wasting connections.
+- **Ingest file_path resolution** — file paths were resolved relative to CWD instead
+  of the configured `ingest_dir`, causing file-not-found errors.
 - **339 mypy type errors** — added null guards, proper type annotations, narrowed
   Optional types across 64 source files. Fixed real bugs: `settings_store.load_one()`
   call to nonexistent method (now uses `load_all()`), `chat_tools.recent_activity()`
