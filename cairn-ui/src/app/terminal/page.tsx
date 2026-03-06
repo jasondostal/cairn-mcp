@@ -396,7 +396,7 @@ function NativeTerminal({ host }: { host: TerminalHost }) {
         if (disposed) return;
         setStatus("connected");
         // Send initial terminal size
-        const dims = fitAddon.proposeDimensions();
+        const dims = fitAddon!.proposeDimensions();
         if (dims) {
           ws!.send(JSON.stringify({ type: "resize", cols: dims.cols, rows: dims.rows }));
         }
@@ -404,23 +404,23 @@ function NativeTerminal({ host }: { host: TerminalHost }) {
 
       ws.onmessage = (event) => {
         if (disposed) return;
-        terminal.write(event.data);
+        terminal!.write(event.data);
       };
 
       ws.onclose = () => {
         if (disposed) return;
         setStatus("disconnected");
-        terminal.write("\r\n\x1b[90m--- Disconnected ---\x1b[0m\r\n");
+        terminal!.write("\r\n\x1b[90m--- Disconnected ---\x1b[0m\r\n");
       };
 
       ws.onerror = () => {
         if (disposed) return;
         setStatus("disconnected");
-        terminal.write("\r\n\x1b[31mConnection error\x1b[0m\r\n");
+        terminal!.write("\r\n\x1b[31mConnection error\x1b[0m\r\n");
       };
 
       // Terminal input → WebSocket
-      terminal.onData((data: string) => {
+      terminal!.onData((data: string) => {
         if (ws && ws.readyState === WebSocket.OPEN) {
           ws.send(data);
         }
@@ -428,8 +428,8 @@ function NativeTerminal({ host }: { host: TerminalHost }) {
 
       // Resize handling
       const onResize = () => {
-        fitAddon.fit();
-        const dims = fitAddon.proposeDimensions();
+        fitAddon!.fit();
+        const dims = fitAddon!.proposeDimensions();
         if (dims && ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: "resize", cols: dims.cols, rows: dims.rows }));
         }
