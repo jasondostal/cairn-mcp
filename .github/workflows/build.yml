@@ -194,22 +194,26 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Trivy (server image)
-        uses: aquasecurity/trivy-action@0.31.0
+        uses: aquasecurity/trivy-action@0.34.2
         with:
           image-ref: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main"
           format: table
           severity: CRITICAL,HIGH
           exit-code: 1
-          vuln-type: library
+          scanners: vuln
+          pkg-types: library
+          trivy-config: ""
 
       - name: Trivy (UI image)
-        uses: aquasecurity/trivy-action@0.31.0
+        uses: aquasecurity/trivy-action@0.34.2
         with:
           image-ref: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-ui:main"
           format: table
           severity: CRITICAL,HIGH
           exit-code: 1
-          vuln-type: library
+          scanners: vuln
+          pkg-types: library
+          trivy-config: ""
 
   smoke:
     needs: build
