@@ -2238,13 +2238,15 @@ def main():
             from fastapi.responses import JSONResponse
             from starlette.middleware.base import BaseHTTPMiddleware
 
-            from cairn.core.auth import resolve_bearer_token
+            from cairn.core.auth import is_trusted_proxy, resolve_bearer_token
             from cairn.core.user import clear_user, set_user
 
             _mcp_jwt_secret = final_config.auth.jwt_secret
             _mcp_user_manager = svc.user_manager
             _mcp_api_key = final_config.auth.api_key
             _mcp_api_key_header = final_config.auth.header_name
+            _mcp_proxy_header = final_config.auth.auth_proxy_header
+            _mcp_trusted_ips = final_config.auth.trusted_proxy_ips
 
             class MCPAuthMiddleware(BaseHTTPMiddleware):
                 async def dispatch(self, request, call_next):
@@ -2257,7 +2259,22 @@ def main():
                     if "/.well-known/" in request.url.path:
                         return await call_next(request)
 
-                    # Try API key fallback first (legacy/simple auth)
+                    # Trusted reverse proxy header
+                    if _mcp_proxy_header:
+                        header_value = request.headers.get(_mcp_proxy_header)
+                        if header_value:
+                            client_ip = request.client.host if request.client else ""
+                            if _mcp_trusted_ips:
+                                if is_trusted_proxy(client_ip, _mcp_trusted_ips):
+                                    return await call_next(request)
+                                logger.debug(
+                                    "MCP: proxy header '%s' ignored — source %s not in TRUSTED_PROXY_IPS",
+                                    _mcp_proxy_header, client_ip,
+                                )
+                            else:
+                                return await call_next(request)
+
+                    # Try API key fallback (legacy/simple auth)
                     if _mcp_api_key:
                         key = request.headers.get(_mcp_api_key_header)
                         if key and key == _mcp_api_key:
@@ -2288,6 +2305,15 @@ def main():
             mcp_app.add_middleware(MCPAuthMiddleware)
             logger.info("MCP HTTP auth enforcement enabled")
 
+        # Security: warn if proxy auth header is configured without source IP restriction
+        if final_config.auth.auth_proxy_header and not final_config.auth.trusted_proxy_ips:
+            logger.warning(
+                "SECURITY: CAIRN_AUTH_PROXY_HEADER='%s' is set without CAIRN_TRUSTED_PROXY_IPS. "
+                "Any client can forge this header and bypass authentication. "
+                "Set CAIRN_TRUSTED_PROXY_IPS to the IP or CIDR of your reverse proxy (e.g. 172.20.0.2).",
+                final_config.auth.auth_proxy_header,
+            )
+
         @asynccontextmanager
         async def combined_lifespan(app):
             # Size thread pool to DB pool capacity + headroom for concurrent tool calls
@@ -2312,10 +2338,18 @@ def main():
             "Starting Cairn (HTTP on %s:%d — MCP at /mcp, API at /api)",
             _base_config.http_host, _base_config.http_port,
         )
+        # Enable uvicorn proxy headers when trusted proxies are configured
+        # so request.client.host reflects the real client IP from X-Forwarded-For
+        _uvicorn_kwargs: dict = {}
+        if final_config.auth.trusted_proxy_ips:
+            _uvicorn_kwargs["proxy_headers"] = True
+            _uvicorn_kwargs["forwarded_allow_ips"] = final_config.auth.trusted_proxy_ips
+
         uvicorn.run(
             mcp_app,
             host=_base_config.http_host,
             port=_base_config.http_port,
+            **_uvicorn_kwargs,
         )
     else:
         logger.info("Starting Cairn MCP server (stdio)")

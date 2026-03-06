@@ -80,18 +80,22 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
 
     Decodes JWT from Authorization header, loads UserContext, and sets
     the contextvar for the request duration. Falls back to API key auth
-    if an X-API-Key header is present instead.
+    if an X-API-Key header is present instead. Supports trusted reverse
+    proxy header authentication.
     """
 
-    def __init__(self, app, *, jwt_secret: str, user_manager, api_key: str | None = None, api_key_header: str = "X-API-Key"):
+    def __init__(self, app, *, jwt_secret: str, user_manager, api_key: str | None = None, api_key_header: str = "X-API-Key",
+                 auth_proxy_header: str = "", trusted_proxy_ips: str = ""):
         super().__init__(app)
         self.jwt_secret = jwt_secret
         self.user_manager = user_manager
         self.api_key = api_key
         self.api_key_header = api_key_header
+        self.auth_proxy_header = auth_proxy_header
+        self.trusted_proxy_ips = trusted_proxy_ips
 
     async def dispatch(self, request: Request, call_next):
-        from cairn.core.auth import resolve_bearer_token
+        from cairn.core.auth import is_trusted_proxy, resolve_bearer_token
         from cairn.core.user import clear_user, set_user
 
         # Always allow CORS preflight
@@ -104,7 +108,23 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         try:
-            # Check for API key first (legacy/simple auth)
+            # Check trusted reverse proxy header first
+            if self.auth_proxy_header:
+                header_value = request.headers.get(self.auth_proxy_header)
+                if header_value:
+                    client_ip = request.client.host if request.client else ""
+                    if self.trusted_proxy_ips:
+                        if is_trusted_proxy(client_ip, self.trusted_proxy_ips):
+                            return await call_next(request)
+                        logger.debug(
+                            "Proxy header '%s' ignored — source %s not in TRUSTED_PROXY_IPS",
+                            self.auth_proxy_header, client_ip,
+                        )
+                    else:
+                        # No trusted IPs configured — accept from any source (insecure fallback)
+                        return await call_next(request)
+
+            # Check for API key (legacy/simple auth)
             if self.api_key:
                 api_key_value = request.headers.get(self.api_key_header)
                 if api_key_value and api_key_value == self.api_key:

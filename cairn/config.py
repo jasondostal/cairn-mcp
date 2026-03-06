@@ -201,6 +201,8 @@ class AuthConfig:
     jwt_expire_minutes: int = 1440  # JWT expiration (default 24h)
     oidc: OIDCConfig = field(default_factory=OIDCConfig)
     stdio_user: str = ""  # Username for stdio transport identity (CAIRN_STDIO_USER)
+    auth_proxy_header: str = ""  # Reverse proxy auth header (e.g. Remote-User, X-Forwarded-User)
+    trusted_proxy_ips: str = ""  # Comma-separated IPs/CIDRs allowed to set proxy header
 
 
 @dataclass(frozen=True)
@@ -366,6 +368,7 @@ EDITABLE_KEYS: set[str] = {
     # Auth
     "auth.enabled", "auth.api_key", "auth.header_name",
     "auth.jwt_secret", "auth.jwt_expire_minutes", "auth.stdio_user",
+    "auth.auth_proxy_header", "auth.trusted_proxy_ips",
     # Auth OIDC (secrets excluded — env-only)
     "auth.oidc.enabled", "auth.oidc.provider_url", "auth.oidc.scopes",
     "auth.oidc.auto_create_users", "auth.oidc.default_role", "auth.oidc.admin_groups",
@@ -646,6 +649,8 @@ _ENV_MAP: dict[str, str] = {
     "auth.jwt_secret": "CAIRN_AUTH_JWT_SECRET",
     "auth.jwt_expire_minutes": "CAIRN_AUTH_JWT_EXPIRE_MINUTES",
     "auth.stdio_user": "CAIRN_STDIO_USER",
+    "auth.auth_proxy_header": "CAIRN_AUTH_PROXY_HEADER",
+    "auth.trusted_proxy_ips": "CAIRN_TRUSTED_PROXY_IPS",
     "auth.oidc.enabled": "CAIRN_OIDC_ENABLED",
     "auth.oidc.provider_url": "CAIRN_OIDC_PROVIDER_URL",
     "auth.oidc.client_id": "CAIRN_OIDC_CLIENT_ID",

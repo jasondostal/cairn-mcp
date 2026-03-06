@@ -78,6 +78,8 @@ def create_api(svc: Services) -> FastAPI:
             user_manager=svc.user_manager,
             api_key=config.auth.api_key,
             api_key_header=config.auth.header_name,
+            auth_proxy_header=config.auth.auth_proxy_header,
+            trusted_proxy_ips=config.auth.trusted_proxy_ips,
         )
         logger.info("JWT auth enabled (with API key fallback)")
     elif config.auth.enabled and config.auth.api_key:

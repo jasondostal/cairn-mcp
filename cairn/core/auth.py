@@ -1,11 +1,13 @@
 """Unified authentication — resolves tokens to UserContext.
 
 All transport middleware (REST, MCP HTTP) delegates to this module.
-Supports: Cairn JWT, Personal Access Tokens (PATs), legacy API key.
+Supports: Cairn JWT, Personal Access Tokens (PATs), legacy API key,
+and trusted reverse proxy header authentication.
 """
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 from typing import TYPE_CHECKING
 
@@ -13,6 +15,24 @@ if TYPE_CHECKING:
     from cairn.core.user import UserContext, UserManager
 
 logger = logging.getLogger(__name__)
+
+
+def is_trusted_proxy(client_ip: str, trusted_ips_str: str) -> bool:
+    """Return True if client_ip matches any entry in the trusted proxy list (IPs or CIDRs)."""
+    try:
+        client = ipaddress.ip_address(client_ip)
+    except ValueError:
+        return False
+    for entry in trusted_ips_str.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        try:
+            if client in ipaddress.ip_network(entry, strict=False):
+                return True
+        except ValueError:
+            pass
+    return False
 
 
 def resolve_bearer_token(
