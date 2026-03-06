@@ -290,7 +290,7 @@ if _base_config.transport == "http":
     mcp_kwargs["host"] = _base_config.http_host
     mcp_kwargs["port"] = _base_config.http_port
 
-mcp = FastMCP(**mcp_kwargs)
+mcp = FastMCP(**mcp_kwargs)  # type: ignore[arg-type]
 
 
 # ============================================================

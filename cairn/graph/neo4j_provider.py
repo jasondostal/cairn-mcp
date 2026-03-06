@@ -24,7 +24,7 @@ class Neo4jGraphProvider(GraphProvider):
         """Open connection to Neo4j."""
         from neo4j import GraphDatabase
 
-        self._driver = GraphDatabase.driver(
+        self._driver = GraphDatabase.driver(  # type: ignore[assignment]
             self.config.uri,
             auth=(self.config.user, self.config.password),
         )

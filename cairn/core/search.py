@@ -134,14 +134,13 @@ class SearchEngine:
         Returns:
             List of memory dicts with relevance scores.
         """
-        temporal = {"as_of": as_of, "event_after": event_after, "event_before": event_before}
-        filter_kw = {**temporal, "ephemeral": ephemeral}
+        t_kw = {"as_of": as_of, "event_after": event_after, "event_before": event_before, "ephemeral": ephemeral}
         if search_mode == "keyword":
-            return self._keyword_search(query, project, memory_type, limit, include_full, required_tags, **filter_kw)
+            return self._keyword_search(query, project, memory_type, limit, include_full, required_tags, **t_kw)  # type: ignore[arg-type]
         elif search_mode == "vector":
-            return self._vector_search(query, project, memory_type, limit, include_full, required_tags, **filter_kw)
+            return self._vector_search(query, project, memory_type, limit, include_full, required_tags, **t_kw)  # type: ignore[arg-type]
         else:
-            return self._hybrid_search(query, query, project, memory_type, limit, include_full, required_tags, **filter_kw)
+            return self._hybrid_search(query, query, project, memory_type, limit, include_full, required_tags, **t_kw)  # type: ignore[arg-type]
 
     def _build_filters(
         self, project: str | list[str] | None, memory_type: str | list[str] | None,

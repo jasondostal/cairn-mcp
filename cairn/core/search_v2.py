@@ -102,18 +102,18 @@ class SearchV2:
         Lifecycle filters:
             ephemeral: True=only ephemeral, False=only crystallized, None=all.
         """
-        filter_kw = {"as_of": as_of, "event_after": event_after, "event_before": event_before, "ephemeral": ephemeral}
+        t_kw = {"as_of": as_of, "event_after": event_after, "event_before": event_before, "ephemeral": ephemeral}
 
         # Passthrough mode: delegate directly to SearchEngine
         if not self.enhanced:
             return self._fallback_search(
-                query, project, memory_type, search_mode, limit, include_full, **filter_kw,
+                query, project, memory_type, search_mode, limit, include_full, **t_kw,  # type: ignore[arg-type]
             )
 
         # Enhanced mode: non-semantic modes bypass the v2 pipeline
         if search_mode != "semantic":
             return self._fallback_search(
-                query, project, memory_type, search_mode, limit, include_full, **filter_kw,
+                query, project, memory_type, search_mode, limit, include_full, **t_kw,  # type: ignore[arg-type]
             )
 
         try:
@@ -121,7 +121,7 @@ class SearchV2:
         except Exception:
             logger.warning("Enhanced search pipeline failed, falling back to RRF", exc_info=True)
             return self._fallback_search(
-                query, project, memory_type, search_mode, limit, include_full, **filter_kw,
+                query, project, memory_type, search_mode, limit, include_full, **t_kw,  # type: ignore[arg-type]
             )
 
     def assess_confidence(self, query: str, results: list[dict]) -> dict | None:

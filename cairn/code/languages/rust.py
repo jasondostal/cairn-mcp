@@ -108,7 +108,8 @@ def _extract_function(
         return None
 
     name = _node_text(name_node, source)
-    params = _node_text(_find_child(node, "parameters"), source) if _find_child(node, "parameters") else "()"
+    params_node = _find_child(node, "parameters")
+    params = _node_text(params_node, source) if params_node else "()"
 
     # Return type
     return_type = ""
@@ -238,7 +239,8 @@ def _extract_function_signature(
         return None
 
     name = _node_text(name_node, source)
-    params = _node_text(_find_child(node, "parameters"), source) if _find_child(node, "parameters") else "()"
+    params_node = _find_child(node, "parameters")
+    params = _node_text(params_node, source) if params_node else "()"
 
     return_type = ""
     for i, child in enumerate(node.children):
