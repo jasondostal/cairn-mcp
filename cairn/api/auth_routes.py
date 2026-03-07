@@ -373,6 +373,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
 
             # Store JWT in a one-time code to avoid exposing token in URL
             # (server logs, referrer headers, browser history)
+            assert _oidc_code_store is not None  # initialized in _get_oidc()
             oidc_code = _oidc_code_store.create(cairn_token, user["username"], user["role"])
             redirect_url = f"{ui_origin}/login?oidc_code={oidc_code}"
             return RedirectResponse(url=redirect_url, status_code=302)

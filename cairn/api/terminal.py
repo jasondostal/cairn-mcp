@@ -39,7 +39,7 @@ async def _ws_authenticate(websocket: WebSocket, svc: Services) -> bool:
             ctx = resolve_bearer_token(
                 token,
                 jwt_secret=config.auth.jwt_secret,
-                user_manager=svc.user_manager,
+                user_manager=svc.user_manager,  # type: ignore[arg-type]
             )
             if ctx is not None:
                 return True
