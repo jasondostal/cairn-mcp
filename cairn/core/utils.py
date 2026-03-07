@@ -293,4 +293,4 @@ def validate_url(url: str) -> None:
                     f"Fetching from private/reserved IP ({ip}) is not allowed"
                 )
     except socket.gaierror:
-        pass
+        raise ValueError(f"Cannot resolve hostname: {parsed.hostname}") from None

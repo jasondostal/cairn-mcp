@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import fnmatch
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 
@@ -63,6 +64,7 @@ class ResourceLockManager:
     """
 
     def __init__(self) -> None:
+        self._mu = threading.Lock()
         # project -> path -> lock
         self._locks: dict[str, dict[str, ResourceLock]] = {}
 
@@ -78,31 +80,32 @@ class ResourceLockManager:
         Returns a list of conflicts (empty = all acquired successfully).
         If any conflict is found, NO locks are acquired (atomic).
         """
-        project_locks = self._locks.setdefault(project, {})
-        conflicts: list[LockConflict] = []
+        with self._mu:
+            project_locks = self._locks.setdefault(project, {})
+            conflicts: list[LockConflict] = []
 
-        # Check for conflicts first
-        for path in paths:
-            conflict = self._check_conflict(project_locks, path, owner, work_item_id)
-            if conflict:
-                conflicts.append(conflict)
+            # Check for conflicts first
+            for path in paths:
+                conflict = self._check_conflict(project_locks, path, owner, work_item_id)
+                if conflict:
+                    conflicts.append(conflict)
 
-        if conflicts:
-            return conflicts
+            if conflicts:
+                return conflicts
 
-        # No conflicts — acquire all locks
-        for path in paths:
-            project_locks[path] = ResourceLock(
-                path=path,
-                owner=owner,
-                work_item_id=work_item_id,
+            # No conflicts — acquire all locks
+            for path in paths:
+                project_locks[path] = ResourceLock(
+                    path=path,
+                    owner=owner,
+                    work_item_id=work_item_id,
+                )
+
+            logger.info(
+                "Acquired %d lock(s) for %s on %s (project: %s)",
+                len(paths), owner, work_item_id, project,
             )
-
-        logger.info(
-            "Acquired %d lock(s) for %s on %s (project: %s)",
-            len(paths), owner, work_item_id, project,
-        )
-        return []
+            return []
 
     def release(
         self,
@@ -119,41 +122,43 @@ class ResourceLockManager:
         if not paths and not work_item_id and not owner:
             raise ValueError("Must provide at least one of: paths, work_item_id, owner")
 
-        project_locks = self._locks.get(project)
-        if not project_locks:
-            return 0
+        with self._mu:
+            project_locks = self._locks.get(project)
+            if not project_locks:
+                return 0
 
-        to_remove: list[str] = []
-        for locked_path, lock in project_locks.items():
-            if paths and locked_path in paths:
-                to_remove.append(locked_path)
-            elif work_item_id and lock.work_item_id == work_item_id:
-                to_remove.append(locked_path)
-            elif owner and lock.owner == owner:
-                to_remove.append(locked_path)
+            to_remove: list[str] = []
+            for locked_path, lock in project_locks.items():
+                if paths and locked_path in paths:
+                    to_remove.append(locked_path)
+                elif work_item_id and lock.work_item_id == work_item_id:
+                    to_remove.append(locked_path)
+                elif owner and lock.owner == owner:
+                    to_remove.append(locked_path)
 
-        for path in to_remove:
-            del project_locks[path]
+            for path in to_remove:
+                del project_locks[path]
 
-        if to_remove:
-            logger.info(
-                "Released %d lock(s) in project %s (filter: paths=%s, wi=%s, owner=%s)",
-                len(to_remove), project, paths, work_item_id, owner,
-            )
-        return len(to_remove)
+            if to_remove:
+                logger.info(
+                    "Released %d lock(s) in project %s (filter: paths=%s, wi=%s, owner=%s)",
+                    len(to_remove), project, paths, work_item_id, owner,
+                )
+            return len(to_remove)
 
     def check(self, project: str, paths: list[str], owner: str | None = None) -> list[LockConflict]:
         """Check for conflicts without acquiring locks.
 
         If owner is provided, locks held by that owner are not treated as conflicts.
         """
-        project_locks = self._locks.get(project, {})
-        conflicts: list[LockConflict] = []
-        for path in paths:
-            conflict = self._check_conflict(project_locks, path, owner, None)
-            if conflict:
-                conflicts.append(conflict)
-        return conflicts
+        with self._mu:
+            project_locks = self._locks.get(project, {})
+            conflicts: list[LockConflict] = []
+            for path in paths:
+                conflict = self._check_conflict(project_locks, path, owner, None)
+                if conflict:
+                    conflicts.append(conflict)
+            return conflicts
 
     def list_locks(
         self,
@@ -163,15 +168,16 @@ class ResourceLockManager:
         work_item_id: str | None = None,
     ) -> list[ResourceLock]:
         """List all active locks, optionally filtered by owner or work item."""
-        project_locks = self._locks.get(project, {})
-        result: list[ResourceLock] = []
-        for lock in project_locks.values():
-            if owner and lock.owner != owner:
-                continue
-            if work_item_id and lock.work_item_id != work_item_id:
-                continue
-            result.append(lock)
-        return sorted(result, key=lambda l: l.path)
+        with self._mu:
+            project_locks = self._locks.get(project, {})
+            result: list[ResourceLock] = []
+            for lock in project_locks.values():
+                if owner and lock.owner != owner:
+                    continue
+                if work_item_id and lock.work_item_id != work_item_id:
+                    continue
+                result.append(lock)
+            return sorted(result, key=lambda l: l.path)
 
     def _check_conflict(
         self,

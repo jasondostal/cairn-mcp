@@ -420,11 +420,14 @@ only sees projects they have access to.
 All authentication modes coexist. When a request arrives, Cairn resolves
 identity in this order:
 
-1. **Static API key** — if `CAIRN_API_KEY` is set and the request includes a
+1. **Trusted reverse proxy header** — if `CAIRN_AUTH_PROXY_HEADER` is set and
+   the request includes that header from a trusted source IP, the header value
+   is resolved to a user identity via username lookup
+2. **Static API key** — if `CAIRN_API_KEY` is set and the request includes a
    matching header, the request is authenticated (no specific user identity)
-2. **JWT** — if an `Authorization: Bearer` header is present, try to decode it
+3. **JWT** — if an `Authorization: Bearer` header is present, try to decode it
    as a Cairn-issued JWT
-3. **PAT** — if JWT decoding fails, try to resolve the Bearer token as a
+4. **PAT** — if JWT decoding fails, try to resolve the Bearer token as a
    Personal Access Token
 
 The first successful match wins. If all fail and auth is enabled, the request
@@ -520,6 +523,8 @@ API key header.
 | `CAIRN_OIDC_DEFAULT_ROLE` | `user` | Default role for auto-created OIDC users |
 | `CAIRN_OIDC_AUTO_CREATE_USERS` | `true` | Auto-create users on first OIDC login |
 | `CAIRN_OIDC_ADMIN_GROUPS` | *(empty)* | Comma-separated IdP groups that map to admin role |
+| `CAIRN_AUTH_PROXY_HEADER` | *(empty)* | HTTP header containing the authenticated username (e.g., `X-Forwarded-User`) |
+| `CAIRN_TRUSTED_PROXY_IPS` | *(empty)* | Comma-separated IPs/CIDRs allowed to send the proxy header |
 | `CAIRN_STDIO_USER` | *(empty)* | Username for MCP stdio transport identity |
 
 ---

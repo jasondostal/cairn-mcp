@@ -50,6 +50,11 @@ docker-compose.override.yml
 screenshot.jpg
 .mcpregistry_*
 
+# Community docs (under consideration — not shipping yet)
+CONTRIBUTING.md
+SECURITY.md
+CODE_OF_CONDUCT.md
+
 # Internal dev notes
 SESSION_HANDOFF.md
 RETRIEVAL_POSTMORTEM.md

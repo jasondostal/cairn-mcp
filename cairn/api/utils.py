@@ -128,6 +128,9 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
                     client_ip = request.client.host if request.client else ""
                     if self.trusted_proxy_ips:
                         if is_trusted_proxy(client_ip, self.trusted_proxy_ips):
+                            ctx = self.user_manager.load_user_context_by_username(header_value)
+                            if ctx:
+                                set_user(ctx)
                             return await call_next(request)
                         logger.debug(
                             "Proxy header '%s' ignored — source %s not in TRUSTED_PROXY_IPS",

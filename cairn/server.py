@@ -1,9 +1,9 @@
 """Cairn MCP Server. Entry point for the semantic memory system."""
 
-import sys
 import asyncio
 import concurrent.futures
 import logging
+import sys
 from contextlib import asynccontextmanager
 
 # Fix __main__ module identity: when run via `python -m cairn.server`, the module
@@ -407,6 +407,10 @@ def main():
                             client_ip = request.client.host if request.client else ""
                             if _mcp_trusted_ips:
                                 if is_trusted_proxy(client_ip, _mcp_trusted_ips):
+                                    if _mcp_user_manager:
+                                        ctx = _mcp_user_manager.load_user_context_by_username(header_value)
+                                        if ctx:
+                                            set_user(ctx)
                                     return await call_next(request)
                                 logger.debug(
                                     "MCP: proxy header '%s' ignored — source %s not in TRUSTED_PROXY_IPS",

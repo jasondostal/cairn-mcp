@@ -309,6 +309,13 @@ class UserManager:
             project_ids=frozenset(project_ids),
         )
 
+    def load_user_context_by_username(self, username: str) -> UserContext | None:
+        """Build a UserContext from a username (for proxy header auth)."""
+        user = self.get_by_username(username)
+        if not user or not user.get("is_active"):
+            return None
+        return self.load_user_context(user["id"])
+
     # --- Personal Access Tokens (PATs) ---
 
     def create_api_token(

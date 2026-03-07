@@ -11,20 +11,20 @@ Current: **v0.74.0** — "Hardening" — audit remediation, silent failure fixes
 Full remediation from the 6-agent audit (red team, blue team, testing, QA manager, OSS quality, UI/UX) triggered by the `__main__` module identity bug that caused silent total MCP failure on prod.
 
 **Silent failure elimination.**
-- [ ] orient() must surface errors, not return empty arrays (ca-210)
-- [ ] Startup assertion — validate critical services non-None after _init_services() (ca-211)
-- [ ] Readiness probe — /api/status must verify DB reachability, not always return "healthy" (ca-216)
+- [x] orient() must surface errors, not return empty arrays (ca-210)
+- [x] Startup assertion — validate critical services non-None after _init_services() (ca-211)
+- [x] Readiness probe — /api/status must verify DB reachability, not always return "healthy" (ca-216)
 
 **Security hardening.**
-- [ ] Proxy header auth bypass — set UserContext from proxy header value (ca-212)
-- [ ] ResourceLockManager thread safety — add threading.Lock (ca-213)
-- [ ] SSRF TOCTOU in webhook URL validation — validate at request time (ca-214)
+- [x] Proxy header auth bypass — set UserContext from proxy header value (ca-212)
+- [x] ResourceLockManager thread safety — add threading.Lock (ca-213)
+- [x] SSRF TOCTOU in webhook URL validation — validate at request time (ca-214)
 - [ ] CORS default to empty list instead of wildcard * (ca-215)
 
 **Test infrastructure.**
-- [ ] CI smoke test must call an actual MCP tool, not just initialize (ca-217)
-- [ ] _ServerGlobals proxy contract test (ca-218)
-- [ ] orient() total failure detection test (ca-219)
+- [x] CI smoke test must call an actual MCP tool, not just initialize (ca-217)
+- [x] _ServerGlobals proxy contract test (ca-218)
+- [x] orient() total failure detection test (ca-219)
 - [ ] Service assembly integration test with real Postgres (ca-220)
 - [ ] Round-trip memory store + search with real Postgres (ca-221)
 
@@ -38,8 +38,8 @@ Full remediation from the 6-agent audit (red team, blue team, testing, QA manage
 - [ ] Confirmation dialogs on destructive work item and session actions (ca-226)
 - [ ] Decompose god-components — Memories (1050 lines), Graph (62KB), Settings (76KB) (ca-228)
 
-**OSS governance.**
-- [ ] Add CONTRIBUTING.md, SECURITY.md, CODE_OF_CONDUCT.md (ca-227)
+**OSS governance (under consideration).**
+- [ ] Add CONTRIBUTING.md, SECURITY.md, CODE_OF_CONDUCT.md (ca-227) — drafts written, not shipping yet
 
 ---
 

@@ -12,6 +12,14 @@ from cairn.storage.database import Database
 @track_operation("status")
 def get_status(db: Database, config: Config, graph_provider=None) -> dict:
     """Aggregate system health metrics."""
+    subsystem_errors: list[str] = []
+
+    # DB reachability check
+    try:
+        db.execute_one("SELECT 1 AS ok")
+    except Exception:
+        subsystem_errors.append("database")
+
     memory_count_row = db.execute_one(
         "SELECT COUNT(*) as count FROM memories WHERE is_active = true"
     )
@@ -71,9 +79,11 @@ def get_status(db: Database, config: Config, graph_provider=None) -> dict:
             pass  # tables may not exist yet
         event_bus_info = eb
 
+    status = "degraded" if subsystem_errors else "healthy"
+
     result = {
         "version": __version__,
-        "status": "healthy",
+        "status": status,
         "profile": config.profile or None,
         "memories": memory_count["count"],
         "projects": project_count["count"],
@@ -107,5 +117,8 @@ def get_status(db: Database, config: Config, graph_provider=None) -> dict:
         pass  # tables may not exist yet (pre-migration)
 
     result["graph_backend"] = "neo4j" if graph_provider else None
+
+    if subsystem_errors:
+        result["subsystem_errors"] = subsystem_errors
 
     return result

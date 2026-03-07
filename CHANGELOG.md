@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.74.0] — 2026-03-07 — "Hardening"
+
+### Fixed
+- Fix `__main__` module identity split when running `python -m cairn.server` (ca-209)
+- orient() surfaces `_errors` key on section failures instead of returning empty arrays (ca-210)
+- `_init_services()` raises `RuntimeError` if critical services are `None` after init (ca-211)
+- Proxy header auth sets `UserContext` via username lookup instead of passing through without identity (ca-212)
+- `ResourceLockManager` mutations protected by `threading.Lock` (ca-213)
+- `validate_url()` raises on DNS resolution failure instead of silently passing (ca-214)
+- `/api/status` checks DB reachability and reports `"degraded"` when checks fail (ca-216)
+
+### Added
+- CI smoke test calls MCP `status` tool end-to-end, not just `initialize` (ca-217)
+- `_ServerGlobals` proxy contract tests (ca-218)
+- orient() error surfacing tests (ca-219)
+
+### Changed
+- Authentication docs: added proxy header to auth resolution order and env var reference
+
 ## [0.73.0] — 2026-03-07 — "Sentinel"
 
 ### Added
