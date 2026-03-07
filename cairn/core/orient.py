@@ -171,8 +171,23 @@ def run_orient(
     """Single-pass session boot. Returns rules, trail, learnings, and work items.
 
     Budget-driven: each section gets a token allocation with surplus flowing
-    to the next section.
+    to the next section. Section failures are tracked in _errors and logged
+    at WARNING level to prevent silent degradation.
     """
+    # Pre-flight: critical services must be non-None (ca-210)
+    _critical = {"db": db, "memory_store": memory_store, "search_engine": search_engine,
+                 "work_item_manager": work_item_manager, "task_manager": task_manager}
+    _missing = [k for k, v in _critical.items() if v is None]
+    if _missing:
+        logger.error("orient: critical services are None: %s — returning error", _missing)
+        return {
+            "project": project,
+            "rules": [], "trail": {}, "learnings": [],
+            "working_memory": [], "beliefs": [], "work_items": [],
+            "_errors": [f"Service unavailable: {', '.join(_missing)}"],
+            "_budget": {"total": 0, "used": 0},
+        }
+
     total_budget = config.budget.orient
     budget_rules = int(total_budget * ORIENT_ALLOC_RULES)
     budget_learnings = int(total_budget * ORIENT_ALLOC_LEARNINGS)
@@ -181,6 +196,7 @@ def run_orient(
     budget_work_items = int(total_budget * ORIENT_ALLOC_WORK_ITEMS)
 
     tokens_used = 0
+    errors: list[str] = []
 
     # --- Section 1: Rules (30%) ---
     rules_data: list[dict] = []
@@ -202,7 +218,8 @@ def run_orient(
             surplus = budget_rules
         budget_learnings += surplus
     except Exception:
-        logger.debug("orient: rules section failed", exc_info=True)
+        logger.warning("orient: rules section failed", exc_info=True)
+        errors.append("rules")
         budget_learnings += budget_rules
 
     # --- Section 2: Learnings (25% + surplus) ---
@@ -231,7 +248,8 @@ def run_orient(
             surplus = budget_learnings
         budget_trail += surplus
     except Exception:
-        logger.debug("orient: learnings section failed", exc_info=True)
+        logger.warning("orient: learnings section failed", exc_info=True)
+        errors.append("learnings")
         budget_trail += budget_learnings
 
     # --- Section 3: Trail (25% + surplus) ---
@@ -252,7 +270,8 @@ def run_orient(
         surplus = max(0, budget_trail - trail_tokens)
         budget_working_memory += surplus
     except Exception:
-        logger.debug("orient: trail section failed", exc_info=True)
+        logger.warning("orient: trail section failed", exc_info=True)
+        errors.append("trail")
         budget_working_memory += budget_trail
 
     # --- Section 3.5: Working Memory (10% + surplus) ---
@@ -274,7 +293,8 @@ def run_orient(
                 surplus = budget_working_memory
             budget_work_items += surplus
         except Exception:
-            logger.debug("orient: working memory section failed", exc_info=True)
+            logger.warning("orient: working memory section failed", exc_info=True)
+            errors.append("working_memory")
             budget_work_items += budget_working_memory
     else:
         budget_work_items += budget_working_memory
@@ -285,7 +305,8 @@ def run_orient(
         try:
             beliefs_data = belief_store.orient_beliefs(project, limit=5)
         except Exception:
-            logger.debug("orient: beliefs section failed", exc_info=True)
+            logger.warning("orient: beliefs section failed", exc_info=True)
+            errors.append("beliefs")
 
     # --- Section 4: Work Items (18% + surplus) ---
     work_items_data = []
@@ -327,9 +348,10 @@ def run_orient(
                 work_items_data.append({"_overflow": wi_meta["overflow_message"]})
             tokens_used += estimate_tokens_for_dict(work_items_data)
     except Exception:
-        logger.debug("orient: work items section failed", exc_info=True)
+        logger.warning("orient: work items section failed", exc_info=True)
+        errors.append("work_items")
 
-    return {
+    result = {
         "project": project,
         "rules": rules_data,
         "trail": trail_data,
@@ -339,3 +361,6 @@ def run_orient(
         "work_items": work_items_data,
         "_budget": {"total": total_budget, "used": tokens_used},
     }
+    if errors:
+        result["_errors"] = errors
+    return result

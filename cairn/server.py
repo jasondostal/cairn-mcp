@@ -98,6 +98,15 @@ def _init_services(svc):
     working_memory_store = svc.working_memory_store
     belief_store = svc.belief_store
 
+    # Startup assertion: critical services must be non-None (ca-211)
+    _critical = {"db": db, "config": config, "memory_store": memory_store,
+                 "search_engine": search_engine, "work_item_manager": work_item_manager,
+                 "task_manager": task_manager}
+    _missing = [k for k, v in _critical.items() if v is None]
+    if _missing:
+        logger.error("FATAL: critical services are None after init: %s", _missing)
+        raise RuntimeError(f"Service initialization failed: {', '.join(_missing)} are None")
+
 
 async def _in_thread(fn, *args, **kwargs):
     """Run fn in a thread pool, then release the DB connection back to the pool.

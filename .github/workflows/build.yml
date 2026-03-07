@@ -342,6 +342,49 @@ jobs:
           print('MCP initialize: OK')
           "
 
+      - name: Assert MCP tool execution
+        run: |
+          # Extract session ID from initialize response
+          INIT_RESP=$(curl -sS -X POST \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            http://localhost:8081/mcp \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke","version":"1.0"}}}' \
+            --max-time 10 -D /tmp/mcp-headers)
+          SESSION_ID=$(grep -i 'mcp-session-id' /tmp/mcp-headers | tr -d '\r' | awk '{print $2}')
+          # Send initialized notification
+          curl -sS -X POST \
+            -H 'Content-Type: application/json' \
+            -H "Mcp-Session-Id: $SESSION_ID" \
+            http://localhost:8081/mcp \
+            -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            --max-time 5 || true
+          # Call an actual MCP tool — this catches wiring bugs like the __main__ split (ca-217)
+          RESP=$(curl -sS -X POST \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            -H "Mcp-Session-Id: $SESSION_ID" \
+            http://localhost:8081/mcp \
+            -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"status","arguments":{}}}' \
+            --max-time 10)
+          echo "$RESP"
+          echo "$RESP" | python3 -c "
+          import sys, json
+          raw = sys.stdin.read().strip()
+          for line in raw.splitlines():
+              if line.startswith('data: '):
+                  raw = line[6:]
+                  break
+          d = json.loads(raw)
+          assert 'result' in d, f'Tool call failed: {d}'
+          content = d['result'].get('content', [])
+          text = content[0].get('text', '') if content else ''
+          parsed = json.loads(text)
+          assert 'error' not in parsed, f'Tool returned error: {parsed}'
+          assert 'version' in parsed, f'Status missing version: {parsed}'
+          print(f'MCP tool execution: OK (v{parsed[\"version\"]})')
+          "
+
       - name: DAST — Nuclei baseline scan
         run: |
           docker run --rm --network cairn-net \
