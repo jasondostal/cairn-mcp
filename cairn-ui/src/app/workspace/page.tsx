@@ -45,6 +45,7 @@ import { cn } from "@/lib/utils";
 function NotConfiguredState() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center max-w-lg mx-auto gap-6 p-8">
+      <h1 className="sr-only">Workspace</h1>
       <div className="rounded-full bg-muted p-4">
         <Boxes className="h-8 w-8 text-muted-foreground" />
       </div>
@@ -106,7 +107,7 @@ function SessionSidebar({
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Sessions
         </span>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onCreate}>
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onCreate} aria-label="New session">
           <Plus className="h-3.5 w-3.5" />
         </Button>
       </div>
@@ -660,7 +661,7 @@ function SessionView({
             )}
             disabled={sending}
           />
-          <Button size="icon" onClick={handleSend} disabled={sending || !input.trim()}>
+          <Button size="icon" onClick={handleSend} disabled={sending || !input.trim()} aria-label="Send message">
             <Send className="h-4 w-4" />
           </Button>
         </div>
@@ -854,6 +855,7 @@ export default function WorkspacePage() {
       className="flex -m-4 md:-m-6"
       style={{ height: "calc(100vh - var(--removed, 0px))" }}
     >
+      <h1 className="sr-only">Workspace</h1>
       <SessionSidebar
         sessions={sessions}
         activeId={activeSession?.session_id ?? null}

@@ -46,6 +46,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   index operations.
 - **Code query simplified** — removed `mode` parameter (was `fulltext`/`semantic`).
   All queries use fulltext search against the Neo4j code graph.
+- **MCP tools modularized** — extracted 21 `@mcp.tool()` functions from
+  `server.py` (2308 → 501 lines) into 5 domain modules under `cairn/tools/`:
+  `memory.py`, `work_items.py`, `insights.py`, `session.py`, `project.py`.
+  No tool signatures or behavior changed.
 
 ### Removed
 - **`code_index` MCP tool and REST endpoint** — indexing is now handled by the
@@ -97,6 +101,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Form accessibility** — added semantic `<label htmlFor>` pairs to login,
   memory-sheet, and work-item create dialog. `aria-label` attributes on
   capture page, settings inputs. Screen-reader-only labels for PAT fields.
+- **Rate limiting** — in-process sliding-window rate limiter on expensive
+  endpoints: `/chat` (30/min), `/ingest` (60/min), `/search` (120/min),
+  `/auth/login` (10/min), `/auth/register` (5/min). Per-client-IP. Returns
+  429 with `Retry-After` header.
+- **CI: Gitleaks** — secret scanning added to lint job via `gitleaks-action`.
+- **CI: SBOM** — SPDX JSON generation (Trivy) + cosign attestation for both
+  server and UI container images on push.
+- **CI: DAST** — Nuclei baseline scan against smoke test stack (non-blocking
+  initially to establish baseline).
 
 ### Fixed
 - **express-rate-limit** — bumped to patch IPv4-mapped IPv6 bypass (GHSA-46wh-pxpv-q5gq).

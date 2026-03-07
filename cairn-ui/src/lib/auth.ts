@@ -201,7 +201,7 @@ export function handleOidcCallback(): boolean {
         setToken(data.access_token);
         setStoredUser({ id: 0, username: data.user.username, role: data.user.role });
         window.history.replaceState({}, "", window.location.pathname);
-        window.location.href = getReturnUrl();
+        window.location.href = "/";
       })
       .catch(() => {
         window.history.replaceState({}, "", window.location.pathname);

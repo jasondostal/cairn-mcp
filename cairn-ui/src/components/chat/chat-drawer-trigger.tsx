@@ -47,6 +47,7 @@ function ChatDrawerTriggerInner() {
                    md:bottom-6 md:right-6"
         onClick={() => setOpen(true)}
         title="Open chat (Cmd+.)"
+        aria-label="Open chat"
       >
         <MessageCircle className="h-5 w-5" />
       </Button>

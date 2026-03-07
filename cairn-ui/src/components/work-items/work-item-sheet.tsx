@@ -396,6 +396,7 @@ export function WorkItemSheet({
                         size="icon"
                         className="h-6 w-6 shrink-0"
                         onClick={() => setEditingParent(false)}
+                        aria-label="Cancel parent edit"
                       >
                         <X className="h-3 w-3" />
                       </Button>
@@ -419,6 +420,7 @@ export function WorkItemSheet({
                               className="h-5 w-5 ml-auto shrink-0"
                               onClick={startEditParent}
                               title="Change parent"
+                              aria-label="Change parent"
                             >
                               <Pencil className="h-3 w-3" />
                             </Button>

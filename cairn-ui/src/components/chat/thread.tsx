@@ -194,12 +194,12 @@ const ChatComposer = forwardRef<HTMLFormElement>(function ChatComposer(_, ref) {
         )}
       />
       <ComposerPrimitive.Send asChild>
-        <Button size="icon">
+        <Button size="icon" aria-label="Send message">
           <SendHorizonal className="h-4 w-4" />
         </Button>
       </ComposerPrimitive.Send>
       <ComposerPrimitive.Cancel asChild>
-        <Button size="icon" variant="ghost">
+        <Button size="icon" variant="ghost" aria-label="Cancel">
           <Square className="h-4 w-4" />
         </Button>
       </ComposerPrimitive.Cancel>
@@ -216,6 +216,7 @@ function ScrollToBottom() {
         size="icon"
         variant="outline"
         className="absolute bottom-2 right-4 h-8 w-8 rounded-full shadow-md"
+        aria-label="Scroll to bottom"
       >
         <ChevronDown className="h-4 w-4" />
       </Button>

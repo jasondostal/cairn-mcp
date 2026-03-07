@@ -169,7 +169,7 @@ function SessionDetail({
   return (
     <div>
       <div className="flex items-center gap-3 mb-4">
-        <Button variant="ghost" size="icon" onClick={onBack}>
+        <Button variant="ghost" size="icon" onClick={onBack} aria-label="Back to sessions">
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="min-w-0 flex-1">
@@ -383,7 +383,7 @@ function SessionsPageInner() {
       title="Sessions"
       titleExtra={
         !selected && (
-          <Button variant="ghost" size="icon" onClick={fetchSessions} disabled={loading}>
+          <Button variant="ghost" size="icon" onClick={fetchSessions} disabled={loading} aria-label="Refresh sessions">
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
           </Button>
         )

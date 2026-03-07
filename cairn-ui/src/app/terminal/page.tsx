@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 function DisabledState() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center max-w-lg mx-auto gap-6 p-8">
+      <h1 className="sr-only">Terminal</h1>
       <div className="rounded-full bg-muted p-4">
         <TerminalIcon className="h-8 w-8 text-muted-foreground" />
       </div>
@@ -91,7 +92,7 @@ function HostSidebar({
     <div className="w-56 shrink-0 border-r border-border flex flex-col bg-card">
       <div className="flex items-center justify-between px-3 py-2 border-b border-border">
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Hosts</span>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onAdd}>
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onAdd} aria-label="Add host">
           <Plus className="h-3.5 w-3.5" />
         </Button>
       </div>
@@ -607,6 +608,7 @@ export default function TerminalPage() {
       className="flex -m-4 md:-m-6"
       style={{ height: "calc(100vh - var(--removed, 0px))" }}
     >
+      <h1 className="sr-only">Terminal</h1>
       <HostSidebar
         hosts={hosts}
         activeId={activeHost?.id ?? null}

@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from cairn import __version__
+from cairn.api.rate_limit import RateLimitMiddleware
 from cairn.api.utils import APIKeyAuthMiddleware, JWTAuthMiddleware
 from cairn.core.services import Services
 from cairn.core.trace import clear_trace, new_trace
@@ -86,6 +87,7 @@ def create_api(svc: Services) -> FastAPI:
 
     app.add_middleware(TraceMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(RateLimitMiddleware)
 
     # Auth middleware: JWT takes priority, API key as fallback
     if config.auth.enabled and config.auth.jwt_secret and svc.user_manager:

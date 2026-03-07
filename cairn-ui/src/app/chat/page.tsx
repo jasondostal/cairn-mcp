@@ -134,6 +134,7 @@ export default function ChatPage() {
                   className="h-7 w-7 hidden md:flex"
                   onClick={() => setSidebarOpen(!sidebarOpen)}
                   title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+                  aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
                 >
                   {sidebarOpen ? (
                     <PanelLeftClose className="h-4 w-4" />

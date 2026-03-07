@@ -126,6 +126,7 @@ export function ConversationSidebar({
           className="h-6 w-6"
           onClick={onNew}
           title="New conversation"
+          aria-label="New conversation"
         >
           <MessageSquarePlus className="h-3.5 w-3.5" />
         </Button>
@@ -197,6 +198,7 @@ export function ConversationSidebar({
                     setDeleteTarget(conv);
                   }}
                   title="Delete"
+                  aria-label="Delete conversation"
                 >
                   <Trash2 className="h-3 w-3 text-muted-foreground" />
                 </Button>

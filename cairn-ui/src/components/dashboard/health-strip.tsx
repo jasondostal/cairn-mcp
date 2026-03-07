@@ -64,8 +64,8 @@ function ModelRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">{label}</span>
-          <Badge variant={healthBadgeVariant[model.health] ?? "outline"} className="text-[10px] px-1.5 py-0">
-            <Activity className={`h-2.5 w-2.5 mr-0.5 ${healthColor[model.health] ?? ""}`} />
+          <Badge variant={healthBadgeVariant[model.health] ?? "outline"} className="text-[10px] px-1.5 py-0" role="status" aria-label={`${label} health: ${model.health}`}>
+            <Activity className={`h-2.5 w-2.5 mr-0.5 ${healthColor[model.health] ?? ""}`} aria-hidden="true" />
             {model.health}
           </Badge>
         </div>
@@ -106,8 +106,8 @@ function DigestRow({ digest }: { digest: DigestInfo }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">Digest Pipeline</span>
-          <Badge variant={healthBadgeVariant[digest.health] ?? "outline"} className="text-[10px] px-1.5 py-0">
-            <Activity className={`h-2.5 w-2.5 mr-0.5 ${healthColor[digest.health] ?? ""}`} />
+          <Badge variant={healthBadgeVariant[digest.health] ?? "outline"} className="text-[10px] px-1.5 py-0" role="status" aria-label={`Digest pipeline health: ${digest.health}`}>
+            <Activity className={`h-2.5 w-2.5 mr-0.5 ${healthColor[digest.health] ?? ""}`} aria-hidden="true" />
             {digest.health}
           </Badge>
         </div>

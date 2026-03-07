@@ -222,7 +222,7 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
                   #{memory.id}
                 </span>
                 {!editing && (
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={startEditing} title="Edit">
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={startEditing} title="Edit" aria-label="Edit memory">
                     <Pencil className="h-3 w-3" />
                   </Button>
                 )}

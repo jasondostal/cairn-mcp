@@ -22,6 +22,8 @@ const statusTextColors: Record<WorkItemStatus, string> = {
 export function StatusDot({ status, className }: { status: WorkItemStatus; className?: string }) {
   return (
     <span
+      role="status"
+      aria-label={`Status: ${status.replace(/_/g, " ")}`}
       className={cn(
         "inline-block h-2 w-2 shrink-0 rounded-full",
         statusColors[status] ?? statusColors.open,
@@ -44,9 +46,9 @@ export function PriorityDots({ priority }: { priority: number }) {
   const count = Math.min(Math.max(priority, 0), 5);
   if (count === 0) return null;
   return (
-    <span className="inline-flex gap-px" title={`Priority ${priority}`}>
+    <span className="inline-flex gap-px" title={`Priority ${priority}`} aria-label={`Priority ${priority} of 5`}>
       {Array.from({ length: count }, (_, i) => (
-        <span key={i} className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+        <span key={i} className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground" aria-hidden="true" />
       ))}
     </span>
   );

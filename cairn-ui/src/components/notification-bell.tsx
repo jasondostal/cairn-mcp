@@ -121,10 +121,11 @@ export function NotificationBell() {
         onClick={() => setOpen(true)}
         className="relative rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
         title={unread > 0 ? `${unread} unread notifications` : "Notifications"}
+        aria-label={unread > 0 ? `${unread} unread notifications` : "Notifications"}
       >
-        <Bell className="h-4 w-4" />
+        <Bell className="h-4 w-4" aria-hidden="true" />
         {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-status-blocked px-1 text-[10px] font-medium leading-none text-white">
+          <span className="absolute -top-0.5 -right-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-status-blocked px-1 text-[10px] font-medium leading-none text-white" aria-hidden="true">
             {unread > 99 ? "99+" : unread}
           </span>
         )}

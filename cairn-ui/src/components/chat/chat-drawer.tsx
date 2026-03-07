@@ -185,7 +185,7 @@ function DemoChat() {
                 "ring-offset-background placeholder:text-muted-foreground",
               )}
             />
-            <Button size="icon">
+            <Button size="icon" aria-label="Send message">
               <SendHorizonal className="h-4 w-4" />
             </Button>
           </div>
@@ -310,6 +310,7 @@ export function ChatDrawer({ open, onOpenChange, demo }: ChatDrawerProps) {
                   className={cn("h-7 w-7", historyOpen && "bg-muted")}
                   onClick={() => setHistoryOpen(!historyOpen)}
                   title={historyOpen ? "Hide history" : "Show history"}
+                  aria-label={historyOpen ? "Hide history" : "Show history"}
                 >
                   <History className="h-4 w-4" />
                 </Button>
