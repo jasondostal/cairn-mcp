@@ -297,7 +297,7 @@ class _ServerGlobals:
         try:
             return getattr(self._mod, key)
         except AttributeError:
-            raise KeyError(key)
+            raise KeyError(key) from None
 
     def get(self, key, default=None):
         return getattr(self._mod, key, default)
