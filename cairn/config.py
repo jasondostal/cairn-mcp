@@ -313,7 +313,7 @@ class Config:
     http_host: str = "0.0.0.0"
     http_port: int = 8000
     public_url: str = ""  # Externally-reachable base URL (e.g. https://cairn.example.com)
-    cors_origins: list[str] = field(default_factory=lambda: ["*"])
+    cors_origins: list[str] = field(default_factory=list)
     event_archive_dir: str | None = None  # File-based event archive (e.g. /data/events)
     ingest_dir: str = "/data/ingest"   # Staging dir for file-path ingestion
     code_dir: str = "/data/code"       # Root dir for code intelligence indexing
@@ -332,9 +332,8 @@ class Config:
 
 
 def _parse_cors_origins(raw: str) -> list[str]:
-    """Parse comma-separated CORS origins. '*' means allow all."""
-    origins = [o.strip() for o in raw.split(",") if o.strip()]
-    return origins or ["*"]
+    """Parse comma-separated CORS origins. Empty string = no origins allowed."""
+    return [o.strip() for o in raw.split(",") if o.strip()]
 
 
 # --- Editable keys whitelist ---
@@ -933,7 +932,7 @@ def load_config() -> Config:
         http_host=os.getenv("CAIRN_HTTP_HOST", "0.0.0.0"),
         http_port=int(os.getenv("CAIRN_HTTP_PORT", "8000")),
         public_url=os.getenv("CAIRN_PUBLIC_URL", ""),
-        cors_origins=_parse_cors_origins(os.getenv("CAIRN_CORS_ORIGINS", "*")),
+        cors_origins=_parse_cors_origins(os.getenv("CAIRN_CORS_ORIGINS", "")),
         event_archive_dir=os.getenv("CAIRN_EVENT_ARCHIVE_DIR") or None,
         ingest_dir=os.getenv("CAIRN_INGEST_DIR", "/data/ingest"),
         code_dir=os.getenv("CAIRN_CODE_DIR", "/data/code"),

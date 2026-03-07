@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navGroups } from "@/lib/nav";
-import { ChevronRight, LogOut, Settings } from "lucide-react";
+import { ChevronRight, LogOut, Moon, Settings, Sun } from "lucide-react";
+import { useTheme } from "@/components/theme-provider";
 import { useState, useEffect } from "react";
 import { NotificationBell } from "@/components/notification-bell";
 import { useAuth } from "@/components/auth-provider";
@@ -113,6 +114,7 @@ export function SidebarNav() {
   const attentionCount = useAttentionCount();
   const { version, time } = useSidebarMeta();
   const { user, authEnabled, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <Sidebar collapsible="icon">
@@ -195,6 +197,20 @@ export function SidebarNav() {
 
       <SidebarFooter>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              size="sm"
+              tooltip={theme === "dark" ? "Light mode" : "Dark mode"}
+              onClick={toggleTheme}
+            >
+              {theme === "dark" ? (
+                <Sun className="size-4" />
+              ) : (
+                <Moon className="size-4" />
+              )}
+              <span>Theme</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <NotificationBell />
           </SidebarMenuItem>

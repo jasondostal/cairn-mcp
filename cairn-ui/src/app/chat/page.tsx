@@ -142,7 +142,7 @@ export default function ChatPage() {
                     <PanelLeft className="h-4 w-4" />
                   )}
                 </Button>
-                <h1 className="text-lg font-semibold">Chat</h1>
+                <h1 className="text-sm md:text-lg font-semibold">Chat</h1>
                 {/* Project scope selector */}
                 <MultiSelect
                   options={filters.projectOptions}

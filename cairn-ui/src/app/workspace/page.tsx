@@ -22,6 +22,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Boxes,
   Plus,
   Trash2,
@@ -36,6 +46,7 @@ import {
   ChevronRight,
   FileCode,
   Wrench,
+  PanelLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -102,7 +113,7 @@ function SessionSidebar({
   health: WorkspaceHealth | null;
 }) {
   return (
-    <div className="w-64 shrink-0 border-r border-border flex flex-col bg-card">
+    <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-3 py-2 border-b border-border">
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Sessions
@@ -698,7 +709,7 @@ function DiffDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-[95vw] sm:max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Session Diffs</DialogTitle>
         </DialogHeader>
@@ -752,10 +763,12 @@ export default function WorkspacePage() {
   const [agents, setAgents] = useState<WorkspaceAgent[]>([]);
   const [backends, setBackends] = useState<WorkspaceBackendInfo[]>([]);
   const [activeSession, setActiveSession] = useState<WorkspaceSession | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [diffDialogOpen, setDiffDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const loadHealth = useCallback(async () => {
     try {
@@ -856,16 +869,24 @@ export default function WorkspacePage() {
       style={{ height: "calc(100vh - var(--removed, 0px))" }}
     >
       <h1 className="sr-only">Workspace</h1>
-      <SessionSidebar
-        sessions={sessions}
-        activeId={activeSession?.session_id ?? null}
-        onSelect={setActiveSession}
-        onCreate={() => setDialogOpen(true)}
-        onDelete={handleDelete}
-        health={health}
-      />
+      <div className={cn("shrink-0 border-r border-border flex flex-col bg-card", sidebarOpen ? "w-64" : "hidden md:flex md:w-64")}>
+        <SessionSidebar
+          sessions={sessions}
+          activeId={activeSession?.session_id ?? null}
+          onSelect={(s) => { setActiveSession(s); setSidebarOpen(false); }}
+          onCreate={() => setDialogOpen(true)}
+          onDelete={(id) => setDeleteConfirm(id)}
+          health={health}
+        />
+      </div>
 
       <div className="flex-1 min-w-0 flex flex-col">
+        <div className="md:hidden flex items-center gap-2 px-3 py-1.5 border-b border-border bg-card">
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Toggle sidebar">
+            <PanelLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm font-medium">Workspace</span>
+        </div>
         {activeSession ? (
           <SessionView
             key={activeSession.session_id}
@@ -893,6 +914,21 @@ export default function WorkspacePage() {
           sessionId={activeSession.session_id}
         />
       )}
+
+      <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete session?</AlertDialogTitle>
+            <AlertDialogDescription>This will permanently delete this workspace session and its history.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { handleDelete(deleteConfirm!); setDeleteConfirm(null); }}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

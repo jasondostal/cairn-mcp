@@ -14,6 +14,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Terminal as TerminalIcon,
   Plus,
   Trash2,
@@ -22,6 +32,7 @@ import {
   WifiOff,
   Loader2,
   Pencil,
+  PanelLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -89,7 +100,7 @@ function HostSidebar({
   backend: string;
 }) {
   return (
-    <div className="w-56 shrink-0 border-r border-border flex flex-col bg-card">
+    <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-3 py-2 border-b border-border">
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Hosts</span>
         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onAdd} aria-label="Add host">
@@ -241,7 +252,7 @@ function HostDialog({
           <DialogTitle>{isEdit ? "Edit Host" : "Add Host"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-muted-foreground">Name</label>
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-server" required />
@@ -254,7 +265,7 @@ function HostDialog({
 
           {backend === "native" && (
             <>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Port</label>
                   <Input type="number" value={port} onChange={(e) => setPort(e.target.value)} />
@@ -539,8 +550,10 @@ export default function TerminalPage() {
   const [activeHost, setActiveHost] = useState<TerminalHost | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingHost, setEditingHost] = useState<TerminalHost | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -609,17 +622,25 @@ export default function TerminalPage() {
       style={{ height: "calc(100vh - var(--removed, 0px))" }}
     >
       <h1 className="sr-only">Terminal</h1>
-      <HostSidebar
-        hosts={hosts}
-        activeId={activeHost?.id ?? null}
-        onSelect={setActiveHost}
-        onAdd={() => { setEditingHost(null); setDialogOpen(true); }}
-        onEdit={(host) => { setEditingHost(host); setDialogOpen(true); }}
-        onDelete={handleDelete}
-        backend={config.backend}
-      />
+      <div className={cn("shrink-0 border-r border-border flex flex-col bg-card", sidebarOpen ? "w-56" : "hidden md:flex md:w-56")}>
+        <HostSidebar
+          hosts={hosts}
+          activeId={activeHost?.id ?? null}
+          onSelect={(host) => { setActiveHost(host); setSidebarOpen(false); }}
+          onAdd={() => { setEditingHost(null); setDialogOpen(true); }}
+          onEdit={(host) => { setEditingHost(host); setDialogOpen(true); }}
+          onDelete={(id) => setDeleteConfirm(id)}
+          backend={config.backend}
+        />
+      </div>
 
       <div className="flex-1 min-w-0 flex flex-col">
+        <div className="md:hidden flex items-center gap-2 px-3 py-1.5 border-b border-border bg-card">
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Toggle sidebar">
+            <PanelLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm font-medium">Terminal</span>
+        </div>
         {activeHost ? (
           config.backend === "native" ? (
             <NativeTerminal key={activeHost.id} host={activeHost} />
@@ -638,6 +659,21 @@ export default function TerminalPage() {
         backend={config.backend}
         editHost={editingHost}
       />
+
+      <AlertDialog open={deleteConfirm !== null} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete host?</AlertDialogTitle>
+            <AlertDialogDescription>This will remove this host configuration.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { handleDelete(deleteConfirm!); setDeleteConfirm(null); }}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

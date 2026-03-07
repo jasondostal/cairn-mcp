@@ -77,6 +77,21 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: cairn
+          POSTGRES_USER: cairn
+          POSTGRES_PASSWORD: cairn-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cairn"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -89,9 +104,15 @@ jobs:
       - name: Install dependencies
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[dev]"
+          pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[dev,code]"
 
       - name: Run tests
+        env:
+          CAIRN_TEST_DB_HOST: localhost
+          CAIRN_TEST_DB_PORT: "5432"
+          CAIRN_TEST_DB_USER: cairn
+          CAIRN_TEST_DB_PASS: cairn-ci
+          CAIRN_TEST_DB_NAME: cairn
         run: pytest tests/ --tb=short -q
 
       - name: Check imports

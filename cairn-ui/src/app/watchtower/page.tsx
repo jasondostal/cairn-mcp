@@ -42,6 +42,16 @@ import {
   Plus,
   Power,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // ---------------------------------------------------------------------------
 // OKLCH Palette — perceptually uniform, dark-mode optimized
@@ -110,6 +120,7 @@ function AlertsTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [creating, setCreating] = useState(false);
+  const [deleteConfirmRule, setDeleteConfirmRule] = useState<AlertRule | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -266,7 +277,7 @@ function AlertsTab() {
                     <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => toggleRule(r)} title={r.is_active ? "Pause" : "Activate"}>
                       <Power className="h-3 w-3" />
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => deleteRule(r)} title="Delete">
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setDeleteConfirmRule(r)} title="Delete">
                       <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>
@@ -304,6 +315,21 @@ function AlertsTab() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!deleteConfirmRule} onOpenChange={(open) => !open && setDeleteConfirmRule(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete alert rule?</AlertDialogTitle>
+            <AlertDialogDescription>This rule will stop monitoring and alerting.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { deleteRule(deleteConfirmRule!); setDeleteConfirmRule(null); }}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -452,6 +478,7 @@ function WebhooksTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [newHook, setNewHook] = useState({ name: "", url: "", event_types: ["*"] as string[] });
   const [creating, setCreating] = useState(false);
+  const [deleteConfirmHook, setDeleteConfirmHook] = useState<Webhook | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -618,7 +645,7 @@ function WebhooksTab() {
                 <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => testWebhook(h.id)} disabled={testing === h.id}>
                   {testing === h.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                 </Button>
-                <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => deleteWebhook(h)} title="Delete">
+                <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => setDeleteConfirmHook(h)} title="Delete">
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
                 <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => toggleExpand(h.id)}>
@@ -668,6 +695,21 @@ function WebhooksTab() {
           </CardContent>
         </Card>
       ))}
+
+      <AlertDialog open={!!deleteConfirmHook} onOpenChange={(open) => !open && setDeleteConfirmHook(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete webhook?</AlertDialogTitle>
+            <AlertDialogDescription>This will stop all webhook deliveries to this endpoint.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { deleteWebhook(deleteConfirmHook!); setDeleteConfirmHook(null); }}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -696,6 +738,7 @@ function RetentionTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [newPolicy, setNewPolicy] = useState({ resource_type: "events", ttl_days: 90, legal_hold: false });
   const [creating, setCreating] = useState(false);
+  const [deleteConfirmPolicy, setDeleteConfirmPolicy] = useState<RetentionPolicy | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -918,7 +961,7 @@ function RetentionTab() {
                       <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => togglePolicy(p)} title={p.is_active ? "Pause" : "Activate"}>
                         <Power className="h-3 w-3" />
                       </Button>
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => deletePolicy(p)} title="Delete">
+                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setDeleteConfirmPolicy(p)} title="Delete">
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
@@ -929,6 +972,21 @@ function RetentionTab() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!deleteConfirmPolicy} onOpenChange={(open) => !open && setDeleteConfirmPolicy(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete retention policy?</AlertDialogTitle>
+            <AlertDialogDescription>This will stop automatic data cleanup for this policy.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { deletePolicy(deleteConfirmPolicy!); setDeleteConfirmPolicy(null); }}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

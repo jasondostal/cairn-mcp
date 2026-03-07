@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/components/auth-provider";
+import { ThemeProvider } from "@/components/theme-provider";
 import { AppShell } from "@/components/app-shell";
 import "./globals.css";
 
@@ -16,6 +17,12 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+};
+
 export const metadata: Metadata = {
   title: "Cairn",
   description: "Semantic memory for AI agents",
@@ -28,16 +35,25 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('cairn-theme');document.documentElement.classList.toggle('dark',t!=='light')}catch(e){}})()`,
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <TooltipProvider delayDuration={300}>
-          <AuthProvider>
-            <AppShell>{children}</AppShell>
-          </AuthProvider>
-          <Toaster theme="dark" position="bottom-right" richColors />
-        </TooltipProvider>
+        <ThemeProvider>
+          <TooltipProvider delayDuration={300}>
+            <AuthProvider>
+              <AppShell>{children}</AppShell>
+            </AuthProvider>
+            <Toaster position="bottom-right" richColors />
+          </TooltipProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -20,8 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI smoke test calls MCP `status` tool end-to-end, not just `initialize` (ca-217)
 - `_ServerGlobals` proxy contract tests (ca-218)
 - orient() error surfacing tests (ca-219)
+- Integration tests with real Postgres: service assembly (ca-220) and memory round-trip store/search/recall/deactivate (ca-221)
+- CI `test` job runs against pgvector service container — integration tests execute automatically
+- Confirmation dialogs on 7 destructive actions: session delete, host delete, group delete, token revoke, alert rule delete, webhook delete, retention policy delete (ca-226)
+- Theme toggle in sidebar — light/dark mode with localStorage persistence (ca-225)
+- Viewport metadata for proper mobile scaling (ca-224)
 
 ### Changed
+- CORS default changed from `*` to empty list; set `CAIRN_CORS_ORIGINS` explicitly for cross-origin access (ca-215)
+- Tree-sitter grammars moved to `[code]` pip extra; `pip install cairn-mcp[code]` for code intelligence (ca-223)
+- `CAIRN_PROFILE` documented in README configuration table (ca-222)
+- Terminal and Workspace sidebars hidden on mobile with toggle button (ca-224)
+- Decomposed god-components: Memories (1049→375 lines), Settings (1223→218 lines), Graph (1522→214 lines) (ca-228)
 - Authentication docs: added proxy header to auth resolution order and env var reference
 
 ## [0.73.0] — 2026-03-07 — "Sentinel"

@@ -15,6 +15,16 @@ import { toast } from "sonner";
 import { useAuth } from "@/components/auth-provider";
 import { api, type Group, type GroupDetail } from "@/lib/api";
 import { Plus, Users2, Shield, ChevronDown, ChevronRight, Trash2, UserPlus, FolderPlus } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 function DisabledState() {
   return (
@@ -240,6 +250,7 @@ export default function AdminGroupsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   const fetchGroups = useCallback(async () => {
     try {
@@ -343,13 +354,28 @@ export default function AdminGroupsPage() {
               <GroupRow
                 key={g.id}
                 group={g}
-                onDelete={handleDelete}
+                onDelete={(id) => setDeleteConfirm(id)}
                 onRefresh={fetchGroups}
               />
             ))}
           </div>
         )}
       </div>
+
+      <AlertDialog open={deleteConfirm !== null} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete group?</AlertDialogTitle>
+            <AlertDialogDescription>This will remove the group and all its member and project assignments.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { handleDelete(deleteConfirm!); setDeleteConfirm(null); }}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </PageLayout>
   );
 }

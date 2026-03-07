@@ -19,24 +19,24 @@ Full remediation from the 6-agent audit (red team, blue team, testing, QA manage
 - [x] Proxy header auth bypass — set UserContext from proxy header value (ca-212)
 - [x] ResourceLockManager thread safety — add threading.Lock (ca-213)
 - [x] SSRF TOCTOU in webhook URL validation — validate at request time (ca-214)
-- [ ] CORS default to empty list instead of wildcard * (ca-215)
+- [x] CORS default to empty list instead of wildcard * (ca-215)
 
 **Test infrastructure.**
 - [x] CI smoke test must call an actual MCP tool, not just initialize (ca-217)
 - [x] _ServerGlobals proxy contract test (ca-218)
 - [x] orient() total failure detection test (ca-219)
-- [ ] Service assembly integration test with real Postgres (ca-220)
-- [ ] Round-trip memory store + search with real Postgres (ca-221)
+- [x] Service assembly integration test with real Postgres (ca-220)
+- [x] Round-trip memory store + search with real Postgres (ca-221)
 
 **Config & dependencies.**
-- [ ] Document and implement CAIRN_PROFILE for config simplification (ca-222)
-- [ ] Make tree-sitter grammars optional via pip extras (ca-223)
+- [x] Document and implement CAIRN_PROFILE for config simplification (ca-222)
+- [x] Make tree-sitter grammars optional via pip extras (ca-223)
 
 **UI/UX.**
-- [ ] Responsive UI — mobile support for Terminal, Workspace, Chat pages (ca-224)
-- [ ] Theme toggle — light mode tokens exist but are unreachable (ca-225)
-- [ ] Confirmation dialogs on destructive work item and session actions (ca-226)
-- [ ] Decompose god-components — Memories (1050 lines), Graph (62KB), Settings (76KB) (ca-228)
+- [x] Responsive UI — mobile support for Terminal, Workspace, Chat pages (ca-224)
+- [x] Theme toggle — light mode tokens exist but are unreachable (ca-225)
+- [x] Confirmation dialogs on destructive work item and session actions (ca-226)
+- [x] Decompose god-components — Memories (1049→375), Graph (1522→214), Settings (1223→218) (ca-228)
 
 **OSS governance (under consideration).**
 - [ ] Add CONTRIBUTING.md, SECURITY.md, CODE_OF_CONDUCT.md (ca-227) — drafts written, not shipping yet

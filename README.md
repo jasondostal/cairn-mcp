@@ -183,6 +183,7 @@ All via environment variables. The ones that matter:
 
 | Variable | Default | What it does |
 |----------|---------|-------------|
+| `CAIRN_PROFILE` | *(empty)* | Preset: `vector`, `enriched`, `knowledge`, `enterprise`. Sets capability defaults. |
 | `CAIRN_LLM_BACKEND` | `ollama` | LLM provider: `ollama`, `bedrock`, `gemini`, `openai` |
 | `CAIRN_DB_PASS` | `cairn-dev-password` | Database password. Change this for anything beyond local. |
 | `CAIRN_AUTH_ENABLED` | `false` | Multi-user authentication (JWT, PATs, OIDC/SSO) |
