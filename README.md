@@ -104,11 +104,11 @@ That's it. 22 tools available. The ones you'll use most:
 | `work_items` | Create, claim, and complete tasks with dependencies and gates |
 | `working_memory` | Capture ephemeral thoughts — hypotheses, questions, tensions — with salience decay. Lives alongside crystallized memories; resolving graduates into permanent memories or beliefs |
 | `projects` | Manage project docs (briefs, PRDs, plans) |
-| `code_index` | Parse a codebase with tree-sitter, build a code graph in Neo4j |
-| `code_query` | Structural queries: dependents, impact, hotspots, cross-project search |
+| `code_query` | Structural queries: dependents, impact, callers, callees, dead code, complexity, hotspots |
 | `arch_check` | Validate architecture boundary rules against imports |
+| `dispatch` | Dispatch work to a background agent — tracked, briefed, heartbeating |
 
-The rest: `modify`, `insights`, `think`, `status`, `consolidate`, `decay_scan`, `drift_check`, `ingest`, `dispatch`.
+The rest: `modify`, `insights`, `think`, `status`, `consolidate`, `decay_scan`, `drift_check`, `ingest`.
 
 ## What's in the box
 
@@ -140,7 +140,7 @@ The rest: `modify`, `insights`, `think`, `status`, `consolidate`, `decay_scan`, 
   <sub>Watchtower: audit trail, alerting rules, webhook delivery, and data retention in one place.</sub>
 </p>
 
-**Code intelligence.** Index any codebase with tree-sitter — 30 languages supported. Ask structural questions — "what depends on this file?", "what's the blast radius?" — and get answers from the code graph. Enforce architecture boundaries with YAML rules. Search code by natural language description. Works across projects.
+**Code intelligence.** A standalone worker indexes codebases with tree-sitter (30 languages) and builds a code graph in Neo4j. The server queries the graph without ever touching source files. Ask structural questions — "what depends on this file?", "who calls this function?", "what's the blast radius?" — and get answers from the code graph. Call graph extraction, cyclomatic complexity, dead code detection. Enforce architecture boundaries with YAML rules. Works across projects.
 
 <details>
 <summary>Supported languages (30)</summary>
@@ -227,6 +227,85 @@ covering all auth modes, OIDC provider configuration, and MCP client examples.
 > has not been independently audited. For network-exposed deployments, add TLS
 > termination and network-level access controls.
 
+## Code Intelligence
+
+Code intelligence runs as a **standalone worker** that indexes source code and writes to Neo4j. The cairn server queries the graph but never touches source files directly. This separation means indexing doesn't block the event loop and the worker can run on the machine where code lives.
+
+**Requirements:** Neo4j (the `cairn-graph` service in docker-compose) must be running.
+
+### Quick start
+
+```bash
+# Index a single project (one-shot, no watching)
+python -m cairn.code \
+  --watch /path/to/your/repo:your-project \
+  --neo4j-uri bolt://localhost:7687 \
+  --cairn-url http://localhost:8000 \
+  --no-watch
+
+# Index and watch for changes (long-running)
+python -m cairn.code \
+  --watch /home/user/working/myproject:myproject \
+  --watch /home/user/working/other:other \
+  --neo4j-uri bolt://util:7687
+```
+
+### Environment variables
+
+| Variable | Default | What it does |
+|----------|---------|-------------|
+| `CAIRN_NEO4J_URI` | `bolt://localhost:7687` | Neo4j bolt URI |
+| `CAIRN_NEO4J_USER` | `neo4j` | Neo4j username |
+| `CAIRN_NEO4J_PASSWORD` | `cairn-dev-password` | Neo4j password |
+| `CAIRN_API_URL` | `http://localhost:8000` | Cairn server URL (for project ID resolution) |
+| `CAIRN_API_KEY` | *(empty)* | API key if cairn auth is enabled |
+| `CAIRN_CODE_PROJECTS` | *(empty)* | Comma-separated `project=path` pairs (alternative to `--watch`) |
+| `CAIRN_CODE_WATCH` | `true` | Enable filesystem watching after initial index |
+| `CAIRN_CODE_FORCE` | `false` | Force re-index even if content hash unchanged |
+
+### Docker / remote codebases
+
+Mount source code into the cairn container and set `CAIRN_CODE_DIR`:
+
+```yaml
+# docker-compose.yml
+volumes:
+  - /path/to/code:/data/code:ro   # read-only mount
+environment:
+  CAIRN_CODE_DIR: /data/code
+```
+
+Or run the worker on the code host and point it at your cairn + Neo4j instances:
+
+```bash
+CAIRN_NEO4J_URI=bolt://cairn-host:7687 \
+CAIRN_API_URL=http://cairn-host:8000 \
+CAIRN_CODE_PROJECTS="myproject=/home/user/code/myproject" \
+python -m cairn.code
+```
+
+### What gets indexed
+
+- **Symbols:** functions, classes, methods, interfaces, enums, React components/hooks
+- **Relationships:** `IMPORTS` (file-level), `CALLS` (function-level), `CONTAINS` (parent-child)
+- **Metadata:** signatures, docstrings, cyclomatic complexity, line numbers, content hashes
+- **Languages:** Python, TypeScript/TSX, and 28 more (C, Rust, Go, Java, Ruby, etc.)
+
+### Query examples (via `code_query` MCP tool)
+
+| Action | What it does |
+|--------|-------------|
+| `dependents` | Files that import the target |
+| `dependencies` | Files the target imports |
+| `callers` | Functions that call the target |
+| `callees` | Functions the target calls |
+| `call_chain` | Trace call paths between two functions |
+| `dead_code` | Functions with zero callers |
+| `complexity` | Rank functions by cyclomatic complexity |
+| `impact` | Blast radius — transitive dependents |
+| `hotspots` | PageRank — structurally important files |
+| `search` | Fulltext search over symbol names and docstrings |
+
 ## Architecture
 
 ```
@@ -238,19 +317,22 @@ MCP clients (Claude Code, Cursor, etc.)     REST clients (curl, web UI, hooks)
 |  cairn.server (MCP tools)     cairn.api (FastAPI endpoints) |
 |                                                             |
 |  core: memory, search, enrichment, extraction, clustering   |
-|        work items, projects, working memory, thinking, code |
+|        work items, projects, working memory, thinking       |
 |                                                             |
 |  watchtower: audit trail, webhooks, alerting, retention     |
-|              trace context, OTel export (optional)           |
+|              trace context, OTel export (optional)          |
 |                                                             |
-|  graph: Neo4j (entities, statements, triples, code graph)   |
 |  embedding: local (MiniLM) or Bedrock (Titan V2)            |
 |  llm: Ollama, Bedrock, Gemini, OpenAI-compatible            |
-+------+----------------------------------------------+----+--+
-       |                                              |    |
-       v                                              v    v
-  PostgreSQL 16 + pgvector                Neo4j 5    OTLP endpoint
-                                        (optional)    (optional)
++------+----------------------------------------------+------++
+       |                                              |       |
+       v                                              v       |
+  PostgreSQL 16 + pgvector                    Neo4j 5 <-------+
+                                             (optional)       |
+                                                ^             |
+  code worker (python -m cairn.code)            |      OTLP endpoint
+  tree-sitter parsing, call graph      --------+       (optional)
+  watches filesystem for changes
 ```
 
 ## Benchmark
