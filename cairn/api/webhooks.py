@@ -149,9 +149,10 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 "body": body,
             }
         except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as e:
+            logger.warning("Webhook test delivery failed: %s", e)
             return {
                 "status": "error",
-                "error": str(e),
+                "error": f"Connection failed: {type(e).__name__}",
             }
 
     @router.get("/webhooks/{webhook_id}/deliveries")
