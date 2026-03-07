@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Code intelligence staging directory** — `CAIRN_CODE_DIR` (default `/data/code`)
+  configures the root directory for `code_index`. Paths are resolved relative to
+  this directory with path traversal and symlink escape protection. Mount remote
+  codebases via SMB/NFS and index them with `code_index(path="repo-name")`.
+  Hot-reloadable via settings UI. Docker volume: `${CAIRN_CODE_PATH:-./code}:/data/code:ro`.
 - **Trusted reverse proxy authentication** — `CAIRN_AUTH_PROXY_HEADER` and
   `CAIRN_TRUSTED_PROXY_IPS` env vars. Only accepts auth headers from configured
   IP/CIDR sources. Applied to both REST and MCP middleware. Startup warning if

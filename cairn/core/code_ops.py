@@ -13,6 +13,42 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def _resolve_code_path(path: str, code_dir: str) -> Path | str:
+    """Resolve and validate a code path against the configured code directory.
+
+    Relative paths are resolved against code_dir. Absolute paths must be
+    under code_dir (path traversal protection). Symlinks must not escape.
+
+    Returns the resolved Path on success, or an error string on failure.
+    """
+    base = Path(code_dir).resolve()
+    raw = Path(path)
+
+    # Resolve relative paths against code_dir
+    target = (base / raw if not raw.is_absolute() else raw).resolve()
+
+    # Path traversal protection: must be under code_dir
+    try:
+        target.relative_to(base)
+    except ValueError:
+        return (
+            f"path must be under the code directory ({base}), got: {path}"
+        )
+
+    # Symlink escape protection
+    if target.is_symlink():
+        real = target.resolve()
+        try:
+            real.relative_to(base)
+        except ValueError:
+            return f"Symlink target is outside the code directory: {path}"
+
+    if not target.is_dir():
+        return f"Not a directory: {target}"
+
+    return target
+
+
 def run_code_index(
     *,
     project: str,
@@ -31,9 +67,10 @@ def run_code_index(
     if not path:
         return {"error": "path is required"}
 
-    root = Path(path)
-    if not root.is_dir():
-        return {"error": f"Not a directory: {path}"}
+    resolved = _resolve_code_path(path, config.code_dir)
+    if isinstance(resolved, str):
+        return {"error": resolved}
+    root = resolved
 
     if not graph_provider:
         return {"error": "Code intelligence requires Neo4j. Set CAIRN_GRAPH_BACKEND=neo4j."}
@@ -336,10 +373,10 @@ def run_arch_check(
     else:
         if not path:
             return {"error": "path is required for source-based evaluation (or set use_graph=True)"}
-        root = Path(path)
-        if not root.is_dir():
-            return {"error": f"Not a directory: {path}"}
-        report = arch_check_source(arch_config, root)
+        resolved = _resolve_code_path(path, config.code_dir)
+        if isinstance(resolved, str):
+            return {"error": resolved}
+        report = arch_check_source(arch_config, resolved)
         evaluation_mode = "source"
 
     # 3. Build response

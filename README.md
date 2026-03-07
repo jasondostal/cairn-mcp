@@ -198,6 +198,7 @@ All via environment variables. The ones that matter:
 | `CAIRN_OTEL_ENABLED` | `false` | OpenTelemetry span export via OTLP |
 | `CAIRN_OTEL_ENDPOINT` | *(empty)* | OTLP HTTP endpoint (e.g. `http://otel-collector:4318/v1/traces`) |
 | `CAIRN_INGEST_DIR` | `/data/ingest` | Staging directory for file-path ingestion of large documents |
+| `CAIRN_CODE_DIR` | `/data/code` | Root directory for code intelligence indexing (mount codebases here) |
 
 Full reference is in [docker-compose.yml](docker-compose.yml). Every variable has a sensible default.
 

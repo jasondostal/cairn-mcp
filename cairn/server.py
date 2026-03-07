@@ -2032,7 +2032,8 @@ async def code_index(
 
     Args:
         project: Project name to index under.
-        path: Root directory to scan (absolute path).
+        path: Directory to scan, relative to CAIRN_CODE_DIR (e.g. "tunnelvision"
+            or "cairn/cairn"). Absolute paths must be under CAIRN_CODE_DIR.
         force: Re-index all files even if unchanged (default: False).
     """
     from cairn.core.code_ops import run_code_index
