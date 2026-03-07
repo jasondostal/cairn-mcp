@@ -1,0 +1,10 @@
+title = "Cairn Gitleaks Configuration"
+
+[allowlist]
+  description = "Allow test fixtures and example configs"
+  paths = [
+    '''tests/.*''',
+    '''\.env\.example''',
+    '''examples/.*''',
+    '''docs/.*''',
+  ]
