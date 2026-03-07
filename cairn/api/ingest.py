@@ -68,7 +68,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 results.append(result)
             except Exception as e:
                 logger.exception("Failed to create doc at index %d", i)
-                errors.append({"index": i, "error": str(e)})
+                errors.append({"index": i, "error": f"Internal error: {type(e).__name__}"})
 
         return {"created": len(results), "errors": errors, "results": results}
 
