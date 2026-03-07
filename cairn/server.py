@@ -1,9 +1,17 @@
 """Cairn MCP Server. Entry point for the semantic memory system."""
 
+import sys
 import asyncio
 import concurrent.futures
 import logging
 from contextlib import asynccontextmanager
+
+# Fix __main__ module identity: when run via `python -m cairn.server`, the module
+# is only registered as __main__. Any `import cairn.server` elsewhere creates a
+# second copy with stale None globals. Register ourselves so the proxy reads the
+# same module instance that _init_services() writes to.
+if __name__ == "__main__" and "cairn.server" not in sys.modules:
+    sys.modules["cairn.server"] = sys.modules["__main__"]
 
 from mcp.server.fastmcp import FastMCP
 
