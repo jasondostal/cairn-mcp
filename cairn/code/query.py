@@ -154,31 +154,70 @@ def query_impact(
     }
 
 
+def query_callers(
+    graph: GraphProvider,
+    target: str,
+    project_id: int,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Functions/methods that CALL the target symbol."""
+    results = graph.get_callers(target, project_id, limit=limit)
+    return {"target": target, "callers": results}
+
+
+def query_callees(
+    graph: GraphProvider,
+    target: str,
+    project_id: int,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Functions/methods that the target symbol CALLS."""
+    results = graph.get_callees(target, project_id, limit=limit)
+    return {"target": target, "callees": results}
+
+
+def query_call_chain(
+    graph: GraphProvider,
+    start: str,
+    end: str,
+    project_id: int,
+    max_depth: int = 5,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Find call chains from start to end symbol."""
+    results = graph.get_call_chain(start, end, project_id, max_depth=max_depth, limit=limit)
+    return {"start": start, "end": end, "chains": results}
+
+
+def query_dead_code(
+    graph: GraphProvider,
+    project_id: int,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Find functions/methods with zero incoming CALLS edges."""
+    results = graph.get_dead_code(project_id, limit=limit)
+    return {"dead_functions": results, "count": len(results)}
+
+
+def query_complexity(
+    graph: GraphProvider,
+    project_id: int,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Get symbols ranked by cyclomatic complexity."""
+    results = graph.get_most_complex(project_id, limit=limit)
+    return {"most_complex": results}
+
+
 def query_search(
     graph: GraphProvider,
     query: str,
     project_id: int,
     kind: str | None = None,
     limit: int = 20,
-    mode: str = "fulltext",
-    embedding_engine=None,
+    **_kwargs: Any,
 ) -> dict[str, Any]:
-    """Search over code symbols — fulltext or semantic.
-
-    Args:
-        mode: "fulltext" (default) for name-based search, "semantic" for
-              NL description vector search.
-        embedding_engine: Required for semantic mode. EmbeddingInterface instance.
-    """
-    if mode == "semantic":
-        if not embedding_engine:
-            return {"error": "Semantic search requires embedding engine", "query": query}
-        emb = embedding_engine.embed(query)
-        results = graph.search_code_symbols_by_description(
-            emb, project_id, kind=kind or None, limit=limit,
-        )
-        return {"query": query, "mode": "semantic", "results": results}
-
+    """Fulltext search over code symbols (name, qualified_name, signature, docstring)."""
     results = graph.search_code_symbols(
         query=query,
         project_id=project_id,

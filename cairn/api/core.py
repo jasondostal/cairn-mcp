@@ -24,7 +24,8 @@ _VALID_RERANKER_BACKENDS = {"local", "bedrock"}
 _VALID_TERMINAL_BACKENDS = {"native", "ttyd", "disabled"}
 
 _SECRET_SETTINGS = {
-    "db.password", "auth.api_key", "terminal.encryption_key",
+    "db.password", "auth.api_key", "auth.jwt_secret",
+    "terminal.encryption_key",
     "llm.gemini_api_key", "llm.openai_api_key",
     "embedding.openai_api_key", "neo4j.password",
     "workspace.password",
@@ -95,6 +96,11 @@ def register_routes(router: APIRouter, svc: Services, **kw):
 
     @router.patch("/settings")
     def api_settings_update(body: dict):
+        from cairn.api.utils import require_admin
+        err = require_admin()
+        if err:
+            return err
+
         if not body:
             raise HTTPException(status_code=400, detail="Request body is required")
 

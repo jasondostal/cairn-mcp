@@ -201,6 +201,7 @@ class AuthConfig:
     jwt_expire_minutes: int = 1440  # JWT expiration (default 24h)
     oidc: OIDCConfig = field(default_factory=OIDCConfig)
     stdio_user: str = ""  # Username for stdio transport identity (CAIRN_STDIO_USER)
+    allow_registration: bool = True  # Allow public user registration (disable after initial setup)
     auth_proxy_header: str = ""  # Reverse proxy auth header (e.g. Remote-User, X-Forwarded-User)
     trusted_proxy_ips: str = ""  # Comma-separated IPs/CIDRs allowed to set proxy header
 
@@ -366,19 +367,17 @@ EDITABLE_KEYS: set[str] = {
     "analytics.enabled", "analytics.retention_days",
     "analytics.cost_embedding_per_1k", "analytics.cost_llm_input_per_1k",
     "analytics.cost_llm_output_per_1k",
-    # Auth
-    "auth.enabled", "auth.api_key", "auth.header_name",
-    "auth.jwt_secret", "auth.jwt_expire_minutes", "auth.stdio_user",
-    "auth.auth_proxy_header", "auth.trusted_proxy_ips",
+    # Auth (secrets and security-critical settings are env-only)
+    "auth.header_name", "auth.jwt_expire_minutes", "auth.stdio_user",
     # Auth OIDC (secrets excluded — env-only)
     "auth.oidc.enabled", "auth.oidc.provider_url", "auth.oidc.scopes",
     "auth.oidc.auto_create_users", "auth.oidc.default_role", "auth.oidc.admin_groups",
     # Terminal
     "terminal.backend", "terminal.max_sessions", "terminal.connect_timeout",
-    # Neo4j
-    "neo4j.uri", "neo4j.user", "neo4j.password", "neo4j.database",
+    # Neo4j (password is env-only)
+    "neo4j.uri", "neo4j.user", "neo4j.database",
     # Workspace
-    "workspace.default_backend", "workspace.url", "workspace.password",
+    "workspace.default_backend", "workspace.url",
     "workspace.default_agent", "workspace.claude_code_enabled",
     "workspace.claude_code_working_dir", "workspace.claude_code_max_turns",
     "workspace.claude_code_max_budget", "workspace.claude_code_mcp_url",
@@ -669,6 +668,7 @@ _ENV_MAP: dict[str, str] = {
     "auth.jwt_secret": "CAIRN_AUTH_JWT_SECRET",
     "auth.jwt_expire_minutes": "CAIRN_AUTH_JWT_EXPIRE_MINUTES",
     "auth.stdio_user": "CAIRN_STDIO_USER",
+    "auth.allow_registration": "CAIRN_AUTH_ALLOW_REGISTRATION",
     "auth.auth_proxy_header": "CAIRN_AUTH_PROXY_HEADER",
     "auth.trusted_proxy_ips": "CAIRN_TRUSTED_PROXY_IPS",
     "auth.oidc.enabled": "CAIRN_OIDC_ENABLED",

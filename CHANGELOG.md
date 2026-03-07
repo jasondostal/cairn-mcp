@@ -8,11 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Standalone code intelligence worker** (`python -m cairn.code`) — runs on the
+  code host independently of the cairn server. Connects to Neo4j directly for
+  graph writes, resolves project IDs via the cairn REST API. Watches filesystems
+  for changes with per-project debounced re-indexing (`watchdog`). No dependency
+  on PostgreSQL, FastAPI, or the event loop. Usage:
+  `python -m cairn.code --watch /path/to/repo:project-name --neo4j-uri bolt://host:7687`.
+  Configurable via env vars (`CAIRN_CODE_PROJECTS`, `CAIRN_NEO4J_URI`, etc.).
+- **Call graph extraction** — Python and TypeScript parsers now extract function/method
+  calls with two-pass resolution: local-first lookup, then global symbol table with
+  import-aware disambiguation. Stored as `CALLS` relationships in Neo4j.
+- **Cyclomatic complexity** — Python and TypeScript parsers compute per-function
+  complexity scores (counting branches, loops, boolean operators, comprehensions,
+  pattern matching). Stored as `complexity` property on code symbols.
+- **New code query actions** — `callers` (who calls target), `callees` (what target
+  calls), `call_chain` (trace path from target to query), `dead_code` (functions
+  with no callers), `complexity` (complexity report for a file or project).
 - **Code intelligence staging directory** — `CAIRN_CODE_DIR` (default `/data/code`)
-  configures the root directory for `code_index`. Paths are resolved relative to
+  configures the root directory for code indexing. Paths are resolved relative to
   this directory with path traversal and symlink escape protection. Mount remote
-  codebases via SMB/NFS and index them with `code_index(path="repo-name")`.
-  Hot-reloadable via settings UI. Docker volume: `${CAIRN_CODE_PATH:-./code}:/data/code:ro`.
+  codebases via SMB/NFS. Hot-reloadable via settings UI.
+  Docker volume: `${CAIRN_CODE_PATH:-./code}:/data/code:ro`.
 - **Trusted reverse proxy authentication** — `CAIRN_AUTH_PROXY_HEADER` and
   `CAIRN_TRUSTED_PROXY_IPS` env vars. Only accepts auth headers from configured
   IP/CIDR sources. Applied to both REST and MCP middleware. Startup warning if
@@ -20,6 +36,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `forwarded_allow_ips` enabled automatically when configured.
 - **Trusted proxy tests** — 8 tests covering exact IP, CIDR ranges, multiple
   entries, empty/invalid inputs.
+- **Settings registry audit** — closed gaps in `_ENV_MAP`, `EDITABLE_KEYS`, and
+  `_SECTION_CLASSES` for all config sections.
+
+### Changed
+- **Code intelligence architecture** — indexing moved from in-server execution to
+  standalone worker process. The server only queries the pre-built graph; it no
+  longer indexes code directly. This eliminates event loop blocking during large
+  index operations.
+- **Code query simplified** — removed `mode` parameter (was `fulltext`/`semantic`).
+  All queries use fulltext search against the Neo4j code graph.
+
+### Removed
+- **`code_index` MCP tool and REST endpoint** — indexing is now handled by the
+  standalone worker (`python -m cairn.code`), not by the server.
+- **`code_describe` MCP tool and REST endpoint** — LLM-based code summarization
+  removed. Structural queries (callers, callees, complexity) provide equivalent
+  insight without LLM cost.
+- **`cairn/code/summarizer.py`** — LLM code summarization module and its tests
+  removed.
+
+### Security
+- **EDITABLE_KEYS hardening** — removed security-sensitive settings (`auth.api_key`,
+  `auth.jwt_secret`, `auth.enabled`, `db.password`, `neo4j.password`,
+  `workspace.password`) from runtime-editable keys. These are now env-only.
+- **Settings RBAC** — `PATCH /settings` now requires admin role.
+- **WebSocket authentication** — terminal WebSocket connections now authenticate
+  (JWT token or API key via query params) before `accept()`. Previously bypassed
+  HTTP middleware entirely.
+- **OIDC token-in-URL fix** — OIDC callback no longer passes JWT in redirect URL
+  query string (leaked to server logs, browser history, Referer headers). Uses a
+  one-time code exchanged via `POST /auth/oidc/exchange`.
+- **Webhook SSRF prevention** — URL validation (blocking private IPs, metadata
+  endpoints, non-HTTP schemes) applied on webhook create, update, and delivery.
+  Shared `validate_url()` in `cairn.core.utils`.
+- **Proxy auth fail-closed** — REST and MCP middleware now reject proxy header auth
+  when `TRUSTED_PROXY_IPS` is not configured (previously failed open).
+- **Timing-safe comparisons** — API key checks in REST middleware, MCP middleware,
+  and WebSocket auth use `hmac.compare_digest` instead of `==`/`!=`.
+- **SSH host key verification** — terminal WebSocket SSH connections now use system
+  `known_hosts` by default instead of `known_hosts=None`. Opt-out via per-host
+  `skip_host_key_check` flag.
+- **Error message sanitization** — SSE event streams and terminal WebSocket errors
+  no longer leak internal exception details (`str(e)`) to clients.
+- **Security headers middleware** — all REST API responses include
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`,
+  and `Cache-Control: no-store` (for non-streaming responses).
+- **Registration gating** — `auth.allow_registration` config (env:
+  `CAIRN_AUTH_ALLOW_REGISTRATION`) to disable public user registration after
+  initial setup.
+- **Default password warnings** — startup logs a warning when using the default
+  database password (`cairn-dev-password`).
+- **Webhook secret redaction** — `GET /webhooks` no longer returns the webhook
+  secret. Secret is only returned on creation.
+- **Silent catch blocks** — 20+ empty `.catch(() => {})` blocks in cairn-ui
+  replaced with `toast.error()` for user actions and `console.error()` for
+  background fetches (notification-bell, sidebar-nav, command-palette,
+  memory-sheet, work-items, memories page).
+- **Form accessibility** — added semantic `<label htmlFor>` pairs to login,
+  memory-sheet, and work-item create dialog. `aria-label` attributes on
+  capture page, settings inputs. Screen-reader-only labels for PAT fields.
+
+### Fixed
+- **express-rate-limit** — bumped to patch IPv4-mapped IPv6 bypass (GHSA-46wh-pxpv-q5gq).
+- **mypy errors** — resolved type errors breaking CI since v0.71.0.
+
+### Dependencies
+- Added `watchdog` for filesystem monitoring in the code worker.
 
 ## [0.72.0] — 2026-03-06 — "Chromatic"
 

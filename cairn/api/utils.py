@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import logging
 
 from fastapi import Request
@@ -9,6 +10,18 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger(__name__)
+
+
+def require_admin() -> JSONResponse | None:
+    """Check that the current user has admin role. Returns 403 response or None."""
+    from cairn.core.user import current_user
+    ctx = current_user()
+    if not ctx or ctx.role != "admin":
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "Admin access required"},
+        )
+    return None
 
 
 def parse_multi(param: str | None) -> list[str] | None:
@@ -54,7 +67,7 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         token = request.headers.get(self.header_name)
-        if not token or token != self.api_key:
+        if not token or not hmac.compare_digest(token, self.api_key):
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Invalid or missing API key"},
@@ -69,9 +82,9 @@ _JWT_OPEN_PATHS = frozenset({
     "/status", "/swagger", "/openapi.json",
     "/api/status", "/api/swagger", "/api/openapi.json",
     "/auth/login", "/auth/register", "/auth/status",
-    "/auth/oidc/login", "/auth/oidc/callback",
+    "/auth/oidc/login", "/auth/oidc/callback", "/auth/oidc/exchange",
     "/api/auth/login", "/api/auth/register", "/api/auth/status",
-    "/api/auth/oidc/login", "/api/auth/oidc/callback",
+    "/api/auth/oidc/login", "/api/auth/oidc/callback", "/api/auth/oidc/exchange",
 })
 
 
@@ -121,13 +134,17 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
                             self.auth_proxy_header, client_ip,
                         )
                     else:
-                        # No trusted IPs configured — accept from any source (insecure fallback)
-                        return await call_next(request)
+                        # No trusted IPs configured — reject (fail closed)
+                        logger.warning(
+                            "Proxy header '%s' present but TRUSTED_PROXY_IPS not configured — "
+                            "ignoring header. Set CAIRN_TRUSTED_PROXY_IPS to enable proxy auth.",
+                            self.auth_proxy_header,
+                        )
 
             # Check for API key (legacy/simple auth)
             if self.api_key:
                 api_key_value = request.headers.get(self.api_key_header)
-                if api_key_value and api_key_value == self.api_key:
+                if api_key_value and hmac.compare_digest(api_key_value, self.api_key):
                     return await call_next(request)
 
             # Check for Bearer token (JWT or PAT)

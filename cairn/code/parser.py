@@ -34,6 +34,17 @@ class CodeSymbol:
     signature: str = ""             # e.g. "def search(self, query: str) -> list"
     docstring: str | None = None
     parent_name: str | None = None  # Containing class/function name
+    complexity: int | None = None   # Cyclomatic complexity (functions/methods only)
+
+
+@dataclass(frozen=True)
+class CallInfo:
+    """A function/method call extracted from source code."""
+    caller_qualified_name: str      # Who is calling (e.g. "MyClass.search")
+    callee_name: str                # Short name of what's called (e.g. "execute")
+    callee_full_name: str           # Dotted form (e.g. "self.db.execute", "os.path.join")
+    line: int                       # 1-based line number of the call
+    file_path: str                  # File containing the call
 
 
 @dataclass
@@ -44,6 +55,7 @@ class ParseResult:
     content_hash: str               # SHA-256 of file content
     symbols: list[CodeSymbol] = field(default_factory=list)
     imports: list[CodeSymbol] = field(default_factory=list)  # Subset: kind == "import"
+    calls: list[CallInfo] = field(default_factory=list)
     error: str | None = None
 
     @property
@@ -114,12 +126,22 @@ class CodeParser:
         imports = [s for s in all_syms if s.kind == "import"]
         symbols = [s for s in all_syms if s.kind != "import"]
 
+        # Extract calls (optional — language modules add support incrementally)
+        calls: list[CallInfo] = []
+        extract_calls = getattr(mod, "extract_calls", None)
+        if extract_calls is not None:
+            try:
+                calls = extract_calls(tree, source_bytes, file_path)
+            except Exception:
+                logger.debug("Call extraction failed for %s", file_path, exc_info=True)
+
         return ParseResult(
             file_path=file_path,
             language=language,
             content_hash=content_hash,
             symbols=symbols,
             imports=imports,
+            calls=calls,
         )
 
     def parse_file(self, filepath: Path) -> ParseResult | None:

@@ -148,29 +148,47 @@ export default function LoginPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              placeholder="Username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-              autoFocus={!showOidc}
-            />
-            {isRegister && (
+            <div className="space-y-1">
+              <label htmlFor="login-username" className="text-xs font-medium text-muted-foreground uppercase">
+                Username
+              </label>
               <Input
-                type="email"
-                placeholder="Email (optional)"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="login-username"
+                placeholder="Username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                autoFocus={!showOidc}
               />
+            </div>
+            {isRegister && (
+              <div className="space-y-1">
+                <label htmlFor="login-email" className="text-xs font-medium text-muted-foreground uppercase">
+                  Email (optional)
+                </label>
+                <Input
+                  id="login-email"
+                  type="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
             )}
-            <Input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-            />
+            <div className="space-y-1">
+              <label htmlFor="login-password" className="text-xs font-medium text-muted-foreground uppercase">
+                Password
+              </label>
+              <Input
+                id="login-password"
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+              />
+            </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading
                 ? "..."

@@ -264,7 +264,7 @@ Per-project code understanding. Parse source files with tree-sitter, build a cod
 - [x] **`code_index` MCP tool** — tree-sitter parsing with pluggable language modules (21 languages), content-hash incremental indexing, `CodeFile`/`CodeSymbol` nodes with `CONTAINS`/`IMPORTS` edges in Neo4j
 - [x] **`.gitignore` support** — respects all `.gitignore` files in the tree (root + nested) via `pathspec` gitwildmatch. No hardcoded exclude lists.
 - [x] **`code_query` MCP tool** — 11 actions: `dependents`, `dependencies`, `structure`, `impact`, `search`, `hotspots`, `entities`, `code_for_entity`, `cross_search`, `shared_deps`, `bridge`
-- [x] **`code_describe` MCP tool** — LLM-generated natural language descriptions per symbol, embedded for semantic code search
+- [x] ~~**`code_describe` MCP tool**~~ — removed in v0.71.0; replaced by expanded Lucene fulltext index on `(name, qualified_name, signature, docstring)`
 - [x] **`arch_check` MCP tool** — boundary validation from YAML config or project docs, source-based or graph-backed evaluation, integration contracts
 - [x] **TypeScript language module** — functions, classes, interfaces, enums, React components/hooks, ES6 imports, JSDoc extraction, TSX dialect support
 - [x] **PageRank hotspot analysis** — identify structurally important files via NetworkX client-side PageRank

@@ -2014,42 +2014,6 @@ async def ingest(
 
 
 @mcp.tool()
-async def code_index(
-    project: str,
-    path: str,
-    force: bool = False,
-) -> dict:
-    """Index a codebase for structural analysis. Parses source files with
-    tree-sitter and stores the code graph (files, symbols, imports) in Neo4j.
-
-    Per-project: each project gets its own code graph. Unchanged files are
-    skipped via content-hash comparison. Safe to run repeatedly.
-
-    WHEN TO USE:
-    - First time analyzing a codebase: index the whole repo
-    - After significant changes: re-index to update the code graph
-    - Before running code_query or arch_check on a project
-
-    Args:
-        project: Project name to index under.
-        path: Directory to scan, relative to CAIRN_CODE_DIR (e.g. "tunnelvision"
-            or "cairn/cairn"). Absolute paths must be under CAIRN_CODE_DIR.
-        force: Re-index all files even if unchanged (default: False).
-    """
-    from cairn.core.code_ops import run_code_index
-
-    try:
-        return await _in_thread(
-            run_code_index,
-            project=project, path=path, force=force,
-            graph_provider=graph_provider, db=db, config=config,
-        )
-    except Exception as e:
-        logger.exception("code_index failed")
-        return {"error": f"Internal error: {e}"}
-
-
-@mcp.tool()
 async def code_query(
     action: str,
     project: str,
@@ -2058,31 +2022,36 @@ async def code_query(
     kind: str = "",
     depth: int = 3,
     limit: int = 20,
-    mode: str = "fulltext",
 ) -> dict:
     """Query the code graph for structural information about an indexed project.
 
     Answers questions like "What depends on this file?", "What's the blast
     radius if I change this module?", and "What symbols are defined here?"
 
-    Requires a prior ``code_index`` run to populate the graph.
+    Requires the code worker (``python -m cairn.code``) to have indexed the project.
 
     WHEN TO USE:
     - Understanding dependencies before making changes
     - Estimating impact/blast radius of a refactor
     - Exploring the structure of a file or module
     - Finding symbols by name across a project
+    - Tracing call chains for security analysis or debugging
+    - Finding dead code or high-complexity functions
     - Finding structurally important files (hotspots)
     - Discovering entity-code relationships
-    - Searching across all indexed projects
 
     Actions:
     - ``dependents``: Files that import the target. "Who depends on me?"
     - ``dependencies``: Files the target imports. "What do I depend on?"
     - ``structure``: Symbols in the target file, hierarchically organized.
     - ``impact``: Transitive dependents — full blast radius up to *depth* hops.
-    - ``search``: Search over symbol names (fulltext) or descriptions (semantic).
+    - ``search``: Fulltext search over symbol names, signatures, and docstrings.
     - ``hotspots``: Top files by PageRank structural importance.
+    - ``callers``: Functions/methods that CALL the target symbol. "Who calls me?"
+    - ``callees``: Functions/methods that the target symbol CALLS. "What do I call?"
+    - ``call_chain``: Find call chains from *target* to *query* symbol (up to *depth* hops).
+    - ``dead_code``: Functions/methods with zero incoming calls.
+    - ``complexity``: Symbols ranked by cyclomatic complexity (highest first).
     - ``entities``: Knowledge entities linked to a code file.
     - ``code_for_entity``: Code files/symbols linked to a knowledge entity.
     - ``cross_search``: Search symbols across all indexed projects.
@@ -2097,7 +2066,6 @@ async def code_query(
         kind: Filter symbols by kind: function, method, class, etc. (search only).
         depth: Max traversal depth for impact (default 3).
         limit: Max results (default 20).
-        mode: Search mode: "fulltext" (default) or "semantic" (NL descriptions).
     """
     from cairn.core.code_ops import run_code_query
 
@@ -2105,50 +2073,12 @@ async def code_query(
         return await _in_thread(
             run_code_query,
             action=action, project=project, target=target, query=query,
-            kind=kind, depth=depth, limit=limit, mode=mode,
+            kind=kind, depth=depth, limit=limit,
             graph_provider=graph_provider, db=db, config=config,
             embedding_engine=_svc.embedding if _svc else None,
         )
     except Exception as e:
         logger.exception("code_query failed")
-        return {"error": f"Internal error: {e}"}
-
-
-@mcp.tool()
-async def code_describe(
-    project: str,
-    target: str = "",
-    kind: str = "",
-    limit: int = 50,
-) -> dict:
-    """Generate natural language descriptions for code symbols using LLM.
-
-    Produces human-readable descriptions of what each symbol does, then
-    embeds them for semantic search. Run this after ``code_index`` to enable
-    ``code_query(action='search', mode='semantic')``.
-
-    WHEN TO USE:
-    - After indexing a codebase for the first time
-    - After re-indexing to describe new/changed symbols
-    - To enable natural language code search
-
-    Args:
-        project: Project name (must be indexed).
-        target: File path to describe symbols in (describes all files if empty).
-        kind: Filter by symbol kind (function, class, method, etc.).
-        limit: Max symbols to describe (default 50).
-    """
-    from cairn.core.code_ops import run_code_describe
-
-    try:
-        return await _in_thread(
-            run_code_describe,
-            project=project, target=target, kind=kind, limit=limit,
-            graph_provider=graph_provider, db=db, config=config,
-            llm=_svc.llm if _svc else None, embedding_engine=_svc.embedding if _svc else None,
-        )
-    except Exception as e:
-        logger.exception("code_describe failed")
         return {"error": f"Internal error: {e}"}
 
 
@@ -2273,12 +2203,17 @@ def main():
                                     _mcp_proxy_header, client_ip,
                                 )
                             else:
-                                return await call_next(request)
+                                # No trusted IPs configured — reject (fail closed)
+                                logger.warning(
+                                    "MCP: proxy header '%s' present but TRUSTED_PROXY_IPS not configured — ignoring",
+                                    _mcp_proxy_header,
+                                )
 
                     # Try API key fallback (legacy/simple auth)
                     if _mcp_api_key:
+                        import hmac as _hmac
                         key = request.headers.get(_mcp_api_key_header)
-                        if key and key == _mcp_api_key:
+                        if key and _hmac.compare_digest(key, _mcp_api_key):
                             return await call_next(request)
 
                     # Try Bearer token (JWT or PAT) via unified resolution
@@ -2305,6 +2240,18 @@ def main():
 
             mcp_app.add_middleware(MCPAuthMiddleware)
             logger.info("MCP HTTP auth enforcement enabled")
+
+        # Security: warn about default database passwords
+        if final_config.db.password == "cairn-dev-password":
+            logger.warning(
+                "SECURITY: Using default database password 'cairn-dev-password'. "
+                "Set CAIRN_DB_PASS to a strong password for production deployments."
+            )
+        if final_config.neo4j.password == "cairn-dev-password" and final_config.capabilities.code_intelligence:
+            logger.warning(
+                "SECURITY: Using default Neo4j password 'cairn-dev-password'. "
+                "Set CAIRN_NEO4J_PASSWORD to a strong password for production deployments."
+            )
 
         # Security: warn if proxy auth header is configured without source IP restriction
         if final_config.auth.auth_proxy_header and not final_config.auth.trusted_proxy_ips:

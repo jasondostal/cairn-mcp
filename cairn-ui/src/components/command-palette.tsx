@@ -83,7 +83,7 @@ export function CommandPalette() {
     api
       .search(q, { limit: "8" })
       .then((data) => setResults(data.items))
-      .catch(() => setResults([]))
+      .catch((err) => { console.error("Search fetch failed", err); setResults([]); })
       .finally(() => setSearching(false));
   }, []);
 

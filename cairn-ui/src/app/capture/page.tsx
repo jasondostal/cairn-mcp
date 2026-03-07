@@ -283,6 +283,7 @@ function CaptureForm() {
       <div className="relative">
         <textarea
           ref={textareaRef}
+          aria-label="Capture content"
           placeholder="What are you capturing? (/ commands, @project, #tags)"
           value={content}
           onChange={(e) => handleContentChange(e.target.value)}
@@ -363,6 +364,7 @@ function CaptureForm() {
       <div className="relative">
         <Link className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
+          aria-label="URL"
           placeholder="URL (optional — paste a link to capture its content)"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
@@ -414,6 +416,7 @@ function CaptureForm() {
         ))}
         <input
           ref={tagInputRef}
+          aria-label="Tags"
           placeholder={tags.length === 0 ? "Tags (type + Enter)" : ""}
           value={tagInput}
           onChange={(e) => setTagInput(e.target.value)}

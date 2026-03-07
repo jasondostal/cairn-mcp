@@ -192,13 +192,14 @@ function TooltipLabel({ children, description }: { children: React.ReactNode; de
 // --- Toggle component ---
 
 function Toggle({
-  checked, onChange, disabled,
-}: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  checked, onChange, disabled, label,
+}: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label?: string }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors
@@ -296,6 +297,7 @@ function EditableText({
           disabled={envLocked}
           onChange={(e) => setLocalEdits({ ...localEdits, [settingKey]: e.target.value })}
           className="h-7 text-xs font-mono"
+          aria-label={label}
         />
         {isSecret && !envLocked && (
           <button onClick={() => setShow(!show)} className="text-muted-foreground hover:text-foreground shrink-0">
@@ -338,6 +340,7 @@ function EditableNumber({
         disabled={envLocked}
         onChange={(e) => setLocalEdits({ ...localEdits, [settingKey]: e.target.value })}
         className="h-7 text-xs font-mono w-24"
+        aria-label={label}
       />
     </div>
   );
@@ -373,6 +376,7 @@ function EditableToggle({
         checked={editedValue}
         onChange={(v) => setLocalEdits({ ...localEdits, [settingKey]: v ? "true" : "false" })}
         disabled={envLocked}
+        label={label}
       />
     </div>
   );
@@ -521,7 +525,9 @@ function PATSection() {
         {/* Create form */}
         <div className="flex items-end gap-2">
           <div className="flex-1">
+            <label htmlFor="pat-name" className="sr-only">Token name</label>
             <Input
+              id="pat-name"
               placeholder="Token name (e.g. claude-code)"
               value={newTokenName}
               onChange={(e) => setNewTokenName(e.target.value)}
@@ -530,7 +536,9 @@ function PATSection() {
             />
           </div>
           <div className="w-28">
+            <label htmlFor="pat-days" className="sr-only">Expiration days</label>
             <Input
+              id="pat-days"
               type="number"
               placeholder="Days (empty=never)"
               value={newTokenDays}
@@ -733,6 +741,7 @@ export default function SettingsPage() {
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
+              aria-label="Filter settings"
               placeholder="Filter settings..."
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}

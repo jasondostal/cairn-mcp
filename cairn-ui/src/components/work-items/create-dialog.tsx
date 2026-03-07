@@ -82,9 +82,9 @@ export function CreateWorkItemDialog({
         <div className="space-y-3 py-2">
           {/* Project */}
           <div className="space-y-1">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <label htmlFor="wi-project" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               Project
-            </span>
+            </label>
             <SingleSelect
               options={projects}
               value={project}
@@ -96,10 +96,11 @@ export function CreateWorkItemDialog({
 
           {/* Title */}
           <div className="space-y-1">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <label htmlFor="wi-title" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               Title
-            </span>
+            </label>
             <Input
+              id="wi-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Work item title…"
@@ -116,9 +117,9 @@ export function CreateWorkItemDialog({
           {/* Type + Priority row */}
           <div className="flex gap-3">
             <div className="space-y-1 flex-1">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <label htmlFor="wi-type" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Type
-              </span>
+              </label>
               <SingleSelect
                 options={[
                   { value: "epic", label: "epic" },
@@ -131,10 +132,11 @@ export function CreateWorkItemDialog({
               />
             </div>
             <div className="space-y-1 w-24">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <label htmlFor="wi-priority" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Priority
-              </span>
+              </label>
               <Input
+                id="wi-priority"
                 type="number"
                 min={0}
                 max={10}
@@ -147,10 +149,11 @@ export function CreateWorkItemDialog({
 
           {/* Description */}
           <div className="space-y-1">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <label htmlFor="wi-description" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               Description
-            </span>
+            </label>
             <textarea
+              id="wi-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Optional description…"

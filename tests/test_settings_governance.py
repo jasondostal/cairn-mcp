@@ -55,9 +55,14 @@ class TestEnvLockedResponse:
         svc.config.profile = None
         svc.event_bus = None
 
+        # Mock admin user so the require_admin() check passes
+        fake_admin = MagicMock()
+        fake_admin.role = "admin"
+
         with patch("cairn.api.core.env_values", return_value=fake_env), \
              patch("cairn.api.core.config_to_flat", return_value={"llm.backend": "bedrock"}), \
-             patch("cairn.api.core.settings_store") as mock_store:
+             patch("cairn.api.core.settings_store") as mock_store, \
+             patch("cairn.core.user.current_user", return_value=fake_admin):
             mock_store.load_all.return_value = {}
 
             from cairn.api.core import register_routes

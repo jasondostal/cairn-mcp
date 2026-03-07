@@ -109,8 +109,17 @@ class WebhookDeliveryWorker:
 
     def _deliver(self, row: dict) -> None:
         """Make HTTP POST to webhook URL."""
+        from cairn.core.utils import validate_url
+
         delivery_id = row["id"]
         url = row["url"]
+
+        try:
+            validate_url(url)
+        except ValueError as e:
+            logger.warning("Webhook delivery %d blocked — URL validation failed: %s", delivery_id, e)
+            self._mark_exhausted(delivery_id, attempts=0, error=f"Blocked: {e}", status_code=0)
+            return
         secret = row["secret"]
         request_body = row["request_body"] or {}
 

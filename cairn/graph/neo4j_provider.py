@@ -102,10 +102,6 @@ class Neo4jGraphProvider(GraphProvider):
             """CREATE VECTOR INDEX work_item_content_vec IF NOT EXISTS
                FOR (wi:WorkItem) ON (wi.content_embedding)
                OPTIONS {indexConfig: {`vector.dimensions`: 1024, `vector.similarity_function`: 'cosine'}}""",
-            # CodeSymbol description vector index (v0.58.0 Phase 6)
-            """CREATE VECTOR INDEX code_symbol_desc_vec IF NOT EXISTS
-               FOR (cs:CodeSymbol) ON (cs.description_embedding)
-               OPTIONS {indexConfig: {`vector.dimensions`: 1024, `vector.similarity_function`: 'cosine'}}""",
         ]
 
         # Fulltext indexes
@@ -114,8 +110,8 @@ class Neo4jGraphProvider(GraphProvider):
             "CREATE FULLTEXT INDEX statement_fact_ft IF NOT EXISTS FOR (s:Statement) ON EACH [s.fact]",
             # WorkItem title fulltext (v0.47.0)
             "CREATE FULLTEXT INDEX work_item_title_ft IF NOT EXISTS FOR (wi:WorkItem) ON EACH [wi.title]",
-            # CodeSymbol name fulltext (v0.58.0)
-            "CREATE FULLTEXT INDEX code_symbol_name_ft IF NOT EXISTS FOR (cs:CodeSymbol) ON EACH [cs.name, cs.qualified_name]",
+            # CodeSymbol fulltext (v0.58.0, expanded v0.71.0)
+            "CREATE FULLTEXT INDEX code_symbol_name_ft IF NOT EXISTS FOR (cs:CodeSymbol) ON EACH [cs.name, cs.qualified_name, cs.signature, cs.docstring]",
         ]
 
         with self._session() as session:
@@ -1420,12 +1416,13 @@ class Neo4jGraphProvider(GraphProvider):
             )
             return [dict(r) for r in result]
 
-    def batch_upsert_code_graph(
+    def batch_upsert_code_graph(  # type: ignore[override]
         self,
         project_id: int,
         files: list[dict],
         import_edges: list[tuple[str, str]],
         stale_file_uuids: list[str],
+        call_edges: list[dict] | None = None,
         chunk_size: int = 50,
     ) -> dict[str, str]:
         """Batch-upsert files, symbols, and edges in chunked transactions.
@@ -1513,6 +1510,8 @@ class Neo4jGraphProvider(GraphProvider):
                                 props["docstring"] = sym["docstring"]
                             if sym.get("parent_name") is not None:
                                 props["parent_name"] = sym["parent_name"]
+                            if sym.get("complexity") is not None:
+                                props["complexity"] = sym["complexity"]
                             sym_rows.append({
                                 "qname": sym["qualified_name"],
                                 "fpath": f["path"],
@@ -1579,6 +1578,28 @@ class Neo4jGraphProvider(GraphProvider):
                             MATCH (a:CodeFile {path: e.src, project_id: $pid})
                             MATCH (b:CodeFile {path: e.dst, project_id: $pid})
                             MERGE (a)-[:IMPORTS]->(b)
+                            """,
+                            edges=edge_chunk,
+                            pid=project_id,
+                        )
+                        tx.commit()
+
+            # 7) Link symbol-level CALLS edges (chunked transactions)
+            if call_edges:
+                for i in range(0, len(call_edges), chunk_size * 4):
+                    edge_chunk = call_edges[i : i + chunk_size * 4]
+                    with session.begin_transaction() as tx:
+                        tx.run(
+                            """
+                            UNWIND $edges AS e
+                            MATCH (caller:CodeSymbol {qualified_name: e.caller_qname,
+                                                       file_path: e.caller_file,
+                                                       project_id: $pid})
+                            MATCH (callee:CodeSymbol {qualified_name: e.callee_qname,
+                                                       file_path: e.callee_file,
+                                                       project_id: $pid})
+                            MERGE (caller)-[r:CALLS]->(callee)
+                            ON CREATE SET r.line = e.line
                             """,
                             edges=edge_chunk,
                             pid=project_id,
@@ -1691,52 +1712,111 @@ class Neo4jGraphProvider(GraphProvider):
             )
             return [dict(r) for r in result]
 
-    # -- Code intelligence: NL descriptions (v0.58.0 Phase 6) --
+    # -- Code intelligence: call graph queries (v0.71.0) --
 
-    def update_code_symbol_description(
-        self,
-        qualified_name: str,
-        project_id: int,
-        file_path: str,
-        description: str,
-        description_embedding: list[float],
-    ) -> None:
+    def get_callers(
+        self, qualified_name: str, project_id: int, limit: int = 50,
+    ) -> list[dict]:
         with self._session() as session:
-            session.run(
+            result = session.run(
                 """
-                MATCH (cs:CodeSymbol {qualified_name: $qn, file_path: $fp, project_id: $pid})
-                SET cs.description = $desc, cs.description_embedding = $emb
+                MATCH (caller:CodeSymbol)-[r:CALLS]->(target:CodeSymbol
+                    {qualified_name: $qname, project_id: $pid})
+                RETURN caller.qualified_name AS caller_qname,
+                       caller.file_path AS caller_file,
+                       r.line AS line
+                ORDER BY caller.file_path, r.line
+                LIMIT $lim
                 """,
-                qn=qualified_name,
-                fp=file_path,
-                pid=project_id,
-                desc=description,
-                emb=description_embedding,
+                qname=qualified_name, pid=project_id, lim=limit,
             )
+            return [dict(r) for r in result]
 
-    def search_code_symbols_by_description(
+    def get_callees(
+        self, qualified_name: str, project_id: int, limit: int = 50,
+    ) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (caller:CodeSymbol {qualified_name: $qname, project_id: $pid})
+                      -[r:CALLS]->(callee:CodeSymbol)
+                RETURN callee.qualified_name AS callee_qname,
+                       callee.file_path AS callee_file,
+                       r.line AS line
+                ORDER BY callee.file_path, r.line
+                LIMIT $lim
+                """,
+                qname=qualified_name, pid=project_id, lim=limit,
+            )
+            return [dict(r) for r in result]
+
+    def get_call_chain(
         self,
-        embedding: list[float],
+        start_qname: str,
+        end_qname: str,
         project_id: int,
-        kind: str | None = None,
+        max_depth: int = 5,
         limit: int = 20,
     ) -> list[dict]:
-        kind_clause = "AND node.kind = $kind" if kind else ""
         with self._session() as session:
             result = session.run(
                 f"""
-                CALL db.index.vector.queryNodes('code_symbol_desc_vec', $limit, $embedding)
-                YIELD node, score
-                WHERE node.project_id = $pid {kind_clause}
-                RETURN node.qualified_name AS qualified_name, node.name AS name,
-                       node.kind AS kind, node.file_path AS file_path,
-                       node.signature AS signature, node.description AS description, score
-                ORDER BY score DESC
+                MATCH (s:CodeSymbol {{qualified_name: $start, project_id: $pid}}),
+                      (e:CodeSymbol {{qualified_name: $end, project_id: $pid}})
+                MATCH path = (s)-[:CALLS*1..{max_depth}]->(e)
+                RETURN [n IN nodes(path) | n.qualified_name] AS chain,
+                       length(path) AS length
+                ORDER BY length ASC
+                LIMIT $lim
                 """,
-                embedding=embedding,
-                pid=project_id,
-                kind=kind,
-                limit=limit,
+                start=start_qname, end=end_qname, pid=project_id, lim=limit,
+            )
+            return [dict(r) for r in result]
+
+    def get_dead_code(
+        self, project_id: int, limit: int = 50,
+    ) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (func:CodeSymbol {project_id: $pid})
+                WHERE func.kind IN ['function', 'method']
+                  AND NOT func.name IN ['main', '__init__', '__main__',
+                      'setup', 'run', '__new__', '__del__', '__enter__',
+                      '__exit__', '__str__', '__repr__', '__eq__', '__hash__']
+                  AND NOT func.name STARTS WITH 'test_'
+                  AND NOT func.name STARTS WITH '_test'
+                WITH func
+                OPTIONAL MATCH (caller:CodeSymbol)-[:CALLS]->(func)
+                WITH func, count(caller) AS caller_count
+                WHERE caller_count = 0
+                RETURN func.qualified_name AS qualified_name,
+                       func.file_path AS file_path,
+                       func.kind AS kind,
+                       func.start_line AS start_line
+                ORDER BY func.file_path, func.start_line
+                LIMIT $lim
+                """,
+                pid=project_id, lim=limit,
+            )
+            return [dict(r) for r in result]
+
+    def get_most_complex(
+        self, project_id: int, limit: int = 20,
+    ) -> list[dict]:
+        with self._session() as session:
+            result = session.run(
+                """
+                MATCH (cs:CodeSymbol {project_id: $pid})
+                WHERE cs.complexity IS NOT NULL AND cs.complexity > 1
+                RETURN cs.qualified_name AS qualified_name,
+                       cs.file_path AS file_path,
+                       cs.kind AS kind,
+                       cs.complexity AS complexity
+                ORDER BY cs.complexity DESC
+                LIMIT $lim
+                """,
+                pid=project_id, lim=limit,
             )
             return [dict(r) for r in result]
 

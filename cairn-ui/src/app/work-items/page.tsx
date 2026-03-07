@@ -5,6 +5,7 @@ import { api, type WorkItem, type GatedItem, type WorkspaceBackendInfo, type Del
 import { usePageFilters } from "@/lib/use-page-filters";
 import { useLocalStorage } from "@/lib/use-local-storage";
 import { useKeyboardNav } from "@/lib/use-keyboard-nav";
+import { toast } from "sonner";
 import { PageLayout } from "@/components/page-layout";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
@@ -357,7 +358,7 @@ export default function WorkItemsPage() {
       await api.workItemCreate({ project, title });
       setQuickTitle("");
       handleCreated();
-    } catch { /* silent */ }
+    } catch { toast.error("Failed to create work item"); }
     finally { setQuickCreating(false); }
   }
 

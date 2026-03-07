@@ -496,6 +496,7 @@ class GraphProvider(ABC):
         files: list[dict],
         import_edges: list[tuple[str, str]],
         stale_file_uuids: list[str],
+        call_edges: list[dict] | None = None,
     ) -> dict[str, str]:
         """Batch-upsert an entire code graph in a single transaction.
 
@@ -508,6 +509,8 @@ class GraphProvider(ABC):
                 path, language, content_hash, symbols (list of symbol dicts)
             import_edges: List of (importer_path, imported_path) tuples.
             stale_file_uuids: UUIDs of CodeFile nodes to delete (no longer on disk).
+            call_edges: List of dicts with keys:
+                caller_qname, caller_file, callee_qname, callee_file, line
 
         Returns:
             Mapping of file path -> uuid for all upserted files.
@@ -554,30 +557,56 @@ class GraphProvider(ABC):
         Returns [{qualified_name, name, kind, file_path, signature, score}].
         """
 
-    # -- Code intelligence: NL descriptions (v0.58.0 Phase 6) --
+    # -- Code intelligence: call graph queries (v0.71.0) --
 
     @abstractmethod
-    def update_code_symbol_description(
-        self,
-        qualified_name: str,
-        project_id: int,
-        file_path: str,
-        description: str,
-        description_embedding: list[float],
-    ) -> None:
-        """Set NL description + embedding on a CodeSymbol node."""
+    def get_callers(
+        self, qualified_name: str, project_id: int, limit: int = 50,
+    ) -> list[dict]:
+        """Get functions/methods that CALL the target symbol.
+
+        Returns [{caller_qname, caller_file, line}].
+        """
 
     @abstractmethod
-    def search_code_symbols_by_description(
+    def get_callees(
+        self, qualified_name: str, project_id: int, limit: int = 50,
+    ) -> list[dict]:
+        """Get functions/methods that the target symbol CALLS.
+
+        Returns [{callee_qname, callee_file, line}].
+        """
+
+    @abstractmethod
+    def get_call_chain(
         self,
-        embedding: list[float],
+        start_qname: str,
+        end_qname: str,
         project_id: int,
-        kind: str | None = None,
+        max_depth: int = 5,
         limit: int = 20,
     ) -> list[dict]:
-        """Vector search over CodeSymbol description embeddings.
+        """Find call chains from start to end symbol.
 
-        Returns [{qualified_name, name, kind, file_path, signature, description, score}].
+        Returns [{chain: [qname, ...], length: int}].
+        """
+
+    @abstractmethod
+    def get_dead_code(
+        self, project_id: int, limit: int = 50,
+    ) -> list[dict]:
+        """Find functions/methods with zero incoming CALLS.
+
+        Returns [{qualified_name, file_path, kind, start_line}].
+        """
+
+    @abstractmethod
+    def get_most_complex(
+        self, project_id: int, limit: int = 20,
+    ) -> list[dict]:
+        """Get symbols ordered by cyclomatic complexity descending.
+
+        Returns [{qualified_name, file_path, kind, complexity}].
         """
 
     # -- Code intelligence: knowledge-code bridging (v0.58.0 Phase 7) --

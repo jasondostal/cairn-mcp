@@ -9,6 +9,7 @@ import { useMemorySheet } from "@/lib/use-memory-sheet";
 import { useKeyboardNav } from "@/lib/use-keyboard-nav";
 import { usePageFilters } from "@/lib/use-page-filters";
 import { DenseToggle } from "@/components/page-filters";
+import { toast } from "sonner";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -857,7 +858,7 @@ export default function MemoriesPage() {
       invalidateCache("/timeline");
       loadData();
     } catch {
-      // swallow
+      toast.error("Action failed");
     }
   }, [loadData]);
 

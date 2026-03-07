@@ -97,7 +97,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 logger.error("SSE: failed to connect for LISTEN: %s", e)
                 if stats.event_bus_stats:
                     stats.event_bus_stats.record_error(f"SSE connect: {e}")
-                yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
+                yield f"event: error\ndata: {json.dumps({'message': 'Internal server error'})}\n\n"
                 return
 
             if stats.event_bus_stats:
@@ -144,7 +144,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 logger.error("SSE stream error: %s", e, exc_info=True)
                 if stats.event_bus_stats:
                     stats.event_bus_stats.record_error(f"SSE stream: {e}")
-                yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
+                yield f"event: error\ndata: {json.dumps({'message': 'Internal server error'})}\n\n"
             finally:
                 if stats.event_bus_stats:
                     stats.event_bus_stats.record_sse_disconnect()
@@ -192,7 +192,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 )
             except Exception as e:
                 logger.error("SSE subscribe: failed to connect: %s", e)
-                yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
+                yield f"event: error\ndata: {json.dumps({'message': 'Internal server error'})}\n\n"
                 return
 
             if stats.event_bus_stats:
@@ -253,7 +253,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 pass
             except Exception as e:
                 logger.error("SSE subscribe error: %s", e, exc_info=True)
-                yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
+                yield f"event: error\ndata: {json.dumps({'message': 'Internal server error'})}\n\n"
             finally:
                 if stats.event_bus_stats:
                     stats.event_bus_stats.record_sse_disconnect()

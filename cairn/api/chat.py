@@ -256,7 +256,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 yield from _stream_chat(messages, max_tokens, conversation_id, project)
             except Exception as e:
                 logger.error("Streaming chat error: %s", e, exc_info=True)
-                yield _sse_event("error", {"message": str(e)})
+                yield _sse_event("error", {"message": "An internal error occurred"})
 
         return StreamingResponse(
             event_generator(),

@@ -30,6 +30,22 @@ class TraceMiddleware(BaseHTTPMiddleware):
         finally:
             clear_trace()
 
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add standard security headers to all API responses."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "0"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        # Cache-Control for API responses (don't cache sensitive data)
+        if "Cache-Control" not in response.headers:
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
 logger = logging.getLogger(__name__)
 
 
@@ -69,6 +85,7 @@ def create_api(svc: Services) -> FastAPI:
     )
 
     app.add_middleware(TraceMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # Auth middleware: JWT takes priority, API key as fallback
     if config.auth.enabled and config.auth.jwt_secret and svc.user_manager:

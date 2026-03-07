@@ -155,16 +155,18 @@ class CodeIndexer:
                 stale_uuids.append(ef["uuid"])
                 result.files_deleted += 1
 
-        # Phase 3: Resolve imports, then batch-upsert
+        # Phase 3: Resolve imports and calls, then batch-upsert
         import_edges = _resolve_all_imports(all_ok_files, current_paths)
+        call_edges = _resolve_all_calls(all_ok_files, current_paths)
         file_dicts = [_parsed_to_dict(p) for p in changed_files]
 
-        if file_dicts or stale_uuids or import_edges:
+        if file_dicts or stale_uuids or import_edges or call_edges:
             self.graph.batch_upsert_code_graph(
                 project_id=project_id,
                 files=file_dicts,
                 import_edges=import_edges,
                 stale_file_uuids=stale_uuids,
+                call_edges=call_edges,
             )
 
         logger.info("Code index complete for %s: %s", project, result.summary())
@@ -175,7 +177,7 @@ def _parsed_to_dict(parsed: ParseResult) -> dict:
     """Convert a ParseResult into the dict format expected by batch_upsert_code_graph."""
     symbols = []
     for sym in parsed.all_symbols:
-        symbols.append({
+        d: dict = {
             "qualified_name": sym.qualified_name,
             "name": sym.name,
             "kind": sym.kind,
@@ -184,7 +186,10 @@ def _parsed_to_dict(parsed: ParseResult) -> dict:
             "signature": sym.signature,
             "docstring": sym.docstring,
             "parent_name": sym.parent_name,
-        })
+        }
+        if sym.complexity is not None:
+            d["complexity"] = sym.complexity
+        symbols.append(d)
     return {
         "path": parsed.file_path,
         "language": parsed.language,
@@ -284,6 +289,95 @@ def _resolve_all_imports(
                 if edge not in seen:
                     seen.add(edge)
                     edges.append(edge)
+
+    return edges
+
+
+def _resolve_all_calls(
+    parsed_files: list[ParseResult],
+    known_paths: set[str],
+) -> list[dict]:
+    """Resolve calls to (caller_qname, caller_file, callee_qname, callee_file, line) edges.
+
+    Two-pass resolution:
+    1. Build a global symbol table: {short_name: [(qualified_name, file_path), ...]}
+    2. For each call, resolve the callee to a known symbol via local-first lookup.
+    """
+    # Pass 1: Build symbol table from all parsed files
+    symbol_table: dict[str, list[tuple[str, str]]] = {}
+    for parsed in parsed_files:
+        for sym in parsed.symbols:
+            if sym.kind in ("function", "method", "class"):
+                symbol_table.setdefault(sym.name, []).append(
+                    (sym.qualified_name, parsed.file_path)
+                )
+
+    # Per-file symbol index for local resolution
+    file_symbols: dict[str, dict[str, str]] = {}
+    for parsed in parsed_files:
+        local: dict[str, str] = {}
+        for sym in parsed.symbols:
+            if sym.kind in ("function", "method", "class"):
+                local[sym.name] = sym.qualified_name
+        file_symbols[parsed.file_path] = local
+
+    # Pre-compute imported paths per file (once, not per call)
+    file_imported_paths: dict[str, set[str]] = {}
+    for parsed in parsed_files:
+        imported = set()
+        for edge in _resolve_all_imports([parsed], known_paths):
+            imported.add(edge[1])
+        file_imported_paths[parsed.file_path] = imported
+
+    # Pass 2: Resolve each call
+    edges: list[dict] = []
+    seen: set[tuple[str, str, str, str]] = set()
+
+    for parsed in parsed_files:
+        local = file_symbols.get(parsed.file_path, {})
+
+        for call in parsed.calls:
+            callee_qname: str | None = None
+            callee_file: str | None = None
+
+            # Strategy 1: Local resolution — callee is in the same file
+            if call.callee_name in local:
+                callee_qname = local[call.callee_name]
+                callee_file = parsed.file_path
+
+            # Strategy 2: Global lookup by short name
+            if not callee_qname:
+                candidates = symbol_table.get(call.callee_name, [])
+                if len(candidates) == 1:
+                    callee_qname, callee_file = candidates[0]
+                elif len(candidates) > 1:
+                    # Disambiguate: prefer symbol in a file we import
+                    imported_paths = file_imported_paths.get(parsed.file_path, set())
+                    for qn, fp in candidates:
+                        if fp in imported_paths:
+                            callee_qname, callee_file = qn, fp
+                            break
+                    # Fallback: just take the first candidate
+                    if not callee_qname:
+                        callee_qname, callee_file = candidates[0]
+
+            if not callee_qname or not callee_file:
+                continue
+            if callee_file not in known_paths:
+                continue
+
+            key = (call.caller_qualified_name, call.file_path, callee_qname, callee_file)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            edges.append({
+                "caller_qname": call.caller_qualified_name,
+                "caller_file": call.file_path,
+                "callee_qname": callee_qname,
+                "callee_file": callee_file,
+                "line": call.line,
+            })
 
     return edges
 

@@ -76,7 +76,10 @@ class WebhookManager:
         secret: str | None = None,
         metadata: dict | None = None,
     ) -> dict:
-        """Create a webhook subscription. Returns the created webhook."""
+        """Create a webhook subscription. Returns the created webhook (with secret)."""
+        from cairn.core.utils import validate_url
+        validate_url(url)
+
         if not secret:
             secret = generate_secret()
 
@@ -97,7 +100,7 @@ class WebhookManager:
         assert row is not None
         self.db.commit()
         logger.info("Webhook created: id=%d name='%s' url=%s", row["id"], name, url)
-        return self._row_to_dict(row)
+        return self._row_to_dict(row, include_secret=True)
 
     def get(self, webhook_id: int) -> dict | None:
         """Get a single webhook by ID."""
@@ -167,6 +170,10 @@ class WebhookManager:
         filtered = {k: v for k, v in updates.items() if k in allowed and v is not None}
         if not filtered:
             return self.get(webhook_id)
+
+        if "url" in filtered:
+            from cairn.core.utils import validate_url
+            validate_url(filtered["url"])
 
         set_parts = []
         params: list[Any] = []
@@ -375,16 +382,18 @@ class WebhookManager:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _row_to_dict(row) -> dict:
-        return {
+    def _row_to_dict(row, *, include_secret: bool = False) -> dict:
+        d: dict = {
             "id": row["id"],
             "project_id": row["project_id"],
             "name": row["name"],
             "url": row["url"],
-            "secret": row["secret"],
             "event_types": list(row["event_types"] or []),
             "is_active": row["is_active"],
             "metadata": row["metadata"] or {},
             "created_at": row["created_at"].isoformat() if row["created_at"] else None,
             "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
         }
+        if include_secret:
+            d["secret"] = row["secret"]
+        return d

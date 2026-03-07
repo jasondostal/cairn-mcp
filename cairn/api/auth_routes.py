@@ -116,6 +116,13 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         if err:
             return err
 
+        # Check if registration is allowed
+        if not config.auth.allow_registration:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "User registration is disabled"},
+            )
+
         # Check if user already exists
         existing = _checked_mgr().get_by_username(body.username)
         if existing:
@@ -265,11 +272,12 @@ def register_routes(router: APIRouter, svc: Services) -> None:
     # Lazy-init: created on first OIDC request
     _oidc_client = None
     _oidc_state_store = None
+    _oidc_code_store = None  # one-time code → JWT (avoids token-in-URL)
 
     def _get_oidc():
-        nonlocal _oidc_client, _oidc_state_store
+        nonlocal _oidc_client, _oidc_state_store, _oidc_code_store
         if _oidc_client is None:
-            from cairn.core.oidc import OIDCClient, OIDCStateStore
+            from cairn.core.oidc import OIDCClient, OIDCCodeStore, OIDCStateStore
             oidc_cfg = config.auth.oidc
             _oidc_client = OIDCClient(
                 provider_url=oidc_cfg.provider_url,
@@ -278,6 +286,7 @@ def register_routes(router: APIRouter, svc: Services) -> None:
                 scopes=oidc_cfg.scopes,
             )
             _oidc_state_store = OIDCStateStore()
+            _oidc_code_store = OIDCCodeStore(ttl_seconds=60)
         return _oidc_client, _oidc_state_store
 
     @router.get("/auth/oidc/login")
@@ -362,12 +371,37 @@ def register_routes(router: APIRouter, svc: Services) -> None:
                 expire_minutes=config.auth.jwt_expire_minutes,
             )
 
-            redirect_url = f"{ui_origin}/login?token={cairn_token}&username={user['username']}&role={user['role']}"
+            # Store JWT in a one-time code to avoid exposing token in URL
+            # (server logs, referrer headers, browser history)
+            oidc_code = _oidc_code_store.create(cairn_token, user["username"], user["role"])
+            redirect_url = f"{ui_origin}/login?oidc_code={oidc_code}"
             return RedirectResponse(url=redirect_url, status_code=302)
 
         except Exception:
             logger.exception("OIDC callback failed")
             return JSONResponse(status_code=500, content={"detail": "OIDC authentication failed"})
+
+    @router.post("/auth/oidc/exchange")
+    def oidc_exchange(body: dict):
+        """Exchange a one-time OIDC code for a JWT token."""
+        err = _require_auth_enabled()
+        if err:
+            return err
+
+        code = body.get("code", "")
+        if not code or _oidc_code_store is None:
+            return JSONResponse(status_code=400, content={"detail": "Invalid or expired code"})
+
+        result = _oidc_code_store.consume(code)
+        if result is None:
+            return JSONResponse(status_code=400, content={"detail": "Invalid or expired code"})
+
+        token, username, role = result
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "user": {"username": username, "role": role},
+        }
 
     # --- Project membership endpoints ---
 

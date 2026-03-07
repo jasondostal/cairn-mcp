@@ -42,7 +42,7 @@ Start a sequence, add thoughts, conclude when done.
 - Use consolidate_memories when asked to clean up or deduplicate. Always dry_run first.
 - Use ingest_content when the user wants to import content or a URL into the knowledge base.
 - Use query_code and check_architecture for code structure questions — dependencies, hotspots, \
-architecture validation. These require a project that has been indexed with code_index.
+architecture validation. These require a project indexed by the code worker (python -m cairn.code).
 - Present results naturally. Summarize, don't dump.
 """
 
@@ -263,17 +263,16 @@ CHAT_TOOLS: list[dict] = [
     },
     {
         "name": "query_code",
-        "description": "Query the code graph for structural information about an indexed project. Actions: dependents (who depends on target), dependencies (what target depends on), structure (symbols in file), impact (blast radius), search (find symbols by name or description), hotspots (structurally important files), entities (knowledge entities linked to code), cross_search (search across all projects).",
+        "description": "Query the code graph for structural information about an indexed project. Actions: dependents, dependencies, structure, impact, search, hotspots, callers (who calls target), callees (what target calls), call_chain (trace from target to query), dead_code, complexity, entities, cross_search.",
         "parameters": {
             "type": "object",
             "properties": {
-                "action": {"type": "string", "description": "Action: dependents, dependencies, structure, impact, search, hotspots, entities, code_for_entity, cross_search, shared_deps, bridge"},
+                "action": {"type": "string", "description": "Action: dependents, dependencies, structure, impact, search, hotspots, callers, callees, call_chain, dead_code, complexity, entities, code_for_entity, cross_search, shared_deps, bridge"},
                 "project": {"type": "string", "description": "Project name (must be indexed)"},
                 "target": {"type": "string", "description": "File path or symbol name (required for dependents, dependencies, structure, impact, entities)"},
                 "query": {"type": "string", "description": "Search term (required for search, cross_search)"},
                 "depth": {"type": "integer", "description": "Max traversal depth for impact (default 3)"},
                 "limit": {"type": "integer", "description": "Max results (default 20)"},
-                "mode": {"type": "string", "description": "Search mode: fulltext (default) or semantic"},
             },
             "required": ["action", "project"],
         },
@@ -598,13 +597,12 @@ class ChatToolExecutor:
     def _tool_query_code(
         self, action: str, project: str, target: str = "",
         query: str = "", depth: int = 3, limit: int = 20,
-        mode: str = "fulltext",
     ) -> dict:
         if not self.svc.graph_provider:
             return {"error": "Code intelligence requires Neo4j — not configured"}
         return run_code_query(
             action=action, project=project, target=target,
-            query=query, kind="", depth=depth, limit=limit, mode=mode,
+            query=query, kind="", depth=depth, limit=limit,
             graph_provider=self.svc.graph_provider, db=self.svc.db,
             config=self.svc.config, embedding_engine=self.svc.embedding,
         )

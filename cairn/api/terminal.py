@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 
@@ -10,6 +11,50 @@ from fastapi import APIRouter, HTTPException, Path, WebSocket, WebSocketDisconne
 from cairn.core.services import Services
 
 logger = logging.getLogger(__name__)
+
+
+async def _ws_authenticate(websocket: WebSocket, svc: Services) -> bool:
+    """Authenticate a WebSocket connection before accepting.
+
+    Checks (in order):
+    1. JWT token in query param `token`
+    2. API key in query param `api_key`
+    3. Auth disabled (allow all)
+
+    Returns True if authenticated, False if rejected (closes with 4401).
+    """
+    config = svc.config
+
+    # If auth is disabled, allow all
+    if not config.auth.enabled:
+        return True
+
+    params = websocket.query_params
+
+    # Check JWT token
+    token = params.get("token", "")
+    if token:
+        try:
+            from cairn.core.auth import resolve_bearer_token
+            ctx = resolve_bearer_token(
+                token,
+                jwt_secret=config.auth.jwt_secret,
+                user_manager=svc.user_manager,
+            )
+            if ctx is not None:
+                return True
+        except Exception:
+            pass
+
+    # Check API key
+    api_key = params.get("api_key", "")
+    if api_key and config.auth.api_key:
+        if hmac.compare_digest(api_key, config.auth.api_key):
+            return True
+
+    # Reject
+    await websocket.close(code=4401, reason="Authentication required")
+    return False
 
 
 def register_routes(router: APIRouter, svc: Services, *, app=None, **kw):
@@ -75,6 +120,9 @@ def register_routes(router: APIRouter, svc: Services, *, app=None, **kw):
 
         @app.websocket("/terminal/ws/{host_id}")
         async def ws_terminal(websocket: WebSocket, host_id: int):
+            # Authenticate before accepting — WS bypasses HTTP middleware
+            if not await _ws_authenticate(websocket, svc):
+                return
             await websocket.accept()
 
             host = terminal_mgr.get(host_id, decrypt=True)
@@ -94,9 +142,16 @@ def register_routes(router: APIRouter, svc: Services, *, app=None, **kw):
                     host=host["hostname"],
                     port=host["port"],
                     username=host["username"],
-                    known_hosts=None,
                     connect_timeout=terminal_config.connect_timeout,
                 )
+                # Use system known_hosts by default (asyncssh default).
+                # Only disable host key checking if explicitly configured.
+                if host.get("skip_host_key_check"):
+                    connect_kwargs["known_hosts"] = None
+                    logger.warning(
+                        "SSH host key verification disabled for host %d (%s)",
+                        host_id, host["hostname"],
+                    )
                 if host["auth_method"] == "key":
                     connect_kwargs["client_keys"] = [asyncssh.import_private_key(credential)]
                 else:
@@ -140,7 +195,7 @@ def register_routes(router: APIRouter, svc: Services, *, app=None, **kw):
             except Exception as e:
                 logger.error("Terminal WebSocket error for host %d: %s", host_id, e)
                 try:
-                    await websocket.send_text(f"\r\n\x1b[31mConnection error: {e}\x1b[0m\r\n")
-                    await websocket.close(code=4500, reason=str(e)[:120])
+                    await websocket.send_text("\r\n\x1b[31mConnection failed. Check server logs for details.\x1b[0m\r\n")
+                    await websocket.close(code=4500, reason="Connection failed")
                 except Exception:
                     pass

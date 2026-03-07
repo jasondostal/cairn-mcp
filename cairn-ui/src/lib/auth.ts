@@ -176,18 +176,44 @@ export function hasToken(): boolean {
   return !!getToken();
 }
 
-/** Handle OIDC callback — stores token + user from URL params.
- *  Returns true if callback params were present. */
+/** Handle OIDC callback — exchanges one-time code for JWT via POST.
+ *  Returns true if callback params were present (async exchange happens in background). */
 export function handleOidcCallback(): boolean {
   if (typeof window === "undefined") return false;
   const params = new URLSearchParams(window.location.search);
-  const token = params.get("token");
-  const username = params.get("username");
-  const role = params.get("role");
-  if (!token || !username) return false;
-  setToken(token);
-  setStoredUser({ id: 0, username, role: role || "user" });
-  // Clean the URL
-  window.history.replaceState({}, "", window.location.pathname);
+  const oidcCode = params.get("oidc_code");
+  // Legacy support: direct token param (will be removed in future)
+  const legacyToken = params.get("token");
+  if (!oidcCode && !legacyToken) return false;
+
+  if (oidcCode) {
+    // Exchange one-time code for JWT (avoids token exposure in URL/logs)
+    fetch(`${BASE}/auth/oidc/exchange`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: oidcCode }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Code exchange failed");
+        return res.json();
+      })
+      .then((data) => {
+        setToken(data.access_token);
+        setStoredUser({ id: 0, username: data.user.username, role: data.user.role });
+        window.history.replaceState({}, "", window.location.pathname);
+        window.location.href = getReturnUrl();
+      })
+      .catch(() => {
+        window.history.replaceState({}, "", window.location.pathname);
+      });
+  } else if (legacyToken) {
+    const username = params.get("username");
+    const role = params.get("role");
+    if (username) {
+      setToken(legacyToken);
+      setStoredUser({ id: 0, username, role: role || "user" });
+    }
+    window.history.replaceState({}, "", window.location.pathname);
+  }
   return true;
 }

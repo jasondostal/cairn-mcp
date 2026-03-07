@@ -106,7 +106,7 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
     api
       .memoryWorkItems(id)
       .then((r) => setLinkedWorkItems(r.work_items))
-      .catch(() => setLinkedWorkItems([]));
+      .catch((err) => { console.error("Linked work-items fetch failed", err); setLinkedWorkItems([]); });
   };
 
   useEffect(() => {
@@ -255,8 +255,9 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
               <div className="flex items-center gap-4 text-sm">
                 {editing ? (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Importance:</span>
+                    <label htmlFor="memory-importance" className="text-xs text-muted-foreground">Importance:</label>
                     <Input
+                      id="memory-importance"
                       type="number"
                       step="0.1"
                       min="0"
@@ -279,7 +280,7 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
               {/* Memory type (editable) */}
               {editing && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Type:</span>
+                  <label htmlFor="memory-type" className="text-xs text-muted-foreground">Type:</label>
                   <SingleSelect
                     options={MEMORY_TYPE_OPTIONS}
                     value={formData.memory_type || memory.memory_type}
@@ -292,11 +293,12 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
 
               {/* Content */}
               <div>
-                <h3 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                <label htmlFor="memory-content" className="mb-2 block text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Content
-                </h3>
+                </label>
                 {editing ? (
                   <textarea
+                    id="memory-content"
                     value={formData.content ?? ""}
                     onChange={(e) => updateFormData((f) => ({ ...f, content: e.target.value }))}
                     className="w-full min-h-[200px] rounded-md border bg-background px-3 py-2 text-sm font-mono leading-relaxed resize-y focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -313,12 +315,13 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
                 <>
                   <Separator />
                   <div>
-                    <h3 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <label htmlFor="memory-tags" className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                       <Tag className="h-3 w-3" /> Tags
-                    </h3>
+                    </label>
                     {editing ? (
                       <div className="space-y-2">
                         <Input
+                          id="memory-tags"
                           value={(formData.tags ?? []).join(", ")}
                           onChange={(e) => {
                             const tags = e.target.value.split(",").map((t) => t.trim()).filter(Boolean);
@@ -498,12 +501,18 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
                               This will soft-delete the memory. It can be reactivated later.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
-                          <textarea
-                            value={inactivateReason}
-                            onChange={(e) => setInactivateReason(e.target.value)}
-                            placeholder="Reason for inactivation (optional)"
-                            className="w-full min-h-[80px] rounded-md border bg-background px-3 py-2 text-sm resize-y focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          />
+                          <div className="space-y-1">
+                            <label htmlFor="inactivate-reason" className="text-xs font-medium text-muted-foreground uppercase">
+                              Reason
+                            </label>
+                            <textarea
+                              id="inactivate-reason"
+                              value={inactivateReason}
+                              onChange={(e) => setInactivateReason(e.target.value)}
+                              placeholder="Reason for inactivation (optional)"
+                              className="w-full min-h-[80px] rounded-md border bg-background px-3 py-2 text-sm resize-y focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            />
+                          </div>
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                             <AlertDialogAction onClick={handleInactivate}>

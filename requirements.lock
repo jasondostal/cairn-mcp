@@ -363,6 +363,8 @@ uvicorn==0.41.0
     # via
     #   cairn-mcp (pyproject.toml)
     #   mcp
+watchdog==6.0.0
+    # via cairn-mcp (pyproject.toml)
 weasyprint==68.1
     # via cairn-mcp (pyproject.toml)
 webencodings==0.5.1

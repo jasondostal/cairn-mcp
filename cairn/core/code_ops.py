@@ -2,6 +2,9 @@
 
 Both MCP tools (server.py) and REST API (api/code.py) call these functions.
 Keeps transport layers thin and prevents divergence.
+
+NOTE: Code indexing is handled by the standalone code worker
+(python -m cairn.code), not by the server. The server only queries.
 """
 
 from __future__ import annotations
@@ -24,18 +27,13 @@ def _resolve_code_path(path: str, code_dir: str) -> Path | str:
     base = Path(code_dir).resolve()
     raw = Path(path)
 
-    # Resolve relative paths against code_dir
     target = (base / raw if not raw.is_absolute() else raw).resolve()
 
-    # Path traversal protection: must be under code_dir
     try:
         target.relative_to(base)
     except ValueError:
-        return (
-            f"path must be under the code directory ({base}), got: {path}"
-        )
+        return f"path must be under the code directory ({base}), got: {path}"
 
-    # Symlink escape protection
     if target.is_symlink():
         real = target.resolve()
         try:
@@ -49,77 +47,6 @@ def _resolve_code_path(path: str, code_dir: str) -> Path | str:
     return target
 
 
-def run_code_index(
-    *,
-    project: str,
-    path: str,
-    force: bool = False,
-    graph_provider: Any,
-    db: Any,
-    config: Any,
-) -> dict:
-    """Index a codebase for structural analysis.
-
-    Returns a result dict with files_scanned, files_indexed, etc.
-    """
-    if not project:
-        return {"error": "project is required"}
-    if not path:
-        return {"error": "path is required"}
-
-    resolved = _resolve_code_path(path, config.code_dir)
-    if isinstance(resolved, str):
-        return {"error": resolved}
-    root = resolved
-
-    if not graph_provider:
-        return {"error": "Code intelligence requires Neo4j. Set CAIRN_GRAPH_BACKEND=neo4j."}
-
-    if not config.capabilities.code_intelligence:
-        return {"error": "Code intelligence is disabled. Set CAIRN_CODE_INTELLIGENCE=true."}
-
-    from cairn.code.indexer import CodeIndexer
-    from cairn.code.parser import CodeParser
-    from cairn.core.utils import get_or_create_project
-
-    project_id = get_or_create_project(db, project)
-    parser = CodeParser()
-    indexer = CodeIndexer(parser, graph_provider)
-
-    result = indexer.index_directory(
-        root=root,
-        project=project,
-        project_id=project_id,
-        force=force,
-    )
-
-    # Bridge entities to code (best-effort)
-    bridge_stats = None
-    if result.files_indexed > 0:
-        try:
-            from cairn.code.bridge import CodeBridgeService
-            pid = get_or_create_project(db, project)
-            bridge_svc = CodeBridgeService(graph_provider)
-            bridge_stats = bridge_svc.bridge_all(pid)
-        except Exception:
-            logger.warning("Code bridge after index failed (non-blocking)", exc_info=True)
-
-    resp = {
-        "project": result.project,
-        "files_scanned": result.files_scanned,
-        "files_indexed": result.files_indexed,
-        "files_skipped": result.files_skipped,
-        "files_deleted": result.files_deleted,
-        "symbols_created": result.symbols_created,
-        "imports_created": result.imports_created,
-        "errors": result.errors if result.errors else None,
-        "summary": result.summary(),
-    }
-    if bridge_stats:
-        resp["bridge"] = bridge_stats
-    return resp
-
-
 def run_code_query(
     *,
     action: str,
@@ -129,7 +56,6 @@ def run_code_query(
     kind: str = "",
     depth: int = 3,
     limit: int = 20,
-    mode: str = "fulltext",
     graph_provider: Any,
     db: Any,
     config: Any,
@@ -148,6 +74,11 @@ def run_code_query(
         return {"error": "Code intelligence is disabled. Set CAIRN_CODE_INTELLIGENCE=true."}
 
     from cairn.code.query import (
+        query_call_chain,
+        query_callees,
+        query_callers,
+        query_complexity,
+        query_dead_code,
         query_dependencies,
         query_dependents,
         query_impact,
@@ -183,13 +114,36 @@ def run_code_query(
             return {"error": "query is required for search"}
         return query_search(
             graph_provider, query, project_id,
-            kind=kind or None, limit=limit, mode=mode,
-            embedding_engine=embedding_engine if mode == "semantic" else None,
+            kind=kind or None, limit=limit,
         )
 
     if action == "hotspots":
         from cairn.code.query import query_hotspots
         return query_hotspots(graph_provider, project_id, limit=limit)
+
+    if action == "callers":
+        if not target:
+            return {"error": "target (qualified name) is required for callers"}
+        return query_callers(graph_provider, target, project_id, limit=limit)
+
+    if action == "callees":
+        if not target:
+            return {"error": "target (qualified name) is required for callees"}
+        return query_callees(graph_provider, target, project_id, limit=limit)
+
+    if action == "call_chain":
+        if not target or not query:
+            return {"error": "target (start symbol) and query (end symbol) are required for call_chain"}
+        return query_call_chain(
+            graph_provider, target, query, project_id,
+            max_depth=depth, limit=limit,
+        )
+
+    if action == "dead_code":
+        return query_dead_code(graph_provider, project_id, limit=limit)
+
+    if action == "complexity":
+        return query_complexity(graph_provider, project_id, limit=limit)
 
     if action == "entities":
         if not target:
@@ -234,84 +188,8 @@ def run_code_query(
 
     return {
         "error": f"Unknown action: {action}. Valid: dependents, dependencies, structure, "
-        "impact, search, hotspots, entities, code_for_entity, cross_search, shared_deps, bridge"
-    }
-
-
-def run_code_describe(
-    *,
-    project: str,
-    target: str = "",
-    kind: str = "",
-    limit: int = 50,
-    graph_provider: Any,
-    db: Any,
-    config: Any,
-    llm: Any,
-    embedding_engine: Any,
-) -> dict:
-    """Generate natural language descriptions for code symbols."""
-    if not project:
-        return {"error": "project is required"}
-
-    if not graph_provider:
-        return {"error": "Code describe requires Neo4j. Set CAIRN_GRAPH_BACKEND=neo4j."}
-
-    if not config.capabilities.code_intelligence:
-        return {"error": "Code intelligence is disabled. Set CAIRN_CODE_INTELLIGENCE=true."}
-
-    if not llm:
-        return {"error": "Code describe requires LLM. Enable enrichment."}
-
-    from cairn.code.summarizer import CodeSummarizer
-    from cairn.core.utils import get_or_create_project
-
-    project_id = get_or_create_project(db, project)
-    summarizer = CodeSummarizer(llm, embedding_engine)
-
-    # Gather symbols
-    if target:
-        symbols = graph_provider.get_code_symbols(target, project_id)
-    else:
-        files = graph_provider.get_code_files(project_id)
-        symbols = []
-        for f in files:
-            file_syms = graph_provider.get_code_symbols(f["path"], project_id)
-            symbols.extend(file_syms)
-
-    # Filter
-    filtered = symbols
-    if kind:
-        filtered = [s for s in filtered if s.get("kind") == kind]
-    filtered = [s for s in filtered if not s.get("description")]
-    filtered = filtered[:limit]
-
-    if not filtered:
-        return {"project": project, "described": 0, "message": "No undescribed symbols found"}
-
-    described = summarizer.batch_describe(filtered, project_id)
-
-    stored = 0
-    for item in described:
-        try:
-            graph_provider.update_code_symbol_description(
-                qualified_name=item["qualified_name"],
-                project_id=project_id,
-                file_path=item["file_path"],
-                description=item["description"],
-                description_embedding=item["embedding"],
-            )
-            stored += 1
-        except Exception:
-            logger.warning("Failed to store description for %s", item["qualified_name"], exc_info=True)
-
-    return {
-        "project": project,
-        "described": stored,
-        "symbols": [
-            {"qualified_name": d["qualified_name"], "description": d["description"]}
-            for d in described[:10]
-        ],
+        "impact, search, hotspots, callers, callees, call_chain, dead_code, complexity, "
+        "entities, code_for_entity, cross_search, shared_deps, bridge"
     }
 
 

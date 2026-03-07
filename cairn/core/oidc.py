@@ -169,3 +169,47 @@ class OIDCStateStore:
         expired = [k for k, (_, _, t) in self._store.items() if now - t > self._ttl]
         for k in expired:
             del self._store[k]
+
+
+class OIDCCodeStore:
+    """One-time code store for secure OIDC token exchange.
+
+    Instead of passing JWT tokens in redirect URL query parameters (which
+    leak into server logs, browser history, and Referer headers), the callback
+    stores the JWT under a short-lived random code. The UI exchanges the code
+    for the JWT via POST.
+    """
+
+    def __init__(self, ttl_seconds: int = 60):
+        # code → (jwt_token, username, role, timestamp)
+        self._store: dict[str, tuple[str, str, str, float]] = {}
+        self._ttl = ttl_seconds
+        self._lock = Lock()
+
+    def create(self, token: str, username: str, role: str) -> str:
+        """Store a JWT under a one-time code. Returns the code."""
+        code = secrets.token_urlsafe(32)
+        with self._lock:
+            self._cleanup()
+            self._store[code] = (token, username, role, time.time())
+        return code
+
+    def consume(self, code: str) -> tuple[str, str, str] | None:
+        """Retrieve and delete (token, username, role) for a code.
+
+        Returns None if expired/missing.
+        """
+        with self._lock:
+            self._cleanup()
+            entry = self._store.pop(code, None)
+        if entry is None:
+            return None
+        token, username, role, _created = entry
+        return token, username, role
+
+    def _cleanup(self) -> None:
+        """Remove expired entries."""
+        now = time.time()
+        expired = [k for k, (_, _, _, t) in self._store.items() if now - t > self._ttl]
+        for k in expired:
+            del self._store[k]

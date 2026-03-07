@@ -52,7 +52,7 @@ export function NotificationBell() {
         setNotifications(d.items);
         setUnread(d.unread);
       })
-      .catch(() => {})
+      .catch((err) => { console.error("Notification fetch failed", err); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -61,7 +61,7 @@ export function NotificationBell() {
     onEvent: () => {
       api.unreadCount()
         .then((d) => setUnread(d.unread))
-        .catch(() => {});
+        .catch((err) => { console.error("Unread count fetch failed", err); });
       if (open) fetchNotifications();
     },
   });
@@ -74,7 +74,7 @@ export function NotificationBell() {
       if (document.hidden || !active) return;
       api.unreadCount()
         .then((d) => { if (active) setUnread(d.unread); })
-        .catch(() => {});
+        .catch((err) => { console.error("Unread count poll failed", err); });
     }
     poll();
     const id = setInterval(poll, POLL_INTERVAL);
@@ -92,7 +92,7 @@ export function NotificationBell() {
   }, [open, fetchNotifications]);
 
   async function handleMarkRead(id: number) {
-    await api.markNotificationRead(id).catch(() => {});
+    await api.markNotificationRead(id).catch((err) => { console.error("Mark-read failed", err); });
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
     );
@@ -100,7 +100,7 @@ export function NotificationBell() {
   }
 
   async function handleMarkAllRead() {
-    await api.markAllNotificationsRead().catch(() => {});
+    await api.markAllNotificationsRead().catch((err) => { console.error("Mark-all-read failed", err); });
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
     setUnread(0);
   }

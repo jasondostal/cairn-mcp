@@ -67,7 +67,7 @@ function useAttentionCount() {
       .then((d) => {
         setCount(d.total ?? 0);
       })
-      .catch(() => {});
+      .catch((err) => { console.error("Ready-ids fetch failed", err); });
   }, 30_000);
 
   return count;
@@ -94,7 +94,7 @@ function useSidebarMeta() {
     fetch("/api/status")
       .then((r) => r.json())
       .then((d) => setVersion(d.version ?? ""))
-      .catch(() => {});
+      .catch((err) => { console.error("Version fetch failed", err); });
   }, []);
 
   return { version, time };

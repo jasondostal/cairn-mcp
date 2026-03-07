@@ -118,7 +118,7 @@ _COORDINATOR_TOOLS = frozenset({
     "work_items", "dispatch",
     # Observation & context
     "orient", "search", "recall", "rules", "insights",
-    "code_query", "code_index",
+    "code_query",
     # Planning & deliberation
     "think", "projects",
     # Deliverable creation (synthesis output)

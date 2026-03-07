@@ -254,3 +254,43 @@ def extract_json(raw: str, json_type: str = "object") -> dict | list | None:
                     return None
 
     return None
+
+
+def validate_url(url: str) -> None:
+    """Validate a URL for safety. Blocks SSRF vectors.
+
+    Rejects private/reserved IPs, metadata endpoints, loopback,
+    and non-http(s) schemes. Used by ingest and webhooks.
+    """
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Only http/https URLs allowed, got: {parsed.scheme}")
+
+    if not parsed.hostname:
+        raise ValueError("URL must include a hostname")
+
+    blocked_hosts = {
+        "localhost", "127.0.0.1", "0.0.0.0",
+        "169.254.169.254", "[::1]",
+        "metadata.google.internal",
+    }
+    if parsed.hostname.lower() in blocked_hosts:
+        raise ValueError(f"Fetching from {parsed.hostname} is not allowed")
+
+    try:
+        resolved = socket.getaddrinfo(
+            parsed.hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM,
+        )
+        for _, _, _, _, sockaddr in resolved:
+            ip = ipaddress.ip_address(sockaddr[0])
+            if ip.is_private or ip.is_reserved or ip.is_loopback or ip.is_link_local:
+                raise ValueError(
+                    f"Fetching from private/reserved IP ({ip}) is not allowed"
+                )
+    except socket.gaierror:
+        pass

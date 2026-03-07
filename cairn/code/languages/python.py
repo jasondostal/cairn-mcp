@@ -1,6 +1,7 @@
 """Python language support for tree-sitter parsing.
 
-Extracts functions, classes, methods, and imports from Python source files.
+Extracts functions, classes, methods, imports, constants, calls, and
+cyclomatic complexity from Python source files.
 """
 
 from __future__ import annotations
@@ -8,9 +9,33 @@ from __future__ import annotations
 import tree_sitter as ts
 import tree_sitter_python as tspython
 
-from cairn.code.parser import CodeSymbol
+from cairn.code.parser import CallInfo, CodeSymbol
 
 _LANGUAGE: ts.Language | None = None
+
+# Node types that contribute to cyclomatic complexity.
+_COMPLEXITY_NODES = frozenset({
+    "if_statement", "elif_clause", "for_statement", "while_statement",
+    "except_clause", "with_statement", "boolean_operator",
+    "list_comprehension", "set_comprehension", "dictionary_comprehension",
+    "generator_expression", "conditional_expression", "case_clause",
+})
+
+# Names that are not real callees (builtins / keywords used as calls).
+_BUILTIN_CALL_SKIP = frozenset({
+    "print", "len", "range", "enumerate", "zip", "map", "filter",
+    "sorted", "reversed", "list", "dict", "set", "tuple", "str",
+    "int", "float", "bool", "bytes", "type", "isinstance", "issubclass",
+    "hasattr", "getattr", "setattr", "delattr", "super", "property",
+    "staticmethod", "classmethod", "repr", "hash", "id", "input",
+    "open", "next", "iter", "all", "any", "min", "max", "sum", "abs",
+    "round", "pow", "divmod", "chr", "ord", "hex", "oct", "bin",
+    "format", "vars", "dir", "callable", "globals", "locals",
+    "compile", "exec", "eval", "breakpoint", "exit", "quit",
+    "NotImplementedError", "ValueError", "TypeError", "KeyError",
+    "RuntimeError", "AttributeError", "ImportError", "OSError",
+    "FileNotFoundError", "IndexError", "StopIteration", "Exception",
+})
 
 
 def get_language() -> ts.Language:
@@ -21,11 +46,14 @@ def get_language() -> ts.Language:
     return _LANGUAGE
 
 
+# ── Symbol extraction ─────────────────────────────────────────
+
+
 def extract_symbols(tree: ts.Tree, source: bytes, file_path: str) -> list[CodeSymbol]:
     """Extract code symbols from a parsed Python AST.
 
     Walks the tree and extracts:
-      - Module-level functions
+      - Module-level functions (with cyclomatic complexity)
       - Classes (with their methods as children)
       - Module-level imports
       - Module-level constants (ALL_CAPS assignments)
@@ -93,6 +121,7 @@ def _walk_node(
                                 signature=sym.signature,
                                 docstring=sym.docstring,
                                 parent_name=sym.parent_name,
+                                complexity=sym.complexity,
                             )
                             symbols.append(sym)
 
@@ -151,6 +180,7 @@ def _extract_function(
         signature=f"def {name}{params}{return_type}",
         docstring=_extract_docstring(node, source),
         parent_name=parent_name,
+        complexity=_calculate_complexity(node),
     )
 
 
@@ -220,6 +250,121 @@ def _extract_constant(node: ts.Node, source: bytes, file_path: str) -> CodeSymbo
         end_line=node.end_point.row + 1,
         signature=_node_text(node, source).split("\n")[0],
     )
+
+
+# ── Call extraction ───────────────────────────────────────────
+
+
+def extract_calls(tree: ts.Tree, source: bytes, file_path: str) -> list[CallInfo]:
+    """Extract function/method calls from a Python AST.
+
+    Walks the tree to find all ``call`` nodes, determines the enclosing
+    function/method (caller), and records the callee name.
+    """
+    calls: list[CallInfo] = []
+    _walk_calls(tree.root_node, source, file_path, caller_qname=None, calls=calls)
+    return calls
+
+
+def _walk_calls(
+    node: ts.Node,
+    source: bytes,
+    file_path: str,
+    caller_qname: str | None,
+    calls: list[CallInfo],
+) -> None:
+    """Recursively walk the AST extracting calls with their caller context."""
+    for child in node.children:
+        # Track function/method scope
+        if child.type in ("function_definition", "class_definition"):
+            name_node = _find_child(child, "identifier")
+            if name_node:
+                name = _node_text(name_node, source)
+                if child.type == "class_definition":
+                    # Recurse into class body with class name as context
+                    body = _find_child(child, "block")
+                    if body:
+                        _walk_calls(body, source, file_path, caller_qname=name, calls=calls)
+                    continue
+                else:
+                    # Function/method: build qualified name
+                    qname = f"{caller_qname}.{name}" if caller_qname else name
+                    body = _find_child(child, "block")
+                    if body:
+                        _walk_calls(body, source, file_path, caller_qname=qname, calls=calls)
+                    continue
+
+        elif child.type == "decorated_definition":
+            # Unwrap to find the inner definition
+            for inner in child.children:
+                if inner.type in ("function_definition", "class_definition"):
+                    _walk_calls(
+                        inner if inner.type == "class_definition" else child,
+                        source, file_path, caller_qname, calls,
+                    )
+            continue
+
+        elif child.type == "call" and caller_qname:
+            call = _extract_call(child, source, file_path, caller_qname)
+            if call:
+                calls.append(call)
+
+        # Continue walking into child nodes
+        _walk_calls(child, source, file_path, caller_qname, calls)
+
+
+def _extract_call(
+    node: ts.Node, source: bytes, file_path: str, caller_qname: str,
+) -> CallInfo | None:
+    """Extract a single call node into a CallInfo."""
+    func_node = _find_child(node, "identifier")
+    attr_node = _find_child(node, "attribute")
+
+    if attr_node:
+        # Attribute call: self.foo(), obj.method(), os.path.join()
+        full_name = _node_text(attr_node, source)
+        # The short name is the last identifier in the attribute chain
+        last_id = None
+        for c in attr_node.children:
+            if c.type == "identifier":
+                last_id = c
+        callee_name = _node_text(last_id, source) if last_id else full_name
+    elif func_node:
+        # Direct call: foo(), MyClass()
+        callee_name = _node_text(func_node, source)
+        full_name = callee_name
+    else:
+        return None
+
+    # Skip builtins — they add noise without structural insight
+    if callee_name in _BUILTIN_CALL_SKIP:
+        return None
+
+    return CallInfo(
+        caller_qualified_name=caller_qname,
+        callee_name=callee_name,
+        callee_full_name=full_name,
+        line=node.start_point.row + 1,
+        file_path=file_path,
+    )
+
+
+# ── Complexity ────────────────────────────────────────────────
+
+
+def _calculate_complexity(func_node: ts.Node) -> int:
+    """Calculate cyclomatic complexity for a function/method node.
+
+    Starts at 1 (the function itself) and adds 1 for each decision point.
+    """
+    complexity = 1
+    stack = [func_node]
+    while stack:
+        n = stack.pop()
+        if n.type in _COMPLEXITY_NODES:
+            complexity += 1
+        stack.extend(n.children)
+    return complexity
 
 
 # ── Helpers ────────────────────────────────────────────────────

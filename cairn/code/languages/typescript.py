@@ -10,7 +10,7 @@ from __future__ import annotations
 import tree_sitter as ts
 import tree_sitter_typescript as tstypescript
 
-from cairn.code.parser import CodeSymbol
+from cairn.code.parser import CallInfo, CodeSymbol
 
 _LANGUAGES: dict[str, ts.Language] = {}
 
@@ -214,6 +214,7 @@ def _extract_function(
         signature=f"function {name}{params}{return_type}",
         docstring=_extract_jsdoc(node, source),
         parent_name=parent_name,
+        complexity=_calculate_complexity(node),
     )
 
 
@@ -280,6 +281,7 @@ def _extract_method(
         signature=f"{name}{params}{return_type}",
         docstring=_extract_jsdoc(node, source),
         parent_name=parent_name,
+        complexity=_calculate_complexity(node),
     )
 
 
@@ -404,6 +406,7 @@ def _extract_arrow_function(
             end_line=node.end_point.row + 1,
             signature=f"const {name} = {params}{return_type} => ...",
             docstring=_extract_jsdoc(node, source),
+            complexity=_calculate_complexity(arrow),
         )
     return None
 
@@ -481,6 +484,136 @@ def _find_child(node: ts.Node, child_type: str) -> ts.Node | None:
 def _node_text(node: ts.Node, source: bytes) -> str:
     """Get the text of a tree-sitter node."""
     return source[node.start_byte:node.end_byte].decode("utf-8", errors="replace")
+
+
+# ── Call extraction ────────────────────────────────────────────
+
+# Node types that contribute to cyclomatic complexity in TS/JS.
+_COMPLEXITY_NODES = frozenset({
+    "if_statement", "else_clause", "for_statement", "for_in_statement",
+    "while_statement", "do_statement", "catch_clause", "switch_case",
+    "ternary_expression", "binary_expression",  # && and || short-circuit
+})
+
+# Binary operators that count as decision points.
+_COMPLEXITY_OPS = frozenset({"&&", "||", "??"})
+
+
+def _calculate_complexity(node: ts.Node) -> int:
+    """Calculate cyclomatic complexity for a function/method node."""
+    complexity = 1
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if n.type in _COMPLEXITY_NODES:
+            if n.type == "binary_expression":
+                # Only count && || ?? as decision points
+                op_node = _find_child(n, "&&") or _find_child(n, "||") or _find_child(n, "??")
+                if op_node:
+                    complexity += 1
+            else:
+                complexity += 1
+        stack.extend(n.children)
+    return complexity
+
+
+def extract_calls(tree: ts.Tree, source: bytes, file_path: str) -> list[CallInfo]:
+    """Extract function/method calls from a TypeScript/TSX AST."""
+    calls: list[CallInfo] = []
+    _walk_calls(tree.root_node, source, file_path, caller_qname=None, calls=calls)
+    return calls
+
+
+def _walk_calls(
+    node: ts.Node,
+    source: bytes,
+    file_path: str,
+    caller_qname: str | None,
+    calls: list[CallInfo],
+) -> None:
+    """Recursively walk the AST extracting calls with their caller context."""
+    for child in node.children:
+        if child.type in ("function_declaration", "method_definition"):
+            name_node = (
+                _find_child(child, "identifier")
+                or _find_child(child, "property_identifier")
+            )
+            if name_node:
+                name = _node_text(name_node, source)
+                qname = f"{caller_qname}.{name}" if caller_qname else name
+                body = (
+                    _find_child(child, "statement_block")
+                    or _find_child(child, "class_body")
+                )
+                if body:
+                    _walk_calls(body, source, file_path, caller_qname=qname, calls=calls)
+                continue
+
+        elif child.type == "class_declaration":
+            name_node = (
+                _find_child(child, "identifier")
+                or _find_child(child, "type_identifier")
+            )
+            if name_node:
+                name = _node_text(name_node, source)
+                body = _find_child(child, "class_body")
+                if body:
+                    _walk_calls(body, source, file_path, caller_qname=name, calls=calls)
+                continue
+
+        elif child.type == "lexical_declaration":
+            # const foo = () => { ... }
+            for decl in child.children:
+                if decl.type == "variable_declarator":
+                    name_node = _find_child(decl, "identifier")
+                    arrow = _find_child(decl, "arrow_function")
+                    if name_node and arrow:
+                        name = _node_text(name_node, source)
+                        qname = f"{caller_qname}.{name}" if caller_qname else name
+                        _walk_calls(arrow, source, file_path, caller_qname=qname, calls=calls)
+                        continue
+
+        elif child.type == "export_statement":
+            _walk_calls(child, source, file_path, caller_qname, calls)
+            continue
+
+        elif child.type == "call_expression" and caller_qname:
+            call = _extract_call_expr(child, source, file_path, caller_qname)
+            if call:
+                calls.append(call)
+
+        _walk_calls(child, source, file_path, caller_qname, calls)
+
+
+def _extract_call_expr(
+    node: ts.Node, source: bytes, file_path: str, caller_qname: str,
+) -> CallInfo | None:
+    """Extract a single call_expression into a CallInfo."""
+    func = node.children[0] if node.children else None
+    if not func:
+        return None
+
+    if func.type == "identifier":
+        callee_name = _node_text(func, source)
+        full_name = callee_name
+    elif func.type == "member_expression":
+        full_name = _node_text(func, source)
+        # Last property is the callee name
+        prop = _find_child(func, "property_identifier")
+        callee_name = _node_text(prop, source) if prop else full_name
+    else:
+        return None
+
+    return CallInfo(
+        caller_qualified_name=caller_qname,
+        callee_name=callee_name,
+        callee_full_name=full_name,
+        line=node.start_point.row + 1,
+        file_path=file_path,
+    )
+
+
+# ── Doc extraction ────────────────────────────────────────────
 
 
 def _extract_jsdoc(node: ts.Node, source: bytes) -> str | None:

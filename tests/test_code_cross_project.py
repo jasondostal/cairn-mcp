@@ -118,34 +118,9 @@ class TestQuerySharedDependencies:
         assert result["shared"] == []
 
 
-class TestSemanticSearch:
+class TestCodeSearch:
 
-    def test_semantic_mode(self):
-        graph = MagicMock()
-        graph.search_code_symbols_by_description.return_value = [
-            {"qualified_name": "add", "name": "add", "kind": "function",
-             "file_path": "utils.py", "description": "Adds two numbers", "score": 0.95},
-        ]
-        embedding = MagicMock()
-        embedding.embed.return_value = [0.1] * 1024
-
-        result = query_search(
-            graph, "function that adds numbers", project_id=1,
-            mode="semantic", embedding_engine=embedding,
-        )
-        assert result["mode"] == "semantic"
-        assert len(result["results"]) == 1
-        embedding.embed.assert_called_once_with("function that adds numbers")
-
-    def test_semantic_mode_no_engine(self):
-        graph = MagicMock()
-        result = query_search(
-            graph, "test query", project_id=1,
-            mode="semantic", embedding_engine=None,
-        )
-        assert "error" in result
-
-    def test_fulltext_mode_default(self):
+    def test_fulltext_search(self):
         graph = MagicMock()
         graph.search_code_symbols.return_value = [
             {"qualified_name": "add", "name": "add", "kind": "function",
@@ -155,6 +130,18 @@ class TestSemanticSearch:
         result = query_search(graph, "add", project_id=1)
         assert result["mode"] == "fulltext"
         assert len(result["results"]) == 1
+
+    def test_extra_kwargs_ignored(self):
+        """query_search accepts **_kwargs for backward compat."""
+        graph = MagicMock()
+        graph.search_code_symbols.return_value = []
+
+        result = query_search(
+            graph, "test", project_id=1,
+            mode="semantic", embedding_engine=None,
+        )
+        assert result["mode"] == "fulltext"
+        assert result["results"] == []
 
 
 class TestKnowledgeCodeBridging:
