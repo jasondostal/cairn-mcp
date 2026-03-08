@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import urllib.error
 import urllib.request
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel
