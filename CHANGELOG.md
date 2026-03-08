@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.75.0] — 2026-03-08 — "Observatory"
+
+### Added
+- **Headless real-time SSE metrics stream** — `GET /api/metrics/stream` delivers 1-second operational pulse (ops, tokens, latency, per-tool/project breakdown); `GET /api/metrics/snapshot` for point-in-time readings. 60-second ring buffer, zero DB queries (ca-240)
+- **MCP tool authorization** — project-scoped access checks + admin gates via UserContext contextvar (ca-230)
+- **Observability attribution** — TraceContext enriched with project/tool_name/model; track_operation and event_bus read from trace as fallback; `tool_name` column on usage_events (ca-231)
+- **Tool layer test coverage** — 108 tests across 5 new suites: memory, work_items, deliverables, threading, auth (ca-234)
+
+### Changed
+- **Services DI** — replaced 23 module-level globals with typed `Services` dataclass passed to all MCP tool register functions (ca-237)
+- **Split work_items god function** — deliverables (7 actions), locks (4 actions), agents extracted to dedicated tools; work_items reduced from 30+ to 19 actions (ca-232)
+- **Unified chat_tools** — budget caps, event publishing, confidence gating aligned with MCP tool behavior (ca-233)
+
+### Fixed
+- **OIDC login race condition** — `handleOidcCallback()` was fire-and-forget; now properly awaits token exchange before navigation
+- **cairn-ui a11y** — ARIA roles on clickable divs, removed maximumScale:1 restriction, skip-to-content link, keyboard focus indicators (ca-239)
+- **Doc retrieval** — `get_doc` and `list_all_docs` actions added to projects tool (ca-191)
+
 ## [0.74.0] — 2026-03-07 — "Hardening"
 
 ### Fixed
