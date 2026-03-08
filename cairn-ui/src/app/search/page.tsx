@@ -80,8 +80,11 @@ function MemoryCard({ memory, onSelect, isActive }: { memory: Memory; onSelect?:
 
   return (
     <Card
-      className={`transition-colors hover:border-primary/30 cursor-pointer ${isActive ? "border-primary/50 bg-accent/30" : ""}`}
+      role="button"
+      tabIndex={0}
+      className={`transition-colors hover:border-primary/30 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isActive ? "border-primary/50 bg-accent/30 ring-2 ring-primary/50" : ""}`}
       onClick={() => onSelect?.(memory.id)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect?.(memory.id); } }}
     >
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-2">
@@ -141,10 +144,13 @@ function MemoryDenseRow({ memory, onSelect, isActive, expanded, onToggleExpand }
   const truncated = memory.summary || (memory.content.length > 120 ? memory.content.slice(0, 120) + "\u2026" : memory.content);
 
   return (
-    <div className={isActive ? "bg-accent/30" : ""}>
+    <div className={isActive ? "bg-accent/30 ring-2 ring-primary/50 rounded-md" : ""}>
       <div
-        className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer"
+        role="button"
+        tabIndex={0}
+        className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => onToggleExpand?.(memory.id)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggleExpand?.(memory.id); } }}
       >
         <span className="font-mono text-xs text-muted-foreground shrink-0">#{memory.id}</span>
         <MemoryTypeBadge type={memory.memory_type} />

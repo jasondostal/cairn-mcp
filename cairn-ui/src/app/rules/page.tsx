@@ -19,7 +19,13 @@ import { Shield } from "lucide-react";
 
 function RuleCard({ rule, onClick }: { rule: Rule; onClick: () => void }) {
   return (
-    <Card className="transition-colors hover:border-primary/30 cursor-pointer" onClick={onClick}>
+    <Card
+      role="button"
+      tabIndex={0}
+      className="transition-colors hover:border-primary/30 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
+    >
       <CardContent className="space-y-2 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -57,8 +63,11 @@ function RuleDenseRow({ rule, onClick }: { rule: Rule; onClick: () => void }) {
   const truncated = rule.content.length > 120 ? rule.content.slice(0, 120) + "…" : rule.content;
   return (
     <div
-      className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer"
+      role="button"
+      tabIndex={0}
+      className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
     >
       <Shield className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <ProjectPill name={rule.project} />

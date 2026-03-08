@@ -37,8 +37,11 @@ function StoneCard({
 }) {
   return (
     <Card
-      className="cursor-pointer transition-colors hover:bg-accent/50"
+      role="button"
+      tabIndex={0}
+      className="cursor-pointer transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
     >
       <CardContent className="p-3 space-y-1.5">
         <div className="flex items-center justify-between gap-2">

@@ -49,12 +49,16 @@ export function WorkItemRow({
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       className={cn(
         "flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         (isDone || isCancelled) && "opacity-50",
-        isActive && "bg-accent/30",
+        isActive && "bg-accent/30 ring-2 ring-primary/50",
       )}
       onClick={() => { if (!dispatchOpen) onClick?.(); }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!dispatchOpen) onClick?.(); } }}
     >
       {/* Indentation with tree connectors */}
       {depth > 0 && (

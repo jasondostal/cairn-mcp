@@ -22,7 +22,13 @@ function TaskCard({ task, showProject, onClick }: { task: Task; showProject?: bo
   const done = task.status === "completed";
 
   return (
-    <Card className={`transition-colors hover:border-primary/30 cursor-pointer ${done ? "opacity-60" : ""}`} onClick={onClick}>
+    <Card
+      role="button"
+      tabIndex={0}
+      className={`transition-colors hover:border-primary/30 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${done ? "opacity-60" : ""}`}
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
+    >
       <CardContent className="flex items-start gap-3 p-4">
         {done ? (
           <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
@@ -69,8 +75,11 @@ function TaskDenseRow({ task, showProject, onClick }: { task: Task; showProject?
   const done = task.status === "completed";
   return (
     <div
-      className={`flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer ${done ? "opacity-50" : ""}`}
+      role="button"
+      tabIndex={0}
+      className={`flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${done ? "opacity-50" : ""}`}
       onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
     >
       {done ? (
         <CheckCircle className="h-3.5 w-3.5 shrink-0 text-green-500" />

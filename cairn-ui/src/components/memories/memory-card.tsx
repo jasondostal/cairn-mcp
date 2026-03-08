@@ -138,8 +138,11 @@ export function MemoryCard({
   return (
     <Card
       ref={isActive ? cardRef : undefined}
-      className={`transition-colors hover:border-primary/30 cursor-pointer ${isActive ? "border-primary/50 bg-accent/30" : ""}`}
+      role="button"
+      tabIndex={0}
+      className={`transition-colors hover:border-primary/30 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isActive ? "border-primary/50 bg-accent/30 ring-2 ring-primary/50" : ""}`}
       onClick={() => onSelect?.(memory.id)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect?.(memory.id); } }}
     >
       <div className="flex">
         {eph && <SalienceBar salience={memory.salience!} />}
@@ -222,8 +225,11 @@ export function MemoryDenseRow({
   return (
     <div
       ref={isActive ? cardRef : undefined}
-      className={`flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer ${isActive ? "bg-accent/30" : ""}`}
+      role="button"
+      tabIndex={0}
+      className={`flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isActive ? "bg-accent/30 ring-2 ring-primary/50" : ""}`}
       onClick={() => onSelect?.(memory.id)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect?.(memory.id); } }}
     >
       {eph && (
         <div
