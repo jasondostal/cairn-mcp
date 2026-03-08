@@ -172,5 +172,8 @@ def create_api(svc: Services) -> FastAPI:
     reg_working_memory(router, svc)
     reg_beliefs(router, svc)
 
+    from cairn.api.metrics_stream import register_routes as reg_metrics_stream
+    reg_metrics_stream(router, svc, metrics_collector=svc.metrics_collector)
+
     app.include_router(router)
     return app

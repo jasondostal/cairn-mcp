@@ -62,6 +62,7 @@ if TYPE_CHECKING:
     from cairn.core.subscriptions import SubscriptionManager
     from cairn.core.webhook_worker import WebhookDeliveryWorker
     from cairn.core.webhooks import WebhookManager
+    from cairn.core.metrics_collector import MetricsCollector
     from cairn.llm.interface import LLMInterface
 
 logger = logging.getLogger(__name__)
@@ -115,6 +116,7 @@ class Services:
     working_memory_store: WorkingMemoryStore
     belief_store: BeliefStore | None
     consolidation_worker: ConsolidationWorker | None
+    metrics_collector: MetricsCollector | None
 
 
 def create_services(config: Config | None = None, db: Database | None = None) -> Services:
@@ -530,4 +532,10 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         ),
         belief_store=_belief_store,
         consolidation_worker=_consolidation_worker,
+        metrics_collector=_build_metrics_collector(),
     )
+
+
+def _build_metrics_collector():
+    from cairn.core.metrics_collector import MetricsCollector
+    return MetricsCollector()

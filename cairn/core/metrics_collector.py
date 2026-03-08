@@ -1,0 +1,236 @@
+"""MetricsCollector — in-memory 1-second sliding window aggregator.
+
+Subscribes to the event bus and accumulates counters into 1-second buckets.
+Provides a real-time metrics stream for SSE consumers (dashboards, extensions).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import threading
+import time
+from collections import deque
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from cairn.core.event_bus import EventBus
+
+logger = logging.getLogger(__name__)
+
+RING_BUFFER_SIZE = 60  # keep last 60 seconds of history
+
+
+@dataclass
+class MetricsBucket:
+    """One-second aggregation bucket."""
+
+    timestamp: str  # ISO format
+    ops_count: int = 0
+    tokens_in: int = 0
+    tokens_out: int = 0
+    errors: int = 0
+    active_sessions: int = 0
+    by_tool: dict[str, int] = field(default_factory=dict)
+    by_project: dict[str, int] = field(default_factory=dict)
+    latency_avg_ms: float = 0.0
+
+    # Internal tracking (not serialized)
+    _latency_sum: float = field(default=0.0, repr=False)
+    _latency_count: int = field(default=0, repr=False)
+
+    def to_dict(self) -> dict:
+        return {
+            "timestamp": self.timestamp,
+            "ops_count": self.ops_count,
+            "tokens_in": self.tokens_in,
+            "tokens_out": self.tokens_out,
+            "errors": self.errors,
+            "active_sessions": self.active_sessions,
+            "by_tool": self.by_tool,
+            "by_project": self.by_project,
+            "latency_avg_ms": round(self.latency_avg_ms, 2),
+        }
+
+
+class MetricsCollector:
+    """In-memory 1-second sliding window metrics aggregator.
+
+    Lifecycle: start() begins the background tick thread, stop() halts it.
+    Thread-safe — all counter mutations are protected by a lock.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._current: MetricsBucket = self._new_bucket()
+        self._ring: deque[MetricsBucket] = deque(maxlen=RING_BUFFER_SIZE)
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+        # Async subscribers (SSE endpoints)
+        self._subscribers: list[asyncio.Queue[MetricsBucket]] = []
+        self._sub_lock = threading.Lock()
+
+    # ------------------------------------------------------------------
+    # Recording events
+    # ------------------------------------------------------------------
+
+    def record_event(
+        self,
+        *,
+        event_type: str = "",
+        tool_name: str | None = None,
+        project: str | None = None,
+        tokens_in: int = 0,
+        tokens_out: int = 0,
+        latency_ms: float = 0.0,
+        success: bool = True,
+        session_name: str | None = None,
+    ) -> None:
+        """Record a single event into the current bucket. Thread-safe."""
+        with self._lock:
+            self._current.ops_count += 1
+            self._current.tokens_in += tokens_in
+            self._current.tokens_out += tokens_out
+            if not success:
+                self._current.errors += 1
+            if tool_name:
+                self._current.by_tool[tool_name] = self._current.by_tool.get(tool_name, 0) + 1
+            if project:
+                self._current.by_project[project] = self._current.by_project.get(project, 0) + 1
+            if latency_ms > 0:
+                self._current._latency_sum += latency_ms
+                self._current._latency_count += 1
+                self._current.latency_avg_ms = (
+                    self._current._latency_sum / self._current._latency_count
+                )
+
+    def set_active_sessions(self, count: int) -> None:
+        """Update the active session count (called periodically or on change)."""
+        with self._lock:
+            self._current.active_sessions = count
+
+    # ------------------------------------------------------------------
+    # Event bus handler (wired via subscribe)
+    # ------------------------------------------------------------------
+
+    def handle_event(self, event_data: dict) -> None:
+        """EventBus handler — extract metrics from published events."""
+        payload = event_data.get("payload") or {}
+        self.record_event(
+            event_type=event_data.get("event_type", ""),
+            tool_name=event_data.get("tool_name"),
+            project=event_data.get("project"),
+            tokens_in=payload.get("tokens_in", 0),
+            tokens_out=payload.get("tokens_out", 0),
+            latency_ms=payload.get("latency_ms", 0.0),
+            success=payload.get("success", True),
+            session_name=event_data.get("session_name"),
+        )
+
+    # ------------------------------------------------------------------
+    # Read interface
+    # ------------------------------------------------------------------
+
+    def snapshot(self) -> MetricsBucket:
+        """Return a copy of the current bucket."""
+        with self._lock:
+            return MetricsBucket(
+                timestamp=self._current.timestamp,
+                ops_count=self._current.ops_count,
+                tokens_in=self._current.tokens_in,
+                tokens_out=self._current.tokens_out,
+                errors=self._current.errors,
+                active_sessions=self._current.active_sessions,
+                by_tool=dict(self._current.by_tool),
+                by_project=dict(self._current.by_project),
+                latency_avg_ms=self._current.latency_avg_ms,
+            )
+
+    def history(self) -> list[MetricsBucket]:
+        """Return the ring buffer contents (oldest first)."""
+        with self._lock:
+            return list(self._ring)
+
+    async def subscribe(self) -> asyncio.Queue[MetricsBucket]:
+        """Return a queue that receives a MetricsBucket every tick."""
+        q: asyncio.Queue[MetricsBucket] = asyncio.Queue(maxsize=120)
+        with self._sub_lock:
+            self._subscribers.append(q)
+        return q
+
+    def unsubscribe(self, q: asyncio.Queue[MetricsBucket]) -> None:
+        """Remove a subscriber queue."""
+        with self._sub_lock:
+            try:
+                self._subscribers.remove(q)
+            except ValueError:
+                pass
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def start(self) -> None:
+        """Start the background tick thread."""
+        if self._thread is not None:
+            return
+        self._stop_event.clear()
+        self._thread = threading.Thread(
+            target=self._tick_loop, daemon=True, name="MetricsCollector",
+        )
+        self._thread.start()
+        logger.info("MetricsCollector: started")
+
+    def stop(self) -> None:
+        """Stop the tick thread."""
+        if self._thread is None:
+            return
+        self._stop_event.set()
+        self._thread.join(timeout=5)
+        if self._thread.is_alive():
+            logger.warning("MetricsCollector: thread did not stop within timeout")
+        else:
+            logger.info("MetricsCollector: stopped")
+        self._thread = None
+
+    # ------------------------------------------------------------------
+    # Internal
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _new_bucket() -> MetricsBucket:
+        return MetricsBucket(timestamp=datetime.now(UTC).isoformat())
+
+    def _tick_loop(self) -> None:
+        """Roll the bucket every second and notify subscribers."""
+        while not self._stop_event.is_set():
+            self._stop_event.wait(timeout=1.0)
+            if self._stop_event.is_set():
+                break
+            self._roll_bucket()
+
+    def _roll_bucket(self) -> None:
+        """Finalize the current bucket, push to ring buffer, notify subscribers."""
+        with self._lock:
+            finished = self._current
+            self._current = self._new_bucket()
+            # Carry forward active_sessions (it's a gauge, not a counter)
+            self._current.active_sessions = finished.active_sessions
+            self._ring.append(finished)
+
+        # Notify async subscribers (non-blocking)
+        with self._sub_lock:
+            dead: list[asyncio.Queue] = []
+            for q in self._subscribers:
+                try:
+                    q.put_nowait(finished)
+                except asyncio.QueueFull:
+                    dead.append(q)
+            # Clean up dead subscribers
+            for q in dead:
+                try:
+                    self._subscribers.remove(q)
+                except ValueError:
+                    pass
