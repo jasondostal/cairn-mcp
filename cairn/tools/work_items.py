@@ -71,23 +71,12 @@ def register(mcp, svc: Services):
         - 'progress': Subtask progress summary — status counts, stale agents, blocked items (work_item_id).
         - 'analyze': Anti-pattern detection on epic children — Split Keel, Drifting Anchorage, Skeleton Crew (work_item_id).
         - 'gated': Items awaiting gates. Optional: project, gate_type.
-        - 'deliverable': Get deliverable for a work item (work_item_id).
-        - 'create_deliverable': Create a deliverable (work_item_id, description as summary). Optional: metadata for changes/decisions/open_items.
-        - 'review_deliverable': Approve/revise/reject (work_item_id, gate_type as action: approve/revise/reject). Optional: note, actor.
-        - 'submit_deliverable': Submit draft for review (work_item_id).
-        - 'pending_deliverables': List deliverables needing review. Optional: project, limit, offset.
-        - 'synthesize': Create epic deliverable from child deliverables (work_item_id). Optional: description as summary override.
-        - 'child_deliverables': Collect latest deliverables from all children (work_item_id).
-        - 'lock': Acquire file locks (project, work_item_id, assignee). metadata.paths = list of file paths.
-        - 'unlock': Release file locks. Provide work_item_id or assignee or metadata.paths.
-        - 'check_locks': Check for conflicts (project). metadata.paths = list of paths. Optional: assignee.
-        - 'list_locks': List active locks (project). Optional: assignee, work_item_id.
-        - 'suggest_agent': Affinity-based agent suggestion for a work item (work_item_id or project+title+description).
+
+        See also: deliverables(), locks(), suggest_agent() for actions moved to dedicated tools.
         """
         try:
             def _do_work_items():
                 work_item_manager = svc.work_item_manager
-                deliverable_manager = svc.deliverable_manager
 
                 if action == "create":
                     if not project or not title:
@@ -251,140 +240,6 @@ def register(mcp, svc: Services):
                     return work_item_manager.gated_items(
                         project=project, gate_type=gate_type, limit=min(limit, MAX_LIMIT),
                     )
-
-                # Deliverable actions
-                if action == "deliverable":
-                    if not work_item_id:
-                        return {"error": "work_item_id is required for deliverable"}
-                    result = deliverable_manager.get(int(work_item_id) if isinstance(work_item_id, str) and work_item_id.isdigit() else work_item_id)
-                    return result or {"error": f"No deliverable found for work item {work_item_id}"}
-
-                if action == "create_deliverable":
-                    if not work_item_id:
-                        return {"error": "work_item_id is required for create_deliverable"}
-                    wi_id = int(work_item_id) if isinstance(work_item_id, str) and work_item_id.isdigit() else work_item_id
-                    return deliverable_manager.create(
-                        work_item_id=wi_id,
-                        summary=description or "",
-                        changes=metadata.get("changes") if metadata else None,
-                        decisions=metadata.get("decisions") if metadata else None,
-                        open_items=metadata.get("open_items") if metadata else None,
-                        metrics=metadata.get("metrics") if metadata else None,
-                        status=status or "draft",
-                    )
-
-                if action == "review_deliverable":
-                    if not work_item_id:
-                        return {"error": "work_item_id is required for review_deliverable"}
-                    review_action = gate_type  # reuse gate_type param for review action
-                    if review_action not in ("approve", "revise", "reject"):
-                        return {"error": "gate_type must be 'approve', 'revise', or 'reject' for review_deliverable"}
-                    wi_id = int(work_item_id) if isinstance(work_item_id, str) and work_item_id.isdigit() else work_item_id
-                    return deliverable_manager.review(
-                        work_item_id=wi_id,
-                        action=review_action,
-                        reviewer=actor,
-                        notes=note,
-                    )
-
-                if action == "submit_deliverable":
-                    if not work_item_id:
-                        return {"error": "work_item_id is required for submit_deliverable"}
-                    wi_id = int(work_item_id) if isinstance(work_item_id, str) and work_item_id.isdigit() else work_item_id
-                    return deliverable_manager.submit_for_review(wi_id)
-
-                if action == "pending_deliverables":
-                    return deliverable_manager.list_pending(
-                        project=project, limit=min(limit, MAX_LIMIT), offset=offset,
-                    )
-
-                if action == "synthesize":
-                    if not work_item_id:
-                        return {"error": "work_item_id (parent epic) is required for synthesize"}
-                    wi_id = int(work_item_id) if isinstance(work_item_id, str) and work_item_id.isdigit() else work_item_id
-                    return deliverable_manager.synthesize_epic(
-                        wi_id, summary_override=description,
-                    )
-
-                if action == "child_deliverables":
-                    if not work_item_id:
-                        return {"error": "work_item_id (parent) is required for child_deliverables"}
-                    wi_id = int(work_item_id) if isinstance(work_item_id, str) and work_item_id.isdigit() else work_item_id
-                    return {"items": deliverable_manager.collect_child_deliverables(wi_id)}
-
-                # --- Resource locking (ca-156) ---
-
-                if action == "lock":
-                    if not project:
-                        return {"error": "project is required for lock"}
-                    paths = (metadata or {}).get("paths")
-                    if not paths or not isinstance(paths, list):
-                        return {"error": "metadata.paths (list of file paths) is required for lock"}
-                    owner = assignee or "unknown"
-                    wi_display = str(work_item_id) if work_item_id else "untracked"
-                    conflicts = lock_manager.acquire(project, paths, owner, wi_display)
-                    if conflicts:
-                        return {
-                            "acquired": False,
-                            "conflicts": [c.to_dict() for c in conflicts],
-                        }
-                    return {"acquired": True, "paths": paths, "owner": owner}
-
-                if action == "unlock":
-                    if not project:
-                        return {"error": "project is required for unlock"}
-                    paths = (metadata or {}).get("paths")
-                    wi_display = str(work_item_id) if work_item_id else None
-                    released = lock_manager.release(
-                        project,
-                        paths=paths if isinstance(paths, list) else None,
-                        work_item_id=wi_display,
-                        owner=assignee,
-                    )
-                    return {"released": released}
-
-                if action == "check_locks":
-                    if not project:
-                        return {"error": "project is required for check_locks"}
-                    paths = (metadata or {}).get("paths")
-                    if not paths or not isinstance(paths, list):
-                        return {"error": "metadata.paths (list of file paths) is required for check_locks"}
-                    conflicts = lock_manager.check(project, paths, owner=assignee)
-                    return {
-                        "clear": len(conflicts) == 0,
-                        "conflicts": [c.to_dict() for c in conflicts],
-                    }
-
-                if action == "list_locks":
-                    if not project:
-                        return {"error": "project is required for list_locks"}
-                    locks = lock_manager.list_locks(
-                        project,
-                        owner=assignee,
-                        work_item_id=str(work_item_id) if work_item_id else None,
-                    )
-                    return {"locks": [l.to_dict() for l in locks]}
-
-                if action == "suggest_agent":
-                    from cairn.core.affinity import rank_agents
-                    from cairn.core.agents import AgentRegistry
-                    registry = AgentRegistry()
-                    # Build work item dict from available params
-                    wi_dict = {}
-                    if work_item_id:
-                        wi_dict = work_item_manager.get(work_item_id)
-                    else:
-                        wi_dict = {
-                            "project": project, "title": title,
-                            "description": description,
-                            "item_type": item_type or "task",
-                            "risk_tier": risk_tier,
-                        }
-                    ranked = rank_agents(registry, wi_dict)
-                    return {
-                        "suggestions": [s.to_dict() for s in ranked if not s.disqualified],
-                        "disqualified": [s.to_dict() for s in ranked if s.disqualified],
-                    }
 
                 return {"error": f"Unknown action: {action}"}
 
