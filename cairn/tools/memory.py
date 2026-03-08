@@ -14,6 +14,7 @@ from cairn.core.constants import (
 )
 from cairn.core.services import Services
 from cairn.core.utils import ValidationError, validate_search, validate_store
+from cairn.tools.auth import check_project_access, require_admin
 from cairn.tools.threading import in_thread
 
 logger = logging.getLogger("cairn")
@@ -88,6 +89,7 @@ def register(mcp, svc: Services):
                 NULL = crystallized (permanent) memory.
         """
         try:
+            check_project_access(svc, project)
             validate_store(content, project, memory_type, importance, tags, session_name)
 
             def _do_store():
@@ -168,6 +170,7 @@ def register(mcp, svc: Services):
                 False=only crystallized (permanent), None=all memories (default).
         """
         try:
+            check_project_access(svc, project)
             validate_search(query, limit)
             if search_mode not in VALID_SEARCH_MODES:
                 return [{"error": f"invalid search_mode: {search_mode}. Must be one of: {', '.join(VALID_SEARCH_MODES)}"}]
@@ -335,6 +338,7 @@ def register(mcp, svc: Services):
             author: Speaker attribution (update only). "user", "assistant", or a name.
         """
         try:
+            check_project_access(svc, project)
             if action not in MemoryAction.ALL:
                 return {"error": f"invalid action: {action}. Must be one of: {', '.join(sorted(MemoryAction.ALL))}"}
             if content is not None and len(content) > MAX_CONTENT_SIZE:
@@ -405,6 +409,7 @@ def register(mcp, svc: Services):
                 The file must be under the configured CAIRN_INGEST_DIR (default: /data/ingest).
         """
         try:
+            check_project_access(svc, project)
             if not content and not url and not file_path:
                 return {"error": "content, url, or file_path is required"}
             if not project:
@@ -457,6 +462,8 @@ def register(mcp, svc: Services):
                 memories and create higher-order insights). Default: dedup.
         """
         try:
+            require_admin(svc)
+            check_project_access(svc, project)
             if not project or not project.strip():
                 return {"error": "project is required"}
             if svc.consolidation_engine is None:

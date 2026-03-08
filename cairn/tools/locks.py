@@ -4,6 +4,7 @@ import logging
 
 from cairn.core.resource_lock import lock_manager
 from cairn.core.services import Services
+from cairn.tools.auth import check_project_access
 from cairn.tools.threading import in_thread
 
 logger = logging.getLogger("cairn")
@@ -34,6 +35,8 @@ def register(mcp, svc: Services):
         - 'list': List active locks (project). Optional: assignee, work_item_id.
         """
         try:
+            check_project_access(svc, project)
+
             def _do_locks():
                 if action == "acquire":
                     if not project:

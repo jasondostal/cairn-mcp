@@ -4,6 +4,7 @@ import logging
 
 from cairn.core.constants import MAX_LIMIT
 from cairn.core.services import Services
+from cairn.tools.auth import check_project_access
 from cairn.tools.threading import in_thread
 
 logger = logging.getLogger("cairn")
@@ -43,6 +44,8 @@ def register(mcp, svc: Services):
         - 'children': Collect latest deliverables from all children (work_item_id).
         """
         try:
+            check_project_access(svc, project)
+
             def _do_deliverables():
                 deliverable_manager = svc.deliverable_manager
 

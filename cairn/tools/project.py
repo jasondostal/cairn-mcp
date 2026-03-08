@@ -4,6 +4,7 @@ import logging
 
 from cairn.api.utils import parse_multi
 from cairn.core.services import Services
+from cairn.tools.auth import check_project_access, require_admin
 from cairn.tools.threading import in_thread
 
 logger = logging.getLogger("cairn")
@@ -66,6 +67,7 @@ def register(mcp, svc: Services):
             offset: Pagination offset (for list_all_docs, default 0).
         """
         try:
+            check_project_access(svc, project)
             if not project and action not in ("list", "get_doc", "list_all_docs"):
                 return {"error": "project is required for this action"}
 
@@ -183,6 +185,7 @@ def register(mcp, svc: Services):
         from cairn.core.code_ops import run_code_query
 
         try:
+            check_project_access(svc, project)
             return await in_thread(
                 svc.db,
                 run_code_query,
@@ -233,6 +236,7 @@ def register(mcp, svc: Services):
         from cairn.core.code_ops import run_arch_check
 
         try:
+            check_project_access(svc, project)
             return await in_thread(
                 svc.db,
                 run_arch_check,
@@ -292,6 +296,8 @@ def register(mcp, svc: Services):
             assignee: Name for the agent claim (auto-generated if omitted).
         """
         try:
+            require_admin(svc)
+            check_project_access(svc, project)
             if svc.workspace_manager is None:
                 return {"error": "workspace manager not available"}
             return await in_thread(

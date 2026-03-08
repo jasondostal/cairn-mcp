@@ -6,6 +6,7 @@ from cairn.core.budget import apply_list_budget
 from cairn.core.constants import BUDGET_RULES_PER_ITEM, MAX_LIMIT
 from cairn.core.services import Services
 from cairn.core.status import get_status
+from cairn.tools.auth import check_project_access
 from cairn.tools.threading import in_thread
 
 logger = logging.getLogger("cairn")
@@ -39,6 +40,8 @@ def register(mcp, svc: Services):
             project: Project name to get rules for. Omit for global rules only.
         """
         try:
+            check_project_access(svc, project)
+
             def _do_rules():
                 result = svc.memory_store.get_rules(project)
                 items = result["items"]
@@ -90,6 +93,8 @@ def register(mcp, svc: Services):
         from cairn.core.orient import run_orient
 
         try:
+            check_project_access(svc, project)
+
             def _do_orient():
                 return run_orient(
                     project=project,
@@ -168,6 +173,8 @@ def register(mcp, svc: Services):
             offset: Pagination offset for list.
         """
         try:
+            check_project_access(svc, project)
+
             def _do_working_memory():
                 memory_store = svc.memory_store
 

@@ -5,6 +5,7 @@ import logging
 from cairn.core.budget import apply_list_budget
 from cairn.core.constants import BUDGET_INSIGHTS_PER_ITEM
 from cairn.core.services import Services
+from cairn.tools.auth import check_project_access, require_admin
 from cairn.tools.threading import in_thread
 
 logger = logging.getLogger("cairn")
@@ -46,6 +47,8 @@ def register(mcp, svc: Services):
             limit: Maximum clusters to return (default 10).
         """
         try:
+            check_project_access(svc, project)
+
             def _do_insights():
                 # Check staleness and recluster if needed
                 reclustered = False
@@ -139,6 +142,7 @@ def register(mcp, svc: Services):
             confidence_delta: How much to adjust confidence on challenge (default -0.1).
         """
         try:
+            check_project_access(svc, project)
             if not svc.belief_store:
                 return {"error": "BeliefStore not initialized"}
 
@@ -206,6 +210,7 @@ def register(mcp, svc: Services):
                    Use sha256 or any consistent hash of file contents.
         """
         try:
+            check_project_access(svc, project)
             if svc.drift_detector is None:
                 return {"error": "drift detector not available"}
             return await in_thread(svc.db, svc.drift_detector.check, project=project, files=files)
@@ -232,6 +237,7 @@ def register(mcp, svc: Services):
             dry_run: Always True for this tool (inspection only).
         """
         try:
+            require_admin(svc)
             if not svc.decay_worker:
                 return {"error": "DecayWorker is not enabled"}
             return await in_thread(svc.db, svc.decay_worker.scan)
@@ -291,6 +297,8 @@ def register(mcp, svc: Services):
             author: Who contributed this thought (e.g., "human", "assistant", a name).
         """
         try:
+            check_project_access(svc, project)
+
             def _do_think():
                 if action == "start":
                     if not goal:
