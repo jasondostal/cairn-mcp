@@ -16,7 +16,7 @@ if __name__ == "__main__" and "cairn.server" not in sys.modules:
 from mcp.server.fastmcp import FastMCP
 
 from cairn.config import apply_overrides, load_config
-from cairn.core.services import create_services
+from cairn.core.services import Services, create_services
 from cairn.storage import settings_store
 from cairn.storage.database import Database
 
@@ -31,105 +31,24 @@ logger = logging.getLogger("cairn")
 # DB overrides are applied during lifespan once the database is connected.
 _base_config = load_config()
 
-# Module-level globals — populated by lifespan before MCP tools execute.
-# Declared here so tool functions can reference them; assigned in _init_services().
-_svc = None
-config = _base_config  # updated in lifespan
-db = None
-graph_provider = None
-memory_store = None
-search_engine = None
-cluster_engine = None
-project_manager = None
-task_manager = None
-thinking_engine = None
-session_synthesizer = None
-consolidation_engine = None
-event_bus = None
-event_dispatcher = None
-drift_detector = None
-
-work_item_manager = None
-deliverable_manager = None
-
-# Resource locking — in-memory singleton (ca-156)
-from cairn.core.resource_lock import ResourceLockManager
-
-_lock_manager = ResourceLockManager()
-analytics_tracker = None
-rollup_worker = None
-workspace_manager = None
-ingest_pipeline = None
-belief_store = None
+# Module-level state — only what lifespan/main genuinely need.
+# Tools no longer access these; they receive the Services dataclass directly.
+_svc: Services | None = None
 
 
-def _init_services(svc):
-    """Assign module globals from a Services instance."""
-    global _svc, config, db, graph_provider, memory_store, search_engine
-    global cluster_engine, project_manager, task_manager
-    global thinking_engine, session_synthesizer, consolidation_engine
-    global event_bus, event_dispatcher, drift_detector
-    global work_item_manager, deliverable_manager
-    global analytics_tracker, rollup_worker, workspace_manager
-    global ingest_pipeline, belief_store
-
+def _init_services(svc: Services):
+    """Store the Services instance and validate critical fields."""
+    global _svc
     _svc = svc
-    config = svc.config
-    db = svc.db
-    graph_provider = svc.graph_provider
-    memory_store = svc.memory_store
-    search_engine = svc.search_engine
-    cluster_engine = svc.cluster_engine
-    project_manager = svc.project_manager
-    task_manager = svc.task_manager
-    work_item_manager = svc.work_item_manager
-    deliverable_manager = svc.deliverable_manager
-    thinking_engine = svc.thinking_engine
-    session_synthesizer = svc.session_synthesizer
-    consolidation_engine = svc.consolidation_engine
-    event_bus = svc.event_bus
-    event_dispatcher = svc.event_dispatcher
-    drift_detector = svc.drift_detector
-    analytics_tracker = svc.analytics_tracker
-    rollup_worker = svc.rollup_worker
-    workspace_manager = svc.workspace_manager
-    ingest_pipeline = svc.ingest_pipeline
-    belief_store = svc.belief_store
 
     # Startup assertion: critical services must be non-None (ca-211)
-    _critical = {"db": db, "config": config, "memory_store": memory_store,
-                 "search_engine": search_engine, "work_item_manager": work_item_manager,
-                 "task_manager": task_manager}
+    _critical = {"db": svc.db, "config": svc.config, "memory_store": svc.memory_store,
+                 "search_engine": svc.search_engine, "work_item_manager": svc.work_item_manager,
+                 "task_manager": svc.task_manager}
     _missing = [k for k, v in _critical.items() if v is None]
     if _missing:
         logger.error("FATAL: critical services are None after init: %s", _missing)
         raise RuntimeError(f"Service initialization failed: {', '.join(_missing)} are None")
-
-
-async def _in_thread(fn, *args, timeout: float = 120.0, **kwargs):
-    """Run fn in a thread pool, then release the DB connection back to the pool.
-
-    The Database class uses threading.local() to hold connections per-thread.
-    With asyncio.to_thread(), worker threads from the ThreadPoolExecutor
-    check out connections but never return them — causing pool exhaustion
-    and deadlock after enough concurrent calls. This wrapper ensures every
-    thread returns its connection when the work is done.
-
-    A timeout (default 120s) prevents hung operations from blocking forever.
-    The DB connection is released even on timeout (via the finally block in
-    _wrapped — the thread still runs to completion and hits finally).
-    """
-    def _wrapped():
-        try:
-            return fn(*args, **kwargs)
-        finally:
-            if db is not None:
-                db._release()
-    try:
-        return await asyncio.wait_for(asyncio.to_thread(_wrapped), timeout=timeout)
-    except asyncio.TimeoutError:
-        logger.error("Tool operation timed out after %.0fs", timeout)
-        raise
 
 
 def _build_config_with_overrides(db_instance):
@@ -236,6 +155,10 @@ async def lifespan(server: FastMCP):
     svc = create_services(config=final_config, db=db_instance)
     _init_services(svc)
 
+    # Register MCP tools now that Services is available (ca-237)
+    from cairn.tools import register_all
+    register_all(mcp, svc)
+
     # Stdio identity mapping: set UserContext for the session lifetime (ca-162)
     if final_config.auth.enabled and final_config.auth.stdio_user and svc.user_manager:
         from cairn.core.user import set_user
@@ -301,37 +224,6 @@ mcp = FastMCP(**mcp_kwargs)  # type: ignore[arg-type]
 
 
 # ============================================================
-# Register MCP tools from domain modules
-# ============================================================
-
-def _server_globals():
-    """Build a globals dict for tool modules that reads live module state."""
-    import cairn.server as _self
-    return _ServerGlobals(_self)
-
-
-class _ServerGlobals:
-    """Proxy dict that reads live module-level globals from server.py."""
-
-    def __init__(self, module):
-        self._mod = module
-
-    def __getitem__(self, key):
-        try:
-            return getattr(self._mod, key)
-        except AttributeError:
-            raise KeyError(key) from None
-
-    def get(self, key, default=None):
-        return getattr(self._mod, key, default)
-
-
-from cairn.tools import register_all  # noqa: E402
-
-register_all(mcp, _server_globals())
-
-
-# ============================================================
 # Entry point
 # ============================================================
 
@@ -358,6 +250,10 @@ def main():
         final_config = _build_config_with_overrides(db_instance)
         svc = create_services(config=final_config, db=db_instance)
         _init_services(svc)
+
+        # Register MCP tools now that Services is available (ca-237)
+        from cairn.tools import register_all
+        register_all(mcp, svc)
 
         # Mount REST API and auth middleware before app starts
         api = create_api(svc)

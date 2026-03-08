@@ -12,17 +12,19 @@ from cairn.core.constants import (
     VALID_SEARCH_MODES,
     MemoryAction,
 )
+from cairn.core.services import Services
 from cairn.core.utils import ValidationError, validate_search, validate_store
+from cairn.tools.threading import in_thread
 
 logger = logging.getLogger("cairn")
 
 
-def register(mcp, g):
+def register(mcp, svc: Services):
     """Register memory-domain tools on the MCP instance.
 
     Args:
         mcp: FastMCP server instance.
-        g: Server globals dict (db, config, memory_store, etc.).
+        svc: Initialized Services dataclass.
     """
 
     @mcp.tool()
@@ -89,7 +91,7 @@ def register(mcp, g):
             validate_store(content, project, memory_type, importance, tags, session_name)
 
             def _do_store():
-                return g["memory_store"].store(
+                return svc.memory_store.store(
                     content=content,
                     project=project,
                     memory_type=memory_type,
@@ -105,7 +107,7 @@ def register(mcp, g):
                     salience=salience,
                 )
 
-            return await g["_in_thread"](_do_store)
+            return await in_thread(svc.db, _do_store)
         except ValidationError as e:
             return {"error": str(e)}
         except Exception as e:
@@ -171,7 +173,7 @@ def register(mcp, g):
                 return [{"error": f"invalid search_mode: {search_mode}. Must be one of: {', '.join(VALID_SEARCH_MODES)}"}]
 
             def _do_search():
-                results = g["search_engine"].search(
+                results = svc.search_engine.search(
                     query=query,
                     project=project,
                     memory_type=memory_type,
@@ -185,7 +187,7 @@ def register(mcp, g):
                 )
 
                 # Apply budget cap
-                budget = g["config"].budget.search
+                budget = svc.config.budget.search
                 if budget > 0 and results:
                     content_key = "content" if include_full else "summary"
                     results_capped, meta = apply_list_budget(
@@ -201,11 +203,10 @@ def register(mcp, g):
                     results = results_capped
 
                 # Publish search.executed event for access tracking
-                event_bus = g["event_bus"]
-                if event_bus and results:
+                if svc.event_bus and results:
                     try:
                         memory_ids = [r["id"] for r in results if isinstance(r, dict) and "id" in r]
-                        event_bus.publish(
+                        svc.event_bus.publish(
                             session_name="",
                             event_type="search.executed",
                             project=project,
@@ -220,12 +221,12 @@ def register(mcp, g):
                         logger.debug("Failed to publish search.executed event", exc_info=True)
 
                 # Confidence gating: wrap results with assessment when active
-                confidence = g["search_engine"].assess_confidence(query, results)
+                confidence = svc.search_engine.assess_confidence(query, results)
                 if confidence is not None:
                     return {"results": results, "confidence": confidence}
                 return results
 
-            return await g["_in_thread"](_do_search)
+            return await in_thread(svc.db, _do_search)
         except ValidationError as e:
             return [{"error": str(e)}]
         except Exception as e:
@@ -254,10 +255,10 @@ def register(mcp, g):
                 return [{"error": f"Maximum {MAX_RECALL_IDS} IDs per recall. Batch into multiple calls."}]
 
             def _do_recall():
-                results = g["memory_store"].recall(ids)
+                results = svc.memory_store.recall(ids)
 
                 # Apply budget cap
-                budget = g["config"].budget.recall
+                budget = svc.config.budget.recall
                 if budget > 0 and results:
                     results_capped, meta = apply_list_budget(
                         results, budget, "content",
@@ -271,11 +272,10 @@ def register(mcp, g):
                         results_capped.append({"_overflow": meta["overflow_message"]})
                     results = results_capped
                 # Publish memory.recalled event for access tracking
-                event_bus = g["event_bus"]
-                if event_bus and results:
+                if svc.event_bus and results:
                     try:
                         memory_ids = [r["id"] for r in results if isinstance(r, dict) and "id" in r]
-                        event_bus.publish(
+                        svc.event_bus.publish(
                             session_name="",
                             event_type="memory.recalled",
                             payload={
@@ -288,7 +288,7 @@ def register(mcp, g):
 
                 return results
 
-            return await g["_in_thread"](_do_recall)
+            return await in_thread(svc.db, _do_recall)
         except Exception as e:
             logger.exception("recall failed")
             return [{"error": f"Internal error: {e}"}]
@@ -345,7 +345,7 @@ def register(mcp, g):
                 return {"error": "importance must be between 0.0 and 1.0"}
 
             def _do_modify():
-                return g["memory_store"].modify(
+                return svc.memory_store.modify(
                     memory_id=id,
                     action=action,
                     content=content,
@@ -357,7 +357,7 @@ def register(mcp, g):
                     author=author,
                 )
 
-            return await g["_in_thread"](_do_modify)
+            return await in_thread(svc.db, _do_modify)
         except Exception as e:
             logger.exception("modify failed")
             return {"error": f"Internal error: {e}"}
@@ -413,7 +413,7 @@ def register(mcp, g):
                 return {"error": "hint must be one of: auto, doc, memory, both"}
 
             def _do_ingest():
-                return g["ingest_pipeline"].ingest(
+                return svc.ingest_pipeline.ingest(
                     content=content,
                     project=project,
                     url=url,
@@ -427,7 +427,7 @@ def register(mcp, g):
                     file_path=file_path,
                 )
 
-            return await g["_in_thread"](_do_ingest)
+            return await in_thread(svc.db, _do_ingest)
         except ValueError as e:
             return {"error": str(e)}
         except Exception as e:
@@ -459,19 +459,20 @@ def register(mcp, g):
         try:
             if not project or not project.strip():
                 return {"error": "project is required"}
-            consolidation_engine = g["consolidation_engine"]
-            if consolidation_engine is None:
+            if svc.consolidation_engine is None:
                 return {"error": "consolidation engine not available"}
             if mode == "synthesize":
-                return await g["_in_thread"](
-                    consolidation_engine.synthesize, project, dry_run=dry_run,
-                    cluster_engine=g["cluster_engine"],
-                    memory_store=g["memory_store"],
-                    event_bus=g["event_bus"],
-                    config=g["config"].consolidation_worker,
+                return await in_thread(
+                    svc.db,
+                    svc.consolidation_engine.synthesize, project, dry_run=dry_run,
+                    cluster_engine=svc.cluster_engine,
+                    memory_store=svc.memory_store,
+                    event_bus=svc.event_bus,
+                    config=svc.config.consolidation_worker,
                 )
-            return await g["_in_thread"](
-                consolidation_engine.consolidate, project, dry_run=dry_run,
+            return await in_thread(
+                svc.db,
+                svc.consolidation_engine.consolidate, project, dry_run=dry_run,
             )
         except Exception as e:
             logger.exception("consolidate failed")

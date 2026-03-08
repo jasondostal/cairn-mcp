@@ -213,3 +213,7 @@ class ResourceLockManager:
                 return LockConflict(requested_path=path, held_by=lock)
 
         return None
+
+
+# Process-wide singleton — shared by server.py and tool modules.
+lock_manager = ResourceLockManager()

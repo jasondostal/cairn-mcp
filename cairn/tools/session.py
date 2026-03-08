@@ -4,17 +4,19 @@ import logging
 
 from cairn.core.budget import apply_list_budget
 from cairn.core.constants import BUDGET_RULES_PER_ITEM, MAX_LIMIT
+from cairn.core.services import Services
 from cairn.core.status import get_status
+from cairn.tools.threading import in_thread
 
 logger = logging.getLogger("cairn")
 
 
-def register(mcp, g):
+def register(mcp, svc: Services):
     """Register session-domain tools on the MCP instance.
 
     Args:
         mcp: FastMCP server instance.
-        g: Server globals dict.
+        svc: Initialized Services dataclass.
     """
 
     @mcp.tool()
@@ -38,9 +40,9 @@ def register(mcp, g):
         """
         try:
             def _do_rules():
-                result = g["memory_store"].get_rules(project)
+                result = svc.memory_store.get_rules(project)
                 items = result["items"]
-                budget = g["config"].budget.rules
+                budget = svc.config.budget.rules
                 if budget > 0 and items:
                     items, meta = apply_list_budget(
                         items, budget, "content",
@@ -54,7 +56,7 @@ def register(mcp, g):
                         items.append({"_overflow": meta["overflow_message"]})
                 return items
 
-            return await g["_in_thread"](_do_rules)
+            return await in_thread(svc.db, _do_rules)
         except Exception as e:
             logger.exception("rules failed")
             return [{"error": f"Internal error: {e}"}]
@@ -67,7 +69,7 @@ def register(mcp, g):
         verifying deployment status. Quick diagnostic tool — no parameters required.
         """
         try:
-            return await g["_in_thread"](get_status, g["db"], g["config"])
+            return await in_thread(svc.db, get_status, svc.db, svc.config)
         except Exception as e:
             logger.exception("status failed")
             return {"error": f"Internal error: {e}"}
@@ -91,17 +93,17 @@ def register(mcp, g):
             def _do_orient():
                 return run_orient(
                     project=project,
-                    config=g["config"],
-                    db=g["db"],
-                    memory_store=g["memory_store"],
-                    search_engine=g["search_engine"],
-                    work_item_manager=g["work_item_manager"],
-                    task_manager=g["task_manager"],
-                    graph_provider=g["graph_provider"],
-                    belief_store=g["belief_store"],
+                    config=svc.config,
+                    db=svc.db,
+                    memory_store=svc.memory_store,
+                    search_engine=svc.search_engine,
+                    work_item_manager=svc.work_item_manager,
+                    task_manager=svc.task_manager,
+                    graph_provider=svc.graph_provider,
+                    belief_store=svc.belief_store,
                 )
 
-            return await g["_in_thread"](_do_orient)
+            return await in_thread(svc.db, _do_orient)
         except Exception as e:
             logger.exception("orient failed")
             return {"error": f"Internal error: {e}"}
@@ -167,7 +169,7 @@ def register(mcp, g):
         """
         try:
             def _do_working_memory():
-                memory_store = g["memory_store"]
+                memory_store = svc.memory_store
 
                 # ca-173: Working memory is now unified into memories table.
                 # All operations delegate to MemoryStore with salience-based lifecycle.
@@ -221,16 +223,16 @@ def register(mcp, g):
 
                 return {"error": f"Unknown action: {action}"}
 
-            return await g["_in_thread"](_do_working_memory)
+            return await in_thread(svc.db, _do_working_memory)
         except Exception as e:
             logger.exception("working_memory failed")
             return {"error": f"Internal error: {e}"}
 
 
-def _fetch_trail_data(g, project=None, since=None, limit=20):
+def _fetch_trail_data(svc: Services, project=None, since=None, limit=20):
     """Fetch recent activity trail data. Used by trail() tool."""
     from cairn.core.orient import fetch_trail_data
     return fetch_trail_data(
-        db=g["db"], graph_provider=g["graph_provider"],
+        db=svc.db, graph_provider=svc.graph_provider,
         project=project, since=since, limit=limit,
     )

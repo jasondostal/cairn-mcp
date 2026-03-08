@@ -4,16 +4,18 @@ import logging
 
 from cairn.core.budget import apply_list_budget
 from cairn.core.constants import BUDGET_INSIGHTS_PER_ITEM
+from cairn.core.services import Services
+from cairn.tools.threading import in_thread
 
 logger = logging.getLogger("cairn")
 
 
-def register(mcp, g):
+def register(mcp, svc: Services):
     """Register insight-domain tools on the MCP instance.
 
     Args:
         mcp: FastMCP server instance.
-        g: Server globals dict.
+        svc: Initialized Services dataclass.
     """
 
     @mcp.tool()
@@ -45,29 +47,26 @@ def register(mcp, g):
         """
         try:
             def _do_insights():
-                cluster_engine = g["cluster_engine"]
-                config = g["config"]
-
                 # Check staleness and recluster if needed
                 reclustered = False
                 labeling_error = None
-                if cluster_engine.is_stale(project):
-                    cluster_result = cluster_engine.run_clustering(project)
+                if svc.cluster_engine.is_stale(project):
+                    cluster_result = svc.cluster_engine.run_clustering(project)
                     reclustered = True
                     labeling_error = cluster_result.get("labeling_error")
 
                 # Fetch clusters
-                clusters = cluster_engine.get_clusters(
+                clusters = svc.cluster_engine.get_clusters(
                     project=project,
                     topic=topic,
                     min_confidence=min_confidence,
                     limit=limit,
                 )
 
-                last_run = cluster_engine.get_last_run(project)
+                last_run = svc.cluster_engine.get_last_run(project)
 
                 # Apply budget cap to cluster summaries
-                budget = config.budget.insights
+                budget = svc.config.budget.insights
                 overflow_msg = ""
                 if budget > 0 and clusters:
                     clusters, meta = apply_list_budget(
@@ -93,7 +92,7 @@ def register(mcp, g):
                     result["_overflow"] = overflow_msg
                 return result
 
-            return await g["_in_thread"](_do_insights)
+            return await in_thread(svc.db, _do_insights)
         except Exception as e:
             logger.exception("insights failed")
             return {"error": f"Internal error: {e}"}
@@ -140,41 +139,44 @@ def register(mcp, g):
             confidence_delta: How much to adjust confidence on challenge (default -0.1).
         """
         try:
-            belief_store = g["belief_store"]
-            if not belief_store:
+            if not svc.belief_store:
                 return {"error": "BeliefStore not initialized"}
 
             if action == "crystallize":
                 if not content:
                     return {"error": "content is required for crystallize"}
-                return await g["_in_thread"](
-                    belief_store.crystallize, project, content,
+                return await in_thread(
+                    svc.db,
+                    svc.belief_store.crystallize, project, content,
                     domain=domain, confidence=confidence,
                     evidence_ids=evidence_ids, agent_name=agent_name,
                 )
             elif action == "list":
-                return await g["_in_thread"](
-                    belief_store.list_beliefs, project,
+                return await in_thread(
+                    svc.db,
+                    svc.belief_store.list_beliefs, project,
                     agent_name=agent_name, domain=domain,
                 )
             elif action == "get":
                 if belief_id is None:
                     return {"error": "belief_id is required for get"}
-                result = await g["_in_thread"](belief_store.get, belief_id)
+                result = await in_thread(svc.db, svc.belief_store.get, belief_id)
                 return result or {"error": f"Belief {belief_id} not found"}
             elif action == "challenge":
                 if belief_id is None:
                     return {"error": "belief_id is required for challenge"}
-                return await g["_in_thread"](
-                    belief_store.challenge, belief_id,
+                return await in_thread(
+                    svc.db,
+                    svc.belief_store.challenge, belief_id,
                     evidence_id=evidence_ids[0] if evidence_ids else None,
                     reason=reason, confidence_delta=confidence_delta,
                 )
             elif action == "retract":
                 if belief_id is None:
                     return {"error": "belief_id is required for retract"}
-                return await g["_in_thread"](
-                    belief_store.retract, belief_id, reason=reason,
+                return await in_thread(
+                    svc.db,
+                    svc.belief_store.retract, belief_id, reason=reason,
                 )
             else:
                 return {"error": f"Unknown action '{action}'. Use: crystallize, list, get, challenge, retract"}
@@ -204,10 +206,9 @@ def register(mcp, g):
                    Use sha256 or any consistent hash of file contents.
         """
         try:
-            drift_detector = g["drift_detector"]
-            if drift_detector is None:
+            if svc.drift_detector is None:
                 return {"error": "drift detector not available"}
-            return await g["_in_thread"](drift_detector.check, project=project, files=files)
+            return await in_thread(svc.db, svc.drift_detector.check, project=project, files=files)
         except Exception as e:
             logger.exception("drift_check failed")
             return {"error": f"Internal error: {e}"}
@@ -231,10 +232,9 @@ def register(mcp, g):
             dry_run: Always True for this tool (inspection only).
         """
         try:
-            _svc = g["_svc"]
-            if not _svc or not _svc.decay_worker:
+            if not svc.decay_worker:
                 return {"error": "DecayWorker is not enabled"}
-            return await g["_in_thread"](_svc.decay_worker.scan)
+            return await in_thread(svc.db, svc.decay_worker.scan)
         except Exception as e:
             logger.exception("decay_scan failed")
             return {"error": f"Internal error: {e}"}
@@ -292,44 +292,42 @@ def register(mcp, g):
         """
         try:
             def _do_think():
-                thinking_engine = g["thinking_engine"]
-
                 if action == "start":
                     if not goal:
                         return {"error": "goal is required for start"}
-                    return thinking_engine.start(project, goal)
+                    return svc.thinking_engine.start(project, goal)
 
                 if action == "add":
                     if not sequence_id or not thought:
                         return {"error": "sequence_id and thought are required for add"}
-                    return thinking_engine.add_thought(sequence_id, thought, thought_type, branch_name, author)
+                    return svc.thinking_engine.add_thought(sequence_id, thought, thought_type, branch_name, author)
 
                 if action == "conclude":
                     if not sequence_id or not thought:
                         return {"error": "sequence_id and thought (conclusion) are required for conclude"}
-                    return thinking_engine.conclude(sequence_id, thought, author)
+                    return svc.thinking_engine.conclude(sequence_id, thought, author)
 
                 if action == "reopen":
                     if not sequence_id:
                         return {"error": "sequence_id is required for reopen"}
-                    return thinking_engine.reopen(sequence_id)
+                    return svc.thinking_engine.reopen(sequence_id)
 
                 if action == "get":
                     if not sequence_id:
                         return {"error": "sequence_id is required for get"}
-                    return thinking_engine.get_sequence(sequence_id)
+                    return svc.thinking_engine.get_sequence(sequence_id)
 
                 if action == "list":
-                    return thinking_engine.list_sequences(project)["items"]
+                    return svc.thinking_engine.list_sequences(project)["items"]
 
                 if action == "summarize":
                     if not sequence_id:
                         return {"error": "sequence_id is required for summarize"}
-                    return thinking_engine.summarize_deliberation(sequence_id)
+                    return svc.thinking_engine.summarize_deliberation(sequence_id)
 
                 return {"error": f"Unknown action: {action}"}
 
-            return await g["_in_thread"](_do_think)
+            return await in_thread(svc.db, _do_think)
         except Exception as e:
             logger.exception("think failed")
             return {"error": f"Internal error: {e}"}

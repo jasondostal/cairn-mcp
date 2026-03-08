@@ -3,16 +3,18 @@
 import logging
 
 from cairn.api.utils import parse_multi
+from cairn.core.services import Services
+from cairn.tools.threading import in_thread
 
 logger = logging.getLogger("cairn")
 
 
-def register(mcp, g):
+def register(mcp, svc: Services):
     """Register project-domain tools on the MCP instance.
 
     Args:
         mcp: FastMCP server instance.
-        g: Server globals dict.
+        svc: Initialized Services dataclass.
     """
 
     @mcp.tool()
@@ -69,35 +71,33 @@ def register(mcp, g):
 
             def _do_projects():
                 nonlocal content, title
-                project_manager = g["project_manager"]
-                ingest_pipeline = g["ingest_pipeline"]
 
                 # Resolve file_path for create_doc/update_doc
                 if file_path and not content and action in ("create_doc", "update_doc"):
-                    file_content, inferred_title = ingest_pipeline.read_local_file(file_path)
+                    file_content, inferred_title = svc.ingest_pipeline.read_local_file(file_path)
                     content = file_content
                     if not title:
                         title = inferred_title
 
                 if action == "list":
-                    return project_manager.list_all()["items"]
+                    return svc.project_manager.list_all()["items"]
 
                 if action == "create_doc":
                     if not doc_type or not content:
                         return {"error": "doc_type and content are required for create_doc"}
-                    return project_manager.create_doc(project, doc_type, content, title=title)
+                    return svc.project_manager.create_doc(project, doc_type, content, title=title)
 
                 if action == "get_docs":
-                    return project_manager.get_docs(project, doc_type=doc_type)
+                    return svc.project_manager.get_docs(project, doc_type=doc_type)
 
                 if action == "get_doc":
                     if not doc_id:
                         return {"error": "doc_id is required for get_doc"}
-                    result = project_manager.get_doc(doc_id)
+                    result = svc.project_manager.get_doc(doc_id)
                     return result if result is not None else {"error": "Document not found"}
 
                 if action == "list_all_docs":
-                    return project_manager.list_all_docs(
+                    return svc.project_manager.list_all_docs(
                         project=parse_multi(project),
                         doc_type=parse_multi(doc_type),
                         limit=limit,
@@ -107,19 +107,19 @@ def register(mcp, g):
                 if action == "update_doc":
                     if not doc_id or not content:
                         return {"error": "doc_id and content are required for update_doc"}
-                    return project_manager.update_doc(doc_id, content, title=title)
+                    return svc.project_manager.update_doc(doc_id, content, title=title)
 
                 if action == "link":
                     if not target:
                         return {"error": "target project is required for link"}
-                    return project_manager.link(project, target, link_type)
+                    return svc.project_manager.link(project, target, link_type)
 
                 if action == "get_links":
-                    return project_manager.get_links(project)
+                    return svc.project_manager.get_links(project)
 
                 return {"error": f"Unknown action: {action}"}
 
-            return await g["_in_thread"](_do_projects)
+            return await in_thread(svc.db, _do_projects)
         except ValueError as e:
             return {"error": str(e)}
         except Exception as e:
@@ -183,13 +183,13 @@ def register(mcp, g):
         from cairn.core.code_ops import run_code_query
 
         try:
-            _svc = g["_svc"]
-            return await g["_in_thread"](
+            return await in_thread(
+                svc.db,
                 run_code_query,
                 action=action, project=project, target=target, query=query,
                 kind=kind, depth=depth, limit=limit,
-                graph_provider=g["graph_provider"], db=g["db"], config=g["config"],
-                embedding_engine=_svc.embedding if _svc else None,
+                graph_provider=svc.graph_provider, db=svc.db, config=svc.config,
+                embedding_engine=svc.embedding,
             )
         except Exception as e:
             logger.exception("code_query failed")
@@ -233,12 +233,13 @@ def register(mcp, g):
         from cairn.core.code_ops import run_arch_check
 
         try:
-            return await g["_in_thread"](
+            return await in_thread(
+                svc.db,
                 run_arch_check,
                 project=project, path=path, config_path=config_path,
                 use_graph=use_graph,
-                graph_provider=g["graph_provider"], db=g["db"], config=g["config"],
-                project_manager=g["project_manager"],
+                graph_provider=svc.graph_provider, db=svc.db, config=svc.config,
+                project_manager=svc.project_manager,
             )
         except Exception as e:
             logger.exception("arch_check failed")
@@ -291,11 +292,11 @@ def register(mcp, g):
             assignee: Name for the agent claim (auto-generated if omitted).
         """
         try:
-            workspace_manager = g["workspace_manager"]
-            if workspace_manager is None:
+            if svc.workspace_manager is None:
                 return {"error": "workspace manager not available"}
-            return await g["_in_thread"](
-                workspace_manager.dispatch,
+            return await in_thread(
+                svc.db,
+                svc.workspace_manager.dispatch,
                 work_item_id=work_item_id,
                 project=project,
                 title=title,

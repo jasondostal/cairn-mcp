@@ -5,16 +5,19 @@ import logging
 from cairn.core.constants import (
     MAX_LIMIT,
 )
+from cairn.core.resource_lock import lock_manager
+from cairn.core.services import Services
+from cairn.tools.threading import in_thread
 
 logger = logging.getLogger("cairn")
 
 
-def register(mcp, g):
+def register(mcp, svc: Services):
     """Register work-item-domain tools on the MCP instance.
 
     Args:
         mcp: FastMCP server instance.
-        g: Server globals dict.
+        svc: Initialized Services dataclass.
     """
 
     @mcp.tool()
@@ -83,9 +86,8 @@ def register(mcp, g):
         """
         try:
             def _do_work_items():
-                work_item_manager = g["work_item_manager"]
-                deliverable_manager = g["deliverable_manager"]
-                _lock_manager = g["_lock_manager"]
+                work_item_manager = svc.work_item_manager
+                deliverable_manager = svc.deliverable_manager
 
                 if action == "create":
                     if not project or not title:
@@ -141,7 +143,7 @@ def register(mcp, g):
                     result = work_item_manager.complete(work_item_id, session_name=session_name)
                     # Auto-release locks held by this work item (ca-156)
                     if project:
-                        released = _lock_manager.release(
+                        released = lock_manager.release(
                             project, work_item_id=str(work_item_id),
                         )
                         if released:
@@ -320,7 +322,7 @@ def register(mcp, g):
                         return {"error": "metadata.paths (list of file paths) is required for lock"}
                     owner = assignee or "unknown"
                     wi_display = str(work_item_id) if work_item_id else "untracked"
-                    conflicts = _lock_manager.acquire(project, paths, owner, wi_display)
+                    conflicts = lock_manager.acquire(project, paths, owner, wi_display)
                     if conflicts:
                         return {
                             "acquired": False,
@@ -333,7 +335,7 @@ def register(mcp, g):
                         return {"error": "project is required for unlock"}
                     paths = (metadata or {}).get("paths")
                     wi_display = str(work_item_id) if work_item_id else None
-                    released = _lock_manager.release(
+                    released = lock_manager.release(
                         project,
                         paths=paths if isinstance(paths, list) else None,
                         work_item_id=wi_display,
@@ -347,7 +349,7 @@ def register(mcp, g):
                     paths = (metadata or {}).get("paths")
                     if not paths or not isinstance(paths, list):
                         return {"error": "metadata.paths (list of file paths) is required for check_locks"}
-                    conflicts = _lock_manager.check(project, paths, owner=assignee)
+                    conflicts = lock_manager.check(project, paths, owner=assignee)
                     return {
                         "clear": len(conflicts) == 0,
                         "conflicts": [c.to_dict() for c in conflicts],
@@ -356,7 +358,7 @@ def register(mcp, g):
                 if action == "list_locks":
                     if not project:
                         return {"error": "project is required for list_locks"}
-                    locks = _lock_manager.list_locks(
+                    locks = lock_manager.list_locks(
                         project,
                         owner=assignee,
                         work_item_id=str(work_item_id) if work_item_id else None,
@@ -386,7 +388,7 @@ def register(mcp, g):
 
                 return {"error": f"Unknown action: {action}"}
 
-            return await g["_in_thread"](_do_work_items)
+            return await in_thread(svc.db, _do_work_items)
         except ValueError as e:
             return {"error": str(e)}
         except Exception as e:
