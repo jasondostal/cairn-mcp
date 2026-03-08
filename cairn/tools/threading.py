@@ -12,7 +12,7 @@ from cairn.storage.database import Database
 logger = logging.getLogger("cairn")
 
 
-async def in_thread(db: Database, fn, *args, timeout: float = 120.0, **kwargs):
+async def in_thread(_db: Database, fn, *args, timeout: float = 120.0, **kwargs):
     """Run *fn* in a thread, then release the DB connection back to the pool.
 
     The Database class uses ``threading.local()`` to hold connections per-thread.
@@ -30,8 +30,8 @@ async def in_thread(db: Database, fn, *args, timeout: float = 120.0, **kwargs):
         try:
             return fn(*args, **kwargs)
         finally:
-            if db is not None:
-                db._release()
+            if _db is not None:
+                _db._release()
 
     try:
         return await asyncio.wait_for(asyncio.to_thread(_wrapped), timeout=timeout)
