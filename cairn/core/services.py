@@ -57,12 +57,12 @@ if TYPE_CHECKING:
     from cairn.core.beliefs import BeliefStore
     from cairn.core.consolidation import ConsolidationWorker
     from cairn.core.decay import DecayWorker
+    from cairn.core.metrics_collector import MetricsCollector
     from cairn.core.retention import RetentionManager
     from cairn.core.retention_worker import RetentionWorker
     from cairn.core.subscriptions import SubscriptionManager
     from cairn.core.webhook_worker import WebhookDeliveryWorker
     from cairn.core.webhooks import WebhookManager
-    from cairn.core.metrics_collector import MetricsCollector
     from cairn.llm.interface import LLMInterface
 
 logger = logging.getLogger(__name__)
