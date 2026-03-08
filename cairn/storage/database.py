@@ -46,6 +46,7 @@ class Database:
             self.config.dsn,
             min_size=POOL_MIN_SIZE,
             max_size=POOL_MAX_SIZE,
+            timeout=10.0,  # ca-236: fail fast if pool is exhausted
             kwargs={"row_factory": dict_row, "autocommit": False},
         )
         # Block until min_size connections are ready

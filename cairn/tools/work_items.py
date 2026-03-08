@@ -4,7 +4,6 @@ import logging
 
 from cairn.core.constants import (
     MAX_LIMIT,
-    ActivityType,
 )
 
 logger = logging.getLogger("cairn")
@@ -17,121 +16,6 @@ def register(mcp, g):
         mcp: FastMCP server instance.
         g: Server globals dict.
     """
-
-    @mcp.tool()
-    async def tasks(
-        action: str,
-        project: str,
-        description: str | None = None,
-        task_id: int | None = None,
-        memory_ids: list[int] | None = None,
-        include_completed: bool = False,
-    ) -> dict | list[dict]:
-        """DEPRECATED: Use working_memory() for loose thoughts or work_items() for structured work.
-
-        Personal reminders and TODO items — human-only quick capture.
-        This tool is deprecated as of v0.67.0. Use working_memory(action="capture")
-        for hypotheses, questions, and loose threads. Use work_items(action="create")
-        for structured, trackable work.
-
-        Existing tasks continue to work. No data is deleted.
-
-        Actions:
-        - 'create': Create a new personal reminder/task.
-        - 'complete': Mark a task as done.
-        - 'list': List tasks for a project.
-        - 'link_memories': Associate memories with a task.
-        - 'promote': Promote a task to a work item. Creates a work item with the
-          task description, marks the task completed, transfers linked memories,
-          and logs a "promoted" activity on the new work item.
-
-        Args:
-            action: One of 'create', 'complete', 'list', 'link_memories', 'promote'.
-            project: Project name.
-            description: Task description (required for create).
-            task_id: Task ID (required for complete, link_memories, promote).
-            memory_ids: Memory IDs to link (required for link_memories).
-            include_completed: Include completed tasks in list (default false).
-        """
-        try:
-            def _do_tasks():
-                task_manager = g["task_manager"]
-                work_item_manager = g["work_item_manager"]
-                db = g["db"]
-
-                if action == "create":
-                    if not description:
-                        return {"error": "description is required for create"}
-                    return task_manager.create(project, description)
-
-                if action == "complete":
-                    if not task_id:
-                        return {"error": "task_id is required for complete"}
-                    return task_manager.complete(task_id)
-
-                if action == "list":
-                    return task_manager.list_tasks(project, include_completed=include_completed)["items"]
-
-                if action == "link_memories":
-                    if not task_id or not memory_ids:
-                        return {"error": "task_id and memory_ids are required for link_memories"}
-                    return task_manager.link_memories(task_id, memory_ids)
-
-                if action == "promote":
-                    if not task_id:
-                        return {"error": "task_id is required for promote"}
-
-                    # 1. Fetch and validate task
-                    task_row = db.execute_one(
-                        """SELECT t.id, t.description, t.status, p.name AS project
-                           FROM tasks t
-                           LEFT JOIN projects p ON t.project_id = p.id
-                           WHERE t.id = %s""",
-                        (task_id,),
-                    )
-                    if not task_row:
-                        return {"error": f"Task {task_id} not found"}
-                    if task_row["status"] != "pending":
-                        return {"error": f"Task {task_id} is already {task_row['status']}"}
-
-                    task_project = task_row["project"] or project
-
-                    # 2. Create work item from task description
-                    wi = work_item_manager.create(
-                        project=task_project,
-                        title=task_row["description"],
-                        item_type="task",
-                    )
-
-                    # 3. Mark task completed
-                    task_manager.complete(task_id)
-
-                    # 4. Transfer linked memories
-                    linked = db.execute(
-                        "SELECT memory_id FROM task_memory_links WHERE task_id = %s",
-                        (task_id,),
-                    )
-                    linked_ids = [r["memory_id"] for r in linked]
-                    if linked_ids:
-                        work_item_manager.link_memories(wi["id"], linked_ids)
-
-                    # 5. Log promoted activity
-                    work_item_manager._log_activity(
-                        wi["id"],
-                        actor="system",
-                        activity_type=ActivityType.PROMOTED,
-                        content=f"Promoted from task #{task_id}",
-                        metadata={"source_task_id": task_id},
-                    )
-
-                    return {"action": "promoted", "task_id": task_id, "work_item": wi}
-
-                return {"error": f"Unknown action: {action}"}
-
-            return await g["_in_thread"](_do_tasks)
-        except Exception as e:
-            logger.exception("tasks failed")
-            return {"error": f"Internal error: {e}"}
 
     @mcp.tool()
     async def work_items(

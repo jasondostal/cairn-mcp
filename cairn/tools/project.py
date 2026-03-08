@@ -2,6 +2,8 @@
 
 import logging
 
+from cairn.api.utils import parse_multi
+
 logger = logging.getLogger("cairn")
 
 
@@ -24,6 +26,8 @@ def register(mcp, g):
         target: str | None = None,
         link_type: str = "related",
         file_path: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> dict | list[dict]:
         """Manage project documents and relationships. For formal project docs, NOT working notes.
 
@@ -39,24 +43,28 @@ def register(mcp, g):
         - 'list': List all projects with memory counts.
         - 'create_doc': Create a project document (brief, PRD, plan, primer, writeup, or guide).
         - 'get_docs': Get documents for a project, optionally filtered by type.
+        - 'get_doc': Get a single document by ID.
+        - 'list_all_docs': List documents across all projects with optional filters and pagination.
         - 'update_doc': Update an existing document's content.
         - 'link': Link two projects together.
         - 'get_links': Get all links for a project.
 
         Args:
-            action: One of 'list', 'create_doc', 'get_docs', 'update_doc', 'link', 'get_links'.
-            project: Project name (required for all actions except 'list').
-            doc_type: Document type: 'brief', 'prd', 'plan', 'primer', 'writeup', or 'guide' (for create_doc, optional for get_docs).
+            action: One of 'list', 'create_doc', 'get_docs', 'get_doc', 'list_all_docs', 'update_doc', 'link', 'get_links'.
+            project: Project name (required for most actions; optional comma-separated filter for list_all_docs).
+            doc_type: Document type: 'brief', 'prd', 'plan', 'primer', 'writeup', or 'guide' (for create_doc, optional comma-separated filter for get_docs/list_all_docs).
             content: Document content (required for create_doc, update_doc). Can be omitted if file_path is provided.
-            doc_id: Document ID (required for update_doc).
+            doc_id: Document ID (required for update_doc, get_doc).
             title: Optional document title (for create_doc, update_doc).
             target: Target project name (required for link).
             link_type: Relationship type for link (default 'related').
             file_path: Path to a local file in the server's ingest staging directory.
                 Use instead of content to ingest from a staging directory (avoids inline transfer).
+            limit: Max results to return (for list_all_docs).
+            offset: Pagination offset (for list_all_docs, default 0).
         """
         try:
-            if not project and action != "list":
+            if not project and action not in ("list", "get_doc", "list_all_docs"):
                 return {"error": "project is required for this action"}
 
             def _do_projects():
@@ -81,6 +89,20 @@ def register(mcp, g):
 
                 if action == "get_docs":
                     return project_manager.get_docs(project, doc_type=doc_type)
+
+                if action == "get_doc":
+                    if not doc_id:
+                        return {"error": "doc_id is required for get_doc"}
+                    result = project_manager.get_doc(doc_id)
+                    return result if result is not None else {"error": "Document not found"}
+
+                if action == "list_all_docs":
+                    return project_manager.list_all_docs(
+                        project=parse_multi(project),
+                        doc_type=parse_multi(doc_type),
+                        limit=limit,
+                        offset=offset,
+                    )
 
                 if action == "update_doc":
                     if not doc_id or not content:

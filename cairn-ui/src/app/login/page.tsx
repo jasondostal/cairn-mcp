@@ -37,19 +37,20 @@ export default function LoginPage() {
   const [oidcLoading, setOidcLoading] = useState(false);
 
   useEffect(() => {
-    // Handle OIDC callback (?token=...&username=...&role=...)
-    if (handleOidcCallback()) {
-      // Hard redirect — bypasses AuthProvider's stale boot state
-      window.location.href = getReturnUrl();
-      return;
-    }
+    async function boot() {
+      // Handle OIDC callback (?oidc_code=...)
+      if (await handleOidcCallback()) {
+        // Hard redirect — bypasses AuthProvider's stale boot state
+        window.location.href = getReturnUrl();
+        return;
+      }
 
-    // If already logged in, redirect
-    if (hasToken()) {
-      router.push(getReturnUrl());
-      return;
-    }
-    checkAuthStatus().then((status) => {
+      // If already logged in, redirect
+      if (hasToken()) {
+        router.push(getReturnUrl());
+        return;
+      }
+      const status = await checkAuthStatus();
       setAuthStatus(status);
       // If auth not enabled, redirect to main app
       if (!status.enabled) {
@@ -60,7 +61,8 @@ export default function LoginPage() {
       if (!status.has_users) {
         setIsRegister(true);
       }
-    });
+    }
+    boot();
   }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {

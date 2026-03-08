@@ -60,7 +60,6 @@ analytics_tracker = None
 rollup_worker = None
 workspace_manager = None
 ingest_pipeline = None
-working_memory_store = None
 belief_store = None
 
 
@@ -72,7 +71,7 @@ def _init_services(svc):
     global event_bus, event_dispatcher, drift_detector
     global work_item_manager, deliverable_manager
     global analytics_tracker, rollup_worker, workspace_manager
-    global ingest_pipeline, working_memory_store, belief_store
+    global ingest_pipeline, belief_store
 
     _svc = svc
     config = svc.config
@@ -95,7 +94,6 @@ def _init_services(svc):
     rollup_worker = svc.rollup_worker
     workspace_manager = svc.workspace_manager
     ingest_pipeline = svc.ingest_pipeline
-    working_memory_store = svc.working_memory_store
     belief_store = svc.belief_store
 
     # Startup assertion: critical services must be non-None (ca-211)
@@ -108,7 +106,7 @@ def _init_services(svc):
         raise RuntimeError(f"Service initialization failed: {', '.join(_missing)} are None")
 
 
-async def _in_thread(fn, *args, **kwargs):
+async def _in_thread(fn, *args, timeout: float = 120.0, **kwargs):
     """Run fn in a thread pool, then release the DB connection back to the pool.
 
     The Database class uses threading.local() to hold connections per-thread.
@@ -116,6 +114,10 @@ async def _in_thread(fn, *args, **kwargs):
     check out connections but never return them — causing pool exhaustion
     and deadlock after enough concurrent calls. This wrapper ensures every
     thread returns its connection when the work is done.
+
+    A timeout (default 120s) prevents hung operations from blocking forever.
+    The DB connection is released even on timeout (via the finally block in
+    _wrapped — the thread still runs to completion and hits finally).
     """
     def _wrapped():
         try:
@@ -123,7 +125,11 @@ async def _in_thread(fn, *args, **kwargs):
         finally:
             if db is not None:
                 db._release()
-    return await asyncio.to_thread(_wrapped)
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_wrapped), timeout=timeout)
+    except asyncio.TimeoutError:
+        logger.error("Tool operation timed out after %.0fs", timeout)
+        raise
 
 
 def _build_config_with_overrides(db_instance):
@@ -323,23 +329,6 @@ class _ServerGlobals:
 from cairn.tools import register_all  # noqa: E402
 
 register_all(mcp, _server_globals())
-
-
-# ============================================================
-# Trail helper — delegates to shared orient module
-# ============================================================
-
-def _fetch_trail_data(
-    project: str | None = None,
-    since: str | None = None,
-    limit: int = 20,
-) -> dict:
-    """Fetch recent activity trail data. Used by trail() tool."""
-    from cairn.core.orient import fetch_trail_data
-    return fetch_trail_data(
-        db=db, graph_provider=graph_provider,
-        project=project, since=since, limit=limit,
-    )
 
 
 # ============================================================

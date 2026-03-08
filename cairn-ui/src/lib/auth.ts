@@ -177,8 +177,8 @@ export function hasToken(): boolean {
 }
 
 /** Handle OIDC callback — exchanges one-time code for JWT via POST.
- *  Returns true if callback params were present (async exchange happens in background). */
-export function handleOidcCallback(): boolean {
+ *  Returns true if callback params were present and exchange succeeded. */
+export async function handleOidcCallback(): Promise<boolean> {
   if (typeof window === "undefined") return false;
   const params = new URLSearchParams(window.location.search);
   const oidcCode = params.get("oidc_code");
@@ -188,24 +188,21 @@ export function handleOidcCallback(): boolean {
 
   if (oidcCode) {
     // Exchange one-time code for JWT (avoids token exposure in URL/logs)
-    fetch(`${BASE}/auth/oidc/exchange`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: oidcCode }),
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error("Code exchange failed");
-        return res.json();
-      })
-      .then((data) => {
-        setToken(data.access_token);
-        setStoredUser({ id: 0, username: data.user.username, role: data.user.role });
-        window.history.replaceState({}, "", window.location.pathname);
-        window.location.href = "/";
-      })
-      .catch(() => {
-        window.history.replaceState({}, "", window.location.pathname);
+    try {
+      const res = await fetch(`${BASE}/auth/oidc/exchange`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: oidcCode }),
       });
+      if (!res.ok) throw new Error("Code exchange failed");
+      const data = await res.json();
+      setToken(data.access_token);
+      setStoredUser({ id: 0, username: data.user.username, role: data.user.role });
+    } catch {
+      // Exchange failed — clear URL params and let login page show
+      window.history.replaceState({}, "", window.location.pathname);
+      return false;
+    }
   } else if (legacyToken) {
     const username = params.get("username");
     const role = params.get("role");
@@ -213,7 +210,7 @@ export function handleOidcCallback(): boolean {
       setToken(legacyToken);
       setStoredUser({ id: 0, username, role: role || "user" });
     }
-    window.history.replaceState({}, "", window.location.pathname);
   }
+  window.history.replaceState({}, "", window.location.pathname);
   return true;
 }

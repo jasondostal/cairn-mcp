@@ -157,22 +157,6 @@ class MemoryAction:
 
 
 # ============================================================
-# Cairns (Episodic) — deprecated in v0.37.0, kept for backward compat
-# ============================================================
-
-class CairnAction:
-    SET = "set"
-    STACK = "stack"
-    GET = "get"
-    COMPRESS = "compress"
-
-    ALL = {SET, STACK, GET, COMPRESS}
-
-
-MAX_CAIRN_STACK = 50  # deprecated — kept for backward compat
-
-
-# ============================================================
 # Tasks
 # ============================================================
 
@@ -319,7 +303,6 @@ EVENT_STREAM_HEARTBEAT_INTERVAL = 15  # seconds between SSE heartbeats
 BUDGET_RULES = 3000
 BUDGET_SEARCH = 4000
 BUDGET_RECALL = 8000
-BUDGET_CAIRN_STACK = 3000
 BUDGET_INSIGHTS = 4000
 BUDGET_WORKSPACE = 6000
 BUDGET_ORIENT = 6000
@@ -338,7 +321,6 @@ HANDLER_CONFIDENCE_THRESHOLD = 0.6
 BUDGET_RULES_PER_ITEM = 300
 BUDGET_SEARCH_PER_ITEM = 200
 BUDGET_RECALL_PER_ITEM = 2000
-BUDGET_CAIRN_NARRATIVE_CHARS = 300
 BUDGET_INSIGHTS_PER_ITEM = 300
 
 # Workspace context allocation (percentage of total budget)
