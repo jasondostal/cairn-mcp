@@ -4,6 +4,7 @@ import logging
 
 from cairn.api.utils import parse_multi
 from cairn.core.services import Services
+from cairn.core.trace import set_trace_project, set_trace_tool
 from cairn.tools.auth import check_project_access, require_admin
 from cairn.tools.threading import in_thread
 
@@ -67,6 +68,9 @@ def register(mcp, svc: Services):
             offset: Pagination offset (for list_all_docs, default 0).
         """
         try:
+            set_trace_tool("projects")
+            if project:
+                set_trace_project(project)
             check_project_access(svc, project)
             if not project and action not in ("list", "get_doc", "list_all_docs"):
                 return {"error": "project is required for this action"}
@@ -185,6 +189,8 @@ def register(mcp, svc: Services):
         from cairn.core.code_ops import run_code_query
 
         try:
+            set_trace_tool("code_query")
+            set_trace_project(project)
             check_project_access(svc, project)
             return await in_thread(
                 svc.db,
@@ -236,6 +242,8 @@ def register(mcp, svc: Services):
         from cairn.core.code_ops import run_arch_check
 
         try:
+            set_trace_tool("arch_check")
+            set_trace_project(project)
             check_project_access(svc, project)
             return await in_thread(
                 svc.db,
@@ -296,6 +304,9 @@ def register(mcp, svc: Services):
             assignee: Name for the agent claim (auto-generated if omitted).
         """
         try:
+            set_trace_tool("dispatch")
+            if project:
+                set_trace_project(project)
             require_admin(svc)
             check_project_access(svc, project)
             if svc.workspace_manager is None:

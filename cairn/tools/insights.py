@@ -5,6 +5,7 @@ import logging
 from cairn.core.budget import apply_list_budget
 from cairn.core.constants import BUDGET_INSIGHTS_PER_ITEM
 from cairn.core.services import Services
+from cairn.core.trace import set_trace_project, set_trace_tool
 from cairn.tools.auth import check_project_access, require_admin
 from cairn.tools.threading import in_thread
 
@@ -47,6 +48,9 @@ def register(mcp, svc: Services):
             limit: Maximum clusters to return (default 10).
         """
         try:
+            set_trace_tool("insights")
+            if project:
+                set_trace_project(project)
             check_project_access(svc, project)
 
             def _do_insights():
@@ -142,6 +146,8 @@ def register(mcp, svc: Services):
             confidence_delta: How much to adjust confidence on challenge (default -0.1).
         """
         try:
+            set_trace_tool("beliefs")
+            set_trace_project(project)
             check_project_access(svc, project)
             if not svc.belief_store:
                 return {"error": "BeliefStore not initialized"}
@@ -210,6 +216,9 @@ def register(mcp, svc: Services):
                    Use sha256 or any consistent hash of file contents.
         """
         try:
+            set_trace_tool("drift_check")
+            if project:
+                set_trace_project(project)
             check_project_access(svc, project)
             if svc.drift_detector is None:
                 return {"error": "drift detector not available"}
@@ -237,6 +246,7 @@ def register(mcp, svc: Services):
             dry_run: Always True for this tool (inspection only).
         """
         try:
+            set_trace_tool("decay_scan")
             require_admin(svc)
             if not svc.decay_worker:
                 return {"error": "DecayWorker is not enabled"}
@@ -297,6 +307,8 @@ def register(mcp, svc: Services):
             author: Who contributed this thought (e.g., "human", "assistant", a name).
         """
         try:
+            set_trace_tool("think")
+            set_trace_project(project)
             check_project_access(svc, project)
 
             def _do_think():

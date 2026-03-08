@@ -3,6 +3,7 @@
 import logging
 
 from cairn.core.services import Services
+from cairn.core.trace import set_trace_project, set_trace_tool
 from cairn.tools.auth import check_project_access
 from cairn.tools.threading import in_thread
 
@@ -43,6 +44,9 @@ def register(mcp, svc: Services):
             risk_tier: Risk tier hint for matching.
         """
         try:
+            set_trace_tool("suggest_agent")
+            if project:
+                set_trace_project(project)
             check_project_access(svc, project)
 
             def _do_suggest_agent():

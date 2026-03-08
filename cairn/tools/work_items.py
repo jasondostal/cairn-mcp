@@ -7,6 +7,7 @@ from cairn.core.constants import (
 )
 from cairn.core.resource_lock import lock_manager
 from cairn.core.services import Services
+from cairn.core.trace import set_trace_project, set_trace_tool
 from cairn.tools.auth import check_project_access
 from cairn.tools.threading import in_thread
 
@@ -76,6 +77,9 @@ def register(mcp, svc: Services):
         See also: deliverables(), locks(), suggest_agent() for actions moved to dedicated tools.
         """
         try:
+            set_trace_tool("work_items")
+            if project:
+                set_trace_project(project)
             check_project_access(svc, project)
 
             def _do_work_items():

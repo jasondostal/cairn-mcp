@@ -14,6 +14,7 @@ from cairn.core.constants import (
 )
 from cairn.core.services import Services
 from cairn.core.utils import ValidationError, validate_search, validate_store
+from cairn.core.trace import set_trace_project, set_trace_tool
 from cairn.tools.auth import check_project_access, require_admin
 from cairn.tools.threading import in_thread
 
@@ -89,6 +90,8 @@ def register(mcp, svc: Services):
                 NULL = crystallized (permanent) memory.
         """
         try:
+            set_trace_tool("store")
+            set_trace_project(project)
             check_project_access(svc, project)
             validate_store(content, project, memory_type, importance, tags, session_name)
 
@@ -170,6 +173,9 @@ def register(mcp, svc: Services):
                 False=only crystallized (permanent), None=all memories (default).
         """
         try:
+            set_trace_tool("search")
+            if project:
+                set_trace_project(project)
             check_project_access(svc, project)
             validate_search(query, limit)
             if search_mode not in VALID_SEARCH_MODES:
@@ -252,6 +258,7 @@ def register(mcp, svc: Services):
             ids: List of memory IDs to retrieve (max 10 per call).
         """
         try:
+            set_trace_tool("recall")
             if not ids:
                 return [{"error": "ids list is required and cannot be empty"}]
             if len(ids) > MAX_RECALL_IDS:
@@ -338,6 +345,9 @@ def register(mcp, svc: Services):
             author: Speaker attribution (update only). "user", "assistant", or a name.
         """
         try:
+            set_trace_tool("modify")
+            if project:
+                set_trace_project(project)
             check_project_access(svc, project)
             if action not in MemoryAction.ALL:
                 return {"error": f"invalid action: {action}. Must be one of: {', '.join(sorted(MemoryAction.ALL))}"}
@@ -409,6 +419,9 @@ def register(mcp, svc: Services):
                 The file must be under the configured CAIRN_INGEST_DIR (default: /data/ingest).
         """
         try:
+            set_trace_tool("ingest")
+            if project:
+                set_trace_project(project)
             check_project_access(svc, project)
             if not content and not url and not file_path:
                 return {"error": "content, url, or file_path is required"}
@@ -462,6 +475,9 @@ def register(mcp, svc: Services):
                 memories and create higher-order insights). Default: dedup.
         """
         try:
+            set_trace_tool("consolidate")
+            if project:
+                set_trace_project(project)
             require_admin(svc)
             check_project_access(svc, project)
             if not project or not project.strip():

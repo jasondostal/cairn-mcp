@@ -22,15 +22,25 @@ def _hex_id(nbytes: int) -> str:
     return os.urandom(nbytes).hex()
 
 
-@dataclass(frozen=True)
+@dataclass
 class TraceContext:
-    """Immutable trace context propagated through an operation."""
+    """Trace context propagated through an operation.
+
+    Core fields (trace_id, span_id, parent_span_id, actor, entry_point) are
+    set at creation and should not be mutated.  Attribution fields (project,
+    tool_name, model) are optional and set by MCP tool handlers so downstream
+    layers (analytics, event_bus) can read them as ambient context.
+    """
 
     trace_id: str  # 32-char hex (128-bit)
     span_id: str  # 16-char hex (64-bit)
     parent_span_id: str | None = None
     actor: str = "mcp"  # "mcp" | "rest" | "agent" | "system"
     entry_point: str = ""  # tool name or API endpoint
+    # Attribution context — set by tool handlers, read by analytics/event_bus
+    project: str | None = None
+    tool_name: str | None = None
+    model: str | None = None
 
 
 def new_trace(*, actor: str = "mcp", entry_point: str = "") -> TraceContext:
@@ -60,6 +70,9 @@ def child_span(*, entry_point: str = "") -> TraceContext:
         parent_span_id=parent.span_id,
         actor=parent.actor,
         entry_point=entry_point or parent.entry_point,
+        project=parent.project,
+        tool_name=parent.tool_name,
+        model=parent.model,
     )
     _trace_ctx.set(ctx)
     return ctx
@@ -68,6 +81,27 @@ def child_span(*, entry_point: str = "") -> TraceContext:
 def current_trace() -> TraceContext | None:
     """Read the current trace context (or None if not in a traced operation)."""
     return _trace_ctx.get()
+
+
+def set_trace_project(project: str) -> None:
+    """Set the project on the current trace context (no-op if no trace)."""
+    ctx = _trace_ctx.get()
+    if ctx is not None:
+        ctx.project = project
+
+
+def set_trace_tool(tool_name: str) -> None:
+    """Set the tool_name on the current trace context (no-op if no trace)."""
+    ctx = _trace_ctx.get()
+    if ctx is not None:
+        ctx.tool_name = tool_name
+
+
+def set_trace_model(model: str) -> None:
+    """Set the model on the current trace context (no-op if no trace)."""
+    ctx = _trace_ctx.get()
+    if ctx is not None:
+        ctx.model = model
 
 
 def clear_trace() -> None:

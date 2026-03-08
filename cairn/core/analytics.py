@@ -51,6 +51,8 @@ class UsageEvent:
     trace_id: str | None = None
     span_id: str | None = None
     parent_span_id: str | None = None
+    # Tool attribution (ca-231)
+    tool_name: str | None = None
 
 
 # ============================================================
@@ -128,16 +130,16 @@ class UsageTracker:
                         (timestamp, operation, project_id, session_name,
                          tokens_in, tokens_out, latency_ms, model,
                          success, error_message, metadata,
-                         trace_id, span_id, parent_span_id)
+                         trace_id, span_id, parent_span_id, tool_name)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb,
-                            %s, %s, %s)
+                            %s, %s, %s, %s)
                     """,
                     (
                         ev.timestamp, ev.operation, ev.project_id, ev.session_name,
                         ev.tokens_in, ev.tokens_out, ev.latency_ms, ev.model,
                         ev.success, ev.error_message,
                         __import__("json").dumps(ev.metadata) if ev.metadata else "{}",
-                        ev.trace_id, ev.span_id, ev.parent_span_id,
+                        ev.trace_id, ev.span_id, ev.parent_span_id, ev.tool_name,
                     ),
                 )
             self.db.commit()
@@ -260,6 +262,17 @@ def track_operation(operation_name: str, tracker: UsageTracker | None | object =
                     if isinstance(val, str):
                         session_name = val
 
+                # Fallback: read project/model/tool from trace context (ca-231)
+                model_name = None
+                tool_name = None
+                if trace:
+                    if not project_name and trace.project:
+                        project_name = trace.project
+                    if trace.model:
+                        model_name = trace.model
+                    if trace.tool_name:
+                        tool_name = trace.tool_name
+
                 # Resolve project_id from project name
                 project_id = None
                 if project_name:
@@ -277,6 +290,8 @@ def track_operation(operation_name: str, tracker: UsageTracker | None | object =
                     project_id=project_id,
                     session_name=session_name,
                     latency_ms=latency_ms,
+                    model=model_name,
+                    tool_name=tool_name,
                     success=success,
                     error_message=error_msg,
                     trace_id=trace.trace_id if trace else None,

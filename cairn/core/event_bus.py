@@ -101,6 +101,12 @@ class EventBus:
         trace = current_trace()
         trace_id = trace.trace_id if trace else None
 
+        # Fallback: read project and tool_name from trace context (ca-231)
+        if not project and trace and trace.project:
+            project = trace.project
+        if not tool_name and trace and trace.tool_name:
+            tool_name = trace.tool_name
+
         project_id = None
         if project:
             project_id = get_or_create_project(self.db, project)

@@ -6,6 +6,7 @@ from cairn.core.budget import apply_list_budget
 from cairn.core.constants import BUDGET_RULES_PER_ITEM, MAX_LIMIT
 from cairn.core.services import Services
 from cairn.core.status import get_status
+from cairn.core.trace import set_trace_project, set_trace_tool
 from cairn.tools.auth import check_project_access
 from cairn.tools.threading import in_thread
 
@@ -40,6 +41,9 @@ def register(mcp, svc: Services):
             project: Project name to get rules for. Omit for global rules only.
         """
         try:
+            set_trace_tool("rules")
+            if project:
+                set_trace_project(project)
             check_project_access(svc, project)
 
             def _do_rules():
@@ -72,6 +76,7 @@ def register(mcp, svc: Services):
         verifying deployment status. Quick diagnostic tool — no parameters required.
         """
         try:
+            set_trace_tool("status")
             return await in_thread(svc.db, get_status, svc.db, svc.config)
         except Exception as e:
             logger.exception("status failed")
@@ -93,6 +98,9 @@ def register(mcp, svc: Services):
         from cairn.core.orient import run_orient
 
         try:
+            set_trace_tool("orient")
+            if project:
+                set_trace_project(project)
             check_project_access(svc, project)
 
             def _do_orient():
@@ -173,6 +181,9 @@ def register(mcp, svc: Services):
             offset: Pagination offset for list.
         """
         try:
+            set_trace_tool("working_memory")
+            if project:
+                set_trace_project(project)
             check_project_access(svc, project)
 
             def _do_working_memory():
