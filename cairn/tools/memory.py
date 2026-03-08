@@ -13,8 +13,8 @@ from cairn.core.constants import (
     MemoryAction,
 )
 from cairn.core.services import Services
-from cairn.core.utils import ValidationError, validate_search, validate_store
 from cairn.core.trace import set_trace_project, set_trace_tool
+from cairn.core.utils import ValidationError, validate_search, validate_store
 from cairn.tools.auth import check_project_access, require_admin
 from cairn.tools.threading import in_thread
 

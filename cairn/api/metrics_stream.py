@@ -54,7 +54,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                         if stats.event_bus_stats:
                             stats.event_bus_stats.record_sse_event()
                         last_heartbeat = time.monotonic()
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         # No bucket received — send heartbeat
                         now = time.monotonic()
                         if now - last_heartbeat >= EVENT_STREAM_HEARTBEAT_INTERVAL:

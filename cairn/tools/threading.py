@@ -35,6 +35,6 @@ async def in_thread(db: Database, fn, *args, timeout: float = 120.0, **kwargs):
 
     try:
         return await asyncio.wait_for(asyncio.to_thread(_wrapped), timeout=timeout)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.error("Tool operation timed out after %.0fs", timeout)
         raise
