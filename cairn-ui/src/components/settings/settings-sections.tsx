@@ -208,9 +208,13 @@ export function AuthSection({ localEdits, setLocalEdits, saving, sectionVisible,
       onSave={() => saveSection("auth.")}
       saving={saving === "auth."}
     >
-      <EditableToggle label="Enabled" settingKey="auth.enabled" value={Boolean(val("auth.enabled"))} source={src("auth.enabled")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
-      <EditableText label="API Key" settingKey="auth.api_key" value={String(val("auth.api_key") ?? "")} source={src("auth.api_key")} secret localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
+      <div className="flex items-center gap-2 text-xs text-muted-foreground px-1 pb-1">
+        <span>Status: {val("auth.enabled") ? "Enabled" : "Disabled"}</span>
+        <Badge variant="outline" className="text-[10px]">env-only</Badge>
+      </div>
       <EditableText label="Header" settingKey="auth.header_name" value={String(val("auth.header_name") ?? "X-API-Key")} source={src("auth.header_name")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
+      <EditableNumber label="JWT Expiry (min)" settingKey="auth.jwt_expire_minutes" value={Number(val("auth.jwt_expire_minutes") ?? 1440)} source={src("auth.jwt_expire_minutes")} min={1} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
+      <EditableText label="Stdio User" settingKey="auth.stdio_user" value={String(val("auth.stdio_user") ?? "")} source={src("auth.stdio_user")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
     </SectionCard>
   );
 }
@@ -248,7 +252,6 @@ export function Neo4jSection({ localEdits, setLocalEdits, saving, sectionVisible
     >
       <EditableText label="URI" settingKey="neo4j.uri" value={String(val("neo4j.uri") ?? "")} source={src("neo4j.uri")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS["neo4j.uri"]} />
       <EditableText label="User" settingKey="neo4j.user" value={String(val("neo4j.user") ?? "")} source={src("neo4j.user")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS["neo4j.user"]} />
-      <EditableText label="Password" settingKey="neo4j.password" value={String(val("neo4j.password") ?? "")} source={src("neo4j.password")} secret localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS["neo4j.password"]} />
       <EditableText label="Database" settingKey="neo4j.database" value={String(val("neo4j.database") ?? "")} source={src("neo4j.database")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS["neo4j.database"]} />
     </SectionCard>
   );
@@ -317,6 +320,7 @@ export function BudgetSection({ localEdits, setLocalEdits, saving, sectionVisibl
           <EditableNumber label="Cairn Stack" settingKey="budget.cairn_stack" value={Number(val("budget.cairn_stack") ?? 3000)} source={src("budget.cairn_stack")} min={0} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS["budget.cairn_stack"]} />
           <EditableNumber label="Insights" settingKey="budget.insights" value={Number(val("budget.insights") ?? 4000)} source={src("budget.insights")} min={0} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS["budget.insights"]} />
           <EditableNumber label="Workspace" settingKey="budget.workspace" value={Number(val("budget.workspace") ?? 6000)} source={src("budget.workspace")} min={0} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS["budget.workspace"]} />
+          <EditableNumber label="Orient" settingKey="budget.orient" value={Number(val("budget.orient") ?? 6000)} source={src("budget.orient")} min={0} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
         </div>
       </div>
     </SectionCard>
@@ -500,7 +504,6 @@ export function WorkspaceSection({ localEdits, setLocalEdits, saving, sectionVis
     >
       <EditableSelect label="Default Backend" settingKey="workspace.default_backend" value={String(val("workspace.default_backend") ?? "opencode")} source={src("workspace.default_backend")} options={["opencode", "claude_code"]} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("workspace.default_backend")} />
       <EditableText label="URL" settingKey="workspace.url" value={String(val("workspace.url") ?? "")} source={src("workspace.url")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("workspace.url")} />
-      <EditableText label="Password" settingKey="workspace.password" value={String(val("workspace.password") ?? "")} source={src("workspace.password")} secret localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("workspace.password")} />
       <EditableText label="Default Agent" settingKey="workspace.default_agent" value={String(val("workspace.default_agent") ?? "")} source={src("workspace.default_agent")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("workspace.default_agent")} />
       <EditableToggle label="Claude Code Enabled" settingKey="workspace.claude_code_enabled" value={Boolean(val("workspace.claude_code_enabled"))} source={src("workspace.claude_code_enabled")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("workspace.claude_code_enabled")} />
       <EditableText label="CC Working Dir" settingKey="workspace.claude_code_working_dir" value={String(val("workspace.claude_code_working_dir") ?? "")} source={src("workspace.claude_code_working_dir")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} envLocked={isEnvLocked("workspace.claude_code_working_dir")} />
