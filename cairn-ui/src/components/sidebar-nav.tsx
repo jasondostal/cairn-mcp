@@ -39,6 +39,30 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 // Groups that are expanded by default
 const DEFAULT_OPEN_GROUPS = new Set(["Core", "Context"]);
+const LS_SIDEBAR_GROUPS_KEY = "cairn:sidebar-open-groups";
+
+function useSidebarGroupState() {
+  const [openGroups, setOpenGroups] = useState<Set<string>>(DEFAULT_OPEN_GROUPS);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(LS_SIDEBAR_GROUPS_KEY);
+      if (stored) setOpenGroups(new Set(JSON.parse(stored)));
+    } catch { /* ignore */ }
+  }, []);
+
+  const toggle = (label: string) => {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      localStorage.setItem(LS_SIDEBAR_GROUPS_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  };
+
+  return { openGroups, toggle };
+}
 
 function useVisibilityPolling(pollFn: () => void, intervalMs: number) {
   useEffect(() => {
@@ -135,6 +159,7 @@ export function SidebarNav() {
   const { user, authEnabled, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const ekgPosition = useEkgPosition();
+  const { openGroups, toggle: toggleGroup } = useSidebarGroupState();
 
   return (
     <Sidebar collapsible="icon">
@@ -174,7 +199,8 @@ export function SidebarNav() {
         {navGroups.map((group) => (
           <Collapsible
             key={group.label}
-            defaultOpen={DEFAULT_OPEN_GROUPS.has(group.label)}
+            open={openGroups.has(group.label)}
+            onOpenChange={() => toggleGroup(group.label)}
             className="group/collapsible"
           >
             <SidebarGroup>
