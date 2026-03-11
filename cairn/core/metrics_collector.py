@@ -60,81 +60,31 @@ class MetricsBucket:
 
 
 # ---------------------------------------------------------------------------
-# Event-type → category mapping
+# Event-type → category mapping (delegates to EventType registry)
 # ---------------------------------------------------------------------------
 
-_CATEGORY_MAP: dict[str, str] = {
-    # Reads
-    "search.executed": "reads",
-    "memory.recalled": "reads",
-    # Writes
-    "memory.created": "writes",
-    "memory.modified": "writes",
-    "memory.deleted": "writes",
-    "memory.consolidated": "writes",
-    "working_memory.captured": "writes",
-    "belief.crystallized": "writes",
-    "belief.updated": "writes",
-    # Work items
-    "work_item.created": "work",
-    "work_item.updated": "work",
-    "work_item.completed": "work",
-    "work_item.blocked": "work",
-    "work_item.unblocked": "work",
-    # Sessions
-    "session_start": "sessions",
-    "session_end": "sessions",
-    # System / background
-    "settings.updated": "system",
-    "working_memory.archived": "system",
-    "working_memory.resolved": "system",
-    # Tool-layer events (from in_thread instrumentation)
-    "tool.search": "reads",
-    "tool.recall": "reads",
-    "tool.code_query": "reads",
-    "tool.orient": "reads",
-    "tool.rules": "reads",
-    "tool.status": "reads",
-    "tool.insights": "reads",
-    "tool.drift_check": "reads",
-    "tool.decay_scan": "reads",
-    "tool.store": "writes",
-    "tool.modify": "writes",
-    "tool.ingest": "writes",
-    "tool.consolidate": "writes",
-    "tool.work_items": "work",
-    "tool.deliverables": "work",
-    "tool.dispatch": "work",
-    "tool.locks": "work",
-    "tool.suggest_agent": "work",
-    "tool.projects": "reads",
-    "tool.think": "llm",
-    "tool.beliefs": "reads",
-    "tool.arch_check": "llm",
-    "tool.working_memory": "reads",
-}
+from cairn.core.constants import EventType
 
-# Prefix fallbacks for event types not in the explicit map
-_CATEGORY_PREFIX_MAP: dict[str, str] = {
-    "memory.": "writes",
-    "search.": "reads",
-    "work_item.": "work",
-    "belief.": "writes",
-    "working_memory.": "system",
-    "session": "sessions",
-    "tool.": "other",
+# Tool-layer events (from in_thread instrumentation) — not in EventType since
+# they're transport-level, not domain events. Checked before the registry.
+_TOOL_CATEGORIES: dict[str, str] = {
+    "tool.search": "reads", "tool.recall": "reads", "tool.code_query": "reads",
+    "tool.orient": "reads", "tool.rules": "reads", "tool.status": "reads",
+    "tool.insights": "reads", "tool.drift_check": "reads", "tool.decay_scan": "reads",
+    "tool.store": "writes", "tool.modify": "writes", "tool.ingest": "writes",
+    "tool.consolidate": "writes", "tool.work_items": "work", "tool.deliverables": "work",
+    "tool.dispatch": "work", "tool.locks": "work", "tool.suggest_agent": "work",
+    "tool.projects": "reads", "tool.think": "llm", "tool.beliefs": "reads",
+    "tool.arch_check": "llm", "tool.working_memory": "reads",
 }
 
 
 def categorize_event(event_type: str) -> str:
     """Map an event_type to a high-level category."""
-    cat = _CATEGORY_MAP.get(event_type)
+    cat = _TOOL_CATEGORIES.get(event_type)
     if cat:
         return cat
-    for prefix, fallback in _CATEGORY_PREFIX_MAP.items():
-        if event_type.startswith(prefix):
-            return fallback
-    return "other"
+    return EventType.category_for(event_type)
 
 
 class MetricsCollector:

@@ -365,6 +365,11 @@ class DeliverableManager:
         """Publish event to event bus if available."""
         if self.event_bus:
             try:
-                self.event_bus.publish(event_type, data)
+                work_item_id = data.get("work_item_id")
+                self.event_bus.publish(
+                    "", event_type,
+                    work_item_id=work_item_id,
+                    payload=data,
+                )
             except Exception:
                 logger.warning("Failed to publish %s event", event_type, exc_info=True)

@@ -1,6 +1,6 @@
 """AuditListener — writes immutable audit_log entries for mutation events.
 
-Subscribes to memory.*, work_item.*, task.*, and thinking.* events.
+Subscribes to memory.*, work_item.*, thinking.*, and settings.* events.
 Extracts action and resource_type from event_type, passes trace_id
 from the event record (not current_trace — runs in dispatcher thread).
 """
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Event types that represent mutations worth auditing.
 # Read-only events (search.executed, memory.recalled) are excluded.
-_AUDITED_DOMAINS = {"memory", "work_item", "task", "thinking", "settings"}
+_AUDITED_DOMAINS = {"memory", "work_item", "thinking", "settings", "deliverable", "belief"}
 
 
 class AuditListener:
@@ -31,9 +31,10 @@ class AuditListener:
         """Subscribe to mutation event domains."""
         event_bus.subscribe("memory.*", "audit_memory", self.handle)
         event_bus.subscribe("work_item.*", "audit_work_item", self.handle)
-        event_bus.subscribe("task.*", "audit_task", self.handle)
         event_bus.subscribe("thinking.*", "audit_thinking", self.handle)
         event_bus.subscribe("settings.*", "audit_settings", self.handle)
+        event_bus.subscribe("deliverable.*", "audit_deliverable", self.handle)
+        event_bus.subscribe("belief.*", "audit_belief", self.handle)
 
     def handle(self, event: dict) -> None:
         """Route event to audit log."""
@@ -52,8 +53,8 @@ class AuditListener:
         resource_id = (
             payload.get("memory_id")
             or payload.get("work_item_id")
-            or payload.get("task_id")
             or payload.get("sequence_id")
+            or payload.get("deliverable_id")
             or event.get("work_item_id")
         )
 

@@ -288,6 +288,124 @@ VALID_LINK_TYPES = ["related", "parent", "child", "dependency", "fork", "templat
 # Event Pipeline
 # ============================================================
 
+
+class EventType:
+    """Canonical event type registry — all event types used across the system.
+
+    Replaces stringly-typed event types scattered across publishers/subscribers.
+    Each constant includes its category for MetricsCollector mapping.
+    """
+
+    # Memory events
+    MEMORY_CREATED = "memory.created"
+    MEMORY_UPDATED = "memory.updated"
+    MEMORY_INACTIVATED = "memory.inactivated"
+    MEMORY_REACTIVATED = "memory.reactivated"
+    MEMORY_GRADUATED = "memory.graduated"
+    MEMORY_BOOSTED = "memory.boosted"
+    MEMORY_CONSOLIDATED = "memory.consolidated"
+    MEMORY_RECALLED = "memory.recalled"
+
+    # Search events
+    SEARCH_EXECUTED = "search.executed"
+
+    # Work item events
+    WORK_ITEM_CREATED = "work_item.created"
+    WORK_ITEM_UPDATED = "work_item.updated"
+    WORK_ITEM_STATUS_CHANGED = "work_item.status_changed"
+    WORK_ITEM_CLAIMED = "work_item.claimed"
+    WORK_ITEM_COMPLETED = "work_item.completed"
+    WORK_ITEM_BLOCKED = "work_item.blocked"
+    WORK_ITEM_UNBLOCKED = "work_item.unblocked"
+    WORK_ITEM_GATE_SET = "work_item.gate_set"
+    WORK_ITEM_GATE_RESOLVED = "work_item.gate_resolved"
+    WORK_ITEM_MEMORIES_LINKED = "work_item.memories_linked"
+
+    # Deliverable events
+    DELIVERABLE_CREATED = "deliverable.created"
+    DELIVERABLE_SUBMITTED = "deliverable.submitted"
+    DELIVERABLE_APPROVED = "deliverable.approved"
+    DELIVERABLE_REVISED = "deliverable.revised"
+    DELIVERABLE_REJECTED = "deliverable.rejected"
+
+    # Belief events
+    BELIEF_CRYSTALLIZED = "belief.crystallized"
+    BELIEF_CHALLENGED = "belief.challenged"
+    BELIEF_RETRACTED = "belief.retracted"
+    BELIEF_SUPERSEDED = "belief.superseded"
+
+    # Working memory events
+    WM_CAPTURED = "working_memory.captured"
+    WM_RESOLVED = "working_memory.resolved"
+    WM_GRADUATED = "working_memory.graduated"
+    WM_BOOSTED = "working_memory.boosted"
+    WM_ARCHIVED = "working_memory.archived"
+
+    # Thinking events
+    THINKING_STARTED = "thinking.sequence_started"
+    THINKING_THOUGHT_ADDED = "thinking.thought_added"
+    THINKING_CONCLUDED = "thinking.sequence_concluded"
+    THINKING_REOPENED = "thinking.sequence_reopened"
+
+    # Settings events
+    SETTINGS_UPDATED = "settings.updated"
+    SETTINGS_DELETED = "settings.deleted"
+
+    # Session events
+    SESSION_START = "session_start"
+    SESSION_END = "session_end"
+
+    # Category mapping for MetricsCollector
+    CATEGORIES = {
+        "memory.created": "writes", "memory.updated": "writes",
+        "memory.inactivated": "writes", "memory.reactivated": "writes",
+        "memory.graduated": "writes", "memory.boosted": "writes",
+        "memory.consolidated": "writes", "memory.recalled": "reads",
+        "search.executed": "reads",
+        "work_item.created": "work", "work_item.updated": "work",
+        "work_item.status_changed": "work", "work_item.claimed": "work",
+        "work_item.completed": "work", "work_item.blocked": "work",
+        "work_item.unblocked": "work", "work_item.gate_set": "work",
+        "work_item.gate_resolved": "work", "work_item.memories_linked": "work",
+        "deliverable.created": "work", "deliverable.submitted": "work",
+        "deliverable.approved": "work", "deliverable.revised": "work",
+        "deliverable.rejected": "work",
+        "belief.crystallized": "writes", "belief.challenged": "writes",
+        "belief.retracted": "writes", "belief.superseded": "writes",
+        "working_memory.captured": "writes", "working_memory.resolved": "system",
+        "working_memory.graduated": "writes", "working_memory.boosted": "writes",
+        "working_memory.archived": "system",
+        "thinking.sequence_started": "llm", "thinking.thought_added": "llm",
+        "thinking.sequence_concluded": "llm", "thinking.sequence_reopened": "llm",
+        "settings.updated": "system", "settings.deleted": "system",
+        "session_start": "sessions", "session_end": "sessions",
+    }
+
+    # Prefix-based fallback for dynamic/tool event types
+    PREFIX_CATEGORIES = {
+        "memory.": "writes",
+        "search.": "reads",
+        "work_item.": "work",
+        "deliverable.": "work",
+        "belief.": "writes",
+        "working_memory.": "system",
+        "thinking.": "llm",
+        "settings.": "system",
+        "tool.": "other",
+    }
+
+    @classmethod
+    def category_for(cls, event_type: str) -> str:
+        """Get the metrics category for an event type."""
+        cat = cls.CATEGORIES.get(event_type)
+        if cat:
+            return cat
+        for prefix, category in cls.PREFIX_CATEGORIES.items():
+            if event_type.startswith(prefix):
+                return category
+        return "other"
+
+
 # Event Bus (v0.50.0)
 EVENT_STREAM_HEARTBEAT_INTERVAL = 15  # seconds between SSE heartbeats
 
