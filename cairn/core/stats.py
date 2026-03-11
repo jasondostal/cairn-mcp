@@ -208,21 +208,7 @@ def emit_usage_event(
     Uses deferred import to avoid circular deps with analytics module.
     Forwards to MetricsCollector for real-time EKG display.
     """
-    from cairn.core.analytics import UsageEvent, _analytics_tracker
-
-    if _analytics_tracker is None:
-        return
-    _analytics_tracker.track(UsageEvent(
-        operation=operation,
-        model=model,
-        tokens_in=tokens_in,
-        tokens_out=tokens_out,
-        latency_ms=latency_ms,
-        success=success,
-        error_message=error_message[:512] if error_message else None,
-    ))
-
-    # Forward to MetricsCollector for real-time EKG
+    # Forward to MetricsCollector first — independent of analytics toggle
     if _metrics_collector is not None:
         category = "embedding" if operation.startswith("embed") else "llm"
         try:
@@ -236,3 +222,18 @@ def emit_usage_event(
             )
         except Exception:
             pass  # never block the caller
+
+    # Analytics persistence (optional — disabled by default)
+    from cairn.core.analytics import UsageEvent, _analytics_tracker
+
+    if _analytics_tracker is None:
+        return
+    _analytics_tracker.track(UsageEvent(
+        operation=operation,
+        model=model,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        latency_ms=latency_ms,
+        success=success,
+        error_message=error_message[:512] if error_message else None,
+    ))
