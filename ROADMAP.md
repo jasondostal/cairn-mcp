@@ -1,42 +1,36 @@
 # Roadmap
 
-Current: **v0.74.0** — "Hardening" — audit remediation, silent failure fixes, test infrastructure, responsive UI. See below.
+Current: **v0.75.0** — "Observatory" — real-time metrics, MCP authorization, Services DI, tool layer tests. Next up: 12-factor audit.
 
 ---
 
 ## In Progress
 
-### v0.74.0 — "Hardening" (ca-209)
+### 12 Factor Audit (ca-241)
 
-Full remediation from the 6-agent audit (red team, blue team, testing, QA manager, OSS quality, UI/UX) triggered by the `__main__` module identity bug that caused silent total MCP failure on prod.
+Systematic review of cairn's architecture against 12-factor principles and operational readiness. Full 5-agent audit (DR. ENTROPY, GUNTHER, SENTINEL, Testing Auditor, Dr. Pixel).
 
-**Silent failure elimination.**
-- [x] orient() must surface errors, not return empty arrays (ca-210)
-- [x] Startup assertion — validate critical services non-None after _init_services() (ca-211)
-- [x] Readiness probe — /api/status must verify DB reachability, not always return "healthy" (ca-216)
+**Dead code removal.**
+- [ ] Purge Tasks concept — TaskManager, API, UI, chat_tools, graph projection, constants (ca-243)
+- [ ] Purge Cairns concept — CairnManager, deprecated endpoints, UI pages, tests (ca-243)
+- [ ] DB migration to DROP tasks, task_memory_links, cairns tables (ca-243)
 
-**Security hardening.**
-- [x] Proxy header auth bypass — set UserContext from proxy header value (ca-212)
-- [x] ResourceLockManager thread safety — add threading.Lock (ca-213)
-- [x] SSRF TOCTOU in webhook URL validation — validate at request time (ca-214)
-- [x] CORS default to empty list instead of wildcard * (ca-215)
+**Architecture hardening.**
+- [ ] Require Neo4j — remove 25+ graceful fallback branches, hard-fail at startup (ca-244)
+- [ ] Event type registry — replace stringly-typed events with enum, audit subscriber wiring (ca-245)
+- [ ] Unify stats into event bus consumers — kill ModelStats/EventBusStats/AnalyticsTracker singletons (ca-246)
+- [ ] Config hardening — fail-loud on default passwords, secret validation at startup (ca-247)
 
-**Test infrastructure.**
-- [x] CI smoke test must call an actual MCP tool, not just initialize (ca-217)
-- [x] _ServerGlobals proxy contract test (ca-218)
-- [x] orient() total failure detection test (ca-219)
-- [x] Service assembly integration test with real Postgres (ca-220)
-- [x] Round-trip memory store + search with real Postgres (ca-221)
-
-**Config & dependencies.**
-- [x] Document and implement CAIRN_PROFILE for config simplification (ca-222)
-- [x] Make tree-sitter grammars optional via pip extras (ca-223)
+**Observability.**
+- [ ] Fix MetricsCollector instance mismatch — snapshot/SSE returns zeros (ca-242)
 
 **UI/UX.**
-- [x] Responsive UI — mobile support for Terminal, Workspace, Chat pages (ca-224)
-- [x] Theme toggle — light mode tokens exist but are unreachable (ca-225)
-- [x] Confirmation dialogs on destructive work item and session actions (ca-226)
-- [x] Decompose god-components — Memories (1049→375), Graph (1522→214), Settings (1223→218) (ca-228)
+- [ ] Sidebar nav restructure — reduce sprawl, user-level configurability, remove dead routes (ca-248)
+- [ ] Settings pane — wire missing sections (consolidation, push, work_items), audit exposed keys (ca-249)
+
+**Scaling readiness.**
+- [ ] Worker isolation — distributed locking, graceful drain for in-flight tools (ca-250)
+- [ ] Horizontal scaling audit — session state, uvicorn workers, shared mutable state inventory (ca-251)
 
 **OSS governance (under consideration).**
 - [ ] Add CONTRIBUTING.md, SECURITY.md, CODE_OF_CONDUCT.md (ca-227) — drafts written, not shipping yet
@@ -86,6 +80,31 @@ Exploring, not committed.
 ---
 
 ## Shipped
+
+### v0.75.0 — "Observatory" ✓
+
+Real-time metrics, MCP authorization, Services DI, tool layer tests.
+
+- [x] **Headless real-time SSE metrics stream** — `GET /api/metrics/stream` and `/snapshot` for operational pulse (ca-240)
+- [x] **MCP tool authorization** — project-scoped access checks + admin gates via UserContext (ca-230)
+- [x] **Observability attribution** — TraceContext enriched with project/tool_name/model (ca-231)
+- [x] **Tool layer test coverage** — 108 tests across 5 new suites (ca-234)
+- [x] **Services DI** — replaced 23 module-level globals with typed Services dataclass (ca-237)
+- [x] **Split work_items god function** — deliverables, locks, agents extracted to dedicated tools (ca-232)
+- [x] **Unified chat_tools** — budget caps, event publishing, confidence gating aligned with MCP tools (ca-233)
+- [x] **OIDC login race condition fix** — handleOidcCallback now properly awaits token exchange
+- [x] **cairn-ui a11y** — ARIA roles, skip-to-content, keyboard focus indicators (ca-239)
+- [x] **Doc retrieval** — get_doc and list_all_docs actions added to projects tool (ca-191)
+
+### v0.74.0 — "Hardening" ✓
+
+Audit remediation, silent failure fixes, test infrastructure, responsive UI.
+
+- [x] **Silent failure elimination** — orient() error surfacing (ca-210), startup assertion (ca-211), readiness probe (ca-216)
+- [x] **Security hardening** — proxy auth (ca-212), lock thread safety (ca-213), SSRF fix (ca-214), CORS default (ca-215)
+- [x] **Test infrastructure** — CI smoke test (ca-217), proxy contract (ca-218), orient tests (ca-219), integration tests (ca-220, ca-221)
+- [x] **Config** — CAIRN_PROFILE (ca-222), tree-sitter optional extras (ca-223)
+- [x] **UI/UX** — responsive mobile (ca-224), theme toggle (ca-225), confirmation dialogs (ca-226), god-component decomposition (ca-228)
 
 ### v0.71.0 — "Unified Memory" ✓
 

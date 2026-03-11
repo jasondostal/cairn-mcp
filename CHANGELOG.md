@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Document attachments** — upload, list, and delete image attachments on project documents. BYTEA storage with foreign key to `project_documents`. Drag-and-drop upload on doc detail page with `cairn://attachments/` URL scheme for inline markdown rendering. Auth-aware `AuthImage` component for secure image display. New endpoints: `POST /api/docs/{id}/attachments`, `GET /api/docs/{id}/attachments`, `DELETE /api/attachments/{id}`, `GET /api/attachments/{id}/data`. Migration 049.
+- **SystemPulse widget** — real-time EKG-style operational pulse in sidebar footer and dashboard. Configurable display modes (sparkline, full). Powered by SSE metrics stream via `useMetricsStream` hook.
+- **ResilientSessionManager** — replaces default MCP session storage with logging for stale session access and client re-initialization triggers. Improves session observability for debugging connection issues.
+- **MetricsCollector category mapping** — tool invocation events auto-categorized (reads, writes, work, llm, system, sessions) for per-category dashboard breakdowns.
+- **Trace context auto-creation** — `set_trace_tool()` auto-creates a TraceContext if none exists, eliminating silent drops when tools fire outside an explicit trace.
+- **`in_thread` boundary instrumentation** — reads `tool_name` and `project` from trace context; records latency, success/failure per tool with zero per-tool wiring.
+- **Event bus lightweight observer pattern** — `add_observer(fn)` for synchronous inline event consumers (used by MetricsCollector). Complements the existing reliable dispatch model.
+
+### Fixed
+- **Doc detail download** — downloads now use auth headers and proper filenames instead of navigating to unauthenticated URLs
+- **Projects page auth** — added missing Authorization headers to project detail API calls
+- **Ruff lint** — import ordering, unused imports, `TimeoutError` alias across services.py, constants.py
+- **Mypy** — renamed `in_thread` positional `fn` param to avoid `db` kwarg collision in callers
+- **Webhooks** — added missing `logger` import in webhooks.py
+
 ## [0.75.0] — 2026-03-08 — "Observatory"
 
 ### Added
