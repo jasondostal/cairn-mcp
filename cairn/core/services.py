@@ -79,7 +79,7 @@ class Services:
     embedding: EmbeddingInterface
     llm: LLMInterface | None
     enricher: Enricher | None
-    graph_provider: GraphProvider | None
+    graph_provider: GraphProvider
     knowledge_extractor: KnowledgeExtractor | None
     memory_store: MemoryStore
     search_engine: SearchV2  # unified search — wraps SearchEngine
@@ -190,30 +190,16 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
 
     capabilities = config.capabilities
 
-    # Graph provider (optional, for knowledge extraction)
-    graph_provider = None
-    knowledge_extractor = None
-    if capabilities.knowledge_extraction:
-        graph_provider = get_graph_provider(config.neo4j)
-        if graph_provider and llm_capable:
-            knowledge_extractor = KnowledgeExtractor(llm_capable, embedding, graph_provider)
-            logger.info("Knowledge extraction enabled (Neo4j graph)")
-        elif not graph_provider:
-            logger.warning("Knowledge extraction requested but Neo4j not available (set CAIRN_GRAPH_BACKEND=neo4j)")
-        elif not llm:
-            logger.warning("Knowledge extraction requested but LLM not available")
+    # Graph provider (required — Neo4j must be available)
+    graph_provider = get_graph_provider(config.neo4j)
+    logger.info("Neo4j graph provider initialized")
 
-    # Warn if Neo4j appears configured but knowledge_extraction is off
-    if not capabilities.knowledge_extraction:
-        neo4j_uri = config.neo4j.uri
-        if neo4j_uri and neo4j_uri != "bolt://localhost:7687":
-            # Non-default Neo4j URI suggests intentional Neo4j setup
-            logger.warning(
-                "Neo4j configured (%s) but knowledge_extraction disabled. "
-                "Graph trail and entity search will have limited data. "
-                "Set CAIRN_KNOWLEDGE_EXTRACTION=true or use 'knowledge' profile.",
-                neo4j_uri,
-            )
+    knowledge_extractor = None
+    if capabilities.knowledge_extraction and llm_capable:
+        knowledge_extractor = KnowledgeExtractor(llm_capable, embedding, graph_provider)
+        logger.info("Knowledge extraction enabled")
+    elif capabilities.knowledge_extraction and not llm:
+        logger.warning("Knowledge extraction requested but LLM not available")
 
     # Reranker (optional, lazy-loaded on first query)
     reranker = None
@@ -255,12 +241,11 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     # knowledge graph. The listener was a regression that produced low-value
     # duplicate summaries.
 
-    # Register graph projection listener if graph is available
-    if graph_provider:
-        from cairn.listeners.graph_projection import GraphProjectionListener
-        _graph_listener = GraphProjectionListener(graph_provider, db)
-        _graph_listener.register(event_bus)
-        logger.info("GraphProjectionListener registered with EventBus")
+    # Register graph projection listener
+    from cairn.listeners.graph_projection import GraphProjectionListener
+    _graph_listener = GraphProjectionListener(graph_provider, db)
+    _graph_listener.register(event_bus)
+    logger.info("GraphProjectionListener registered with EventBus")
 
     # Register memory access tracking listener (bumps access_count on search/recall)
     from cairn.listeners.memory_access import MemoryAccessListener
@@ -269,7 +254,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     logger.info("MemoryAccessListener registered with EventBus")
 
     # Register code index listener for event-driven re-indexing
-    if graph_provider and capabilities.code_intelligence:
+    if capabilities.code_intelligence:
         from cairn.listeners.code_index_listener import CodeIndexListener
         _code_listener = CodeIndexListener(graph_provider, db)
         _code_listener.register(event_bus)

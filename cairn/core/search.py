@@ -82,7 +82,7 @@ class SearchEngine:
         reranker: RerankerInterface | None = None,
         rerank_candidates: int = 50,
         activation_engine: ActivationEngine | None = None,
-        graph_provider: GraphProvider | None = None,
+        graph_provider: GraphProvider | None = None,  # still optional for unit tests
         decay_lambda: float = 0.01,
         memory_store: MemoryStore | None = None,
     ):
@@ -487,7 +487,7 @@ class SearchEngine:
 
         # Signal 7: Graph neighbors (memories sharing entities with candidates)
         graph_ranks = {}
-        if self.graph_provider is not None:
+        if self.graph_provider is not None:  # optional for unit tests
             try:
                 # Use top vector + keyword candidates as seeds
                 seed_ids = list(set(list(vector_ranks.keys())[:15] + list(keyword_ranks.keys())[:5]))

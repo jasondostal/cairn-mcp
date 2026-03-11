@@ -42,7 +42,7 @@ class WorkItemManager:
         self,
         db: Database,
         embedding: EmbeddingInterface,
-        graph: GraphProvider | None = None,
+        graph: GraphProvider,
         knowledge_extractor: KnowledgeExtractor | None = None,
         event_bus: EventBus | None = None,
     ):

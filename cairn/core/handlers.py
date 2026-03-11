@@ -29,7 +29,7 @@ class SearchContext:
     project_name: str | None
     db: Database
     embedding: EmbeddingInterface
-    graph: GraphProvider | None
+    graph: GraphProvider
     limit: int = 10
     resolved_entities: list | None = None
 

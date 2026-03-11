@@ -25,7 +25,7 @@ class ThinkingEngine:
     def __init__(
         self,
         db: Database,
-        graph: GraphProvider | None = None,
+        graph: GraphProvider,
         knowledge_extractor: KnowledgeExtractor | None = None,
         embedding: EmbeddingInterface | None = None,
         thought_extraction: str = "off",
@@ -70,11 +70,10 @@ class ThinkingEngine:
             if not seq:
                 return
             known = []
-            if self.graph:
-                try:
-                    known = self.graph.get_known_entities(seq["project_id"], limit=100)
-                except Exception:
-                    pass
+            try:
+                known = self.graph.get_known_entities(seq["project_id"], limit=100)
+            except Exception:
+                pass
             result = self.knowledge_extractor.extract(
                 content, known_entities=known or None,
             )

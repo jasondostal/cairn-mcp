@@ -398,14 +398,13 @@ class ChatToolExecutor:
 
         # Trail (recent graph activity)
         try:
-            if self.svc.graph_provider:
-                from datetime import datetime, timedelta
-                since = (datetime.now(UTC) - timedelta(days=7)).isoformat()
-                project_id = get_or_create_project(self.svc.db, project) if project else None
-                trail = self.svc.graph_provider.recent_activity(
-                    project_id=project_id, since=since, limit=10,
-                )
-                sections["trail"] = trail
+            from datetime import datetime, timedelta
+            since = (datetime.now(UTC) - timedelta(days=7)).isoformat()
+            project_id = get_or_create_project(self.svc.db, project) if project else None
+            trail = self.svc.graph_provider.recent_activity(
+                project_id=project_id, since=since, limit=10,
+            )
+            sections["trail"] = trail
         except Exception:
             pass
 
@@ -836,8 +835,6 @@ class ChatToolExecutor:
         self, action: str, project: str, target: str = "",
         query: str = "", depth: int = 3, limit: int = 20,
     ) -> dict:
-        if not self.svc.graph_provider:
-            return {"error": "Code intelligence requires Neo4j — not configured"}
         return run_code_query(
             action=action, project=project, target=target,
             query=query, kind="", depth=depth, limit=limit,
@@ -852,8 +849,6 @@ class ChatToolExecutor:
     def _tool_check_architecture(
         self, project: str, path: str = "", use_graph: bool = False,
     ) -> dict:
-        if not self.svc.graph_provider:
-            return {"error": "Code intelligence requires Neo4j — not configured"}
         return run_arch_check(
             project=project, path=path, config_path="",
             use_graph=use_graph, graph_provider=self.svc.graph_provider,

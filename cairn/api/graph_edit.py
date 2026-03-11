@@ -30,12 +30,8 @@ class MergeEntitiesBody(BaseModel):
     duplicate_id: str
 
 
-def _require_graph(graph_provider: GraphProvider | None) -> GraphProvider:
-    if not graph_provider:
-        raise HTTPException(
-            status_code=503,
-            detail="Knowledge graph not available (Neo4j not configured)",
-        )
+def _require_graph(graph_provider: GraphProvider) -> GraphProvider:
+    """Passthrough — Neo4j is always available (required dependency)."""
     return graph_provider
 
 

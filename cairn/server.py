@@ -64,21 +64,16 @@ def _build_config_with_overrides(db_instance):
 
 
 def _start_workers(svc, cfg, db_instance):
-    """Start background workers and optional graph connection."""
+    """Start background workers and graph connection."""
     db_instance.reconcile_vector_dimensions(cfg.embedding.dimensions)
-    if svc.graph_provider:
-        try:
-            svc.graph_provider.connect()
-            svc.graph_provider.ensure_schema()
-            logger.info("Neo4j graph connected and schema ensured")
-            # Reconcile PG vs Neo4j state (PG wins)
-            try:
-                from cairn.core.reconciliation import reconcile_graph
-                reconcile_graph(db_instance, svc.graph_provider)
-            except Exception:
-                logger.warning("Graph reconciliation failed", exc_info=True)
-        except Exception:
-            logger.warning("Neo4j connection failed — graph features disabled", exc_info=True)
+    svc.graph_provider.connect()
+    svc.graph_provider.ensure_schema()
+    logger.info("Neo4j graph connected and schema ensured")
+    try:
+        from cairn.core.reconciliation import reconcile_graph
+        reconcile_graph(db_instance, svc.graph_provider)
+    except Exception:
+        logger.warning("Graph reconciliation failed", exc_info=True)
     if svc.event_dispatcher:
         svc.event_dispatcher.start()
     if svc.analytics_tracker:
@@ -122,11 +117,10 @@ def _stop_workers(svc, db_instance):
     otel.shutdown()
     if svc.analytics_tracker:
         svc.analytics_tracker.stop()
-    if svc.graph_provider:
-        try:
-            svc.graph_provider.close()
-        except Exception:
-            pass
+    try:
+        svc.graph_provider.close()
+    except Exception:
+        pass
     db_instance.close()
     logger.info("Cairn stopped.")
 

@@ -476,12 +476,6 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         limit: int = Query(500, ge=1, le=2000),
     ):
         """Knowledge graph from Neo4j — entities as nodes, statement triples as edges."""
-        if not graph_provider:
-            raise HTTPException(
-                status_code=503,
-                detail="Knowledge graph not available (Neo4j not configured)",
-            )
-
         project_id = None
         if project:
             project_id = get_project(db, project)

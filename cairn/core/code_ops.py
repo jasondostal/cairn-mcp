@@ -67,9 +67,6 @@ def run_code_query(
     if not project:
         return {"error": "project is required"}
 
-    if not graph_provider:
-        return {"error": "Code queries require Neo4j. Set CAIRN_GRAPH_BACKEND=neo4j."}
-
     if not config.capabilities.code_intelligence:
         return {"error": "Code intelligence is disabled. Set CAIRN_CODE_INTELLIGENCE=true."}
 
@@ -207,9 +204,6 @@ def run_arch_check(
     """Check architecture boundary rules and integration contracts."""
     if not project:
         return {"error": "project is required"}
-
-    if not graph_provider:
-        return {"error": "Architecture checks require Neo4j. Set CAIRN_GRAPH_BACKEND=neo4j."}
 
     if not config.capabilities.code_intelligence:
         return {"error": "Code intelligence is disabled. Set CAIRN_CODE_INTELLIGENCE=true."}

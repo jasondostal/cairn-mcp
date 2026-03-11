@@ -26,16 +26,16 @@ logger = logging.getLogger(__name__)
 def fetch_trail_data(
     *,
     db: Any,
-    graph_provider: Any | None = None,
+    graph_provider: Any,
     project: str | None = None,
     since: str | None = None,
     limit: int = 20,
 ) -> dict:
     """Fetch recent activity trail data.
 
-    Merges two data sources following the HA philosophy:
-    - PG (always): source of truth for what memories exist
-    - Graph (when available): enriches with entity types and facts
+    Merges two data sources:
+    - PG: source of truth for what memories exist
+    - Graph: enriches with entity types and facts
     Neither source can suppress the other.
     """
     if not since:
@@ -90,41 +90,40 @@ def fetch_trail_data(
 
     source = "memory"
 
-    # --- ENRICHMENT: Graph data when available (non-blocking) ---
-    if graph_provider:
-        try:
-            activity = graph_provider.recent_activity(
-                project_id=project_id, since=since, limit=limit,
-            )
-            if activity:
-                episode_ids = list({a["episode_id"] for a in activity if a.get("episode_id")})
-                ep_session_map = {}
-                if episode_ids:
-                    placeholders = ",".join(["%s"] * len(episode_ids))
-                    ep_rows = db.execute(
-                        f"SELECT id, session_name FROM memories WHERE id IN ({placeholders})",
-                        tuple(episode_ids),
-                    )
-                    ep_session_map = {r["id"]: r["session_name"] for r in ep_rows}
+    # --- ENRICHMENT: Graph data (non-blocking) ---
+    try:
+        activity = graph_provider.recent_activity(
+            project_id=project_id, since=since, limit=limit,
+        )
+        if activity:
+            episode_ids = list({a["episode_id"] for a in activity if a.get("episode_id")})
+            ep_session_map = {}
+            if episode_ids:
+                placeholders = ",".join(["%s"] * len(episode_ids))
+                ep_rows = db.execute(
+                    f"SELECT id, session_name FROM memories WHERE id IN ({placeholders})",
+                    tuple(episode_ids),
+                )
+                ep_session_map = {r["id"]: r["session_name"] for r in ep_rows}
 
-                for a in activity:
-                    sn = ep_session_map.get(a.get("episode_id"), "unknown")
-                    if sn in sessions:
-                        s = sessions[sn]
-                        if a.get("subject_name"):
-                            s["entities_touched"].add(a["subject_name"])
-                        if a.get("object_name"):
-                            s["entities_touched"].add(a["object_name"])
-                        if a.get("fact") and len(s["key_facts"]) < 5:
-                            s["key_facts"].append(a["fact"])
+            for a in activity:
+                sn = ep_session_map.get(a.get("episode_id"), "unknown")
+                if sn in sessions:
+                    s = sessions[sn]
+                    if a.get("subject_name"):
+                        s["entities_touched"].add(a["subject_name"])
+                    if a.get("object_name"):
+                        s["entities_touched"].add(a["object_name"])
+                    if a.get("fact") and len(s["key_facts"]) < 5:
+                        s["key_facts"].append(a["fact"])
 
-                for s in sessions.values():
-                    if isinstance(s["entities_touched"], set):
-                        s["entities_touched"] = sorted(s["entities_touched"])
+            for s in sessions.values():
+                if isinstance(s["entities_touched"], set):
+                    s["entities_touched"] = sorted(s["entities_touched"])
 
-                source = "memory+graph"
-        except Exception:
-            logger.debug("Graph trail enrichment failed (non-blocking)", exc_info=True)
+            source = "memory+graph"
+    except Exception:
+        logger.debug("Graph trail enrichment failed (non-blocking)", exc_info=True)
 
     result = {
         "source": source,
@@ -133,24 +132,23 @@ def fetch_trail_data(
     }
 
     # --- ENRICHMENT: Thinking activity from graph (non-blocking) ---
-    if graph_provider:
-        try:
-            thinking_activity = graph_provider.recent_thinking_activity(
-                project_id=project_id, since=since, limit=10,
-            )
-            if thinking_activity:
-                result["thinking"] = [
-                    {
-                        "type": "thinking",
-                        "goal": t.get("goal", ""),
-                        "status": t.get("status", ""),
-                        "thought_count": t.get("thought_count", 0),
-                        "created_at": t.get("created_at", ""),
-                    }
-                    for t in thinking_activity
-                ]
-        except Exception:
-            logger.debug("Thinking trail failed", exc_info=True)
+    try:
+        thinking_activity = graph_provider.recent_thinking_activity(
+            project_id=project_id, since=since, limit=10,
+        )
+        if thinking_activity:
+            result["thinking"] = [
+                {
+                    "type": "thinking",
+                    "goal": t.get("goal", ""),
+                    "status": t.get("status", ""),
+                    "thought_count": t.get("thought_count", 0),
+                    "created_at": t.get("created_at", ""),
+                }
+                for t in thinking_activity
+            ]
+    except Exception:
+        logger.debug("Thinking trail failed", exc_info=True)
 
     return result
 
@@ -163,7 +161,7 @@ def run_orient(
     memory_store: Any,
     search_engine: Any,
     work_item_manager: Any,
-    graph_provider: Any | None = None,
+    graph_provider: Any,
     working_memory_store: Any | None = None,
     belief_store: Any | None = None,
 ) -> dict:

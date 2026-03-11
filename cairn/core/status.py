@@ -10,7 +10,7 @@ from cairn.storage.database import Database
 
 
 @track_operation("status")
-def get_status(db: Database, config: Config, graph_provider=None) -> dict:
+def get_status(db: Database, config: Config, graph_provider) -> dict:
     """Aggregate system health metrics."""
     subsystem_errors: list[str] = []
 
@@ -116,7 +116,7 @@ def get_status(db: Database, config: Config, graph_provider=None) -> dict:
     except Exception:
         pass  # tables may not exist yet (pre-migration)
 
-    result["graph_backend"] = "neo4j" if graph_provider else None
+    result["graph_backend"] = "neo4j"
 
     if subsystem_errors:
         result["subsystem_errors"] = subsystem_errors

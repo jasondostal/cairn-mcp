@@ -51,7 +51,7 @@ class SearchV2:
         self,
         db: Database,
         embedding: EmbeddingInterface,
-        graph: GraphProvider | None,
+        graph: GraphProvider,
         llm: LLMInterface | None,
         capabilities: LLMCapabilities | None,
         reranker: RerankerInterface | None = None,
@@ -168,7 +168,7 @@ class SearchV2:
         Falls back to non-stop content words if no capitalized terms found.
         Uses ENTITY_EXTRACTION_THRESHOLD (0.7) to filter garbage matches.
         """
-        if not self.graph:
+        if not self.graph:  # defensive: graph is required but may be None in tests
             return []
 
         # Extract capitalized words from original query (preserving case info)
