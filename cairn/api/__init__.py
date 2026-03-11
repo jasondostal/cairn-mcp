@@ -108,6 +108,11 @@ def create_api(svc: Services) -> FastAPI:
             header_name=config.auth.header_name,
         )
         logger.info("API key auth enabled (header: %s)", config.auth.header_name)
+    elif config.auth.enabled:
+        logger.error(
+            "SECURITY: CAIRN_AUTH_ENABLED=true but no auth credentials configured. "
+            "Set CAIRN_API_KEY or CAIRN_AUTH_JWT_SECRET. API is UNAUTHENTICATED."
+        )
 
     router = APIRouter()
 

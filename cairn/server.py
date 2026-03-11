@@ -36,6 +36,58 @@ _base_config = load_config()
 _svc: Services | None = None
 
 
+def _validate_config(config) -> None:
+    """Startup config validation — fail-loud on insecure defaults (ca-247).
+
+    Set CAIRN_ALLOW_INSECURE=true to bypass in local dev environments.
+    """
+    import os
+    allow_insecure = os.getenv("CAIRN_ALLOW_INSECURE", "").lower() in ("true", "1", "yes")
+    errors: list[str] = []
+
+    # Default passwords
+    if config.db.password == "cairn-dev-password":
+        if allow_insecure:
+            logger.warning("SECURITY: Using default DB password (allowed by CAIRN_ALLOW_INSECURE)")
+        else:
+            errors.append(
+                "CAIRN_DB_PASS is the default 'cairn-dev-password'. "
+                "Set a strong password or export CAIRN_ALLOW_INSECURE=true for local dev."
+            )
+
+    if config.neo4j.password == "cairn-dev-password":
+        if allow_insecure:
+            logger.warning("SECURITY: Using default Neo4j password (allowed by CAIRN_ALLOW_INSECURE)")
+        else:
+            errors.append(
+                "CAIRN_NEO4J_PASSWORD is the default 'cairn-dev-password'. "
+                "Set a strong password or export CAIRN_ALLOW_INSECURE=true for local dev."
+            )
+
+    # Auth enabled without credentials
+    if config.auth.enabled:
+        if not config.auth.jwt_secret and not config.auth.api_key:
+            errors.append(
+                "CAIRN_AUTH_ENABLED=true but neither CAIRN_AUTH_JWT_SECRET nor CAIRN_API_KEY is set. "
+                "API would be unauthenticated."
+            )
+
+    # Proxy auth without IP restriction
+    if config.auth.auth_proxy_header and not config.auth.trusted_proxy_ips:
+        errors.append(
+            f"CAIRN_AUTH_PROXY_HEADER='{config.auth.auth_proxy_header}' is set without "
+            "CAIRN_TRUSTED_PROXY_IPS. Any client can forge this header."
+        )
+
+    if errors:
+        for e in errors:
+            logger.error("CONFIG: %s", e)
+        raise RuntimeError(
+            f"Startup blocked by {len(errors)} config error(s). "
+            "Fix the issues above or set CAIRN_ALLOW_INSECURE=true for local dev."
+        )
+
+
 def _init_services(svc: Services):
     """Store the Services instance and validate critical fields."""
     global _svc
@@ -357,26 +409,8 @@ def main():
             mcp_app.add_middleware(MCPAuthMiddleware)
             logger.info("MCP HTTP auth enforcement enabled")
 
-        # Security: warn about default database passwords
-        if final_config.db.password == "cairn-dev-password":
-            logger.warning(
-                "SECURITY: Using default database password 'cairn-dev-password'. "
-                "Set CAIRN_DB_PASS to a strong password for production deployments."
-            )
-        if final_config.neo4j.password == "cairn-dev-password" and final_config.capabilities.code_intelligence:
-            logger.warning(
-                "SECURITY: Using default Neo4j password 'cairn-dev-password'. "
-                "Set CAIRN_NEO4J_PASSWORD to a strong password for production deployments."
-            )
-
-        # Security: warn if proxy auth header is configured without source IP restriction
-        if final_config.auth.auth_proxy_header and not final_config.auth.trusted_proxy_ips:
-            logger.warning(
-                "SECURITY: CAIRN_AUTH_PROXY_HEADER='%s' is set without CAIRN_TRUSTED_PROXY_IPS. "
-                "Any client can forge this header and bypass authentication. "
-                "Set CAIRN_TRUSTED_PROXY_IPS to the IP or CIDR of your reverse proxy (e.g. 172.20.0.2).",
-                final_config.auth.auth_proxy_header,
-            )
+        # --- Startup config validation (ca-247) ---
+        _validate_config(final_config)
 
         @asynccontextmanager
         async def combined_lifespan(app):
