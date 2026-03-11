@@ -309,6 +309,110 @@ class ProjectManager:
         self.db.commit()
         return {"source": source, "target": target, "link_type": link_type}
 
+    @track_operation("projects.upload_attachment")
+    def upload_attachment(
+        self, doc_id: int, filename: str, mime_type: str, data: bytes,
+    ) -> dict:
+        """Upload an attachment to a document."""
+        from cairn.core.constants import ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENT_SIZE
+
+        # Verify doc exists
+        doc = self.get_doc(doc_id)
+        if doc is None:
+            raise ValueError(f"Document {doc_id} not found")
+
+        if mime_type not in ALLOWED_ATTACHMENT_TYPES:
+            raise ValueError(
+                f"Unsupported file type: {mime_type}. "
+                f"Allowed: {', '.join(sorted(ALLOWED_ATTACHMENT_TYPES))}"
+            )
+
+        size = len(data)
+        if size > MAX_ATTACHMENT_SIZE:
+            raise ValueError(
+                f"File too large: {size} bytes (max {MAX_ATTACHMENT_SIZE})"
+            )
+
+        row = self.db.execute_one(
+            """
+            INSERT INTO document_attachments (document_id, filename, mime_type, size_bytes, data)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id, created_at
+            """,
+            (doc_id, filename, mime_type, size, data),
+        )
+        assert row is not None
+        self.db.commit()
+
+        logger.info(
+            "Uploaded attachment %s for doc %d (%s, %d bytes)",
+            filename, doc_id, mime_type, size,
+        )
+        return {
+            "id": row["id"],
+            "document_id": doc_id,
+            "filename": filename,
+            "mime_type": mime_type,
+            "size_bytes": size,
+            "url": f"cairn://attachments/{row['id']}/{filename}",
+            "created_at": row["created_at"].isoformat(),
+        }
+
+    @track_operation("projects.get_attachment")
+    def get_attachment(self, attachment_id: int) -> dict | None:
+        """Get a single attachment including binary data."""
+        row = self.db.execute_one(
+            """
+            SELECT id, document_id, filename, mime_type, size_bytes, data, created_at
+            FROM document_attachments WHERE id = %s
+            """,
+            (attachment_id,),
+        )
+        if row is None:
+            return None
+        return {
+            "id": row["id"],
+            "document_id": row["document_id"],
+            "filename": row["filename"],
+            "mime_type": row["mime_type"],
+            "size_bytes": row["size_bytes"],
+            "data": bytes(row["data"]),
+            "created_at": row["created_at"].isoformat(),
+        }
+
+    @track_operation("projects.list_attachments")
+    def list_attachments(self, doc_id: int) -> list[dict]:
+        """List attachments for a document (metadata only, no binary data)."""
+        rows = self.db.execute(
+            """
+            SELECT id, document_id, filename, mime_type, size_bytes, created_at
+            FROM document_attachments WHERE document_id = %s
+            ORDER BY created_at
+            """,
+            (doc_id,),
+        )
+        return [
+            {
+                "id": r["id"],
+                "document_id": r["document_id"],
+                "filename": r["filename"],
+                "mime_type": r["mime_type"],
+                "size_bytes": r["size_bytes"],
+                "url": f"cairn://attachments/{r['id']}/{r['filename']}",
+                "created_at": r["created_at"].isoformat(),
+            }
+            for r in rows
+        ]
+
+    @track_operation("projects.delete_attachment")
+    def delete_attachment(self, attachment_id: int) -> dict:
+        """Delete a single attachment."""
+        self.db.execute(
+            "DELETE FROM document_attachments WHERE id = %s", (attachment_id,),
+        )
+        self.db.commit()
+        return {"id": attachment_id, "action": "deleted"}
+
     @track_operation("projects.get_links")
     def get_links(self, project: str) -> list[dict]:
         """Get all links for a project (both directions)."""

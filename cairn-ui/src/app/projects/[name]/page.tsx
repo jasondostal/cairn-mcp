@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api, type Paginated, type TimelineMemory, type WorkItem, type SessionInfo } from "@/lib/api";
+import { getAuthHeaders } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
 import { useFetch } from "@/lib/use-fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -178,7 +179,7 @@ function ExportButton({ project }: { project: string }) {
       url.searchParams.set("project", project);
       url.searchParams.set("format", format);
 
-      const res = await fetch(url.toString());
+      const res = await fetch(url.toString(), { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(`${res.status}`);
 
       const blob = await res.blob();

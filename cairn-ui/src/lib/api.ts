@@ -53,6 +53,14 @@ export function invalidateCache(pathPrefix?: string) {
   }
 }
 
+/** Resolve cairn:// attachment URLs to HTTP API paths. */
+export function resolveCairnUrl(src: string): string {
+  if (src.startsWith("cairn://attachments/")) {
+    return `/api/attachments/${src.slice("cairn://attachments/".length)}`;
+  }
+  return src;
+}
+
 async function get<T>(path: string, params?: Record<string, string | string[] | undefined>): Promise<T> {
   const key = buildUrl(path, params);
 
@@ -508,6 +516,16 @@ export interface Document {
   updated_at: string;
 }
 
+export interface Attachment {
+  id: number;
+  document_id: number;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  url: string;
+  created_at: string;
+}
+
 export interface ExportResult {
   project: string;
   exported_at: string;
@@ -538,33 +556,6 @@ export interface SessionEvent {
   payload: Record<string, unknown>;
   project: string | null;
   created_at: string;
-}
-
-export interface Cairn {
-  id: number;
-  session_name: string;
-  title: string;
-  narrative: string | null;
-  memory_count: number;
-  project?: string;
-  started_at: string;
-  set_at: string;
-  is_compressed: boolean;
-}
-
-export interface CairnStone {
-  id: number;
-  summary: string;
-  memory_type: string;
-  importance: number;
-  tags: string[];
-  created_at: string;
-}
-
-export interface CairnDetail extends Cairn {
-  project: string;
-  events: Array<Record<string, unknown>> | null;
-  stones: CairnStone[];
 }
 
 export interface Conversation {
@@ -1061,6 +1052,22 @@ export interface HeatmapResult {
   days: HeatmapDay[];
 }
 
+// --- Real-time metrics (SSE) ---
+
+export interface MetricsBucket {
+  timestamp: string;
+  ops_count: number;
+  tokens_in: number;
+  tokens_out: number;
+  errors: number;
+  active_sessions: number;
+  by_tool: Record<string, number>;
+  by_project: Record<string, number>;
+  by_category: Record<string, number>;
+  by_event_type: Record<string, number>;
+  latency_avg_ms: number;
+}
+
 // --- Workspace types ---
 
 export interface WorkspaceHealth {
@@ -1264,19 +1271,6 @@ export const api = {
   clusters: (opts?: { project?: string; topic?: string }) =>
     get<ClusterResult>("/clusters", opts),
 
-  tasks: (project?: string, opts?: { include_completed?: string; limit?: string; offset?: string }) =>
-    get<Paginated<Task>>("/tasks", { ...(project ? { project } : {}), ...opts }),
-
-  taskCreate: (body: { project: string; description: string }) =>
-    post<Task>("/tasks", body),
-
-  taskComplete: (id: number) => post<{ status: string }>(`/tasks/${id}/complete`, {}),
-
-  taskPromote: (id: number) =>
-    post<{ action: string; task_id: number; work_item: { id: number; display_id: string; title: string; status: string } }>(
-      `/tasks/${id}/promote`, {},
-    ),
-
   thinking: (project?: string, opts?: { status?: string; limit?: string; offset?: string }) =>
     get<Paginated<ThinkingSequence>>("/thinking", { ...(project ? { project } : {}), ...opts }),
 
@@ -1294,11 +1288,6 @@ export const api = {
 
   clusterVisualization: (opts?: { project?: string }) =>
     get<VisualizationResult>("/clusters/visualization", opts),
-
-  cairns: (project?: string, opts?: { limit?: string }) =>
-    get<Cairn[]>("/cairns", { ...(project ? { project } : {}), ...opts }),
-
-  cairnDetail: (id: number) => get<CairnDetail>(`/cairns/${id}`),
 
   sessions: (opts?: { project?: string; limit?: string }) =>
     get<{ count: number; items: SessionInfo[] }>("/sessions", opts),
@@ -1319,6 +1308,27 @@ export const api = {
     get<Paginated<Document>>("/docs", opts),
 
   doc: (id: number) => get<Document>(`/docs/${id}`),
+
+  docAttachments: (docId: number) => get<Attachment[]>(`/docs/${docId}/attachments`),
+
+  uploadAttachment: async (docId: number, file: File): Promise<Attachment> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${BASE}/docs/${docId}/attachments`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: formData,
+    });
+    if (!res.ok) {
+      handle401(res);
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || `${res.status} ${res.statusText}`);
+    }
+    invalidateCache(`/docs/${docId}/attachments`);
+    return res.json();
+  },
+
+  deleteAttachment: (attachmentId: number) => del<{ id: number; action: string }>(`/attachments/${attachmentId}`),
 
   exportProject: (project: string, format: string = "json") =>
     get<ExportResult | string>("/export", { project, format }),

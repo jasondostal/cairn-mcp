@@ -1,6 +1,6 @@
-"""MetricsCollector — in-memory 1-second sliding window aggregator.
+"""MetricsCollector — in-memory sliding window aggregator.
 
-Subscribes to the event bus and accumulates counters into 1-second buckets.
+Subscribes to the event bus and accumulates counters into time-based buckets.
 Provides a real-time metrics stream for SSE consumers (dashboards, extensions).
 """
 
@@ -19,7 +19,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-RING_BUFFER_SIZE = 60  # keep last 60 seconds of history
+RING_BUFFER_SIZE = 60  # keep last 60 buckets of history
+BUCKET_INTERVAL_S = 5  # seconds per bucket (5s × 60 = 5 min window)
 
 
 @dataclass
@@ -34,6 +35,8 @@ class MetricsBucket:
     active_sessions: int = 0
     by_tool: dict[str, int] = field(default_factory=dict)
     by_project: dict[str, int] = field(default_factory=dict)
+    by_category: dict[str, int] = field(default_factory=dict)
+    by_event_type: dict[str, int] = field(default_factory=dict)
     latency_avg_ms: float = 0.0
 
     # Internal tracking (not serialized)
@@ -50,8 +53,88 @@ class MetricsBucket:
             "active_sessions": self.active_sessions,
             "by_tool": self.by_tool,
             "by_project": self.by_project,
+            "by_category": self.by_category,
+            "by_event_type": self.by_event_type,
             "latency_avg_ms": round(self.latency_avg_ms, 2),
         }
+
+
+# ---------------------------------------------------------------------------
+# Event-type → category mapping
+# ---------------------------------------------------------------------------
+
+_CATEGORY_MAP: dict[str, str] = {
+    # Reads
+    "search.executed": "reads",
+    "memory.recalled": "reads",
+    # Writes
+    "memory.created": "writes",
+    "memory.modified": "writes",
+    "memory.deleted": "writes",
+    "memory.consolidated": "writes",
+    "working_memory.captured": "writes",
+    "belief.crystallized": "writes",
+    "belief.updated": "writes",
+    # Work items
+    "work_item.created": "work",
+    "work_item.updated": "work",
+    "work_item.completed": "work",
+    "work_item.blocked": "work",
+    "work_item.unblocked": "work",
+    # Sessions
+    "session_start": "sessions",
+    "session_end": "sessions",
+    # System / background
+    "settings.updated": "system",
+    "working_memory.archived": "system",
+    "working_memory.resolved": "system",
+    # Tool-layer events (from in_thread instrumentation)
+    "tool.search": "reads",
+    "tool.recall": "reads",
+    "tool.code_query": "reads",
+    "tool.orient": "reads",
+    "tool.rules": "reads",
+    "tool.status": "reads",
+    "tool.insights": "reads",
+    "tool.drift_check": "reads",
+    "tool.decay_scan": "reads",
+    "tool.store": "writes",
+    "tool.modify": "writes",
+    "tool.ingest": "writes",
+    "tool.consolidate": "writes",
+    "tool.work_items": "work",
+    "tool.deliverables": "work",
+    "tool.dispatch": "work",
+    "tool.locks": "work",
+    "tool.suggest_agent": "work",
+    "tool.projects": "reads",
+    "tool.think": "llm",
+    "tool.beliefs": "reads",
+    "tool.arch_check": "llm",
+    "tool.working_memory": "reads",
+}
+
+# Prefix fallbacks for event types not in the explicit map
+_CATEGORY_PREFIX_MAP: dict[str, str] = {
+    "memory.": "writes",
+    "search.": "reads",
+    "work_item.": "work",
+    "belief.": "writes",
+    "working_memory.": "system",
+    "session": "sessions",
+    "tool.": "other",
+}
+
+
+def categorize_event(event_type: str) -> str:
+    """Map an event_type to a high-level category."""
+    cat = _CATEGORY_MAP.get(event_type)
+    if cat:
+        return cat
+    for prefix, fallback in _CATEGORY_PREFIX_MAP.items():
+        if event_type.startswith(prefix):
+            return fallback
+    return "other"
 
 
 class MetricsCollector:
@@ -86,10 +169,15 @@ class MetricsCollector:
         latency_ms: float = 0.0,
         success: bool = True,
         session_name: str | None = None,
+        category: str | None = None,
     ) -> None:
         """Record a single event into the current bucket. Thread-safe."""
         with self._lock:
             self._current.ops_count += 1
+            logger.info(
+                "MetricsCollector.record_event: type=%s tool=%s ops_count=%d",
+                event_type, tool_name, self._current.ops_count,
+            )
             self._current.tokens_in += tokens_in
             self._current.tokens_out += tokens_out
             if not success:
@@ -98,6 +186,13 @@ class MetricsCollector:
                 self._current.by_tool[tool_name] = self._current.by_tool.get(tool_name, 0) + 1
             if project:
                 self._current.by_project[project] = self._current.by_project.get(project, 0) + 1
+            # Category tracking
+            cat = category or (categorize_event(event_type) if event_type else "other")
+            self._current.by_category[cat] = self._current.by_category.get(cat, 0) + 1
+            if event_type:
+                self._current.by_event_type[event_type] = (
+                    self._current.by_event_type.get(event_type, 0) + 1
+                )
             if latency_ms > 0:
                 self._current._latency_sum += latency_ms
                 self._current._latency_count += 1
@@ -144,6 +239,8 @@ class MetricsCollector:
                 active_sessions=self._current.active_sessions,
                 by_tool=dict(self._current.by_tool),
                 by_project=dict(self._current.by_project),
+                by_category=dict(self._current.by_category),
+                by_event_type=dict(self._current.by_event_type),
                 latency_avg_ms=self._current.latency_avg_ms,
             )
 
@@ -203,9 +300,9 @@ class MetricsCollector:
         return MetricsBucket(timestamp=datetime.now(UTC).isoformat())
 
     def _tick_loop(self) -> None:
-        """Roll the bucket every second and notify subscribers."""
+        """Roll the bucket every BUCKET_INTERVAL_S and notify subscribers."""
         while not self._stop_event.is_set():
-            self._stop_event.wait(timeout=1.0)
+            self._stop_event.wait(timeout=BUCKET_INTERVAL_S)
             if self._stop_event.is_set():
                 break
             self._roll_bucket()

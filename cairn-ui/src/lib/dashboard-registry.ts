@@ -5,6 +5,7 @@ import {
   Calendar,
   DollarSign,
   Cpu,
+  HeartPulse,
   Kanban,
   Layers,
   PieChart,
@@ -175,6 +176,17 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
       lg: { i: "memory-type-bar", x: 0, y: 47, w: 12, h: 3, minW: 6, minH: 2 },
       md: { i: "memory-type-bar", x: 0, y: 70, w: 6, h: 3, minW: 3, minH: 2 },
       sm: { i: "memory-type-bar", x: 0, y: 70, w: 1, h: 3, minW: 1, minH: 2 },
+    },
+  },
+  {
+    id: "live-pulse",
+    label: "Live Pulse",
+    description: "Real-time EKG — ops/sec, latency, tokens, errors streamed via SSE",
+    icon: HeartPulse,
+    layouts: {
+      lg: { i: "live-pulse", x: 0, y: 50, w: 12, h: 8, minW: 4, minH: 5 },
+      md: { i: "live-pulse", x: 0, y: 73, w: 6, h: 8, minW: 3, minH: 5 },
+      sm: { i: "live-pulse", x: 0, y: 73, w: 1, h: 8, minW: 1, minH: 5 },
     },
   },
 ];

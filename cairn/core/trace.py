@@ -84,17 +84,27 @@ def current_trace() -> TraceContext | None:
 
 
 def set_trace_project(project: str) -> None:
-    """Set the project on the current trace context (no-op if no trace)."""
+    """Set the project on the current trace context.
+
+    Auto-creates a trace if one doesn't exist (MCP tool handlers call this
+    before any middleware has started a trace).
+    """
     ctx = _trace_ctx.get()
-    if ctx is not None:
-        ctx.project = project
+    if ctx is None:
+        ctx = new_trace(actor="mcp")
+    ctx.project = project
 
 
 def set_trace_tool(tool_name: str) -> None:
-    """Set the tool_name on the current trace context (no-op if no trace)."""
+    """Set the tool_name on the current trace context.
+
+    Auto-creates a trace if one doesn't exist (MCP tool handlers call this
+    before any middleware has started a trace).
+    """
     ctx = _trace_ctx.get()
-    if ctx is not None:
-        ctx.tool_name = tool_name
+    if ctx is None:
+        ctx = new_trace(actor="mcp", entry_point=tool_name)
+    ctx.tool_name = tool_name
 
 
 def set_trace_model(model: str) -> None:

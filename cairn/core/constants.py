@@ -64,6 +64,12 @@ MAX_CONTENT_SIZE = 500_000      # ~500KB — single memory ceiling (embedding qu
 MAX_INGEST_SIZE = 100_000_000   # ~100MB — ingest pipeline chunks automatically via
                                 # Chonkie; cost is proportional to chunk count, not size
 MAX_NAME_LENGTH = 255  # project, session, branch names
+
+# Document attachments
+ALLOWED_ATTACHMENT_TYPES = {
+    "image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml",
+}
+MAX_ATTACHMENT_SIZE = 10_000_000  # 10MB
 MAX_TAGS = 20
 MAX_TAG_LENGTH = 100
 MAX_SEARCH_QUERY = 2000
@@ -154,15 +160,6 @@ class MemoryAction:
     BOOST = "boost"
 
     ALL = {UPDATE, INACTIVATE, REACTIVATE, GRADUATE, PIN, UNPIN, BOOST}
-
-
-# ============================================================
-# Tasks
-# ============================================================
-
-class TaskStatus:
-    PENDING = "pending"
-    COMPLETED = "completed"
 
 
 # ============================================================

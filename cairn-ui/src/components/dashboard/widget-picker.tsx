@@ -32,7 +32,7 @@ export function WidgetPicker({
           <SheetTitle>Widgets</SheetTitle>
           <SheetDescription>Toggle widgets on or off</SheetDescription>
         </SheetHeader>
-        <div className="mt-4 space-y-1">
+        <div className="mt-4 space-y-1 overflow-y-auto max-h-[calc(100dvh-8rem)]">
           {WIDGET_REGISTRY.map((widget) => {
             const isVisible = visibleSet.has(widget.id);
             const Icon = widget.icon;

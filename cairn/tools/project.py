@@ -52,18 +52,23 @@ def register(mcp, svc: Services):
         - 'update_doc': Update an existing document's content.
         - 'link': Link two projects together.
         - 'get_links': Get all links for a project.
+        - 'attach_file': Upload a file as an attachment to a document.
+            Two modes: file_path (server-local) or content (base64) + title (filename).
+            Returns the cairn:// URL to embed in markdown content.
+        - 'list_attachments': List attachments for a document.
 
         Args:
-            action: One of 'list', 'create_doc', 'get_docs', 'get_doc', 'list_all_docs', 'update_doc', 'link', 'get_links'.
+            action: One of 'list', 'create_doc', 'get_docs', 'get_doc', 'list_all_docs', 'update_doc', 'link', 'get_links', 'attach_file', 'list_attachments'.
             project: Project name (required for most actions; optional comma-separated filter for list_all_docs).
             doc_type: Document type: 'brief', 'prd', 'plan', 'primer', 'writeup', or 'guide' (for create_doc, optional comma-separated filter for get_docs/list_all_docs).
             content: Document content (required for create_doc, update_doc). Can be omitted if file_path is provided.
-            doc_id: Document ID (required for update_doc, get_doc).
+            doc_id: Document ID (required for update_doc, get_doc, attach_file, list_attachments).
             title: Optional document title (for create_doc, update_doc).
             target: Target project name (required for link).
             link_type: Relationship type for link (default 'related').
             file_path: Path to a local file in the server's ingest staging directory.
                 Use instead of content to ingest from a staging directory (avoids inline transfer).
+                For attach_file: absolute path to the image file on the server's filesystem.
             limit: Max results to return (for list_all_docs).
             offset: Pagination offset (for list_all_docs, default 0).
         """
@@ -72,7 +77,7 @@ def register(mcp, svc: Services):
             if project:
                 set_trace_project(project)
             check_project_access(svc, project)
-            if not project and action not in ("list", "get_doc", "list_all_docs"):
+            if not project and action not in ("list", "get_doc", "list_all_docs", "attach_file", "list_attachments"):
                 return {"error": "project is required for this action"}
 
             def _do_projects():
@@ -122,6 +127,40 @@ def register(mcp, svc: Services):
 
                 if action == "get_links":
                     return svc.project_manager.get_links(project)
+
+                if action == "attach_file":
+                    if not doc_id:
+                        return {"error": "doc_id is required for attach_file"}
+                    import base64
+                    import mimetypes
+                    import os
+
+                    if content and title:
+                        # Base64 mode: content=base64 data, title=filename
+                        try:
+                            raw = base64.b64decode(content)
+                        except Exception:
+                            return {"error": "content must be valid base64 when used for attach_file"}
+                        att_filename = title
+                        mime_type = mimetypes.guess_type(att_filename)[0] or "application/octet-stream"
+                        return svc.project_manager.upload_attachment(doc_id, att_filename, mime_type, raw)
+
+                    if file_path:
+                        abs_path = os.path.expanduser(file_path)
+                        if not os.path.isfile(abs_path):
+                            return {"error": f"File not found: {abs_path}"}
+                        att_filename = os.path.basename(abs_path)
+                        mime_type = mimetypes.guess_type(abs_path)[0] or "application/octet-stream"
+                        with open(abs_path, "rb") as f:
+                            raw = f.read()
+                        return svc.project_manager.upload_attachment(doc_id, att_filename, mime_type, raw)
+
+                    return {"error": "attach_file requires either file_path (server-local) or content (base64) + title (filename)"}
+
+                if action == "list_attachments":
+                    if not doc_id:
+                        return {"error": "doc_id is required for list_attachments"}
+                    return svc.project_manager.list_attachments(doc_id)
 
                 return {"error": f"Unknown action: {action}"}
 

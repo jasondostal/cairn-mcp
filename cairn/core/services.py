@@ -14,8 +14,6 @@ from cairn.core.analytics import (
     UsageTracker,
     init_analytics_tracker,
 )
-
-# CairnManager removed in v0.37.0 — orient() + temporal graph queries replace cairns
 from cairn.core.clustering import ClusterEngine
 from cairn.core.consolidation import ConsolidationEngine
 from cairn.core.conversations import ConversationManager
@@ -31,9 +29,13 @@ from cairn.core.projects import ProjectManager
 from cairn.core.reranker import get_reranker
 from cairn.core.search import SearchEngine
 from cairn.core.search_v2 import SearchV2
-from cairn.core.stats import init_embedding_stats, init_event_bus_stats, init_llm_stats
+from cairn.core.stats import (
+    init_embedding_stats,
+    init_event_bus_stats,
+    init_llm_stats,
+    init_metrics_collector,
+)
 from cairn.core.synthesis import SessionSynthesizer
-from cairn.core.tasks import TaskManager
 from cairn.core.terminal import TerminalHostManager
 from cairn.core.thinking import ThinkingEngine
 from cairn.core.user import UserManager
@@ -83,11 +85,9 @@ class Services:
     search_engine: SearchV2  # unified search — wraps SearchEngine
     cluster_engine: ClusterEngine
     project_manager: ProjectManager
-    task_manager: TaskManager
     thinking_engine: ThinkingEngine
     session_synthesizer: SessionSynthesizer
     consolidation_engine: ConsolidationEngine
-    cairn_manager: object  # deprecated — kept as None for backward compat
     event_bus: EventBus
     drift_detector: DriftDetector
     ingest_pipeline: IngestPipeline
@@ -483,7 +483,6 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         search_engine=unified_search,
         cluster_engine=_cluster_engine,
         project_manager=project_manager,
-        task_manager=TaskManager(db, graph=graph_provider, event_bus=event_bus),
         work_item_manager=_wi_mgr,
         deliverable_manager=_deliverable_mgr,
         thinking_engine=ThinkingEngine(
@@ -496,7 +495,6 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         ),
         session_synthesizer=SessionSynthesizer(db, llm=llm_fast, capabilities=capabilities),
         consolidation_engine=ConsolidationEngine(db, embedding, llm=llm_fast, capabilities=capabilities),
-        cairn_manager=None,  # removed in v0.37.0
         event_bus=event_bus,
         event_dispatcher=event_dispatcher,
         drift_detector=DriftDetector(db),
@@ -532,10 +530,16 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         ),
         belief_store=_belief_store,
         consolidation_worker=_consolidation_worker,
-        metrics_collector=_build_metrics_collector(),
+        metrics_collector=_build_metrics_collector(event_bus),
     )
 
 
-def _build_metrics_collector():
+def _build_metrics_collector(event_bus):
     from cairn.core.metrics_collector import MetricsCollector
-    return MetricsCollector()
+
+    collector = MetricsCollector()
+    # Wire to EventBus for domain events (memory, search, work items)
+    event_bus.add_observer(collector.handle_event)
+    # Wire to stats module for LLM/embedding usage events
+    init_metrics_collector(collector)
+    return collector

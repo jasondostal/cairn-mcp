@@ -36,6 +36,7 @@ import { ActivityHeatmap } from "@/components/analytics/activity-heatmap";
 import { ModelPerformance } from "@/components/analytics/model-performance";
 import { ProjectBreakdown } from "@/components/analytics/project-breakdown";
 import { CostProjection } from "@/components/analytics/cost-projection";
+import { LivePulse } from "./live-pulse";
 
 export interface DashboardData {
   status: Status | null;
@@ -103,6 +104,8 @@ function renderWidget(id: string, data: DashboardData) {
       return data.status
         ? <MemoryTypeBar types={data.status.types} />
         : <WidgetSkeleton />;
+    case "live-pulse":
+      return <LivePulse />;
     default:
       return <WidgetSkeleton />;
   }

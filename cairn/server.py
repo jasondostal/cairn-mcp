@@ -43,8 +43,7 @@ def _init_services(svc: Services):
 
     # Startup assertion: critical services must be non-None (ca-211)
     _critical = {"db": svc.db, "config": svc.config, "memory_store": svc.memory_store,
-                 "search_engine": svc.search_engine, "work_item_manager": svc.work_item_manager,
-                 "task_manager": svc.task_manager}
+                 "search_engine": svc.search_engine, "work_item_manager": svc.work_item_manager}
     _missing = [k for k, v in _critical.items() if v is None]
     if _missing:
         logger.error("FATAL: critical services are None after init: %s", _missing)
@@ -237,6 +236,26 @@ def main():
         import uvicorn
 
         from cairn.api import create_api
+
+        # Inject our resilient session manager BEFORE streamable_http_app()
+        # creates the default one. The SDK checks `if self._session_manager is None`
+        # and skips creation if it's already set, so our instance gets used
+        # throughout the ASGI app.
+        #
+        # Why: The SDK's StreamableHTTPSessionManager stores sessions in an
+        # in-memory dict. Container restart = all session IDs gone = clients
+        # get hard 404s. Our ResilientSessionManager auto-recreates sessions
+        # on unknown IDs instead of 404'ing. All application state lives in
+        # PostgreSQL — transport sessions are disposable (12-factor).
+        from cairn.session import ResilientSessionManager
+        mcp._session_manager = ResilientSessionManager(
+            app=mcp._mcp_server,
+            event_store=mcp._event_store,
+            json_response=mcp.settings.json_response,
+            stateless=mcp.settings.stateless_http,
+            security_settings=mcp.settings.transport_security,
+            retry_interval=mcp._retry_interval,
+        )
 
         # Get MCP's Starlette app (parent — owns lifespan, serves /mcp)
         mcp_app = mcp.streamable_http_app()

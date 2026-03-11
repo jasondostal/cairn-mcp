@@ -39,6 +39,18 @@ class EventBus:
         self._handlers: dict[str, list[tuple[str, Callable]]] = defaultdict(list)
         # handler_name -> fn (flat lookup for dispatcher)
         self._handler_lookup: dict[str, Callable] = {}
+        # Lightweight observers — fire-and-forget, no DB dispatch records
+        self._observers: list[Callable[[dict], None]] = []
+
+    def add_observer(self, fn: Callable[[dict], None]) -> None:
+        """Register a lightweight observer that receives all published events.
+
+        Observers run synchronously inline during publish(), wrapped in
+        try/except so they never block event publishing. Use for transient
+        in-process consumers like MetricsCollector.
+        """
+        self._observers.append(fn)
+        logger.info("EventBus: added observer %s", fn)
 
     # ------------------------------------------------------------------
     # Subscriber registration
@@ -161,6 +173,21 @@ class EventBus:
             "Event published: id=%d session=%s type=%s tool=%s dispatches=%d",
             event_id, session_name, event_type, tool_name, len(matching),
         )
+
+        # Notify lightweight observers (metrics collector, etc.)
+        if self._observers:
+            observer_data = {
+                "event_type": event_type,
+                "tool_name": tool_name,
+                "project": project,
+                "session_name": session_name,
+                "payload": payload or {},
+            }
+            for obs in self._observers:
+                try:
+                    obs(observer_data)
+                except Exception:
+                    logger.warning("EventBus observer %s failed", obs, exc_info=True)
 
         # Auto-manage session lifecycle from events
         _payload = payload or {}

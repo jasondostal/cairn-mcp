@@ -7,6 +7,7 @@ import { ChevronRight, LogOut, Moon, Settings, Sun } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { useState, useEffect } from "react";
 import { NotificationBell } from "@/components/notification-bell";
+import { SystemPulse, LS_POSITION_KEY, type SystemPulsePosition } from "@/components/system-pulse";
 import { useAuth } from "@/components/auth-provider";
 import {
   Sidebar,
@@ -109,12 +110,31 @@ function getInitials(name: string): string {
     .join("");
 }
 
+function useEkgPosition(): SystemPulsePosition {
+  const [pos, setPos] = useState<SystemPulsePosition>("header");
+
+  useEffect(() => {
+    const stored = localStorage.getItem(LS_POSITION_KEY);
+    if (stored === "header" || stored === "footer") setPos(stored);
+
+    function onPosChange(e: Event) {
+      const detail = (e as CustomEvent).detail;
+      if (detail === "header" || detail === "footer") setPos(detail);
+    }
+    window.addEventListener("cairn:ekg-position-change", onPosChange);
+    return () => window.removeEventListener("cairn:ekg-position-change", onPosChange);
+  }, []);
+
+  return pos;
+}
+
 export function SidebarNav() {
   const pathname = usePathname();
   const attentionCount = useAttentionCount();
   const { version, time } = useSidebarMeta();
   const { user, authEnabled, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const ekgPosition = useEkgPosition();
 
   return (
     <Sidebar collapsible="icon">
@@ -142,6 +162,11 @@ export function SidebarNav() {
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          {ekgPosition === "header" && (
+            <SidebarMenuItem>
+              <SystemPulse />
+            </SidebarMenuItem>
+          )}
         </SidebarMenu>
       </SidebarHeader>
 
@@ -197,6 +222,11 @@ export function SidebarNav() {
 
       <SidebarFooter>
         <SidebarMenu>
+          {ekgPosition === "footer" && (
+            <SidebarMenuItem>
+              <SystemPulse />
+            </SidebarMenuItem>
+          )}
           <SidebarMenuItem>
             <SidebarMenuButton
               size="sm"

@@ -115,6 +115,7 @@ def create_api(svc: Services) -> FastAPI:
     from cairn.api.agents import register_routes as reg_agents
     from cairn.api.alerting import register_routes as reg_alerting
     from cairn.api.analytics import register_routes as reg_analytics
+    from cairn.api.attachments import register_routes as reg_attachments
     from cairn.api.audit import register_routes as reg_audit
     from cairn.api.auth_routes import register_routes as reg_auth
     from cairn.api.beliefs import register_routes as reg_beliefs
@@ -123,7 +124,6 @@ def create_api(svc: Services) -> FastAPI:
     from cairn.api.conversations import register_routes as reg_conversations
     from cairn.api.core import register_routes as reg_core
     from cairn.api.deliverables import register_routes as reg_deliverables
-    from cairn.api.deprecated import register_routes as reg_deprecated
     from cairn.api.dispatch import register_routes as reg_dispatch
     from cairn.api.events import register_routes as reg_events
     from cairn.api.export import register_routes as reg_export
@@ -134,7 +134,6 @@ def create_api(svc: Services) -> FastAPI:
     from cairn.api.search import register_routes as reg_search
     from cairn.api.sessions import register_routes as reg_sessions
     from cairn.api.subscriptions import register_routes as reg_subscriptions
-    from cairn.api.tasks import register_routes as reg_tasks
     from cairn.api.terminal import register_routes as reg_terminal
     from cairn.api.thinking import register_routes as reg_thinking
     from cairn.api.webhooks import register_routes as reg_webhooks
@@ -145,9 +144,7 @@ def create_api(svc: Services) -> FastAPI:
     reg_core(router, svc)
     reg_search(router, svc)
     reg_knowledge(router, svc)
-    reg_tasks(router, svc)
     reg_thinking(router, svc)
-    reg_deprecated(router, svc)
     reg_events(router, svc)
     reg_ingest(router, svc)
     reg_sessions(router, svc)
@@ -171,6 +168,7 @@ def create_api(svc: Services) -> FastAPI:
     reg_auth(router, svc)
     reg_working_memory(router, svc)
     reg_beliefs(router, svc)
+    reg_attachments(router, svc)
 
     from cairn.api.metrics_stream import register_routes as reg_metrics_stream
     reg_metrics_stream(router, svc, metrics_collector=svc.metrics_collector)

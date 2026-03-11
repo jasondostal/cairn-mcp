@@ -70,6 +70,18 @@ class ModelStats:
 # Singletons — initialized by services.py on startup
 embedding_stats: ModelStats | None = None
 llm_stats: ModelStats | None = None
+_metrics_collector = None  # MetricsCollector — set by services.py
+
+
+def init_metrics_collector(collector) -> None:
+    """Wire the MetricsCollector so emit_usage_event can forward to it."""
+    global _metrics_collector
+    _metrics_collector = collector
+
+
+def get_metrics_collector():
+    """Return the MetricsCollector instance (or None if not initialized)."""
+    return _metrics_collector
 
 
 def init_embedding_stats(backend: str, model: str) -> ModelStats:
@@ -194,6 +206,7 @@ def emit_usage_event(
     """Convenience function for embedding/LLM backends to emit usage events.
 
     Uses deferred import to avoid circular deps with analytics module.
+    Forwards to MetricsCollector for real-time EKG display.
     """
     from cairn.core.analytics import UsageEvent, _analytics_tracker
 
@@ -208,3 +221,18 @@ def emit_usage_event(
         success=success,
         error_message=error_message[:512] if error_message else None,
     ))
+
+    # Forward to MetricsCollector for real-time EKG
+    if _metrics_collector is not None:
+        category = "embedding" if operation.startswith("embed") else "llm"
+        try:
+            _metrics_collector.record_event(
+                event_type=operation,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                latency_ms=latency_ms,
+                success=success,
+                category=category,
+            )
+        except Exception:
+            pass  # never block the caller

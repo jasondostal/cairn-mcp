@@ -86,6 +86,13 @@ def register_routes(router: APIRouter, svc: Services, **kw):
 
         title = doc.get("title") or "Untitled"
         content = doc.get("content", "")
+        # Resolve cairn:// URLs to HTTP paths for portability
+        import re
+        content = re.sub(
+            r'cairn://attachments/(\d+)/([^)\s"]+)',
+            r'/api/attachments/\1/\2',
+            content,
+        )
         safe_title = "".join(c if c.isalnum() or c in " -_" else "" for c in title)
         filename = f"{safe_title.strip() or 'document'}.md"
 
@@ -98,6 +105,9 @@ def register_routes(router: APIRouter, svc: Services, **kw):
     @router.get("/docs/{doc_id}/pdf")
     def api_doc_pdf(doc_id: int = Path(...)):
         """Export a document as PDF via server-side markdown→HTML→PDF."""
+        import base64
+        import re
+
         import markdown as md  # type: ignore[import-untyped]
         import weasyprint
 
@@ -110,21 +120,165 @@ def register_routes(router: APIRouter, svc: Services, **kw):
 
         html_body = md.markdown(
             content,
-            extensions=["tables", "fenced_code", "toc", "sane_lists"],
+            extensions=["tables", "fenced_code", "toc", "sane_lists", "codehilite"],
+            extension_configs={
+                "codehilite": {"css_class": "codehilite", "guess_lang": False},
+            },
         )
 
+        # Resolve cairn://attachments/{id}/{filename} → inline data URIs
+        def _resolve_cairn_img(match: re.Match) -> str:
+            att_id = int(match.group(1))
+            att = project_manager.get_attachment(att_id)
+            if att is None:
+                return match.group(0)  # leave as-is if not found
+            b64 = base64.b64encode(att["data"]).decode()
+            return f'src="data:{att["mime_type"]};base64,{b64}"'
+
+        html_body = re.sub(
+            r'src="cairn://attachments/(\d+)/[^"]*"',
+            _resolve_cairn_img,
+            html_body,
+        )
+
+        css = """
+            @page {
+                size: A4;
+                margin: 2cm 2.2cm 2.5cm 2.2cm;
+                @bottom-center {
+                    content: counter(page);
+                    font-size: 8pt;
+                    color: #999;
+                }
+            }
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                font-size: 10.5pt;
+                line-height: 1.55;
+                color: #1a1a1a;
+                orphans: 2;
+                widows: 2;
+            }
+            h1 {
+                font-size: 22pt;
+                font-weight: 700;
+                color: #111;
+                border-bottom: 2px solid #333;
+                padding-bottom: 6pt;
+                margin-top: 0;
+                margin-bottom: 12pt;
+            }
+            h2 {
+                font-size: 15pt;
+                font-weight: 600;
+                color: #222;
+                margin-top: 22pt;
+                margin-bottom: 8pt;
+                page-break-after: avoid;
+            }
+            h3 {
+                font-size: 12pt;
+                font-weight: 600;
+                color: #333;
+                margin-top: 16pt;
+                margin-bottom: 6pt;
+                page-break-after: avoid;
+            }
+            h4, h5, h6 {
+                font-size: 10.5pt;
+                font-weight: 600;
+                margin-top: 12pt;
+                margin-bottom: 4pt;
+            }
+            p { margin: 0 0 8pt 0; }
+            strong { font-weight: 600; }
+            a { color: #1a56db; text-decoration: underline; }
+            a[href^="http"]::after {
+                content: " (" attr(href) ")";
+                font-size: 0.8em;
+                color: #666;
+                word-break: break-all;
+            }
+            a[href^="cairn://"]::after,
+            a[href^="data:"]::after { content: none; }
+            hr {
+                border: none;
+                border-top: 1px solid #ddd;
+                margin: 16pt 0;
+            }
+            ul, ol { margin: 0 0 8pt 0; padding-left: 22pt; }
+            li { margin-bottom: 3pt; }
+            li > ul, li > ol { margin-top: 3pt; margin-bottom: 0; }
+            code {
+                font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+                font-size: 9pt;
+                background: #f3f4f6;
+                padding: 1pt 4pt;
+                border-radius: 3pt;
+                color: #d63384;
+            }
+            pre {
+                background: #f8f9fa;
+                border: 1px solid #e5e7eb;
+                border-radius: 5pt;
+                padding: 10pt 12pt;
+                margin: 8pt 0 12pt 0;
+                overflow-x: auto;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                page-break-inside: avoid;
+            }
+            pre code {
+                background: none;
+                padding: 0;
+                border-radius: 0;
+                color: inherit;
+                font-size: 8.5pt;
+                line-height: 1.5;
+            }
+            table {
+                border-collapse: collapse;
+                width: 100%;
+                margin: 10pt 0 14pt 0;
+                font-size: 9.5pt;
+                page-break-inside: avoid;
+            }
+            th, td {
+                border: 1px solid #d1d5db;
+                padding: 6pt 10pt;
+                text-align: left;
+                vertical-align: top;
+            }
+            th {
+                background: #f3f4f6;
+                font-weight: 600;
+                color: #374151;
+            }
+            tr:nth-child(even) td { background: #fafafa; }
+            blockquote {
+                border-left: 3pt solid #6366f1;
+                margin: 10pt 0;
+                padding: 8pt 14pt;
+                background: #f5f3ff;
+                color: #312e81;
+                font-style: italic;
+            }
+            blockquote p { margin-bottom: 4pt; }
+            blockquote p:last-child { margin-bottom: 0; }
+            img {
+                max-width: 100%;
+                height: auto;
+                border-radius: 4pt;
+                margin: 8pt 0;
+                page-break-inside: avoid;
+            }
+            .codehilite { background: #f8f9fa; padding: 0; }
+        """
+
         html_doc = (
-            "<!DOCTYPE html><html><head><meta charset='utf-8'>"
-            "<style>"
-            "body{font-family:sans-serif;font-size:11pt;line-height:1.4;margin:2cm}"
-            "h1{font-size:20pt} h2{font-size:16pt} h3{font-size:13pt}"
-            "code,pre{font-family:monospace;font-size:9pt}"
-            "pre{background:#f4f4f4;padding:8px;border-radius:4px;white-space:pre-wrap}"
-            "table{border-collapse:collapse;width:100%;margin:1em 0}"
-            "th,td{border:1px solid #ccc;padding:6px 10px;text-align:left}"
-            "th{background:#f0f0f0;font-weight:bold}"
-            "blockquote{border-left:3px solid #ccc;margin-left:0;padding-left:1em;color:#555}"
-            "</style></head><body>"
+            f"<!DOCTYPE html><html><head><meta charset='utf-8'>"
+            f"<title>{title}</title>"
+            f"<style>{css}</style></head><body>"
             f"{html_body}</body></html>"
         )
 
@@ -363,7 +517,6 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                 memory_store=memory_store,
                 search_engine=svc.search_engine,
                 work_item_manager=svc.work_item_manager,
-                task_manager=svc.task_manager,
                 graph_provider=graph_provider,
             )
         except Exception as e:
