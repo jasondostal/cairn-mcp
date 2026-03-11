@@ -172,18 +172,6 @@ CHAT_TOOLS: list[dict] = [
         },
     },
     {
-        "name": "list_tasks",
-        "description": "List pending tasks for a project.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "project": {"type": "string", "description": "Project name"},
-                "include_completed": {"type": "boolean", "description": "Include completed tasks (default false)"},
-            },
-            "required": ["project"],
-        },
-    },
-    {
         "name": "list_work_items",
         "description": "List work items for a project. Supports filtering by status, type, and assignee.",
         "parameters": {
@@ -626,20 +614,6 @@ class ChatToolExecutor:
             "rules": [
                 {"id": r["id"], "content": r["content"], "importance": r["importance"], "project": r["project"]}
                 for r in result["items"]
-            ],
-        }
-
-    # ------------------------------------------------------------------
-    # list_tasks — delegates to svc.task_manager
-    # ------------------------------------------------------------------
-
-    def _tool_list_tasks(self, project: str, include_completed: bool = False) -> dict:
-        result = self.svc.task_manager.list_tasks(project=project, include_completed=include_completed)
-        return {
-            "count": result["total"],
-            "tasks": [
-                {"id": t["id"], "description": t["description"], "status": t["status"], "created_at": t.get("created_at")}
-                for t in result["items"]
             ],
         }
 

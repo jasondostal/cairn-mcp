@@ -163,7 +163,6 @@ def run_orient(
     memory_store: Any,
     search_engine: Any,
     work_item_manager: Any,
-    task_manager: Any,
     graph_provider: Any | None = None,
     working_memory_store: Any | None = None,
     belief_store: Any | None = None,
@@ -176,7 +175,7 @@ def run_orient(
     """
     # Pre-flight: critical services must be non-None (ca-210)
     _critical = {"db": db, "memory_store": memory_store, "search_engine": search_engine,
-                 "work_item_manager": work_item_manager, "task_manager": task_manager}
+                 "work_item_manager": work_item_manager}
     _missing = [k for k, v in _critical.items() if v is None]
     if _missing:
         logger.error("orient: critical services are None: %s — returning error", _missing)
@@ -335,9 +334,6 @@ def run_orient(
                 })
             if wi_items:
                 work_items_data = wi_items
-            else:
-                tasks_result = task_manager.list_tasks(project, include_completed=False)
-                work_items_data = tasks_result.get("items", [])
         if work_items_data:
             content_key = "title" if work_items_data and "title" in work_items_data[0] else "description"
             work_items_data, wi_meta = apply_list_budget(

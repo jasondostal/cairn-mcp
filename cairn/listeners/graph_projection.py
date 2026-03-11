@@ -1,7 +1,7 @@
 """Graph projection listener — event-driven Neo4j sync.
 
-Replaces inline dual-write pattern. Subscribes to work_item.*, task.*,
-and thinking.* events. Each handler queries PG for current state and
+Replaces inline dual-write pattern. Subscribes to work_item.* and
+thinking.* events. Each handler queries PG for current state and
 calls idempotent ensure_* methods on the graph provider. Backfills
 graph_uuid in PG if it was missing.
 """
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class GraphProjectionListener:
-    """Event-driven graph projection for work items, tasks, and thinking."""
+    """Event-driven graph projection for work items and thinking."""
 
     def __init__(self, graph: GraphProvider, db: Database):
         self.graph = graph
@@ -29,7 +29,6 @@ class GraphProjectionListener:
     def register(self, event_bus: EventBus) -> None:
         """Subscribe to all graph-relevant event types."""
         event_bus.subscribe("work_item.*", "graph_projection", self.handle)
-        event_bus.subscribe("task.*", "graph_projection", self.handle)
         event_bus.subscribe("thinking.*", "graph_projection", self.handle)
 
     def handle(self, event: dict) -> None:
@@ -46,10 +45,6 @@ class GraphProjectionListener:
             "work_item.gate_set": self._wi_ensure,
             "work_item.gate_resolved": self._wi_ensure,
             "work_item.memories_linked": self._wi_memories_linked,
-            # Tasks
-            "task.created": self._task_ensure,
-            "task.completed": self._task_ensure,
-            "task.memories_linked": self._task_memories_linked,
             # Thinking
             "thinking.sequence_started": self._thinking_ensure,
             "thinking.thought_added": self._thought_ensure,
@@ -171,55 +166,6 @@ class GraphProjectionListener:
                 self.graph.link_work_item_to_memory(wi_uuid, mid)
             except Exception:
                 logger.debug("GraphProjection: failed to link work_item to memory %d", mid, exc_info=True)
-
-    # ------------------------------------------------------------------
-    # Tasks
-    # ------------------------------------------------------------------
-
-    def _task_ensure(self, event: dict) -> None:
-        """Ensure task node exists and matches PG state."""
-        payload = event["payload"]
-        task_id = payload.get("task_id")
-        if not task_id:
-            return
-
-        row = self.db.execute_one("SELECT * FROM tasks WHERE id = %s", (task_id,))
-        if not row:
-            return
-
-        graph_uuid = self.graph.ensure_task(
-            pg_id=row["id"],
-            project_id=row["project_id"],
-            description=row.get("description") or "",
-            status="completed" if row.get("completed_at") else "pending",
-            completed_at=row["completed_at"].isoformat() if row.get("completed_at") else None,
-        )
-
-        if not row.get("graph_uuid"):
-            self.db.execute(
-                "UPDATE tasks SET graph_uuid = %s, graph_synced = true WHERE id = %s",
-                (graph_uuid, row["id"]),
-            )
-            self.db.commit()
-
-    def _task_memories_linked(self, event: dict) -> None:
-        """Create LINKED_TO edges between a task and memory statements."""
-        payload = event["payload"]
-        task_id = payload.get("task_id")
-        memory_ids = payload.get("memory_ids", [])
-        if not task_id or not memory_ids:
-            return
-
-        row = self.db.execute_one("SELECT id, project_id FROM tasks WHERE id = %s", (task_id,))
-        if not row:
-            return
-
-        task_uuid = self.graph.ensure_task(pg_id=row["id"], project_id=row["project_id"])
-        for mid in memory_ids:
-            try:
-                self.graph.link_task_to_memory(task_uuid, mid)
-            except Exception:
-                logger.debug("GraphProjection: failed to link task to memory %d", mid, exc_info=True)
 
     # ------------------------------------------------------------------
     # Thinking sequences

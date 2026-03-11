@@ -25,7 +25,6 @@ def reconcile_graph(db: Database, graph: GraphProvider) -> dict:
     """
     stats = {
         "work_items": _reconcile_work_items(db, graph),
-        "tasks": _reconcile_tasks(db, graph),
         "thinking": _reconcile_thinking(db, graph),
     }
     total_fixed = sum(s.get("fixed", 0) for s in stats.values())
@@ -87,38 +86,6 @@ def _reconcile_work_items(db: Database, graph: GraphProvider) -> dict:
             stats["fixed"] += 1
         except Exception:
             logger.debug("Reconciliation: failed for work_item #%d", row["id"], exc_info=True)
-
-    return stats
-
-
-def _reconcile_tasks(db: Database, graph: GraphProvider) -> dict:
-    """Reconcile pending tasks (PG wins)."""
-    stats = {"checked": 0, "fixed": 0, "backfilled": 0}
-
-    rows = db.execute(
-        "SELECT id, project_id, description, status, completed_at, graph_uuid FROM tasks WHERE status = 'pending'",
-    )
-
-    for row in rows:
-        stats["checked"] += 1
-        try:
-            graph_uuid = graph.ensure_task(
-                pg_id=row["id"],
-                project_id=row["project_id"],
-                description=row.get("description") or "",
-                status=row["status"],
-                completed_at=row["completed_at"].isoformat() if row.get("completed_at") else None,
-            )
-            if not row.get("graph_uuid"):
-                db.execute(
-                    "UPDATE tasks SET graph_uuid = %s, graph_synced = true WHERE id = %s",
-                    (graph_uuid, row["id"]),
-                )
-                db.commit()
-                stats["backfilled"] += 1
-            stats["fixed"] += 1
-        except Exception:
-            logger.debug("Reconciliation: failed for task #%d", row["id"], exc_info=True)
 
     return stats
 

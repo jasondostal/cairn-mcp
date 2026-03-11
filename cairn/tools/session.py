@@ -111,7 +111,6 @@ def register(mcp, svc: Services):
                     memory_store=svc.memory_store,
                     search_engine=svc.search_engine,
                     work_item_manager=svc.work_item_manager,
-                    task_manager=svc.task_manager,
                     graph_provider=svc.graph_provider,
                     belief_store=svc.belief_store,
                 )
