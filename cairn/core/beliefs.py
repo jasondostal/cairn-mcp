@@ -339,6 +339,7 @@ class BeliefStore:
         return result
 
     def _publish(self, event_type: str, project_id: int | None = None, **payload) -> None:
+        """Emit event into the unified event bus."""
         if not self.event_bus:
             return
         project_name = None
@@ -349,11 +350,10 @@ class BeliefStore:
             if row:
                 project_name = row["name"]
         try:
-            self.event_bus.publish(
-                session_name="",
-                event_type=event_type,
+            self.event_bus.emit(
+                event_type,
                 project=project_name,
                 payload=payload if payload else None,
             )
         except Exception:
-            logger.warning("Failed to publish %s", event_type, exc_info=True)
+            logger.warning("Failed to emit %s", event_type, exc_info=True)

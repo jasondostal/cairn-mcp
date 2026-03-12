@@ -456,12 +456,11 @@ class ConsolidationEngine:
             cluster["cluster_id"], parent_id, len(member_ids),
         )
 
-        # Publish event
+        # Emit event
         if event_bus:
             try:
-                event_bus.publish(
-                    session_name="",
-                    event_type="memory.consolidated",
+                event_bus.emit(
+                    "memory.consolidated",
                     project=project,
                     payload={
                         "parent_id": parent_id,
@@ -470,7 +469,7 @@ class ConsolidationEngine:
                     },
                 )
             except Exception:
-                logger.warning("Failed to publish memory.consolidated", exc_info=True)
+                logger.warning("Failed to emit memory.consolidated", exc_info=True)
 
         return {
             "parent_id": parent_id,

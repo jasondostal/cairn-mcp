@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import { navGroups } from "@/lib/nav";
 import { ChevronRight, LogOut, Moon, Settings, Sun } from "lucide-react";
 import { useState, useEffect } from "react";
-import { SystemPulse, LS_POSITION_KEY, type SystemPulsePosition } from "@/components/system-pulse";
+// NOTE: EKG hidden until SSE pipeline is stable — see ca-251
+// import { SystemPulse, LS_POSITION_KEY, type SystemPulsePosition } from "@/components/system-pulse";
 import { NotificationBell } from "@/components/notification-bell";
 import { useAuth } from "@/components/auth-provider";
 import { useTheme } from "@/components/theme-provider";
@@ -134,23 +135,21 @@ function getInitials(name: string): string {
     .join("");
 }
 
-function useEkgPosition(): SystemPulsePosition {
-  const [pos, setPos] = useState<SystemPulsePosition>("header");
-
-  useEffect(() => {
-    const stored = localStorage.getItem(LS_POSITION_KEY);
-    if (stored === "header" || stored === "footer") setPos(stored);
-
-    function onPosChange(e: Event) {
-      const detail = (e as CustomEvent).detail;
-      if (detail === "header" || detail === "footer") setPos(detail);
-    }
-    window.addEventListener("cairn:ekg-position-change", onPosChange);
-    return () => window.removeEventListener("cairn:ekg-position-change", onPosChange);
-  }, []);
-
-  return pos;
-}
+// NOTE: EKG hidden until SSE pipeline is stable — see ca-251
+// function useEkgPosition(): SystemPulsePosition {
+//   const [pos, setPos] = useState<SystemPulsePosition>("header");
+//   useEffect(() => {
+//     const stored = localStorage.getItem(LS_POSITION_KEY);
+//     if (stored === "header" || stored === "footer") setPos(stored);
+//     function onPosChange(e: Event) {
+//       const detail = (e as CustomEvent).detail;
+//       if (detail === "header" || detail === "footer") setPos(detail);
+//     }
+//     window.addEventListener("cairn:ekg-position-change", onPosChange);
+//     return () => window.removeEventListener("cairn:ekg-position-change", onPosChange);
+//   }, []);
+//   return pos;
+// }
 
 export function SidebarNav() {
   const pathname = usePathname();
@@ -158,7 +157,7 @@ export function SidebarNav() {
   const { version, time } = useSidebarMeta();
   const { user, authEnabled, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const ekgPosition = useEkgPosition();
+  // const ekgPosition = useEkgPosition(); // EKG hidden — ca-251
   const { openGroups, toggle: toggleGroup } = useSidebarGroupState();
 
   return (
@@ -201,11 +200,13 @@ export function SidebarNav() {
               </div>
             </div>
           </SidebarMenuItem>
+          {/* NOTE: EKG hidden until SSE pipeline is stable — see ca-251
           {ekgPosition === "header" && (
             <SidebarMenuItem>
               <SystemPulse />
             </SidebarMenuItem>
           )}
+          */}
         </SidebarMenu>
       </SidebarHeader>
 
@@ -262,11 +263,13 @@ export function SidebarNav() {
 
       <SidebarFooter>
         <SidebarMenu>
+          {/* NOTE: EKG hidden until SSE pipeline is stable — see ca-251
           {ekgPosition === "footer" && (
             <SidebarMenuItem>
               <SystemPulse />
             </SidebarMenuItem>
           )}
+          */}
           {authEnabled && user ? (
             <SidebarMenuItem>
               <DropdownMenu>

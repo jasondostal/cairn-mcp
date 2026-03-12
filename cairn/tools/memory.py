@@ -215,9 +215,8 @@ def register(mcp, svc: Services):
                 if svc.event_bus and results:
                     try:
                         memory_ids = [r["id"] for r in results if isinstance(r, dict) and "id" in r]
-                        svc.event_bus.publish(
-                            session_name="",
-                            event_type="search.executed",
+                        svc.event_bus.emit(
+                            "search.executed",
                             project=project,
                             payload={
                                 "query": query[:200],
@@ -285,9 +284,8 @@ def register(mcp, svc: Services):
                 if svc.event_bus and results:
                     try:
                         memory_ids = [r["id"] for r in results if isinstance(r, dict) and "id" in r]
-                        svc.event_bus.publish(
-                            session_name="",
-                            event_type="memory.recalled",
+                        svc.event_bus.emit(
+                            "memory.recalled",
                             payload={
                                 "memory_ids": memory_ids,
                                 "count": len(memory_ids),

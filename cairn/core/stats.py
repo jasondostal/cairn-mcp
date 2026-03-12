@@ -70,18 +70,18 @@ class ModelStats:
 # Singletons — initialized by services.py on startup
 embedding_stats: ModelStats | None = None
 llm_stats: ModelStats | None = None
-_metrics_collector = None  # MetricsCollector — set by services.py
+_event_bus = None  # EventBus — set by services.py via init_event_bus_ref()
 
 
-def init_metrics_collector(collector) -> None:
-    """Wire the MetricsCollector so emit_usage_event can forward to it."""
-    global _metrics_collector
-    _metrics_collector = collector
+def init_event_bus_ref(bus) -> None:
+    """Wire the EventBus so emit_usage_event can route through the unified stream."""
+    global _event_bus
+    _event_bus = bus
 
 
-def get_metrics_collector():
-    """Return the MetricsCollector instance (or None if not initialized)."""
-    return _metrics_collector
+def get_event_bus():
+    """Return the EventBus instance (or None if not initialized)."""
+    return _event_bus
 
 
 def init_embedding_stats(backend: str, model: str) -> ModelStats:
@@ -203,25 +203,36 @@ def emit_usage_event(
     success: bool = True,
     error_message: str | None = None,
 ) -> None:
-    """Convenience function for embedding/LLM backends to emit usage events.
+    """Emit LLM/embedding usage as an event through the unified bus.
 
-    Uses deferred import to avoid circular deps with analytics module.
-    Forwards to MetricsCollector for real-time EKG display.
+    Events persist to Postgres and trigger NOTIFY for real-time SSE streaming.
     """
-    # Forward to MetricsCollector first — independent of analytics toggle
-    if _metrics_collector is not None:
-        category = "embedding" if operation.startswith("embed") else "llm"
+    if _event_bus is not None:
+        # Operations arrive as "embed", "embed.batch", "llm.generate", etc.
+        # Only add prefix if the operation doesn't already have one.
+        if "." in operation:
+            event_type = operation
+        elif operation.startswith("embed"):
+            event_type = f"embed.{operation}"
+        else:
+            event_type = f"llm.{operation}"
         try:
-            _metrics_collector.record_event(
-                event_type=operation,
-                tokens_in=tokens_in,
-                tokens_out=tokens_out,
-                latency_ms=latency_ms,
-                success=success,
-                category=category,
+            _event_bus.emit(
+                event_type,
+                tool_name=model,
+                payload={
+                    "operation": operation,
+                    "model": model,
+                    "tokens_in": tokens_in,
+                    "tokens_out": tokens_out,
+                    "latency_ms": latency_ms,
+                    "success": success,
+                    "error_message": error_message[:512] if error_message else None,
+                },
             )
-        except Exception:
-            pass  # never block the caller
+        except Exception as exc:
+            import logging as _log
+            _log.getLogger(__name__).warning("emit_usage_event failed: %s", exc)
 
     # Analytics persistence (optional — disabled by default)
     from cairn.core.analytics import UsageEvent, _analytics_tracker

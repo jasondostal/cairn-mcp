@@ -116,6 +116,52 @@ export function EmbeddingSection({ status, val, src }: SettingsSectionProps) {
 
 export function LLMSection({ localEdits, setLocalEdits, saving, sectionVisible, sectionDirty, dirtyKeys, saveKeys, handleReset, val, src }: SettingsSectionProps) {
   if (!sectionVisible("llm.", "enrichment_enabled")) return null;
+  const activeBackend = String(localEdits["llm.backend"] ?? val("llm.backend") ?? "ollama");
+
+  const vendorFields: { vendor: string; label: string; fields: React.ReactNode }[] = [
+    {
+      vendor: "ollama",
+      label: "Ollama",
+      fields: (
+        <>
+          <EditableText label="URL" settingKey="llm.ollama_url" value={String(val("llm.ollama_url") ?? "")} source={src("llm.ollama_url")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
+          <EditableText label="Model" settingKey="llm.ollama_model" value={String(val("llm.ollama_model") ?? "")} source={src("llm.ollama_model")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
+        </>
+      ),
+    },
+    {
+      vendor: "bedrock",
+      label: "Bedrock",
+      fields: (
+        <>
+          <EditableText label="Model" settingKey="llm.bedrock_model" value={String(val("llm.bedrock_model") ?? "")} source={src("llm.bedrock_model")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
+          <EditableText label="Region" settingKey="llm.bedrock_region" value={String(val("llm.bedrock_region") ?? "")} source={src("llm.bedrock_region")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
+        </>
+      ),
+    },
+    {
+      vendor: "gemini",
+      label: "Gemini",
+      fields: (
+        <>
+          <EditableText label="Model" settingKey="llm.gemini_model" value={String(val("llm.gemini_model") ?? "")} source={src("llm.gemini_model")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
+          <EditableText label="API Key" settingKey="llm.gemini_api_key" value={String(val("llm.gemini_api_key") ?? "")} source={src("llm.gemini_api_key")} secret localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
+        </>
+      ),
+    },
+    {
+      vendor: "openai",
+      label: "OpenAI",
+      fields: (
+        <>
+          <EditableText label="URL" settingKey="llm.openai_base_url" value={String(val("llm.openai_base_url") ?? "")} source={src("llm.openai_base_url")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
+          <EditableText label="Model" settingKey="llm.openai_model" value={String(val("llm.openai_model") ?? "")} source={src("llm.openai_model")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
+          <EditableText label="API Key" settingKey="llm.openai_api_key" value={String(val("llm.openai_api_key") ?? "")} source={src("llm.openai_api_key")} secret localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
+        </>
+      ),
+    },
+  ];
+
   return (
     <SectionCard
       icon={<Brain className="h-4 w-4" />}
@@ -129,15 +175,18 @@ export function LLMSection({ localEdits, setLocalEdits, saving, sectionVisible, 
       saving={saving === "llm."}
     >
       <EditableSelect label="Backend" settingKey="llm.backend" value={String(val("llm.backend") ?? "ollama")} source={src("llm.backend")} options={["ollama", "bedrock", "gemini", "openai"]} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
-      <EditableText label="Ollama URL" settingKey="llm.ollama_url" value={String(val("llm.ollama_url") ?? "")} source={src("llm.ollama_url")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
-      <EditableText label="Ollama Model" settingKey="llm.ollama_model" value={String(val("llm.ollama_model") ?? "")} source={src("llm.ollama_model")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
-      <EditableText label="Bedrock Model" settingKey="llm.bedrock_model" value={String(val("llm.bedrock_model") ?? "")} source={src("llm.bedrock_model")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
-      <EditableText label="Bedrock Region" settingKey="llm.bedrock_region" value={String(val("llm.bedrock_region") ?? "")} source={src("llm.bedrock_region")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
-      <EditableText label="Gemini Model" settingKey="llm.gemini_model" value={String(val("llm.gemini_model") ?? "")} source={src("llm.gemini_model")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
-      <EditableText label="Gemini API Key" settingKey="llm.gemini_api_key" value={String(val("llm.gemini_api_key") ?? "")} source={src("llm.gemini_api_key")} secret localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
-      <EditableText label="OpenAI URL" settingKey="llm.openai_base_url" value={String(val("llm.openai_base_url") ?? "")} source={src("llm.openai_base_url")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
-      <EditableText label="OpenAI Model" settingKey="llm.openai_model" value={String(val("llm.openai_model") ?? "")} source={src("llm.openai_model")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
-      <EditableText label="OpenAI API Key" settingKey="llm.openai_api_key" value={String(val("llm.openai_api_key") ?? "")} source={src("llm.openai_api_key")} secret localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
+      {vendorFields.map(({ vendor, label, fields }) => {
+        const active = activeBackend === vendor;
+        return (
+          <div key={vendor} className={`transition-opacity duration-200 ${active ? "" : "opacity-30"}`}>
+            <div className="flex items-center gap-1.5 pt-2 pb-0.5">
+              <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</h4>
+              {active && <span className="size-1.5 rounded-full bg-primary" />}
+            </div>
+            {fields}
+          </div>
+        );
+      })}
       <EditableToggle label="Enrichment" settingKey="enrichment_enabled" value={Boolean(val("enrichment_enabled"))} source={src("enrichment_enabled")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS.enrichment_enabled} />
     </SectionCard>
   );
@@ -147,6 +196,8 @@ export function LLMSection({ localEdits, setLocalEdits, saving, sectionVisible, 
 
 export function RerankerSection({ localEdits, setLocalEdits, saving, sectionVisible, sectionDirty, saveSection, handleReset, val, src }: SettingsSectionProps) {
   if (!sectionVisible("reranker.")) return null;
+  const activeBackend = String(localEdits["reranker.backend"] ?? val("reranker.backend") ?? "local");
+
   return (
     <SectionCard
       icon={<Zap className="h-4 w-4" />}
@@ -158,8 +209,14 @@ export function RerankerSection({ localEdits, setLocalEdits, saving, sectionVisi
       <EditableSelect label="Backend" settingKey="reranker.backend" value={String(val("reranker.backend") ?? "local")} source={src("reranker.backend")} options={["local", "bedrock"]} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
       <EditableText label="Model" settingKey="reranker.model" value={String(val("reranker.model") ?? "")} source={src("reranker.model")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
       <EditableNumber label="Candidates" settingKey="reranker.candidates" value={Number(val("reranker.candidates") ?? 50)} source={src("reranker.candidates")} min={1} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} tooltip={SETTING_TOOLTIPS["reranker.candidates"]} />
-      <EditableText label="Bedrock Model" settingKey="reranker.bedrock_model" value={String(val("reranker.bedrock_model") ?? "")} source={src("reranker.bedrock_model")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
-      <EditableText label="Bedrock Region" settingKey="reranker.bedrock_region" value={String(val("reranker.bedrock_region") ?? "")} source={src("reranker.bedrock_region")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
+      <div className={`transition-opacity duration-200 ${activeBackend === "bedrock" ? "" : "opacity-30"}`}>
+        <div className="flex items-center gap-1.5 pt-2 pb-0.5">
+          <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Bedrock</h4>
+          {activeBackend === "bedrock" && <span className="size-1.5 rounded-full bg-primary" />}
+        </div>
+        <EditableText label="Model" settingKey="reranker.bedrock_model" value={String(val("reranker.bedrock_model") ?? "")} source={src("reranker.bedrock_model")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
+        <EditableText label="Region" settingKey="reranker.bedrock_region" value={String(val("reranker.bedrock_region") ?? "")} source={src("reranker.bedrock_region")} localEdits={localEdits} setLocalEdits={setLocalEdits} onReset={handleReset} />
+      </div>
     </SectionCard>
   );
 }

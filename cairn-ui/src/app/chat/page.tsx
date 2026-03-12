@@ -107,7 +107,7 @@ export default function ChatPage() {
 
 
   return (
-    <div className="flex h-full -m-4 md:-m-6">
+    <div className="flex h-full">
       {/* Conversation sidebar */}
       {sidebarOpen && (
         <div className="w-56 shrink-0 hidden md:block">

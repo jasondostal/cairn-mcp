@@ -33,7 +33,7 @@ from cairn.core.stats import (
     init_embedding_stats,
     init_event_bus_stats,
     init_llm_stats,
-    init_metrics_collector,
+    init_event_bus_ref,
 )
 from cairn.core.synthesis import SessionSynthesizer
 from cairn.core.terminal import TerminalHostManager
@@ -59,7 +59,6 @@ if TYPE_CHECKING:
     from cairn.core.beliefs import BeliefStore
     from cairn.core.consolidation import ConsolidationWorker
     from cairn.core.decay import DecayWorker
-    from cairn.core.metrics_collector import MetricsCollector
     from cairn.core.retention import RetentionManager
     from cairn.core.retention_worker import RetentionWorker
     from cairn.core.subscriptions import SubscriptionManager
@@ -116,7 +115,6 @@ class Services:
     working_memory_store: WorkingMemoryStore
     belief_store: BeliefStore | None
     consolidation_worker: ConsolidationWorker | None
-    metrics_collector: MetricsCollector | None
 
 
 def create_services(config: Config | None = None, db: Database | None = None) -> Services:
@@ -456,6 +454,9 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         workspace_backends["claude_code"] = ClaudeCodeBackend(cc_config)
         logger.info("Claude Code workspace backend enabled")
 
+    # Wire EventBus ref into stats module so emit_usage_event() routes through bus
+    init_event_bus_ref(event_bus)
+
     return Services(
         config=config,
         db=db,
@@ -515,16 +516,4 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         ),
         belief_store=_belief_store,
         consolidation_worker=_consolidation_worker,
-        metrics_collector=_build_metrics_collector(event_bus),
     )
-
-
-def _build_metrics_collector(event_bus):
-    from cairn.core.metrics_collector import MetricsCollector
-
-    collector = MetricsCollector()
-    # Wire to EventBus for domain events (memory, search, work items)
-    event_bus.add_observer(collector.handle_event)
-    # Wire to stats module for LLM/embedding usage events
-    init_metrics_collector(collector)
-    return collector

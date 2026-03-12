@@ -56,10 +56,9 @@ class MemoryStore:
         project_id: int | None = None, session_name: str | None = None,
         **payload_fields,
     ) -> None:
-        """Publish a memory event if event_bus is available."""
+        """Emit a memory event into the unified event bus."""
         if not self.event_bus:
             return
-        # Ensure memory_id is in the payload for handlers
         if memory_id is not None:
             payload_fields.setdefault("memory_id", memory_id)
         project_name = None
@@ -68,14 +67,14 @@ class MemoryStore:
             if row:
                 project_name = row["name"]
         try:
-            self.event_bus.publish(
-                session_name=session_name or "",
-                event_type=event_type,
+            self.event_bus.emit(
+                event_type,
+                session_name=session_name or None,
                 project=project_name,
                 payload=payload_fields if payload_fields else None,
             )
         except Exception:
-            logger.warning("Failed to publish %s for memory %s", event_type, memory_id, exc_info=True)
+            logger.warning("Failed to emit %s for memory %s", event_type, memory_id, exc_info=True)
 
     @track_operation("store")
     def store(

@@ -293,7 +293,7 @@ class EventType:
     """Canonical event type registry — all event types used across the system.
 
     Replaces stringly-typed event types scattered across publishers/subscribers.
-    Each constant includes its category for MetricsCollector mapping.
+    Each constant includes its category for metrics classification.
     """
 
     # Memory events
@@ -354,56 +354,46 @@ class EventType:
     # Session events
     SESSION_START = "session_start"
     SESSION_END = "session_end"
+    SESSION_STARTED = "session.started"
+    SESSION_ENDED = "session.ended"
 
-    # Category mapping for MetricsCollector
-    CATEGORIES = {
-        "memory.created": "writes", "memory.updated": "writes",
-        "memory.inactivated": "writes", "memory.reactivated": "writes",
-        "memory.graduated": "writes", "memory.boosted": "writes",
-        "memory.consolidated": "writes", "memory.recalled": "reads",
-        "search.executed": "reads",
-        "work_item.created": "work", "work_item.updated": "work",
-        "work_item.status_changed": "work", "work_item.claimed": "work",
-        "work_item.completed": "work", "work_item.blocked": "work",
-        "work_item.unblocked": "work", "work_item.gate_set": "work",
-        "work_item.gate_resolved": "work", "work_item.memories_linked": "work",
-        "deliverable.created": "work", "deliverable.submitted": "work",
-        "deliverable.approved": "work", "deliverable.revised": "work",
-        "deliverable.rejected": "work",
-        "belief.crystallized": "writes", "belief.challenged": "writes",
-        "belief.retracted": "writes", "belief.superseded": "writes",
-        "working_memory.captured": "writes", "working_memory.resolved": "system",
-        "working_memory.graduated": "writes", "working_memory.boosted": "writes",
-        "working_memory.archived": "system",
-        "thinking.sequence_started": "llm", "thinking.thought_added": "llm",
-        "thinking.sequence_concluded": "llm", "thinking.sequence_reopened": "llm",
-        "settings.updated": "system", "settings.deleted": "system",
-        "session_start": "sessions", "session_end": "sessions",
+    # Unified category mapping — one prefix-based lookup for all event types.
+    # Domain events, tool events, LLM/embedding telemetry, external hooks —
+    # all classified by their domain prefix.
+    _DOMAIN_CATEGORIES: dict[str, str] = {
+        "memory": "writes",
+        "search": "reads",
+        "work_item": "work",
+        "deliverable": "work",
+        "belief": "writes",
+        "working_memory": "system",
+        "thinking": "llm",
+        "settings": "system",
+        "session": "sessions",
+        "tool": "tool",
+        "llm": "llm",
+        "embed": "embedding",
+        "api": "api",
+        "hook": "external",
+        "code": "system",
     }
 
-    # Prefix-based fallback for dynamic/tool event types
-    PREFIX_CATEGORIES = {
-        "memory.": "writes",
-        "search.": "reads",
-        "work_item.": "work",
-        "deliverable.": "work",
-        "belief.": "writes",
-        "working_memory.": "system",
-        "thinking.": "llm",
-        "settings.": "system",
-        "tool.": "other",
+    # Per-event overrides where the prefix rule is wrong
+    _CATEGORY_OVERRIDES: dict[str, str] = {
+        "memory.recalled": "reads",
+        # Legacy event names (pre-unified)
+        "session_start": "sessions",
+        "session_end": "sessions",
     }
 
     @classmethod
     def category_for(cls, event_type: str) -> str:
         """Get the metrics category for an event type."""
-        cat = cls.CATEGORIES.get(event_type)
-        if cat:
-            return cat
-        for prefix, category in cls.PREFIX_CATEGORIES.items():
-            if event_type.startswith(prefix):
-                return category
-        return "other"
+        override = cls._CATEGORY_OVERRIDES.get(event_type)
+        if override:
+            return override
+        prefix = event_type.split(".")[0]
+        return cls._DOMAIN_CATEGORIES.get(prefix, "other")
 
 
 # Event Bus (v0.50.0)

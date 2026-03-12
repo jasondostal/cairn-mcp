@@ -165,10 +165,11 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         if svc.event_bus:
             from cairn.core.user import current_user as _current_user
             ctx = _current_user()
-            svc.event_bus.publish(
-                session_name="settings", event_type="settings.updated",
+            svc.event_bus.emit(
+                "settings.updated",
+                actor="rest",
                 payload={
-                    "actor": ctx.username if ctx else "anonymous",
+                    "user": ctx.username if ctx else "anonymous",
                     "changes": {k: updates[k] for k in updates},
                 },
             )
@@ -186,10 +187,11 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         if svc.event_bus:
             from cairn.core.user import current_user as _current_user
             ctx = _current_user()
-            svc.event_bus.publish(
-                session_name="settings", event_type="settings.deleted",
+            svc.event_bus.emit(
+                "settings.deleted",
+                actor="rest",
                 payload={
-                    "actor": ctx.username if ctx else "anonymous",
+                    "user": ctx.username if ctx else "anonymous",
                     "key": key,
                 },
             )

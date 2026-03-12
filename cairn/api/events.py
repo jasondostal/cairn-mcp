@@ -44,9 +44,10 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         if not event_type:
             raise HTTPException(status_code=400, detail="event_type is required")
 
-        event_id = event_bus.publish(
+        event_id = event_bus.emit(
+            event_type,
             session_name=session_name,
-            event_type=event_type,
+            actor=body.get("actor", "hook"),
             project=body.get("project"),
             agent_id=body.get("agent_id"),
             work_item_id=body.get("work_item_id"),

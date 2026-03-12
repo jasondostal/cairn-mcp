@@ -27,9 +27,10 @@ export type MetricKey =
   | "cat_llm"
   | "cat_embedding"
   | "cat_work"
+  | "cat_tool"
   | "cat_sessions";
 
-export type DisplayMode = "motes" | "ekg" | "numeric";
+export type DisplayMode = "beads" | "ekg" | "numeric";
 
 interface MetricDef {
   key: MetricKey;
@@ -132,6 +133,14 @@ const METRIC_DEFS: MetricDef[] = [
     group: "category",
   },
   {
+    key: "cat_tool",
+    label: "Tool calls",
+    shortLabel: "tool",
+    color: "var(--pulse-tokens)",
+    format: (v) => v.toString(),
+    group: "category",
+  },
+  {
     key: "cat_sessions",
     label: "Sessions",
     shortLabel: "sess",
@@ -146,12 +155,12 @@ const METRIC_MAP = new Map(METRIC_DEFS.map((d) => [d.key, d]));
 const LS_METRICS_KEY = "cairn:ekg-metrics";
 const LS_POSITION_KEY = "cairn:ekg-position";
 const LS_DISPLAY_KEY = "cairn:ekg-display";
-const DEFAULT_METRICS: MetricKey[] = ["ops_count", "latency_avg_ms"];
-const DEFAULT_DISPLAY: DisplayMode = "motes";
-const MAX_SELECTED = 3;
+const DEFAULT_METRICS: MetricKey[] = ["cat_reads", "cat_writes", "cat_llm"];
+const DEFAULT_DISPLAY: DisplayMode = "beads";
+const MAX_SELECTED = 6;
 
 const DISPLAY_MODE_LABELS: Record<DisplayMode, string> = {
-  motes: "Motes",
+  beads: "Beads",
   ekg: "EKG",
   numeric: "Numeric",
 };
@@ -163,6 +172,7 @@ const CATEGORY_KEY_MAP: Record<string, string> = {
   cat_llm: "llm",
   cat_embedding: "embedding",
   cat_work: "work",
+  cat_tool: "tool",
   cat_sessions: "sessions",
 };
 
@@ -185,7 +195,9 @@ function loadSelectedMetrics(): MetricKey[] {
 function loadDisplayMode(): DisplayMode {
   try {
     const stored = localStorage.getItem(LS_DISPLAY_KEY);
-    if (stored === "motes" || stored === "ekg" || stored === "numeric") return stored;
+    if (stored === "beads" || stored === "ekg" || stored === "numeric") return stored;
+    // Migrate old "motes" preference
+    if (stored === "motes") return "beads";
   } catch { /* ignore */ }
   return DEFAULT_DISPLAY;
 }
@@ -209,77 +221,71 @@ function resolveColor(cssVar: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Display: Motes — ambient drifting dots, solid on real events
+// Display: Beads — operations as drifting, fading particles
 // ---------------------------------------------------------------------------
 
-interface Mote {
+interface Bead {
   x: number;
   y: number;
   vx: number;
   vy: number;
-  r: number;
-  opacity: number;
-  solid: boolean;
-  life: number;
-  maxLife: number;
+  r: number;          // radius
+  color: string;       // resolved RGB "r,g,b"
+  opacity: number;     // current opacity (fades over life)
+  age: number;         // seconds since spawn
+  maxAge: number;      // total lifespan in seconds
+  birthGlow: number;   // extra glow intensity at birth (0..1)
 }
 
-const AMBIENT_COUNT = 5;
-const MOTE_SPEED = 0.25;
-const AMBIENT_OPACITY = 0.12;
-// Minimum event motes — even 1 op spawns a visible burst
-const MIN_EVENT_MOTES = 8;
+const BEAD_MAX_AGE = 45;      // seconds a bead lives
+const BEAD_DRIFT_SPEED = 0.4; // px/frame horizontal drift
+const BEAD_BASE_RADIUS = 2.5;
+const BEAD_MAX_RADIUS = 5;
 
-function spawnAmbient(w: number, h: number): Mote {
+function spawnBead(w: number, h: number, color: string, magnitude: number): Bead {
+  const r = Math.min(BEAD_BASE_RADIUS + magnitude * 0.8, BEAD_MAX_RADIUS);
   return {
-    x: Math.random() * w,
-    y: Math.random() * h,
-    vx: (Math.random() - 0.5) * MOTE_SPEED,
-    vy: (Math.random() - 0.5) * MOTE_SPEED * 0.5,
-    r: 0.8 + Math.random() * 0.7,
-    opacity: AMBIENT_OPACITY * (0.5 + Math.random() * 0.5),
-    solid: false,
-    life: 1,
-    maxLife: 1,
-  };
-}
-
-function spawnEvent(w: number, h: number): Mote {
-  return {
-    x: w * (0.15 + Math.random() * 0.7),
-    y: h * (0.1 + Math.random() * 0.8),
-    vx: (Math.random() - 0.5) * MOTE_SPEED * 0.5,
-    vy: (Math.random() - 0.5) * MOTE_SPEED * 0.3,
-    r: 3 + Math.random() * 3,
+    x: 4 + Math.random() * 8,  // spawn near left edge
+    y: 3 + Math.random() * (h - 6),
+    vx: BEAD_DRIFT_SPEED * (0.7 + Math.random() * 0.6),
+    vy: (Math.random() - 0.5) * 0.15,
+    r,
+    color,
     opacity: 1.0,
-    solid: true,
-    life: 1,
-    maxLife: 1,
+    age: 0,
+    maxAge: BEAD_MAX_AGE * (0.8 + Math.random() * 0.4),
+    birthGlow: 1.0,
   };
 }
 
-function PulseMotes({
-  data,
-  color,
-  height = 20,
+function PulseBeads({
+  buckets,
+  selectedDefs,
+  height = 32,
 }: {
-  data: { v: number }[];
-  color: string;
+  buckets: MetricsBucket[];
+  selectedDefs: MetricDef[];
   height?: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const motesRef = useRef<Mote[]>([]);
+  const beadsRef = useRef<Bead[]>([]);
   const rafRef = useRef<number>(0);
-  const flashRef = useRef(0);
+  const sizeRef = useRef({ w: 0, h: 0 });
+  const lastTimestampRef = useRef<string>("");
+  const lastFrameRef = useRef<number>(performance.now());
 
-  const resolvedColor = useRef("128,200,128");
+  // Resolve CSS custom properties to RGB strings
+  const colorMapRef = useRef<Map<string, string>>(new Map());
   useEffect(() => {
     if (!canvasRef.current) return;
-    resolvedColor.current = resolveColor(color);
-  }, [color]);
+    const map = new Map<string, string>();
+    for (const def of selectedDefs) {
+      map.set(def.key, resolveColor(def.color));
+    }
+    colorMapRef.current = map;
+  }, [selectedDefs]);
 
-  const sizeRef = useRef({ w: 0, h: 0 });
-
+  // Canvas setup and animation loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -296,10 +302,6 @@ function PulseMotes({
       canvas.width = w * 2;
       canvas.height = h * 2;
       ctx.setTransform(2, 0, 0, 2, 0, 0);
-      motesRef.current = [];
-      for (let i = 0; i < AMBIENT_COUNT; i++) {
-        motesRef.current.push(spawnAmbient(w, h));
-      }
     }
 
     const observer = new ResizeObserver(resize);
@@ -312,60 +314,76 @@ function PulseMotes({
       if (!running || !ctx) return;
       const { w, h } = sizeRef.current;
       if (w === 0) { rafRef.current = requestAnimationFrame(tick); return; }
+
+      const now = performance.now();
+      const dt = Math.min((now - lastFrameRef.current) / 1000, 0.1); // delta in seconds, capped
+      lastFrameRef.current = now;
+
       ctx.clearRect(0, 0, w, h);
-      const motes = motesRef.current;
-      const c = resolvedColor.current;
+      const beads = beadsRef.current;
 
-      if (flashRef.current > 0) {
-        ctx.fillStyle = `rgba(${c}, ${flashRef.current * 0.15})`;
-        ctx.fillRect(0, 0, w, h);
-        flashRef.current = Math.max(0, flashRef.current - 0.02);
-      }
+      for (let i = beads.length - 1; i >= 0; i--) {
+        const b = beads[i];
+        b.age += dt;
 
-      for (let i = motes.length - 1; i >= 0; i--) {
-        const m = motes[i];
-        m.x += m.vx;
-        m.y += m.vy;
-        if (!m.solid) {
-          m.vx += (Math.random() - 0.5) * 0.02;
-          m.vy += (Math.random() - 0.5) * 0.02;
-          m.vx *= 0.99;
-          m.vy *= 0.99;
-        }
-        if (m.solid) {
-          m.life -= 0.0015;
-          if (m.life <= 0) {
-            motes.splice(i, 1);
-            continue;
-          }
-        }
-        if (!m.solid) {
-          if (m.x < -4) m.x = w + 2;
-          if (m.x > w + 4) m.x = -2;
-          if (m.y < -4) m.y = h + 2;
-          if (m.y > h + 4) m.y = -2;
+        // Remove expired beads
+        if (b.age >= b.maxAge || b.x > w + 10) {
+          beads.splice(i, 1);
+          continue;
         }
 
-        const alpha = m.solid ? m.opacity * m.life : m.opacity;
+        // Drift
+        b.x += b.vx * dt * 60;
+        b.y += b.vy * dt * 60;
 
-        if (m.solid) {
-          ctx.beginPath();
-          ctx.arc(m.x, m.y, m.r * 3.5, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(${c}, ${alpha * 0.2})`;
-          ctx.fill();
-          if (m.life > 0.8) {
-            const f = (m.life - 0.8) / 0.2;
-            ctx.beginPath();
-            ctx.arc(m.x, m.y, m.r * 6, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(${c}, ${f * 0.3})`;
-            ctx.fill();
-          }
-        }
+        // Gentle vertical drift correction — keep beads roughly in bounds
+        if (b.y < 2) b.vy = Math.abs(b.vy) * 0.5;
+        if (b.y > h - 2) b.vy = -Math.abs(b.vy) * 0.5;
 
+        // Tiny random wobble
+        b.vy += (Math.random() - 0.5) * 0.01;
+
+        // Opacity: full brightness for first 30%, then linear fade
+        const lifeRatio = b.age / b.maxAge;
+        b.opacity = lifeRatio < 0.3
+          ? 1.0
+          : 1.0 - ((lifeRatio - 0.3) / 0.7);
+
+        // Birth glow decays quickly
+        b.birthGlow = Math.max(0, 1 - b.age * 2);
+
+        const alpha = Math.max(0, b.opacity);
+        const c = b.color;
+
+        // Outer glow (always present, larger when young)
+        const glowRadius = b.r * (2.5 + b.birthGlow * 2);
+        const glowAlpha = alpha * (0.12 + b.birthGlow * 0.25);
         ctx.beginPath();
-        ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${c}, ${alpha})`;
+        ctx.arc(b.x, b.y, glowRadius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${c}, ${glowAlpha})`;
         ctx.fill();
+
+        // Birth flash — bright burst that fades fast
+        if (b.birthGlow > 0.1) {
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, b.r * (4 + b.birthGlow * 3), 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${c}, ${b.birthGlow * 0.2})`;
+          ctx.fill();
+        }
+
+        // Core bead
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${c}, ${alpha * 0.9})`;
+        ctx.fill();
+
+        // Bright center highlight
+        if (alpha > 0.3) {
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, b.r * 0.4, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.3})`;
+          ctx.fill();
+        }
       }
 
       rafRef.current = requestAnimationFrame(tick);
@@ -379,24 +397,45 @@ function PulseMotes({
     };
   }, []);
 
-  // Spawn event motes — amplified: even v=1 spawns MIN_EVENT_MOTES
-  const lastBucketRef = useRef<string>("");
+  // Spawn beads from new buckets
   useEffect(() => {
-    if (!data.length) return;
-    const last = data[data.length - 1];
-    if (!last || last.v === 0) return;
-    const fp = `${data.length}:${last.v}`;
-    if (fp === lastBucketRef.current) return;
-    lastBucketRef.current = fp;
+    if (!buckets.length) return;
+    const latest = buckets[buckets.length - 1];
+    if (!latest) return;
 
-    const { w, h } = sizeRef.current.w > 0 ? sizeRef.current : { w: 100, h: 20 };
-    // Amplify: minimum burst even for 1 event, scales up but caps at 24
-    const count = Math.min(Math.max(last.v * 6, MIN_EVENT_MOTES), 24);
-    for (let i = 0; i < count; i++) {
-      motesRef.current.push(spawnEvent(w, h));
+    // Only process new buckets
+    if (latest.timestamp === lastTimestampRef.current) return;
+    lastTimestampRef.current = latest.timestamp;
+
+    const { w, h } = sizeRef.current;
+    if (w === 0) return;
+
+    const colorMap = colorMapRef.current;
+
+    // Spawn beads for each selected category that has activity
+    for (const def of selectedDefs) {
+      const color = colorMap.get(def.key);
+      if (!color) continue;
+
+      let count = 0;
+      const catKey = CATEGORY_KEY_MAP[def.key];
+      if (catKey) {
+        count = latest.by_category?.[catKey] ?? 0;
+      } else {
+        // Aggregate metric — use raw value
+        const raw = latest[def.key as keyof MetricsBucket];
+        count = typeof raw === "number" ? raw : 0;
+      }
+
+      if (count <= 0) continue;
+
+      // Spawn 1 bead per operation, capped to avoid explosion
+      const beadCount = Math.min(count, 8);
+      for (let i = 0; i < beadCount; i++) {
+        beadsRef.current.push(spawnBead(w, h, color, count));
+      }
     }
-    flashRef.current = 1;
-  }, [data]);
+  }, [buckets, selectedDefs]);
 
   return (
     <canvas
@@ -632,7 +671,7 @@ function PulseConfig({
       <div>
         <div className="text-xs font-medium text-muted-foreground mb-1">Display</div>
         <div className="flex gap-1">
-          {(["motes", "ekg", "numeric"] as const).map((mode) => (
+          {(["beads", "ekg", "numeric"] as const).map((mode) => (
             <button
               key={mode}
               onClick={() => onDisplayModeChange(mode)}
@@ -649,7 +688,9 @@ function PulseConfig({
       </div>
       {/* Metrics */}
       <div className="border-t border-border pt-2">
-        <div className="text-xs font-medium text-muted-foreground">Metrics (max 3)</div>
+        <div className="text-xs font-medium text-muted-foreground">
+          Metrics {displayMode === "beads" ? "(bead colors)" : `(max ${MAX_SELECTED})`}
+        </div>
         <div className="space-y-1">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 px-2 pt-1">Aggregate</div>
           {aggregateDefs.map(renderMetricCheckbox)}
@@ -819,37 +860,63 @@ export function SystemPulse() {
       );
     }
 
-    // Default: motes
-    const value = latest
-      ? CATEGORY_KEY_MAP[def.key]
-        ? (latest.by_category?.[CATEGORY_KEY_MAP[def.key]] ?? 0)
-        : (latest[def.key as keyof MetricsBucket] as number)
-      : 0;
+    // Should not happen — beads mode doesn't use per-metric lanes
+    return null;
+  }
+
+  // Beads mode: single shared canvas, all categories rendered as differently-colored beads
+  if (displayMode === "beads") {
     return (
-      <div key={def.key} className="flex items-center gap-1.5">
-        <span
-          className={`text-[9px] w-6 text-right tabular-nums shrink-0 transition-colors duration-300 ${
-            flash && def.key === "ops_count"
-              ? "text-[var(--pulse-ops)] font-bold"
-              : "text-muted-foreground"
-          }`}
-        >
-          {latest ? def.format(value) : "--"}
-        </span>
-        <div className="flex-1 min-w-0">
-          <PulseMotes
-            data={series}
-            color={def.color}
-            height={16}
-          />
-        </div>
-        <span className="text-[8px] text-muted-foreground/60 w-5 shrink-0">
-          {def.shortLabel}
-        </span>
-      </div>
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            className={`w-full rounded-md px-2 py-1.5 hover:bg-sidebar-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group ${flash ? "bg-[var(--pulse-ops)]/10" : ""}`}
+            style={{ transition: "background-color 0.3s ease-out" }}
+            aria-label="System pulse — click to configure"
+          >
+            <div className="flex items-center justify-between mb-0.5">
+              <div className="flex items-center gap-1.5">
+                <div
+                  className={`rounded-full shrink-0 transition-all duration-300 ${
+                    connected
+                      ? hasErrors
+                        ? "h-1.5 w-1.5 bg-[var(--pulse-errors)] animate-pulse"
+                        : flash
+                          ? "h-2.5 w-2.5 bg-[var(--pulse-ops)] shadow-[0_0_6px_var(--pulse-ops)]"
+                          : "h-1.5 w-1.5 bg-[var(--pulse-ops)]"
+                      : "h-1.5 w-1.5 bg-muted-foreground/40"
+                  }`}
+                />
+                <span className="text-[10px] text-muted-foreground">
+                  {connected ? "live" : "disconnected"}
+                </span>
+              </div>
+              <Settings2 className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <PulseBeads
+              buckets={buckets}
+              selectedDefs={selectedDefs}
+              height={32}
+            />
+            {/* Category legend */}
+            <div className="flex gap-2 mt-0.5">
+              {selectedDefs.map((def) => (
+                <div key={def.key} className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: def.color }} />
+                  <span className="text-[8px] text-muted-foreground/50">{def.shortLabel}</span>
+                </div>
+              ))}
+            </div>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent side="right" align="start" className="w-56">
+          {configPopover}
+        </PopoverContent>
+      </Popover>
     );
   }
 
+  // EKG / Numeric — per-metric lanes
   return (
     <Popover>
       <PopoverTrigger asChild>

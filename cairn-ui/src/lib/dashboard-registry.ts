@@ -5,7 +5,7 @@ import {
   Calendar,
   DollarSign,
   Cpu,
-  HeartPulse,
+  // HeartPulse, // EKG hidden — ca-251
   Kanban,
   Layers,
   PieChart,
@@ -178,17 +178,18 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
       sm: { i: "memory-type-bar", x: 0, y: 70, w: 1, h: 3, minW: 1, minH: 2 },
     },
   },
-  {
-    id: "live-pulse",
-    label: "Live Pulse",
-    description: "Real-time EKG — ops/sec, latency, tokens, errors streamed via SSE",
-    icon: HeartPulse,
-    layouts: {
-      lg: { i: "live-pulse", x: 0, y: 50, w: 12, h: 8, minW: 4, minH: 5 },
-      md: { i: "live-pulse", x: 0, y: 73, w: 6, h: 8, minW: 3, minH: 5 },
-      sm: { i: "live-pulse", x: 0, y: 73, w: 1, h: 8, minW: 1, minH: 5 },
-    },
-  },
+  // NOTE: live-pulse (EKG) hidden until SSE pipeline is stable — see ca-251
+  // {
+  //   id: "live-pulse",
+  //   label: "Live Pulse",
+  //   description: "Real-time EKG — ops/sec, latency, tokens, errors streamed via SSE",
+  //   icon: HeartPulse,
+  //   layouts: {
+  //     lg: { i: "live-pulse", x: 0, y: 50, w: 12, h: 8, minW: 4, minH: 5 },
+  //     md: { i: "live-pulse", x: 0, y: 73, w: 6, h: 8, minW: 3, minH: 5 },
+  //     sm: { i: "live-pulse", x: 0, y: 73, w: 1, h: 8, minW: 1, minH: 5 },
+  //   },
+  // },
 ];
 
 /** O(1) lookup by widget id */

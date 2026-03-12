@@ -451,9 +451,8 @@ class ChatToolExecutor:
         if self.svc.event_bus and results:
             try:
                 memory_ids = [r["id"] for r in results if isinstance(r, dict) and "id" in r]
-                self.svc.event_bus.publish(
-                    session_name="",
-                    event_type="search.executed",
+                self.svc.event_bus.emit(
+                    "search.executed",
                     project=project,
                     payload={
                         "query": query[:200],
@@ -520,9 +519,8 @@ class ChatToolExecutor:
         if self.svc.event_bus and results:
             try:
                 memory_ids = [r["id"] for r in results if isinstance(r, dict) and "id" in r]
-                self.svc.event_bus.publish(
-                    session_name="",
-                    event_type="memory.recalled",
+                self.svc.event_bus.emit(
+                    "memory.recalled",
                     payload={
                         "memory_ids": memory_ids,
                         "count": len(memory_ids),

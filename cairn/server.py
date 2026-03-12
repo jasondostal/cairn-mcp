@@ -142,8 +142,6 @@ def _start_workers(svc, cfg, db_instance):
         svc.alert_worker.start()
     if svc.retention_worker:
         svc.retention_worker.start()
-    if svc.metrics_collector:
-        svc.metrics_collector.start()
     logger.info("Cairn started. Embedding: %s (%d-dim)", cfg.embedding.backend, cfg.embedding.dimensions)
 
 
@@ -163,8 +161,6 @@ def _stop_workers(svc, db_instance):
         svc.alert_worker.stop()
     if svc.retention_worker:
         svc.retention_worker.stop()
-    if svc.metrics_collector:
-        svc.metrics_collector.stop()
     from cairn.core import otel
     otel.shutdown()
     if svc.analytics_tracker:

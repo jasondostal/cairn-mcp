@@ -91,7 +91,7 @@ Search for it later:
 
 > "What did we decide about the storage layer?"
 
-That's it. 22 tools available. The ones you'll use most:
+That's it. 23 tools available. The ones you'll use most:
 
 | Tool | What it does |
 |------|-------------|
@@ -108,7 +108,7 @@ That's it. 22 tools available. The ones you'll use most:
 | `arch_check` | Validate architecture boundary rules against imports |
 | `dispatch` | Dispatch work to a background agent — tracked, briefed, heartbeating |
 
-The rest: `modify`, `insights`, `think`, `status`, `consolidate`, `decay_scan`, `drift_check`, `ingest`.
+The rest: `modify`, `insights`, `think`, `status`, `consolidate`, `decay_scan`, `drift_check`, `ingest`, `deliverables`, `locks`, `suggest_agent`.
 
 ## What's in the box
 
@@ -248,7 +248,7 @@ python -m cairn.code \
 python -m cairn.code \
   --watch /home/user/working/myproject:myproject \
   --watch /home/user/working/other:other \
-  --neo4j-uri bolt://util:7687
+  --neo4j-uri bolt://my-server:7687
 ```
 
 ### Environment variables

@@ -1,8 +1,12 @@
-"""EventBus — event publishing, subscriber dispatch, and query.
+"""EventBus — unified event publishing, subscriber dispatch, and query.
 
-Events are INSERTed into the events table (triggering Postgres NOTIFY for
-real-time SSE streaming). Registered handlers get dispatch records created
-in event_dispatches for reliable delivery with retry via EventDispatcher.
+All events in cairn flow through this bus. Domain mutations, tool calls,
+LLM/embedding usage, external hooks — everything emits a CairnEvent.
+
+Every event is INSERTed into the events table, triggering Postgres NOTIFY
+for real-time SSE streaming. Registered handlers get dispatch records
+created in event_dispatches for reliable delivery with retry via
+EventDispatcher.
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from cairn.core import stats
+from cairn.core.event_schema import CairnEvent
 from cairn.core.utils import get_or_create_project
 
 if TYPE_CHECKING:
@@ -39,18 +44,6 @@ class EventBus:
         self._handlers: dict[str, list[tuple[str, Callable]]] = defaultdict(list)
         # handler_name -> fn (flat lookup for dispatcher)
         self._handler_lookup: dict[str, Callable] = {}
-        # Lightweight observers — fire-and-forget, no DB dispatch records
-        self._observers: list[Callable[[dict], None]] = []
-
-    def add_observer(self, fn: Callable[[dict], None]) -> None:
-        """Register a lightweight observer that receives all published events.
-
-        Observers run synchronously inline during publish(), wrapped in
-        try/except so they never block event publishing. Use for transient
-        in-process consumers like MetricsCollector.
-        """
-        self._observers.append(fn)
-        logger.info("EventBus: added observer %s", fn)
 
     # ------------------------------------------------------------------
     # Subscriber registration
@@ -88,6 +81,52 @@ class EventBus:
         handlers += self._handlers.get("*", [])
         return handlers
 
+    # ------------------------------------------------------------------
+    # Unified emit — the preferred entry point
+    # ------------------------------------------------------------------
+
+    def emit(
+        self,
+        event_type: str,
+        *,
+        session_name: str | None = None,
+        actor: str | None = None,
+        project: str | None = None,
+        agent_id: str | None = None,
+        work_item_id: int | None = None,
+        tool_name: str | None = None,
+        payload: dict | None = None,
+    ) -> int:
+        """Unified event entry point. Builds a CairnEvent and persists it.
+
+        Every event is INSERTed into the events table, creating dispatch
+        records for reliable listeners and triggering Postgres NOTIFY for SSE.
+
+        All fields fall back to the current trace context when not provided.
+        """
+        from cairn.core.trace import current_trace
+
+        trace = current_trace()
+
+        event = CairnEvent(
+            event_type=event_type,
+            session_name=session_name or (getattr(trace, "entry_point", None) if trace else None) or "__system__",
+            actor=actor or (trace.actor if trace else "system"),
+            project=project or (trace.project if trace else None),
+            agent_id=agent_id,
+            work_item_id=work_item_id,
+            tool_name=tool_name or (trace.tool_name if trace else None),
+            trace_id=trace.trace_id if trace else None,
+            span_id=trace.span_id if trace else None,
+            payload=payload or {},
+        )
+
+        return self._persist_and_dispatch(event)
+
+    # ------------------------------------------------------------------
+    # Legacy publish — delegates to emit()
+    # ------------------------------------------------------------------
+
     def publish(
         self,
         session_name: str,
@@ -101,45 +140,50 @@ class EventBus:
     ) -> int:
         """Insert event and trigger NOTIFY. Returns event id.
 
-        Lifecycle side-effects:
-        - session_start events auto-create a session record (upsert).
-        - session_end events auto-close the session (set closed_at).
+        .. deprecated:: Use :meth:`emit` instead. This method remains for
+           backward compatibility during the migration.
         """
+        return self.emit(
+            event_type,
+            session_name=session_name,
+            project=project,
+            agent_id=agent_id,
+            work_item_id=work_item_id,
+            tool_name=tool_name,
+            payload=payload,
+        )
+
+    # ------------------------------------------------------------------
+    # Internal persistence + dispatch
+    # ------------------------------------------------------------------
+
+    def _persist_and_dispatch(self, event: CairnEvent) -> int:
+        """Persist event to DB, create dispatch records, notify observers."""
         import json
 
-        from cairn.core.trace import current_trace
-
-        # Read trace context (if active)
-        trace = current_trace()
-        trace_id = trace.trace_id if trace else None
-
-        # Fallback: read project and tool_name from trace context (ca-231)
-        if not project and trace and trace.project:
-            project = trace.project
-        if not tool_name and trace and trace.tool_name:
-            tool_name = trace.tool_name
-
         project_id = None
-        if project:
-            project_id = get_or_create_project(self.db, project)
+        if event.project:
+            project_id = get_or_create_project(self.db, event.project)
 
         row = self.db.execute_one(
             """
             INSERT INTO events
                 (session_name, agent_id, work_item_id, project_id,
-                 event_type, tool_name, payload, trace_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+                 event_type, tool_name, payload, trace_id, actor, span_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)
             RETURNING id
             """,
             (
-                session_name,
-                agent_id,
-                work_item_id,
+                event.session_name,
+                event.agent_id,
+                event.work_item_id,
                 project_id,
-                event_type,
-                tool_name,
-                json.dumps(payload or {}),
-                trace_id,
+                event.event_type,
+                event.tool_name,
+                json.dumps(event.payload),
+                event.trace_id,
+                event.actor,
+                event.span_id,
             ),
         )
         assert row is not None
@@ -148,7 +192,7 @@ class EventBus:
         event_id = row["id"]
 
         # Create dispatch records for matching handlers
-        matching = self._matching_handlers(event_type)
+        matching = self._matching_handlers(event.event_type)
         for handler_name, _ in matching:
             try:
                 self.db.execute(
@@ -168,45 +212,30 @@ class EventBus:
             self.db.commit()
 
         if stats.event_bus_stats:
-            stats.event_bus_stats.record_publish(event_type)
+            stats.event_bus_stats.record_publish(event.event_type)
         logger.debug(
-            "Event published: id=%d session=%s type=%s tool=%s dispatches=%d",
-            event_id, session_name, event_type, tool_name, len(matching),
+            "Event published: id=%d session=%s type=%s actor=%s tool=%s dispatches=%d",
+            event_id, event.session_name, event.event_type, event.actor,
+            event.tool_name, len(matching),
         )
 
-        # Notify lightweight observers (metrics collector, etc.)
-        if self._observers:
-            observer_data = {
-                "event_type": event_type,
-                "tool_name": tool_name,
-                "project": project,
-                "session_name": session_name,
-                "payload": payload or {},
-            }
-            for obs in self._observers:
-                try:
-                    obs(observer_data)
-                except Exception:
-                    logger.warning("EventBus observer %s failed", obs, exc_info=True)
-
         # Auto-manage session lifecycle from events
-        _payload = payload or {}
-        if event_type == "session_start" and project:
+        if event.event_type in ("session_start", "session.started") and event.project:
             try:
                 self.open_session(
-                    session_name=session_name,
-                    project=project,
-                    agent_id=agent_id,
-                    agent_type=_payload.get("agent_type", "interactive"),
-                    parent_session=_payload.get("parent_session"),
+                    session_name=event.session_name,
+                    project=event.project,
+                    agent_id=event.agent_id,
+                    agent_type=event.payload.get("agent_type", "interactive"),
+                    parent_session=event.payload.get("parent_session"),
                 )
             except Exception:
-                logger.warning("Auto open_session failed for %s", session_name, exc_info=True)
-        elif event_type == "session_end":
+                logger.warning("Auto open_session failed for %s", event.session_name, exc_info=True)
+        elif event.event_type in ("session_end", "session.ended"):
             try:
-                self.close_session(session_name)
+                self.close_session(event.session_name)
             except Exception:
-                logger.warning("Auto close_session failed for %s", session_name, exc_info=True)
+                logger.warning("Auto close_session failed for %s", event.session_name, exc_info=True)
 
         return event_id
 

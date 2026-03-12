@@ -5,7 +5,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/components/auth-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AppShell } from "@/components/app-shell";
-import { MetricsStreamProvider } from "@/hooks/use-metrics-stream";
+// NOTE: EKG hidden until SSE pipeline is stable — see ca-251
+// import { MetricsStreamProvider } from "@/hooks/use-metrics-stream";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -55,9 +56,10 @@ export default function RootLayout({
         <ThemeProvider>
           <TooltipProvider delayDuration={300}>
             <AuthProvider>
-              <MetricsStreamProvider>
+              {/* NOTE: EKG hidden until SSE pipeline is stable — see ca-251 */}
+              {/* <MetricsStreamProvider> */}
                 <AppShell>{children}</AppShell>
-              </MetricsStreamProvider>
+              {/* </MetricsStreamProvider> */}
             </AuthProvider>
             <Toaster position="bottom-center" richColors />
           </TooltipProvider>

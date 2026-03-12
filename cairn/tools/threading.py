@@ -3,11 +3,10 @@
 Runs synchronous service calls in a thread and releases the DB connection
 afterward to prevent pool exhaustion.
 
-Also the universal instrumentation point for the MetricsCollector —
-every MCP tool call passes through ``in_thread``, so we record timing
-and success/failure here instead of per-tool. One boundary, all tools
-observed. Tool name and project are read from the trace context (set by
-each tool handler before calling ``in_thread``).
+Also the universal instrumentation point — every MCP tool call passes
+through ``in_thread``, so we emit a ``tool.*`` event into the unified event
+bus. Tool name and project are read from the trace context (set by each
+tool handler before calling ``in_thread``).
 """
 
 import asyncio
@@ -34,9 +33,8 @@ async def in_thread(_db: Database, fn, *args, timeout: float = 120.0, **kwargs):
     The DB connection is released even on timeout (via the finally block in
     ``_wrapped`` — the thread still runs to completion and hits finally).
 
-    Automatically records the call in the MetricsCollector using tool_name
-    and project from the trace context (set by tool handlers via
-    ``set_trace_tool`` / ``set_trace_project`` before calling this).
+    Automatically emits a ``tool.*`` event into the unified event bus using
+    tool_name and project from the trace context.
     """
     # Capture trace context before the thread hop (contextvars don't propagate)
     trace = current_trace()
@@ -64,16 +62,15 @@ async def in_thread(_db: Database, fn, *args, timeout: float = 120.0, **kwargs):
         raise
     finally:
         latency_ms = (time.monotonic() - t0) * 1000
-        collector = stats.get_metrics_collector()
+        event_bus = stats.get_event_bus()
         logger.info(
-            "in_thread exit: tool=%s project=%s latency=%.0fms success=%s collector=%s",
-            _tool_name, _project, latency_ms, success, collector is not None,
+            "in_thread exit: tool=%s project=%s latency=%.0fms success=%s bus=%s",
+            _tool_name, _project, latency_ms, success, event_bus is not None,
         )
-        if collector and _tool_name:
-            collector.record_event(
-                event_type=f"tool.{_tool_name}",
+        if event_bus and _tool_name:
+            event_bus.emit(
+                f"tool.{_tool_name}",
                 tool_name=_tool_name,
                 project=_project,
-                latency_ms=latency_ms,
-                success=success,
+                payload={"latency_ms": latency_ms, "success": success},
             )

@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.76.0] — 2026-03-12 — "Unified Events"
 
 ### Added
 - **Document attachments** — upload, list, and delete image attachments on project documents. BYTEA storage with foreign key to `project_documents`. Drag-and-drop upload on doc detail page with `cairn://attachments/` URL scheme for inline markdown rendering. Auth-aware `AuthImage` component for secure image display. New endpoints: `POST /api/docs/{id}/attachments`, `GET /api/docs/{id}/attachments`, `DELETE /api/attachments/{id}`, `GET /api/attachments/{id}/data`. Migration 049.
@@ -31,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Ruff lint** — import ordering, unused imports, `TimeoutError` alias across services.py, constants.py
 - **Mypy** — renamed `in_thread` positional `fn` param to avoid `db` kwarg collision in callers
 - **Webhooks** — added missing `logger` import in webhooks.py
+- **cairn-ui shell** — killed desktop header bar, moved ThemeToggle + NotificationBell into sidebar, added max-width constraint on content area
+- **cairn-ui responsive** — two-line layout for dense rows on mobile, chat drawer responsive, filter toolbar mobile layout, gated items responsive
+- **cairn-ui touch targets** — validated tap areas across all pages, empty state CTAs, toast position, sidebar width
+- **cairn-ui memories** — filter toolbar mobile layout, ephemeral action aria-labels
+
+### Disabled
+- **SystemPulse EKG widget** — sidebar EKG, LivePulse dashboard widget, and MetricsStreamProvider commented out until SSE pipeline is stable (ca-251). Beads/numeric modes and the component code remain for re-enablement.
 
 ## [0.75.0] — 2026-03-08 — "Observatory"
 

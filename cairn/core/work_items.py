@@ -61,7 +61,7 @@ class WorkItemManager:
         project_id: int | None = None, session_name: str | None = None,
         **payload_fields,
     ) -> None:
-        """Publish an event if event_bus is available."""
+        """Emit an event into the unified event bus."""
         if not self.event_bus:
             return
         project_name = None
@@ -70,15 +70,15 @@ class WorkItemManager:
             if row:
                 project_name = row["name"]
         try:
-            self.event_bus.publish(
-                session_name=session_name or "",
-                event_type=event_type,
+            self.event_bus.emit(
+                event_type,
+                session_name=session_name or None,
                 work_item_id=work_item_id,
                 project=project_name,
                 payload=payload_fields if payload_fields else None,
             )
         except Exception:
-            logger.warning("Failed to publish %s for work_item %s", event_type, work_item_id, exc_info=True)
+            logger.warning("Failed to emit %s for work_item %s", event_type, work_item_id, exc_info=True)
 
     def _allocate_seq_num(self, project_id: int) -> int:
         """Atomically allocate the next sequence number for a project."""

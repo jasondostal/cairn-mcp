@@ -1,35 +1,23 @@
 # Roadmap
 
-Current: **v0.75.0** — "Observatory". Next up: UI/UX comprehensive audit.
+Current: **v0.76.0** — "Unified Events". Next up: SSE pipeline fix, scaling readiness.
 
 ---
 
 ## In Progress
 
-### Unified Event Architecture
+### Unified Event Architecture — Remaining
 
-Replacing the split MetricsCollector/observer/ephemeral pattern with a single `emit() → INSERT → NOTIFY → SSE → client` pipeline. SystemPulse does client-side aggregation.
+Backend pipeline shipped. SSE client delivery and SystemPulse disabled until stable (ca-251).
 
-- [x] CairnEvent schema, NOTIFY payload expansion (migrations 051, 052)
-- [x] Kill MetricsCollector, observer system, `/api/metrics/*` endpoints
 - [ ] Fix SSE connection — SystemPulse shows "disconnected" (Next.js rewrite proxy buffering SSE?)
 - [ ] Validate pg_notify payload size safety (8KB Postgres limit vs JSONB payloads)
+- [ ] Re-enable SystemPulse EKG widget, LivePulse dashboard widget, MetricsStreamProvider
 
-### UI/UX Comprehensive Audit
+### UI/UX Comprehensive Audit — Remaining
 
-Full Dr. Pixel + Gunther audit of cairn-ui. Surgical fixes, not a rewrite — the component library, hooks, data flow, and color system are solid. The problems are layout composition and responsive behavior.
+Content density pass not yet started.
 
-**Shell & chrome.**
-- [ ] Kill desktop header bar — move ThemeToggle + NotificationBell into sidebar header
-- [ ] Identify and remove mystery footer black bar
-- [ ] Audit padding/gaps across shell — reclaim wasted vertical space
-
-**Responsive.**
-- [ ] Memory list mobile layout — two-line card rows (title full-width, metadata line beneath) instead of truncated table
-- [ ] Audit all list/table pages for mobile breakpoint behavior
-- [ ] Validate touch targets and tap areas
-
-**Content density.**
 - [ ] Chrome-to-content ratio audit across all pages
 - [ ] Information hierarchy review — what's visible at a glance vs. drill-in
 
@@ -90,6 +78,28 @@ Exploring, not committed.
 ---
 
 ## Shipped
+
+### v0.76.0 — "Unified Events" ✓
+
+Unified event pipeline, document attachments, UI/UX audit, 12 Factor wave 1.
+
+- [x] **Unified event architecture** — single `emit() → INSERT → NOTIFY` pipeline, CairnEvent dataclass, migrations 051/052
+- [x] **Kill MetricsCollector** — removed in-memory aggregation, observer system, `/api/metrics/*` endpoints
+- [x] **Document attachments** — BYTEA upload/list/delete on project docs, AuthImage, drag-and-drop, migration 049
+- [x] **SystemPulse widget** — beads/EKG/numeric display modes (EKG disabled in 0.76.0, ca-251)
+- [x] **ResilientSessionManager** — MCP session observability with stale access logging
+- [x] **Trace auto-creation** — `set_trace_tool()` auto-creates TraceContext
+- [x] **`in_thread` instrumentation** — tool latency/success recording from trace context
+
+### UI/UX Audit — Wave 1 ✓
+
+Dr. Pixel + Gunther surgical audit of cairn-ui shell and responsive behavior.
+
+- [x] **Kill desktop header bar** — ThemeToggle + NotificationBell moved to sidebar, max-width constraint on content
+- [x] **Responsive two-line layout** — dense rows on mobile with full-width title, metadata beneath
+- [x] **Touch targets** — validated tap areas, empty state CTAs, toast position, sidebar width
+- [x] **Chat drawer mobile** — responsive chat, filter toolbar, gated items layout
+- [x] **Memories filter toolbar** — mobile layout, ephemeral action aria-labels
 
 ### 12 Factor Audit — Wave 1 ✓
 
