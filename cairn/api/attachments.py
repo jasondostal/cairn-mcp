@@ -25,7 +25,7 @@ def register_routes(router: APIRouter, svc: Services, **_kw) -> None:
         try:
             result = project_manager.upload_attachment(doc_id, filename, mime_type, data)
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
+            raise HTTPException(status_code=400, detail=str(exc)) from None
 
         return result
 
