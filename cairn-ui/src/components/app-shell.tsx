@@ -20,7 +20,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <SidebarProvider>
         <SidebarNav />
         <SidebarInset className="h-dvh overflow-hidden">
-          <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4 md:hidden">
+          {/* Mobile-only header — hidden on desktop where icons live in sidebar */}
+          <header className="flex h-10 shrink-0 items-center gap-2 border-b px-4 md:hidden">
             <SidebarTrigger className="-ml-1" />
           </header>
           <div id="main-content" className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6">

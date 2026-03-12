@@ -4,11 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navGroups } from "@/lib/nav";
 import { ChevronRight, LogOut, Moon, Settings, Sun } from "lucide-react";
-import { useTheme } from "@/components/theme-provider";
 import { useState, useEffect } from "react";
-import { NotificationBell } from "@/components/notification-bell";
 import { SystemPulse, LS_POSITION_KEY, type SystemPulsePosition } from "@/components/system-pulse";
+import { NotificationBell } from "@/components/notification-bell";
 import { useAuth } from "@/components/auth-provider";
+import { useTheme } from "@/components/theme-provider";
 import {
   Sidebar,
   SidebarContent,
@@ -166,26 +166,40 @@ export function SidebarNav() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild tooltip="Cairn">
-              <Link href="/">
-                <div className="flex aspect-square size-8 items-center justify-center">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src="/cairn-mark-trail.svg"
-                    alt="Cairn"
-                    className="size-5"
-                  />
-                </div>
-                <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-semibold tracking-tight">Cairn</span>
-                  {version && (
-                    <span className="text-[10px] text-muted-foreground">
-                      v{version}
-                    </span>
-                  )}
-                </div>
-              </Link>
-            </SidebarMenuButton>
+            <div className="flex items-center">
+              <SidebarMenuButton size="lg" asChild tooltip="Cairn" className="flex-1">
+                <Link href="/">
+                  <div className="flex aspect-square size-8 items-center justify-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src="/cairn-mark-trail.svg"
+                      alt="Cairn"
+                      className="size-5"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-0.5 leading-none">
+                    <span className="font-semibold tracking-tight">Cairn</span>
+                    {version && (
+                      <span className="text-[10px] text-muted-foreground">
+                        v{version}
+                      </span>
+                    )}
+                  </div>
+                </Link>
+              </SidebarMenuButton>
+              {/* Header icons — hidden when sidebar is collapsed */}
+              <div className="flex items-center gap-0.5 shrink-0 group-data-[collapsible=icon]:hidden">
+                <button
+                  onClick={toggleTheme}
+                  className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                  title={theme === "dark" ? "Light mode" : "Dark mode"}
+                  aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                >
+                  {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+                </button>
+                <NotificationBell />
+              </div>
+            </div>
           </SidebarMenuItem>
           {ekgPosition === "header" && (
             <SidebarMenuItem>
@@ -253,23 +267,6 @@ export function SidebarNav() {
               <SystemPulse />
             </SidebarMenuItem>
           )}
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              size="sm"
-              tooltip={theme === "dark" ? "Light mode" : "Dark mode"}
-              onClick={toggleTheme}
-            >
-              {theme === "dark" ? (
-                <Sun className="size-4" />
-              ) : (
-                <Moon className="size-4" />
-              )}
-              <span>Theme</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <NotificationBell />
-          </SidebarMenuItem>
           {authEnabled && user ? (
             <SidebarMenuItem>
               <DropdownMenu>
