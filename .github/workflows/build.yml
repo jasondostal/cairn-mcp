@@ -305,6 +305,17 @@ jobs:
             sleep 1
           done
           docker run -d \
+            --name cairn-graph \
+            --network cairn-net \
+            -e NEO4J_AUTH=neo4j/smoke-test-neo4j \
+            -e NEO4J_PLUGINS='["apoc"]' \
+            neo4j:5-community
+          # Wait for Neo4j
+          for i in $(seq 1 30); do
+            if docker exec cairn-graph cypher-shell -u neo4j -p smoke-test-neo4j "RETURN 1" > /dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          docker run -d \
             --name cairn \
             --network cairn-net \
             -e CAIRN_DB_HOST=cairn-db \
@@ -314,6 +325,9 @@ jobs:
             -e CAIRN_DB_PASS=smoke-test \
             -e CAIRN_SECRET_KEY=smoke-test-secret-not-for-production \
             -e CAIRN_ALLOW_INSECURE=true \
+            -e CAIRN_NEO4J_URI=bolt://cairn-graph:7687 \
+            -e CAIRN_NEO4J_USER=neo4j \
+            -e CAIRN_NEO4J_PASSWORD=smoke-test-neo4j \
             -e CAIRN_TRANSPORT=http \
             -e CAIRN_EMBEDDING_BACKEND=local \
             -p 8081:8000 \
@@ -427,9 +441,10 @@ jobs:
         run: |
           docker logs cairn
           docker logs cairn-db
+          docker logs cairn-graph
 
       - name: Cleanup
         if: always()
         run: |
-          docker rm -f cairn cairn-db || true
+          docker rm -f cairn cairn-db cairn-graph || true
           docker network rm cairn-net || true
