@@ -221,37 +221,66 @@ export function MemoryDenseRow({
 }: MemoryDenseRowProps) {
   const eph = isEphemeral(memory);
 
-
   return (
     <div
       ref={isActive ? cardRef : undefined}
       role="button"
       tabIndex={0}
-      className={`flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isActive ? "bg-accent/30 ring-2 ring-primary/50" : ""}`}
+      className={`px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isActive ? "bg-accent/30 ring-2 ring-primary/50" : ""}`}
       onClick={() => onSelect?.(memory.id)}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect?.(memory.id); } }}
     >
-      {eph && (
-        <div
-          className="w-1 h-4 rounded-full shrink-0"
-          style={{
-            backgroundColor: LC.ephemeral,
-            opacity: Math.max(0.15, memory.salience!),
-          }}
-        />
-      )}
-      <span className="font-mono text-xs text-muted-foreground shrink-0">#{memory.id}</span>
-      <MemoryTypeBadge type={memory.memory_type} />
-      {eph && memory.pinned && <Pin className="h-3 w-3 text-amber-500 shrink-0" />}
-      <span className="flex-1 truncate">{memory.summary || memory.content}</span>
-      <ProjectPill name={memory.project} />
-      {eph ? (
-        <ScoreBar value={memory.salience!} variant="salience" />
-      ) : (
-        <ScoreBar value={memory.importance} variant="importance" />
-      )}
-      <span className="text-xs text-muted-foreground shrink-0">{formatTime(memory.created_at)}</span>
-      {eph && <EphemeralActions memory={memory} onAction={onAction} size="dense" />}
+      {/* Desktop: single row. Mobile: two lines */}
+      <div className="hidden md:flex items-center gap-2">
+        {eph && (
+          <div
+            className="w-1 h-4 rounded-full shrink-0"
+            style={{ backgroundColor: LC.ephemeral, opacity: Math.max(0.15, memory.salience!) }}
+          />
+        )}
+        <span className="font-mono text-xs text-muted-foreground shrink-0">#{memory.id}</span>
+        <MemoryTypeBadge type={memory.memory_type} />
+        {eph && memory.pinned && <Pin className="h-3 w-3 text-amber-500 shrink-0" />}
+        <span className="flex-1 truncate">{memory.summary || memory.content}</span>
+        <ProjectPill name={memory.project} />
+        {eph ? (
+          <ScoreBar value={memory.salience!} variant="salience" />
+        ) : (
+          <ScoreBar value={memory.importance} variant="importance" />
+        )}
+        <span className="text-xs text-muted-foreground shrink-0">{formatTime(memory.created_at)}</span>
+        {eph && <EphemeralActions memory={memory} onAction={onAction} size="dense" />}
+      </div>
+
+      {/* Mobile: two-line layout — title gets full width */}
+      <div className="md:hidden space-y-0.5">
+        <div className="flex items-center gap-1.5">
+          {eph && (
+            <div
+              className="w-1 h-4 rounded-full shrink-0"
+              style={{ backgroundColor: LC.ephemeral, opacity: Math.max(0.15, memory.salience!) }}
+            />
+          )}
+          <MemoryTypeBadge type={memory.memory_type} />
+          {eph && memory.pinned && <Pin className="h-3 w-3 text-amber-500 shrink-0" />}
+          <span className="flex-1 truncate">{memory.summary || memory.content}</span>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="font-mono shrink-0">#{memory.id}</span>
+          <ProjectPill name={memory.project} />
+          {eph ? (
+            <ScoreBar value={memory.salience!} variant="salience" />
+          ) : (
+            <ScoreBar value={memory.importance} variant="importance" />
+          )}
+          <span className="shrink-0">{formatTime(memory.created_at)}</span>
+          {eph && (
+            <div className="ml-auto">
+              <EphemeralActions memory={memory} onAction={onAction} size="dense" />
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
