@@ -339,9 +339,9 @@ export function ChatDrawer({ open, onOpenChange, demo }: ChatDrawerProps) {
 
           {/* Content area: sidebar + thread */}
           <div className="flex flex-1 min-h-0">
-            {/* Conversation history panel */}
+            {/* Conversation history panel — hidden on small phones */}
             {historyOpen && (
-              <div className="w-52 shrink-0 border-r">
+              <div className="hidden sm:block w-52 shrink-0 border-r">
                 <ConversationSidebar
                   activeId={activeConvId}
                   onSelect={handleSelectConversation}

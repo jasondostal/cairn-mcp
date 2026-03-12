@@ -394,6 +394,7 @@ export default function WorkItemsPage() {
       }
       filters={
         <div className="flex items-center gap-2 flex-wrap">
+          <FilterModeToggle value={filterMode} onChange={setFilterMode} />
           <MultiSelect
             options={filters.projectOptions}
             value={filters.projectFilter}
@@ -408,19 +409,21 @@ export default function WorkItemsPage() {
             onValueChange={setStatusFilter}
             placeholder="All statuses"
           />
-          <SingleSelect
-            options={typeOptions}
-            value={itemTypeFilter}
-            onValueChange={setItemTypeFilter}
-            placeholder="All types"
-          />
-          <SingleSelect
-            options={assigneeOptions}
-            value={assigneeFilter}
-            onValueChange={setAssigneeFilter}
-            placeholder="Assignee"
-          />
-          <FilterModeToggle value={filterMode} onChange={setFilterMode} />
+          {/* Secondary filters — hidden on mobile to reduce toolbar height */}
+          <span className="hidden md:contents">
+            <SingleSelect
+              options={typeOptions}
+              value={itemTypeFilter}
+              onValueChange={setItemTypeFilter}
+              placeholder="All types"
+            />
+            <SingleSelect
+              options={assigneeOptions}
+              value={assigneeFilter}
+              onValueChange={setAssigneeFilter}
+              placeholder="Assignee"
+            />
+          </span>
           <TimeRangeFilter
             days={days}
             onChange={filters.setDays}
@@ -450,18 +453,35 @@ export default function WorkItemsPage() {
             {gatedItems.map((g) => (
               <div
                 key={g.id}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer"
+                className="px-3 py-1.5 text-sm hover:bg-accent/50 transition-colors cursor-pointer"
                 onClick={() => openSheet(g.id)}
               >
-                <Hand className="h-3 w-3 text-status-gate shrink-0" />
-                <span className="font-mono text-xs text-muted-foreground shrink-0">{g.display_id}</span>
-                <span className="flex-1 truncate">{g.title}</span>
-                {typeof g.gate_data?.question === "string" && (
-                  <span className="text-xs text-muted-foreground truncate max-w-48">
-                    {g.gate_data.question}
-                  </span>
-                )}
-                <ProjectPill name={g.project} />
+                {/* Desktop: single row */}
+                <div className="hidden md:flex items-center gap-2">
+                  <Hand className="h-3 w-3 text-status-gate shrink-0" />
+                  <span className="font-mono text-xs text-muted-foreground shrink-0">{g.display_id}</span>
+                  <span className="flex-1 truncate">{g.title}</span>
+                  {typeof g.gate_data?.question === "string" && (
+                    <span className="text-xs text-muted-foreground truncate max-w-48">
+                      {g.gate_data.question}
+                    </span>
+                  )}
+                  <ProjectPill name={g.project} />
+                </div>
+                {/* Mobile: two lines */}
+                <div className="md:hidden space-y-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <Hand className="h-3 w-3 text-status-gate shrink-0" />
+                    <span className="flex-1 truncate">{g.title}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground pl-5">
+                    <span className="font-mono shrink-0">{g.display_id}</span>
+                    <ProjectPill name={g.project} />
+                    {typeof g.gate_data?.question === "string" && (
+                      <span className="truncate">{g.gate_data.question}</span>
+                    )}
+                  </div>
+                </div>
               </div>
             ))}
           </div>
