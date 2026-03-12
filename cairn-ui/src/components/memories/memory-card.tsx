@@ -71,15 +71,15 @@ export function EphemeralActions({
 
   return (
     <div className={`flex ${size === "dense" ? "gap-0.5" : "gap-1"}`}>
-      <Button variant="ghost" size="sm" className={btnCls} title="Boost salience"
+      <Button variant="ghost" size="sm" className={btnCls} title="Boost salience" aria-label="Boost salience"
         onClick={(e) => { e.stopPropagation(); onAction(memory.id, "boost"); }}>
         <Zap className={iconCls} />
       </Button>
-      <Button variant="ghost" size="sm" className={btnCls} title={memory.pinned ? "Unpin" : "Pin"}
+      <Button variant="ghost" size="sm" className={btnCls} title={memory.pinned ? "Unpin" : "Pin"} aria-label={memory.pinned ? "Unpin" : "Pin"}
         onClick={(e) => { e.stopPropagation(); onAction(memory.id, memory.pinned ? "unpin" : "pin"); }}>
         <Pin className={iconCls} />
       </Button>
-      <Button variant="ghost" size="sm" className={btnCls} title="Archive"
+      <Button variant="ghost" size="sm" className={btnCls} title="Archive" aria-label="Archive"
         onClick={(e) => { e.stopPropagation(); onAction(memory.id, "archive"); }}>
         <Archive className={iconCls} />
       </Button>

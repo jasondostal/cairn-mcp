@@ -252,18 +252,21 @@ export default function MemoriesPage() {
               searchPlaceholder="Search projects…"
               maxCount={2}
             />
-            <MultiSelect
-              options={typeOptions}
-              value={filters.typeFilter}
-              onValueChange={filters.setTypeFilter}
-              placeholder="All types"
-              searchPlaceholder="Search…"
-              maxCount={2}
-            />
+            {/* Type filter — hidden on mobile to reduce toolbar height */}
+            <span className="hidden md:contents">
+              <MultiSelect
+                options={typeOptions}
+                value={filters.typeFilter}
+                onValueChange={filters.setTypeFilter}
+                placeholder="All types"
+                searchPlaceholder="Search…"
+                maxCount={2}
+              />
+            </span>
             <OklchToggle value={lifecycle} options={LIFECYCLE_OPTIONS} onChange={setLifecycle} />
 
-            {/* === DIVIDER === */}
-            <div className="h-6 w-px bg-border mx-0.5" />
+            {/* === DIVIDER (desktop only) === */}
+            <div className="hidden md:block h-6 w-px bg-border mx-0.5" />
 
             {/* === DISPLAY CONTROLS (how) === */}
             <OklchToggle value={sort} options={SORT_OPTIONS} onChange={setSort} />
