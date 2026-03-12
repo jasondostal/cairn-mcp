@@ -10,7 +10,7 @@ from cairn.storage.database import Database
 
 
 @track_operation("status")
-def get_status(db: Database, config: Config, graph_provider) -> dict:
+def get_status(db: Database, config: Config, graph_provider=None) -> dict:
     """Aggregate system health metrics."""
     subsystem_errors: list[str] = []
 
