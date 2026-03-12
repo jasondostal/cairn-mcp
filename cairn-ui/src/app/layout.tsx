@@ -59,7 +59,7 @@ export default function RootLayout({
                 <AppShell>{children}</AppShell>
               </MetricsStreamProvider>
             </AuthProvider>
-            <Toaster position="bottom-right" richColors />
+            <Toaster position="bottom-center" richColors />
           </TooltipProvider>
         </ThemeProvider>
       </body>

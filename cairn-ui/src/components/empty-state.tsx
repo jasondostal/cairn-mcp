@@ -1,4 +1,5 @@
 import { Inbox, type LucideIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function EmptyState({
   message,
@@ -6,12 +7,16 @@ export function EmptyState({
   icon: Icon,
   title,
   description,
+  action,
+  onAction,
 }: {
   message?: string;
   detail?: string;
   icon?: LucideIcon;
   title?: string;
   description?: string;
+  action?: string;
+  onAction?: () => void;
 }) {
   const IconComponent = Icon ?? Inbox;
   const heading = title ?? message;
@@ -23,6 +28,11 @@ export function EmptyState({
       {heading && <p className="text-sm text-muted-foreground">{heading}</p>}
       {sub && (
         <p className="mt-1 text-xs text-muted-foreground/70">{sub}</p>
+      )}
+      {action && onAction && (
+        <Button variant="outline" size="sm" className="mt-3" onClick={onAction}>
+          {action}
+        </Button>
       )}
     </div>
   );

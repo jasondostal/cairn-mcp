@@ -64,7 +64,6 @@ export function PaginationControls({
         <Button
           variant="outline"
           size="icon"
-          className="h-8 w-8"
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
           aria-label="Previous page"
@@ -77,7 +76,6 @@ export function PaginationControls({
         <Button
           variant="outline"
           size="icon"
-          className="h-8 w-8"
           disabled={page >= totalPages}
           onClick={() => onPageChange(page + 1)}
           aria-label="Next page"
