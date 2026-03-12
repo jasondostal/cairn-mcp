@@ -122,7 +122,6 @@ class TestServiceAssembly:
         assert svc.search_engine is not None
         assert svc.cluster_engine is not None
         assert svc.project_manager is not None
-        assert svc.task_manager is not None
         assert svc.work_item_manager is not None
         assert svc.event_bus is not None
 
