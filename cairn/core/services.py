@@ -31,9 +31,9 @@ from cairn.core.search import SearchEngine
 from cairn.core.search_v2 import SearchV2
 from cairn.core.stats import (
     init_embedding_stats,
+    init_event_bus_ref,
     init_event_bus_stats,
     init_llm_stats,
-    init_event_bus_ref,
 )
 from cairn.core.synthesis import SessionSynthesizer
 from cairn.core.terminal import TerminalHostManager
