@@ -312,6 +312,7 @@ jobs:
             -e CAIRN_DB_NAME=cairn \
             -e CAIRN_DB_USER=cairn \
             -e CAIRN_DB_PASS=smoke-test \
+            -e CAIRN_SECRET_KEY=smoke-test-secret-not-for-production \
             -e CAIRN_TRANSPORT=http \
             -e CAIRN_EMBEDDING_BACKEND=local \
             -p 8081:8000 \
