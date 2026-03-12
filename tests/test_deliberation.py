@@ -45,7 +45,7 @@ class TestSummarizeDeliberation:
     def _make_engine(self):
         from cairn.core.thinking import ThinkingEngine
         db = MagicMock()
-        engine = ThinkingEngine(db)
+        engine = ThinkingEngine(db, MagicMock())
         return engine, db
 
     def _mock_sequence(self, db, thoughts):

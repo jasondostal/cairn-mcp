@@ -112,10 +112,10 @@ class TestSettingsAuditEvent:
                     if hasattr(route, "path") and route.path == "/settings" and "PATCH" in getattr(route, "methods", set()):
                         route.endpoint({"llm.backend": "bedrock"})
                         # Verify event was published
-                        svc.event_bus.publish.assert_called_once()
-                        call_kwargs = svc.event_bus.publish.call_args
-                        assert call_kwargs[1]["event_type"] == "settings.updated"
-                        assert call_kwargs[1]["payload"]["actor"] == "admin"
+                        svc.event_bus.emit.assert_called_once()
+                        call_kwargs = svc.event_bus.emit.call_args
+                        assert call_kwargs[0][0] == "settings.updated"
+                        assert call_kwargs[1]["payload"]["user"] == "admin"
                         assert "llm.backend" in call_kwargs[1]["payload"]["changes"]
                         return
                 pytest.fail("PATCH /settings route not found")

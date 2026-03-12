@@ -21,7 +21,7 @@ def test_orient_returns_errors_key_when_service_is_none():
         memory_store=None,
         search_engine=None,
         work_item_manager=None,
-        task_manager=None,
+        graph_provider=None,
     )
 
     assert "_errors" in result, (
@@ -43,7 +43,7 @@ def test_orient_returns_errors_key_on_partial_none():
         memory_store=None,  # just this one
         search_engine=MagicMock(),
         work_item_manager=MagicMock(),
-        task_manager=MagicMock(),
+        graph_provider=MagicMock(),
     )
 
     assert "_errors" in result
@@ -67,9 +67,6 @@ def test_orient_tracks_section_failures():
     work_item_manager.ready_queue.return_value = {"items": []}
     work_item_manager.list_items.return_value = {"items": []}
 
-    task_manager = MagicMock()
-    task_manager.list_tasks.return_value = {"items": []}
-
     result = run_orient(
         project="test",
         config=_make_config(),
@@ -77,7 +74,7 @@ def test_orient_tracks_section_failures():
         memory_store=memory_store,
         search_engine=search_engine,
         work_item_manager=work_item_manager,
-        task_manager=task_manager,
+        graph_provider=MagicMock(),
     )
 
     assert "_errors" in result
@@ -101,9 +98,6 @@ def test_orient_no_errors_on_healthy_boot():
     work_item_manager.ready_queue.return_value = {"items": []}
     work_item_manager.list_items.return_value = {"items": []}
 
-    task_manager = MagicMock()
-    task_manager.list_tasks.return_value = {"items": []}
-
     result = run_orient(
         project="test",
         config=_make_config(),
@@ -111,7 +105,7 @@ def test_orient_no_errors_on_healthy_boot():
         memory_store=memory_store,
         search_engine=search_engine,
         work_item_manager=work_item_manager,
-        task_manager=task_manager,
+        graph_provider=MagicMock(),
     )
 
     assert "_errors" not in result

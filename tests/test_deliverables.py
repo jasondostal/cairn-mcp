@@ -41,9 +41,9 @@ class TestDeliverableManager:
         assert "INSERT INTO deliverables" in sql
 
         # Verify event published
-        event_bus.publish.assert_called_once()
-        event_type = event_bus.publish.call_args[0][0]
-        assert event_type == "deliverable.created"
+        event_bus.emit.assert_called_once()
+        call_kwargs = event_bus.emit.call_args
+        assert call_kwargs[0][0] == "deliverable.created"
 
     def test_create_increments_version(self):
         mgr, db, event_bus = self._make_manager()
@@ -128,9 +128,9 @@ class TestDeliverableManager:
         assert "UPDATE deliverables" in sql
 
         # Verify event
-        event_bus.publish.assert_called()
-        event_type = event_bus.publish.call_args[0][0]
-        assert event_type == "deliverable.approved"
+        event_bus.emit.assert_called()
+        call_kwargs = event_bus.emit.call_args
+        assert call_kwargs[0][0] == "deliverable.approved"
 
     def test_review_revise(self):
         mgr, db, event_bus = self._make_manager()
@@ -148,8 +148,8 @@ class TestDeliverableManager:
         assert result["status"] == DeliverableStatus.REVISED
         assert result["action"] == "revise"
 
-        event_type = event_bus.publish.call_args[0][0]
-        assert event_type == "deliverable.revised"
+        call_kwargs = event_bus.emit.call_args
+        assert call_kwargs[0][0] == "deliverable.revised"
 
     def test_review_reject(self):
         mgr, db, event_bus = self._make_manager()
@@ -215,7 +215,7 @@ class TestDeliverableManager:
         result = mgr.submit_for_review(42)
 
         assert result["status"] == DeliverableStatus.PENDING_REVIEW
-        event_bus.publish.assert_called_once()
+        event_bus.emit.assert_called_once()
 
     def test_submit_non_draft_raises(self):
         mgr, db, _ = self._make_manager()
@@ -292,7 +292,7 @@ class TestDeliverableManager:
     def test_event_bus_failure_is_silent(self):
         mgr, db, event_bus = self._make_manager()
         now = datetime.now(timezone.utc)
-        event_bus.publish.side_effect = Exception("bus down")
+        event_bus.emit.side_effect = Exception("bus down")
         db.execute_one.side_effect = [
             {"next_ver": 1},
             {"id": 1, "version": 1, "status": "draft", "created_at": now},

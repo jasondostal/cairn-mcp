@@ -147,11 +147,27 @@ class TestTraceContext:
         assert current_trace().model == "claude-4"
         clear_trace()
 
-    def test_set_trace_noop_without_trace(self):
-        """Setters are no-ops when no trace is active."""
+    def test_set_trace_auto_creates_for_project(self):
+        """set_trace_project auto-creates a trace when none exists."""
         clear_trace()
         set_trace_project("cairn")
+        ctx = current_trace()
+        assert ctx is not None
+        assert ctx.project == "cairn"
+        clear_trace()
+
+    def test_set_trace_auto_creates_for_tool(self):
+        """set_trace_tool auto-creates a trace when none exists."""
+        clear_trace()
         set_trace_tool("store")
+        ctx = current_trace()
+        assert ctx is not None
+        assert ctx.tool_name == "store"
+        clear_trace()
+
+    def test_set_trace_model_noop_without_trace(self):
+        """set_trace_model is still a no-op when no trace is active."""
+        clear_trace()
         set_trace_model("claude-4")
         assert current_trace() is None
 

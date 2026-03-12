@@ -174,7 +174,7 @@ class TestWorkItemScoping:
 
         db = MagicMock()
         embedding = MagicMock()
-        mgr = WorkItemManager(db, embedding)
+        mgr = WorkItemManager(db, embedding, MagicMock())
         db.execute.return_value = []
         mgr.list_items()
         # Check the query was called — no project_id = ANY in conditions
@@ -188,7 +188,7 @@ class TestWorkItemScoping:
         set_user(UserContext(user_id=2, username="alice", role="user", project_ids=frozenset({10, 20})))
         db = MagicMock()
         embedding = MagicMock()
-        mgr = WorkItemManager(db, embedding)
+        mgr = WorkItemManager(db, embedding, MagicMock())
         db.execute.return_value = []
         mgr.list_items()
         call_query = db.execute.call_args[0][0]
@@ -201,7 +201,7 @@ class TestWorkItemScoping:
         set_user(UserContext(user_id=1, username="admin", role="admin"))
         db = MagicMock()
         embedding = MagicMock()
-        mgr = WorkItemManager(db, embedding)
+        mgr = WorkItemManager(db, embedding, MagicMock())
         db.execute.return_value = []
         mgr.list_items()
         call_query = db.execute.call_args[0][0]

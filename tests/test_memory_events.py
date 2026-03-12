@@ -34,22 +34,22 @@ class TestMemoryEventPublishing:
 
     def test_store_publishes_memory_created_when_event_bus(self):
         bus = MagicMock()
-        bus.publish.return_value = 1
+        bus.emit.return_value = 1
         store = self._make_store(event_bus=bus)
         self._stub_store_calls(store)
 
         store.store(content="hello", project="test-project")
 
-        publish_calls = bus.publish.call_args_list
+        publish_calls = bus.emit.call_args_list
         assert len(publish_calls) >= 1
         event_call = publish_calls[0]
-        assert event_call.kwargs["event_type"] == "memory.created"
+        assert event_call.args[0] == "memory.created"
         assert event_call.kwargs["payload"]["memory_id"] == 42
 
     def test_store_skips_phase2_when_event_bus(self):
         """When event_bus is present, Phase 2 enrichment is NOT run inline."""
         bus = MagicMock()
-        bus.publish.return_value = 1
+        bus.emit.return_value = 1
         store = self._make_store(event_bus=bus)
         self._stub_store_calls(store)
 
@@ -73,7 +73,7 @@ class TestMemoryEventPublishing:
 
     def test_modify_inactivate_publishes_event(self):
         bus = MagicMock()
-        bus.publish.return_value = 1
+        bus.emit.return_value = 1
         store = self._make_store(event_bus=bus)
         # execute_one calls: _get_memory_project_id, project name in _publish
         store.db.execute_one.side_effect = [
@@ -83,13 +83,13 @@ class TestMemoryEventPublishing:
 
         store.modify(memory_id=42, action="inactivate", reason="outdated")
 
-        publish_calls = bus.publish.call_args_list
+        publish_calls = bus.emit.call_args_list
         assert len(publish_calls) >= 1
-        assert publish_calls[0].kwargs["event_type"] == "memory.inactivated"
+        assert publish_calls[0].args[0] == "memory.inactivated"
 
     def test_modify_update_publishes_event(self):
         bus = MagicMock()
-        bus.publish.return_value = 1
+        bus.emit.return_value = 1
         store = self._make_store(event_bus=bus)
         # execute_one calls: _get_memory_project_id, project name in _publish
         store.db.execute_one.side_effect = [
@@ -99,9 +99,9 @@ class TestMemoryEventPublishing:
 
         store.modify(memory_id=42, action="update", importance=0.9)
 
-        publish_calls = bus.publish.call_args_list
+        publish_calls = bus.emit.call_args_list
         assert len(publish_calls) >= 1
-        assert publish_calls[0].kwargs["event_type"] == "memory.updated"
+        assert publish_calls[0].args[0] == "memory.updated"
 
     def test_no_events_without_event_bus(self):
         store = self._make_store(event_bus=None)

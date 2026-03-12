@@ -31,7 +31,7 @@ class TestConcurrentClaim:
 
         db = MagicMock()
         event_bus = MagicMock()
-        wim = WorkItemManager(db, event_bus)
+        wim = WorkItemManager(db, event_bus, MagicMock())
 
         item = {"id": 42, "status": "open", "project_id": 1, "display_id": "ca-42",
                 "project_name": "cairn", "parent_id": None}
@@ -82,7 +82,7 @@ class TestConcurrentClaim:
 
         db = MagicMock()
         event_bus = MagicMock()
-        wim = WorkItemManager(db, event_bus)
+        wim = WorkItemManager(db, event_bus, MagicMock())
 
         item = {"id": 42, "status": "in_progress", "project_id": 1,
                 "display_id": "ca-42", "project_name": "cairn", "parent_id": None}
@@ -102,7 +102,7 @@ class TestConcurrentHeartbeat:
 
         db = MagicMock()
         event_bus = MagicMock()
-        wim = WorkItemManager(db, event_bus)
+        wim = WorkItemManager(db, event_bus, MagicMock())
 
         items = {
             i: {"id": i, "status": "in_progress", "project_id": 1,
@@ -440,7 +440,7 @@ class TestMixedWorkload:
 
         db = MagicMock()
         event_bus = MagicMock()
-        wim = WorkItemManager(db, event_bus)
+        wim = WorkItemManager(db, event_bus, MagicMock())
 
         items = {
             i: {"id": i, "status": "open", "project_id": 1,

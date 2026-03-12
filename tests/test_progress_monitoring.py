@@ -15,7 +15,7 @@ class TestProgressSummary:
         from cairn.core.work_items import WorkItemManager
         db = MagicMock()
         event_bus = MagicMock()
-        wim = WorkItemManager(db, event_bus)
+        wim = WorkItemManager(db, event_bus, MagicMock())
         return wim, db
 
     def _make_item(self, id=1, status="open", parent_id=None):

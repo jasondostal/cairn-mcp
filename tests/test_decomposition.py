@@ -16,7 +16,7 @@ class TestDecompositionContext:
         from cairn.core.work_items import WorkItemManager
         db = MagicMock()
         event_bus = MagicMock()
-        wim = WorkItemManager(db, event_bus)
+        wim = WorkItemManager(db, event_bus, MagicMock())
         return wim, db
 
     def test_decomposition_context_no_children(self):

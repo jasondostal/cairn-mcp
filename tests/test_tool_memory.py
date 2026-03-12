@@ -266,10 +266,10 @@ class TestSearchRoundTrip:
 
         asyncio.run(tools["search"](query="test query"))
 
-        event_bus.publish.assert_called_once()
-        call_kwargs = event_bus.publish.call_args.kwargs
-        assert call_kwargs["event_type"] == "search.executed"
-        assert call_kwargs["payload"]["query"] == "test query"
+        event_bus.emit.assert_called_once()
+        call_kwargs = event_bus.emit.call_args
+        assert call_kwargs[0][0] == "search.executed"
+        assert call_kwargs[1]["payload"]["query"] == "test query"
 
     def test_search_confidence_gating(self):
         svc = _make_svc()
@@ -365,9 +365,9 @@ class TestRecallRoundTrip:
 
         asyncio.run(tools["recall"](ids=[1]))
 
-        event_bus.publish.assert_called_once()
-        call_kwargs = event_bus.publish.call_args.kwargs
-        assert call_kwargs["event_type"] == "memory.recalled"
+        event_bus.emit.assert_called_once()
+        call_kwargs = event_bus.emit.call_args
+        assert call_kwargs[0][0] == "memory.recalled"
 
     def test_recall_internal_error_caught(self):
         svc = _make_svc()

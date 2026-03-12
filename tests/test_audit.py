@@ -161,8 +161,9 @@ class TestAuditListener:
         patterns = [c[0][0] for c in bus.subscribe.call_args_list]
         assert "memory.*" in patterns
         assert "work_item.*" in patterns
-        assert "task.*" in patterns
         assert "thinking.*" in patterns
+        assert "deliverable.*" in patterns
+        assert "belief.*" in patterns
 
     def test_handle_memory_created(self):
         listener, audit = self._make_listener()
@@ -205,10 +206,10 @@ class TestAuditListener:
         """resource_id extraction covers multiple payload key conventions."""
         listener, audit = self._make_listener()
 
-        # task_id
+        # deliverable_id
         listener.handle({
-            "event_type": "task.created",
-            "payload": {"task_id": 5},
+            "event_type": "deliverable.created",
+            "payload": {"deliverable_id": 5},
         })
         assert audit.log.call_args[1]["resource_id"] == 5
 
@@ -269,11 +270,11 @@ class TestAuditListener:
         listener, audit = self._make_listener()
 
         listener.handle({
-            "event_type": "task.completed",
+            "event_type": "work_item.completed",
         })
 
         audit.log.assert_called_once()
         kw = audit.log.call_args[1]
         assert kw["action"] == "completed"
-        assert kw["resource_type"] == "task"
+        assert kw["resource_type"] == "work_item"
         assert kw["after_state"] == {}
