@@ -1,36 +1,46 @@
 # Roadmap
 
-Current: **v0.75.0** — "Observatory" — real-time metrics, MCP authorization, Services DI, tool layer tests. Next up: 12-factor audit.
+Current: **v0.75.0** — "Observatory". Next up: UI/UX comprehensive audit.
 
 ---
 
 ## In Progress
 
-### 12 Factor Audit (ca-241)
+### Unified Event Architecture
 
-Systematic review of cairn's architecture against 12-factor principles and operational readiness. Full 5-agent audit (DR. ENTROPY, GUNTHER, SENTINEL, Testing Auditor, Dr. Pixel).
+Replacing the split MetricsCollector/observer/ephemeral pattern with a single `emit() → INSERT → NOTIFY → SSE → client` pipeline. SystemPulse does client-side aggregation.
 
-**Dead code removal.**
-- [ ] Purge Tasks concept — TaskManager, API, UI, chat_tools, graph projection, constants (ca-243)
-- [ ] Purge Cairns concept — CairnManager, deprecated endpoints, UI pages, tests (ca-243)
-- [ ] DB migration to DROP tasks, task_memory_links, cairns tables (ca-243)
+- [x] CairnEvent schema, NOTIFY payload expansion (migrations 051, 052)
+- [x] Kill MetricsCollector, observer system, `/api/metrics/*` endpoints
+- [ ] Fix SSE connection — SystemPulse shows "disconnected" (Next.js rewrite proxy buffering SSE?)
+- [ ] Validate pg_notify payload size safety (8KB Postgres limit vs JSONB payloads)
 
-**Architecture hardening.**
-- [ ] Require Neo4j — remove 25+ graceful fallback branches, hard-fail at startup (ca-244)
-- [ ] Event type registry — replace stringly-typed events with enum, audit subscriber wiring (ca-245)
-- [ ] Unify stats into event bus consumers — kill ModelStats/EventBusStats/AnalyticsTracker singletons (ca-246)
-- [ ] Config hardening — fail-loud on default passwords, secret validation at startup (ca-247)
+### UI/UX Comprehensive Audit
 
-**Observability.**
-- [ ] Fix MetricsCollector instance mismatch — snapshot/SSE returns zeros (ca-242)
+Full Dr. Pixel + Gunther audit of cairn-ui. Surgical fixes, not a rewrite — the component library, hooks, data flow, and color system are solid. The problems are layout composition and responsive behavior.
 
-**UI/UX.**
-- [ ] Sidebar nav restructure — reduce sprawl, user-level configurability, remove dead routes (ca-248)
-- [ ] Settings pane — wire missing sections (consolidation, push, work_items), audit exposed keys (ca-249)
+**Shell & chrome.**
+- [ ] Kill desktop header bar — move ThemeToggle + NotificationBell into sidebar header
+- [ ] Identify and remove mystery footer black bar
+- [ ] Audit padding/gaps across shell — reclaim wasted vertical space
+
+**Responsive.**
+- [ ] Memory list mobile layout — two-line card rows (title full-width, metadata line beneath) instead of truncated table
+- [ ] Audit all list/table pages for mobile breakpoint behavior
+- [ ] Validate touch targets and tap areas
+
+**Content density.**
+- [ ] Chrome-to-content ratio audit across all pages
+- [ ] Information hierarchy review — what's visible at a glance vs. drill-in
+
+### 12 Factor Audit — Remaining (ca-241)
 
 **Scaling readiness.**
 - [ ] Worker isolation — distributed locking, graceful drain for in-flight tools (ca-250)
 - [ ] Horizontal scaling audit — session state, uvicorn workers, shared mutable state inventory (ca-251)
+
+**Stats unification.**
+- [ ] Unify stats into event bus consumers — kill ModelStats/EventBusStats/AnalyticsTracker singletons (ca-246)
 
 **OSS governance (under consideration).**
 - [ ] Add CONTRIBUTING.md, SECURITY.md, CODE_OF_CONDUCT.md (ca-227) — drafts written, not shipping yet
@@ -80,6 +90,18 @@ Exploring, not committed.
 ---
 
 ## Shipped
+
+### 12 Factor Audit — Wave 1 ✓
+
+Dead code removal, architecture hardening, config hardening, UI fixes.
+
+- [x] **Purge Tasks and Cairns** — removed TaskManager, CairnManager, deprecated endpoints, UI, constants (ca-243)
+- [x] **Require Neo4j** — removed 25+ fallback branches, hard-fail at startup (ca-244)
+- [x] **EventType registry** — stringly-typed → enum, fixed deliverables publish bug (ca-245)
+- [x] **Config hardening** — fail-loud on insecure defaults for secrets (ca-247)
+- [x] **Sidebar nav persistence** — expand/collapse state in localStorage (ca-248)
+- [x] **Settings pane** — removed non-editable fields, added missing controls (ca-249)
+- [x] **MetricsCollector fix** — event routing when analytics disabled (ca-242)
 
 ### v0.75.0 — "Observatory" ✓
 

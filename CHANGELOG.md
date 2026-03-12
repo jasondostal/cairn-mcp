@@ -9,14 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Document attachments** — upload, list, and delete image attachments on project documents. BYTEA storage with foreign key to `project_documents`. Drag-and-drop upload on doc detail page with `cairn://attachments/` URL scheme for inline markdown rendering. Auth-aware `AuthImage` component for secure image display. New endpoints: `POST /api/docs/{id}/attachments`, `GET /api/docs/{id}/attachments`, `DELETE /api/attachments/{id}`, `GET /api/attachments/{id}/data`. Migration 049.
-- **SystemPulse widget** — real-time EKG-style operational pulse in sidebar footer and dashboard. Configurable display modes (sparkline, full). Powered by SSE metrics stream via `useMetricsStream` hook.
+- **SystemPulse widget** — real-time operational pulse in sidebar with three display modes (beads, EKG, numeric). Configurable metric selection, position (header/footer), and per-mode visualization. Powered by SSE events via `useMetricsStream` hook with client-side aggregation into 5-second ring buckets.
 - **ResilientSessionManager** — replaces default MCP session storage with logging for stale session access and client re-initialization triggers. Improves session observability for debugging connection issues.
-- **MetricsCollector category mapping** — tool invocation events auto-categorized (reads, writes, work, llm, system, sessions) for per-category dashboard breakdowns.
 - **Trace context auto-creation** — `set_trace_tool()` auto-creates a TraceContext if none exists, eliminating silent drops when tools fire outside an explicit trace.
 - **`in_thread` boundary instrumentation** — reads `tool_name` and `project` from trace context; records latency, success/failure per tool with zero per-tool wiring.
-- **Event bus lightweight observer pattern** — `add_observer(fn)` for synchronous inline event consumers (used by MetricsCollector). Complements the existing reliable dispatch model.
+- **Sidebar group persistence** — expand/collapse state for nav groups saved to localStorage (ca-248)
+- **Unified event architecture** — all events (LLM calls, embeddings, tool instrumentation) persist to Postgres via single `emit()` path. Postgres NOTIFY trigger expanded with payload and project_id for client-side SSE consumers (migrations 051, 052). `CairnEvent` dataclass for typed event construction.
+
+### Changed
+- **Purge Tasks and Cairns** — removed TaskManager, CairnManager, deprecated API endpoints, UI pages, chat_tools handlers, graph projection listeners, and constants. DB migration drops `tasks`, `task_memory_links`, `cairns` tables (ca-243)
+- **Require Neo4j** — removed 25+ graceful fallback branches across the codebase; Neo4j is now a mandatory dependency that hard-fails at startup if unavailable (ca-244)
+- **EventType registry** — replaced stringly-typed event names with `EventType` enum. Fixed deliverables publish bug where events weren't dispatching. Audited all subscriber wiring for consistency (ca-245)
+- **Config hardening** — fail-loud on insecure defaults: `CAIRN_SECRET_KEY` and `CAIRN_DB_PASS` validated at startup, rejects known-bad defaults (ca-247)
+- **Settings pane** — removed non-editable fields, added missing controls for consolidation, push notifications, and work items sections (ca-249)
+- **Kill MetricsCollector** — removed in-memory sliding-window aggregation layer (`metrics_collector.py`, `metrics_stream.py`), EventBus observer system, and `/api/metrics/stream` + `/api/metrics/snapshot` endpoints. SystemPulse UI now does client-side aggregation from raw SSE events.
 
 ### Fixed
+- **MetricsCollector event routing** — collector received events even when analytics disabled (ca-242). Subsequently replaced by unified event architecture.
 - **Doc detail download** — downloads now use auth headers and proper filenames instead of navigating to unauthenticated URLs
 - **Projects page auth** — added missing Authorization headers to project detail API calls
 - **Ruff lint** — import ordering, unused imports, `TimeoutError` alias across services.py, constants.py
