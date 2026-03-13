@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getAuthToken } from "@/lib/auth";
 
 /**
  * useSSE — subscribe to server-sent events with pattern matching.
@@ -67,6 +68,10 @@ export function useSSE(
 
     const params = new URLSearchParams({ patterns });
     if (project) params.set("project", project);
+    // SSE auth: EventSource can't send Authorization headers,
+    // so pass the token as a query parameter.
+    const token = getAuthToken();
+    if (token) params.set("token", token);
 
     const url = `/api/sse/subscribe?${params.toString()}`;
     const source = new EventSource(url);

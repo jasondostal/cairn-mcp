@@ -29,6 +29,10 @@ def register_routes(router: APIRouter, svc: Services, **kw):
 
     @router.post("/dispatch")
     def api_dispatch(body: DispatchBody = Body(...)):
+        from cairn.api.utils import require_admin
+        admin_err = require_admin()
+        if admin_err:
+            return admin_err
         try:
             return workspace_manager.dispatch(
                 work_item_id=body.work_item_id,

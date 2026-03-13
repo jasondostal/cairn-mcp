@@ -9,6 +9,7 @@ import logging
 import time
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import JSONResponse
 from starlette.responses import StreamingResponse
 
 from cairn.core import stats
@@ -165,17 +166,33 @@ def register_routes(router: APIRouter, svc: Services, **kw):
     async def api_sse_subscribe(
         patterns: str = Query("*", description="Comma-separated event patterns (fnmatch)"),
         project: str | None = Query(None),
+        token: str | None = Query(None, description="Bearer token (EventSource can't send headers)"),
     ):
         """Pattern-based SSE subscription.
 
         Streams events matching any of the given patterns (fnmatch syntax).
         Supports reconnection via Last-Event-ID header.
+        Requires authentication via ?token= query parameter (JWT or PAT).
 
         Examples:
         - patterns=work_item.*,notification.* — work item + notification events
         - patterns=* — all events
         - patterns=deliverable.created,work_item.gated — specific events
         """
+        # SSE auth: EventSource can't send Authorization headers, so accept
+        # token as query parameter. Validate it the same way as Bearer tokens.
+        if token and svc.user_manager:
+            from cairn.core.auth import resolve_bearer_token
+            from cairn.core.user import set_user
+            ctx = resolve_bearer_token(
+                token,
+                jwt_secret=svc.config.auth.jwt_secret if svc.config else "",
+                user_manager=svc.user_manager,
+            )
+            if ctx:
+                set_user(ctx)
+            else:
+                return JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
         pattern_list = [p.strip() for p in patterns.split(",") if p.strip()]
         if not pattern_list:
             pattern_list = ["*"]

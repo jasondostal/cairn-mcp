@@ -301,6 +301,21 @@ def register_routes(router: APIRouter, svc: Services) -> None:
         oidc, state_store = _get_oidc()
         # Callback URL: prefer explicit redirect_uri, then CAIRN_PUBLIC_URL, then internal host
         if redirect_uri:
+            # Validate redirect_uri against CAIRN_PUBLIC_URL to prevent open redirect
+            from urllib.parse import urlparse
+            parsed_redirect = urlparse(redirect_uri)
+            if config.public_url:
+                parsed_public = urlparse(config.public_url)
+                if parsed_redirect.netloc != parsed_public.netloc:
+                    return JSONResponse(
+                        status_code=400,
+                        content={"detail": "redirect_uri must match CAIRN_PUBLIC_URL origin"},
+                    )
+            elif parsed_redirect.hostname not in ("localhost", "127.0.0.1", config.http_host):
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "redirect_uri must target this server"},
+                )
             callback_uri = redirect_uri
         elif config.public_url:
             callback_uri = f"{config.public_url.rstrip('/')}/api/auth/oidc/callback"

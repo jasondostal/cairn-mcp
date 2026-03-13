@@ -85,11 +85,8 @@ _JWT_OPEN_PATHS = frozenset({
     "/auth/oidc/login", "/auth/oidc/callback", "/auth/oidc/exchange",
     "/api/auth/login", "/api/auth/register", "/api/auth/status",
     "/api/auth/oidc/login", "/api/auth/oidc/callback", "/api/auth/oidc/exchange",
-    # SSE endpoints — EventSource cannot send Authorization headers.
-    # These are read-only operational streams, not user data.
-    "/sse/subscribe", "/api/sse/subscribe",
-    "/metrics/stream", "/api/metrics/stream",
-    "/metrics/snapshot", "/api/metrics/snapshot",
+    # SSE endpoints require token query param (EventSource can't send headers).
+    # Removed from open paths — auth handled inline via ?token= parameter.
 })
 
 

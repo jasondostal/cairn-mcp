@@ -28,7 +28,9 @@ _SECRET_SETTINGS = {
     "terminal.encryption_key",
     "llm.gemini_api_key", "llm.openai_api_key",
     "embedding.openai_api_key", "neo4j.password",
-    "workspace.password", "oidc.client_secret",
+    "workspace.password", "workspace.claude_code_ssh_key",
+    "auth.oidc.client_secret", "oidc.client_secret",
+    "push.token",
 }
 
 

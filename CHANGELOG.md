@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.77.1] — 2026-03-13 — Security Hardening
+
+### Security
+- **REST `/api/dispatch` requires admin** — any authenticated user could previously spawn `claude -p` subprocesses (RCE). Now enforces `require_admin()` check matching the MCP tool
+- **OIDC provider settings removed from Settings API** — `auth.oidc.enabled`, `auth.oidc.provider_url`, and `auth.oidc.admin_groups` removed from `EDITABLE_KEYS`. IdP configuration is security-critical and now env-only
+- **Filesystem paths removed from Settings API** — `ingest_dir`, `code_dir`, `event_archive_dir` removed from `EDITABLE_KEYS` to prevent path traversal via settings
+- **OIDC login redirect_uri validated** — `/auth/oidc/login` now validates `redirect_uri` against `CAIRN_PUBLIC_URL` origin, preventing open redirect / auth code theft
+- **SSE endpoints require authentication** — `/sse/subscribe` removed from `_JWT_OPEN_PATHS`. Now accepts `?token=` query parameter (JWT or PAT) since EventSource cannot send Authorization headers
+- **Secret masking expanded** — added `auth.oidc.client_secret`, `workspace.claude_code_ssh_key`, and `push.token` to `_SECRET_SETTINGS` (masked in GET /settings)
+
 ## [0.77.0] — 2026-03-13 — "Remote Access"
 
 ### Added

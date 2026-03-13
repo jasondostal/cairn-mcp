@@ -377,9 +377,8 @@ EDITABLE_KEYS: set[str] = {
     "analytics.cost_llm_output_per_1k",
     # Auth (secrets and security-critical settings are env-only)
     "auth.header_name", "auth.jwt_expire_minutes", "auth.stdio_user",
-    # Auth OIDC (secrets excluded — env-only)
-    "auth.oidc.enabled", "auth.oidc.provider_url", "auth.oidc.scopes",
-    "auth.oidc.auto_create_users", "auth.oidc.default_role", "auth.oidc.admin_groups",
+    # Auth OIDC (provider_url, enabled, admin_groups are security-critical — env-only)
+    "auth.oidc.scopes", "auth.oidc.auto_create_users", "auth.oidc.default_role",
     # Terminal
     "terminal.backend", "terminal.max_sessions", "terminal.connect_timeout",
     # Neo4j (password is env-only)
@@ -408,7 +407,7 @@ EDITABLE_KEYS: set[str] = {
     "push.enabled", "push.url", "push.token", "push.default_topic", "push.timeout",
     # Top-level
     "enrichment_enabled",
-    "event_archive_dir", "ingest_dir", "code_dir",
+    # event_archive_dir, ingest_dir, code_dir are security-critical (path traversal) — env-only
     "ingest_max_size", "ingest_chunk_size", "ingest_chunk_overlap", "decay_lambda",
     "decay.enabled", "decay.scan_interval_hours", "decay.threshold",
     "decay.min_age_days", "decay.protect_importance", "decay.dry_run",
