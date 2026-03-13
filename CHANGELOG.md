@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.77.0] — 2026-03-13 — "Remote Access"
+
+### Added
+- **OAuth2 Authorization Server** — full MCP SDK `OAuthAuthorizationServerProvider` implementation enabling remote MCP clients (Claude.ai, mobile apps) to connect via OAuth2 Authorization Code + PKCE flow with Dynamic Client Registration (RFC 7591). New file: `cairn/core/oauth2_server.py`
+- **External IdP delegation** — Cairn issues its own JWTs while delegating user authentication to any OIDC provider (Authentik, Keycloak, Auth0, Okta, Azure AD). Reuses existing `OIDCClient` for the Authentik leg; SSO sessions make the auth bounce invisible to users
+- **Protected Resource Metadata** — RFC 9728 `/.well-known/oauth-protected-resource` endpoint for MCP client discovery
+- **DB-backed refresh tokens** — token rotation on use, automatic expired token cleanup, configurable expiry (default 30 days). Migration 053
+- **`MCPOAuthConfig`** — new config dataclass with `CAIRN_MCP_OAUTH_ENABLED`, `CAIRN_MCP_OAUTH_ACCESS_EXPIRY`, and `CAIRN_MCP_OAUTH_REFRESH_EXPIRY` environment variables
+- **Remote MCP setup guide** — `docs/remote-mcp.md` covering OAuth2 flow, OIDC provider configuration, reverse proxy setup, and security hardening
+
+### Security
+- HTTPS-only redirect URI validation in Dynamic Client Registration
+- Localhost/internal target rejection for redirect URIs
+- 50-client registration cap to prevent DCR spam
+- Expired refresh token rejection with automatic cleanup
+- Recommended rate limiting configuration for OAuth2 endpoints
+
+### Changed
+- `cairn/server.py` restructured HTTP startup to inject OAuth2 provider before route construction; conditional middleware selection based on `CAIRN_MCP_OAUTH_ENABLED`
+
 ## [0.76.0] — 2026-03-12 — "Unified Events"
 
 ### Added

@@ -189,6 +189,7 @@ All via environment variables. The ones that matter:
 | `CAIRN_AUTH_ENABLED` | `false` | Multi-user authentication (JWT, PATs, OIDC/SSO) |
 | `CAIRN_AUTH_JWT_SECRET` | *(empty)* | JWT signing secret (required when auth enabled) |
 | `CAIRN_OIDC_ENABLED` | `false` | OIDC/SSO integration (any OIDC-compliant provider) |
+| `CAIRN_MCP_OAUTH_ENABLED` | `false` | OAuth2 Authorization Server for remote MCP clients (Claude.ai, mobile) |
 | `CAIRN_GRAPH_BACKEND` | *(disabled)* | Set to `neo4j` to enable knowledge graph |
 | `CAIRN_KNOWLEDGE_EXTRACTION` | `false` | Entity/statement extraction on store |
 | `CAIRN_EMBEDDING_BACKEND` | `local` | `local` (MiniLM, 384-dim) or `bedrock` (Titan V2, 1024-dim) |
@@ -227,6 +228,30 @@ covering all auth modes, OIDC provider configuration, and MCP client examples.
 > **Security note:** Cairn's auth system is functional and production-tested but
 > has not been independently audited. For network-exposed deployments, add TLS
 > termination and network-level access controls.
+
+## Remote MCP Access (Claude.ai, Mobile)
+
+Connect Cairn to Claude.ai, the Claude mobile app, or any OAuth2-capable MCP client. Cairn acts as an OAuth2 Authorization Server, delegating user authentication to your existing OIDC identity provider.
+
+**Prerequisites:** Auth enabled (`CAIRN_AUTH_ENABLED=true`), OIDC configured (`CAIRN_OIDC_ENABLED=true`), and a public URL set (`CAIRN_PUBLIC_URL`).
+
+**Enable it:**
+
+```bash
+CAIRN_MCP_OAUTH_ENABLED=true
+```
+
+**Connect from Claude.ai:**
+
+1. Go to Claude.ai Settings > Integrations > Add custom MCP
+2. Enter your Cairn URL: `https://your-cairn-domain.com/mcp`
+3. Claude.ai discovers the OAuth2 endpoints automatically
+4. You'll be redirected to your identity provider to log in
+5. After login, Claude.ai has full access to your Cairn MCP tools
+
+The OAuth2 flow uses Authorization Code + PKCE with Dynamic Client Registration (RFC 7591). If your identity provider supports SSO sessions, the auth redirect is invisible after the first login.
+
+See the **[Remote MCP Guide](docs/remote-mcp.md)** for reverse proxy configuration, security hardening, and troubleshooting.
 
 ## Code Intelligence
 

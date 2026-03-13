@@ -272,6 +272,17 @@ mcp = FastMCP(**mcp_kwargs)  # type: ignore[arg-type]
 # Entry point
 # ============================================================
 
+def _mcp_oauth_enabled(config) -> bool:
+    """Check if MCP OAuth2 Authorization Server should be enabled."""
+    return (
+        config.auth.mcp_oauth.enabled
+        and config.auth.enabled
+        and config.auth.oidc.enabled
+        and bool(config.auth.jwt_secret)
+        and bool(config.public_url)
+    )
+
+
 def main():
     """Run the Cairn MCP server."""
     if _base_config.transport == "http":
@@ -299,15 +310,7 @@ def main():
             retry_interval=mcp._retry_interval,
         )
 
-        # Get MCP's Starlette app (parent — owns lifespan, serves /mcp)
-        mcp_app = mcp.streamable_http_app()
-
-        # Wrap MCP's lifespan with DB lifecycle.
-        # streamable_http_app() only starts the session manager — our custom
-        # lifespan (DB connect) doesn't fire unless we inject it here.
-        _mcp_lifespan = mcp_app.router.lifespan_context
-
-        # Pre-connect DB and build services so we can mount API before app starts
+        # --- DB + services init (before streamable_http_app for OAuth2 injection) ---
         db_instance = Database(_base_config.db)
         db_instance.connect()
         db_instance.run_migrations()
@@ -320,12 +323,65 @@ def main():
         from cairn.tools import register_all
         register_all(mcp, svc)
 
-        # Mount REST API and auth middleware before app starts
+        # --- MCP OAuth2 Authorization Server (for Claude.ai remote access) ---
+        _oauth_provider = None
+        if _mcp_oauth_enabled(final_config) and svc.user_manager:
+            from mcp.server.auth.provider import ProviderTokenVerifier
+            from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
+
+            from cairn.core.oauth2_server import CairnOAuthProvider
+
+            _oauth_provider = CairnOAuthProvider(
+                db=db_instance,
+                oidc_config=final_config.auth.oidc,
+                auth_config=final_config.auth,
+                mcp_oauth_config=final_config.auth.mcp_oauth,
+                public_url=final_config.public_url,
+                user_manager=svc.user_manager,
+            )
+
+            # Inject auth settings and provider onto FastMCP before building the app.
+            # The SDK's streamable_http_app() reads these to create OAuth2 routes
+            # and bearer auth middleware automatically.
+            mcp.settings.auth = AuthSettings(
+                issuer_url=final_config.public_url,
+                resource_server_url=f"{final_config.public_url.rstrip('/')}/mcp",
+                client_registration_options=ClientRegistrationOptions(
+                    enabled=True,
+                    valid_scopes=["mcp:tools"],
+                    default_scopes=["mcp:tools"],
+                ),
+                revocation_options=RevocationOptions(enabled=True),
+            )
+            mcp._auth_server_provider = _oauth_provider
+            mcp._token_verifier = ProviderTokenVerifier(_oauth_provider)
+            logger.info("MCP OAuth2 Authorization Server enabled (issuer: %s)", final_config.public_url)
+
+        # Get MCP's Starlette app (parent — owns lifespan, serves /mcp)
+        # NOTE: must be called AFTER OAuth2 injection so SDK creates auth routes
+        mcp_app = mcp.streamable_http_app()
+
+        # Add /oauth/callback route for Authentik redirect (not handled by SDK)
+        if _oauth_provider:
+            from starlette.routing import Route
+            mcp_app.routes.insert(0, Route(
+                "/oauth/callback",
+                endpoint=_oauth_provider.callback_handler,
+                methods=["GET"],
+            ))
+
+        # Wrap MCP's lifespan with DB lifecycle.
+        _mcp_lifespan = mcp_app.router.lifespan_context
+
+        # Mount REST API
         api = create_api(svc)
         mcp_app.mount("/api", api)
 
-        # MCP HTTP: enforce auth on /mcp/* when auth is enabled (ca-162)
-        if final_config.auth.enabled and final_config.auth.jwt_secret and svc.user_manager:
+        # MCP HTTP auth: when OAuth2 is enabled, the SDK's built-in
+        # RequireAuthMiddleware + BearerAuthBackend handle /mcp auth.
+        # The CairnOAuthProvider.load_access_token() bridges to UserContext.
+        # When OAuth2 is disabled, use the legacy MCPAuthMiddleware.
+        if not _oauth_provider and final_config.auth.enabled and final_config.auth.jwt_secret and svc.user_manager:
             from fastapi.responses import JSONResponse
             from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -403,7 +459,7 @@ def main():
                     )
 
             mcp_app.add_middleware(MCPAuthMiddleware)
-            logger.info("MCP HTTP auth enforcement enabled")
+            logger.info("MCP HTTP auth enforcement enabled (legacy middleware)")
 
         # --- Startup config validation (ca-247) ---
         _validate_config(final_config)

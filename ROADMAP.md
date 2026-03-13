@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: **v0.76.0** — "Unified Events". Next up: SSE pipeline fix, scaling readiness.
+Current: **v0.77.0** — "Remote Access". Next up: SSE pipeline fix, scaling readiness.
 
 ---
 
@@ -78,6 +78,18 @@ Exploring, not committed.
 ---
 
 ## Shipped
+
+### v0.77.0 — "Remote Access" ✓
+
+OAuth2 Authorization Server for remote MCP clients. Connect from Claude.ai, mobile, or any OAuth2-capable MCP client.
+
+- [x] **OAuth2 Authorization Server** — full `OAuthAuthorizationServerProvider` implementation with Authorization Code + PKCE flow and Dynamic Client Registration (RFC 7591)
+- [x] **External IdP delegation** — Cairn acts as OAuth2 AS while delegating user authentication to any OIDC provider (Authentik, Keycloak, Auth0, etc.)
+- [x] **Protected Resource Metadata** — RFC 9728 `/.well-known/oauth-protected-resource` endpoint for MCP client discovery
+- [x] **Refresh token rotation** — DB-backed refresh tokens with automatic rotation on use and expired token cleanup
+- [x] **DCR hardening** — HTTPS-only redirect URIs, localhost rejection, 50-client registration cap
+- [x] **Token lifecycle** — configurable access (default 24h) and refresh (default 30d) token expiry via environment variables
+- [x] **Backward compatible** — `CAIRN_MCP_OAUTH_ENABLED=false` (default) preserves existing auth behavior; all legacy auth methods continue working alongside OAuth2
 
 ### v0.76.0 — "Unified Events" ✓
 

@@ -193,6 +193,14 @@ class OIDCConfig:
 
 
 @dataclass(frozen=True)
+class MCPOAuthConfig:
+    """OAuth2 Authorization Server for remote MCP clients (e.g. Claude.ai)."""
+    enabled: bool = False
+    access_token_expiry: int = 86400     # Access token lifetime in seconds (default 24h)
+    refresh_token_expiry: int = 2592000  # Refresh token lifetime in seconds (default 30 days)
+
+
+@dataclass(frozen=True)
 class AuthConfig:
     enabled: bool = False
     api_key: str | None = None  # Static API key (checked via X-API-Key header)
@@ -200,6 +208,7 @@ class AuthConfig:
     jwt_secret: str = ""  # Secret for JWT signing (required when auth.enabled=true)
     jwt_expire_minutes: int = 1440  # JWT expiration (default 24h)
     oidc: OIDCConfig = field(default_factory=OIDCConfig)
+    mcp_oauth: MCPOAuthConfig = field(default_factory=MCPOAuthConfig)
     stdio_user: str = ""  # Username for stdio transport identity (CAIRN_STDIO_USER)
     allow_registration: bool = True  # Allow public user registration (disable after initial setup)
     auth_proxy_header: str = ""  # Reverse proxy auth header (e.g. Remote-User, X-Forwarded-User)
@@ -678,6 +687,9 @@ _ENV_MAP: dict[str, str] = {
     "auth.oidc.auto_create_users": "CAIRN_OIDC_AUTO_CREATE",
     "auth.oidc.default_role": "CAIRN_OIDC_DEFAULT_ROLE",
     "auth.oidc.admin_groups": "CAIRN_OIDC_ADMIN_GROUPS",
+    "auth.mcp_oauth.enabled": "CAIRN_MCP_OAUTH_ENABLED",
+    "auth.mcp_oauth.access_token_expiry": "CAIRN_MCP_OAUTH_ACCESS_EXPIRY",
+    "auth.mcp_oauth.refresh_token_expiry": "CAIRN_MCP_OAUTH_REFRESH_EXPIRY",
     "analytics.enabled": "CAIRN_ANALYTICS_ENABLED",
     "analytics.retention_days": "CAIRN_ANALYTICS_RETENTION_DAYS",
     "analytics.cost_embedding_per_1k": "CAIRN_ANALYTICS_COST_EMBEDDING",
@@ -852,6 +864,11 @@ def load_config() -> Config:
                 auto_create_users=os.getenv("CAIRN_OIDC_AUTO_CREATE", "true").lower() in ("true", "1", "yes"),
                 default_role=os.getenv("CAIRN_OIDC_DEFAULT_ROLE", "user"),
                 admin_groups=os.getenv("CAIRN_OIDC_ADMIN_GROUPS", ""),
+            ),
+            mcp_oauth=MCPOAuthConfig(
+                enabled=os.getenv("CAIRN_MCP_OAUTH_ENABLED", "false").lower() in ("true", "1", "yes"),
+                access_token_expiry=int(os.getenv("CAIRN_MCP_OAUTH_ACCESS_EXPIRY", "86400")),
+                refresh_token_expiry=int(os.getenv("CAIRN_MCP_OAUTH_REFRESH_EXPIRY", "2592000")),
             ),
         ),
         analytics=AnalyticsConfig(
