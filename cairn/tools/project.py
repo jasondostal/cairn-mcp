@@ -30,6 +30,7 @@ def register(mcp, svc: Services):
         target: str | None = None,
         link_type: str = "related",
         file_path: str | None = None,
+        separator: str = "\n\n",
         limit: int | None = None,
         offset: int = 0,
     ) -> dict | list[dict]:
@@ -50,6 +51,9 @@ def register(mcp, svc: Services):
         - 'get_doc': Get a single document by ID.
         - 'list_all_docs': List documents across all projects with optional filters and pagination.
         - 'update_doc': Update an existing document's content.
+        - 'append_doc': Append content to an existing document. Perfect for building
+            large docs incrementally — create a skeleton, then append sections one at a time.
+            Each append avoids LLM output limits. Optional separator (default: two newlines).
         - 'link': Link two projects together.
         - 'get_links': Get all links for a project.
         - 'attach_file': Upload a file as an attachment to a document.
@@ -58,7 +62,7 @@ def register(mcp, svc: Services):
         - 'list_attachments': List attachments for a document.
 
         Args:
-            action: One of 'list', 'create_doc', 'get_docs', 'get_doc', 'list_all_docs', 'update_doc', 'link', 'get_links', 'attach_file', 'list_attachments'.
+            action: One of 'list', 'create_doc', 'get_docs', 'get_doc', 'list_all_docs', 'update_doc', 'append_doc', 'link', 'get_links', 'attach_file', 'list_attachments'.
             project: Project name (required for most actions; optional comma-separated filter for list_all_docs).
             doc_type: Document type: 'brief', 'prd', 'plan', 'primer', 'writeup', or 'guide' (for create_doc, optional comma-separated filter for get_docs/list_all_docs).
             content: Document content (required for create_doc, update_doc). Can be omitted if file_path is provided.
@@ -69,6 +73,7 @@ def register(mcp, svc: Services):
             file_path: Path to a local file in the server's ingest staging directory.
                 Use instead of content to ingest from a staging directory (avoids inline transfer).
                 For attach_file: absolute path to the image file on the server's filesystem.
+            separator: Separator between existing and appended content (for append_doc, default: two newlines).
             limit: Max results to return (for list_all_docs).
             offset: Pagination offset (for list_all_docs, default 0).
         """
@@ -83,8 +88,8 @@ def register(mcp, svc: Services):
             def _do_projects():
                 nonlocal content, title
 
-                # Resolve file_path for create_doc/update_doc
-                if file_path and not content and action in ("create_doc", "update_doc"):
+                # Resolve file_path for create_doc/update_doc/append_doc
+                if file_path and not content and action in ("create_doc", "update_doc", "append_doc"):
                     file_content, inferred_title = svc.ingest_pipeline.read_local_file(file_path)
                     content = file_content
                     if not title:
@@ -119,6 +124,11 @@ def register(mcp, svc: Services):
                     if not doc_id or not content:
                         return {"error": "doc_id and content are required for update_doc"}
                     return svc.project_manager.update_doc(doc_id, content, title=title)
+
+                if action == "append_doc":
+                    if not doc_id or not content:
+                        return {"error": "doc_id and content are required for append_doc"}
+                    return svc.project_manager.append_to_doc(doc_id, content, separator=separator)
 
                 if action == "link":
                     if not target:

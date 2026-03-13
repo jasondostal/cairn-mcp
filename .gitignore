@@ -35,6 +35,9 @@ Thumbs.db
 /data/
 *.gguf
 
+# Ingest staging directory (bind-mounted into container)
+ingest/
+
 # Docker
 pgdata/
 eval/data/corpus.json

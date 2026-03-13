@@ -289,6 +289,40 @@ class ProjectManager:
         self.db.commit()
         return {"id": doc_id, "action": "updated"}
 
+    @track_operation("projects.append_to_doc")
+    def append_to_doc(self, doc_id: int, content: str, separator: str = "\n\n") -> dict:
+        """Append content to an existing document.
+
+        Useful for incremental document building — create a skeleton, then
+        append sections one at a time. Each append is a small operation that
+        avoids hitting LLM output limits on large documents.
+        """
+        existing = self.get_doc(doc_id)
+        if existing is None:
+            raise ValueError(f"Document {doc_id} not found")
+
+        new_content = existing["content"] + separator + content
+        self.db.execute(
+            "UPDATE project_documents SET content = %s, updated_at = NOW() WHERE id = %s",
+            (new_content, doc_id),
+        )
+        self.db.commit()
+
+        # Return updated metadata with new size info
+        logger.info(
+            "Appended %d chars to doc %d (total now %d chars)",
+            len(content), doc_id, len(new_content),
+        )
+        return {
+            "id": doc_id,
+            "project": existing["project"],
+            "doc_type": existing["doc_type"],
+            "title": existing["title"],
+            "action": "appended",
+            "appended_chars": len(content),
+            "total_chars": len(new_content),
+        }
+
     @track_operation("projects.link")
     def link(self, source: str, target: str, link_type: str = "related") -> dict:
         """Link two projects."""

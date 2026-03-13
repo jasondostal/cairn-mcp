@@ -39,6 +39,11 @@ class UpdateDocBody(BaseModel):
     title: str | None = None
 
 
+class AppendDocBody(BaseModel):
+    content: str
+    separator: str = "\n\n"
+
+
 def register_routes(router: APIRouter, svc: Services, **kw):
     db = svc.db
     memory_store = svc.memory_store
@@ -539,3 +544,10 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         if doc is None:
             raise HTTPException(status_code=404, detail="Document not found")
         return project_manager.update_doc(doc_id, body.content, title=body.title)
+
+    @router.post("/docs/{doc_id}/append")
+    def api_append_doc(doc_id: int = Path(...), body: AppendDocBody = Body(...)):
+        try:
+            return project_manager.append_to_doc(doc_id, body.content, separator=body.separator)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
