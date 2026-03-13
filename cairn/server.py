@@ -327,7 +327,11 @@ def main():
         _oauth_provider = None
         if _mcp_oauth_enabled(final_config) and svc.user_manager:
             from mcp.server.auth.provider import ProviderTokenVerifier
-            from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
+            from mcp.server.auth.settings import (
+                AuthSettings,
+                ClientRegistrationOptions,
+                RevocationOptions,
+            )
 
             from cairn.core.oauth2_server import CairnOAuthProvider
 

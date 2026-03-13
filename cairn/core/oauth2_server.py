@@ -20,19 +20,16 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import TYPE_CHECKING
 
-from pydantic import AnyUrl
-from starlette.requests import Request
-from starlette.responses import RedirectResponse, Response
-
 from mcp.server.auth.provider import (
     AccessToken,
     AuthorizationCode,
     AuthorizationParams,
-    OAuthAuthorizationServerProvider,
     RefreshToken,
     construct_redirect_uri,
 )
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
+from starlette.requests import Request
+from starlette.responses import RedirectResponse, Response
 
 if TYPE_CHECKING:
     from cairn.config import AuthConfig, MCPOAuthConfig, OIDCConfig
@@ -405,8 +402,9 @@ class CairnOAuthProvider:
         refresh_token: CairnRefreshToken,
         scopes: list[str],
     ) -> OAuthToken:
-        from cairn.core.user import create_access_token
         from mcp.server.auth.provider import TokenError
+
+        from cairn.core.user import create_access_token
 
         user = self._user_manager.get_by_id(refresh_token.user_id)
         if not user:
