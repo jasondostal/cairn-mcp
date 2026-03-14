@@ -1,4 +1,4 @@
-"""Insight tools: insights, drift_check, decay_scan, think."""
+"""Insight tools: insights, think (core); drift_check, decay_scan (extended)."""
 
 import logging
 
@@ -14,6 +14,9 @@ logger = logging.getLogger("cairn")
 
 def register(mcp, svc: Services):
     """Register insight-domain tools on the MCP instance.
+
+    Core tools (insights, think) are always registered.
+    Extended tools (drift_check, decay_scan) are gated behind extended_tools config.
 
     Args:
         mcp: FastMCP server instance.
@@ -102,67 +105,6 @@ def register(mcp, svc: Services):
             return await in_thread(svc.db, _do_insights)
         except Exception as e:
             logger.exception("insights failed")
-            return {"error": f"Internal error: {e}"}
-
-    @mcp.tool()
-    async def drift_check(
-        project: str | None = None,
-        files: list[dict] | None = None,
-    ) -> dict:
-        """Check for memories with stale file references via content hash comparison.
-
-        WHEN TO USE: Verify if stored memories about code/config files are still accurate.
-        - Before relying on a stored memory about a specific file's contents
-        - Periodic maintenance to find outdated code-snippet or decision memories
-        - After major refactors to identify memories that need updating
-
-        Pull-based: the caller computes and provides current file hashes because
-        Cairn may run on a different host than the codebase. Returns memories where
-        the referenced files have changed since the memory was stored.
-
-        Args:
-            project: Filter to a specific project. Omit to check all.
-            files: List of {path: str, hash: str} — current file content hashes.
-                   Use sha256 or any consistent hash of file contents.
-        """
-        try:
-            set_trace_tool("drift_check")
-            if project:
-                set_trace_project(project)
-            check_project_access(svc, project)
-            if svc.drift_detector is None:
-                return {"error": "drift detector not available"}
-            return await in_thread(svc.db, svc.drift_detector.check, project=project, files=files)
-        except Exception as e:
-            logger.exception("drift_check failed")
-            return {"error": f"Internal error: {e}"}
-
-    @mcp.tool()
-    async def decay_scan(
-        project: str | None = None,
-        dry_run: bool = True,
-    ) -> dict:
-        """Scan for memories at risk of being forgotten by the decay system.
-
-        WHEN TO USE: Understanding what the decay system would forget.
-        - "what memories are decaying", "show me at-risk memories"
-        - Verifying decay thresholds before enabling live mode
-
-        Returns candidates with decay scores and protected status.
-        Always dry-run by default — never forgets on its own.
-
-        Args:
-            project: Optional project filter.
-            dry_run: Always True for this tool (inspection only).
-        """
-        try:
-            set_trace_tool("decay_scan")
-            require_admin(svc)
-            if not svc.decay_worker:
-                return {"error": "DecayWorker is not enabled"}
-            return await in_thread(svc.db, svc.decay_worker.scan)
-        except Exception as e:
-            logger.exception("decay_scan failed")
             return {"error": f"Internal error: {e}"}
 
     @mcp.tool()
@@ -260,4 +202,69 @@ def register(mcp, svc: Services):
             return await in_thread(svc.db, _do_think)
         except Exception as e:
             logger.exception("think failed")
+            return {"error": f"Internal error: {e}"}
+
+    # --- Extended tools: only register when CAIRN_EXTENDED_TOOLS=true ---
+    if not svc.config.extended_tools:
+        return
+
+    @mcp.tool()
+    async def drift_check(
+        project: str | None = None,
+        files: list[dict] | None = None,
+    ) -> dict:
+        """Check for memories with stale file references via content hash comparison.
+
+        WHEN TO USE: Verify if stored memories about code/config files are still accurate.
+        - Before relying on a stored memory about a specific file's contents
+        - Periodic maintenance to find outdated code-snippet or decision memories
+        - After major refactors to identify memories that need updating
+
+        Pull-based: the caller computes and provides current file hashes because
+        Cairn may run on a different host than the codebase. Returns memories where
+        the referenced files have changed since the memory was stored.
+
+        Args:
+            project: Filter to a specific project. Omit to check all.
+            files: List of {path: str, hash: str} — current file content hashes.
+                   Use sha256 or any consistent hash of file contents.
+        """
+        try:
+            set_trace_tool("drift_check")
+            if project:
+                set_trace_project(project)
+            check_project_access(svc, project)
+            if svc.drift_detector is None:
+                return {"error": "drift detector not available"}
+            return await in_thread(svc.db, svc.drift_detector.check, project=project, files=files)
+        except Exception as e:
+            logger.exception("drift_check failed")
+            return {"error": f"Internal error: {e}"}
+
+    @mcp.tool()
+    async def decay_scan(
+        project: str | None = None,
+        dry_run: bool = True,
+    ) -> dict:
+        """Scan for memories at risk of being forgotten by the decay system.
+
+        WHEN TO USE: Understanding what the decay system would forget.
+        - "what memories are decaying", "show me at-risk memories"
+        - Verifying decay thresholds before enabling live mode
+
+        Returns candidates with decay scores and protected status.
+        Always dry-run by default — never forgets on its own.
+
+        Args:
+            project: Optional project filter.
+            dry_run: Always True for this tool (inspection only).
+        """
+        try:
+            set_trace_tool("decay_scan")
+            require_admin(svc)
+            if not svc.decay_worker:
+                return {"error": "DecayWorker is not enabled"}
+            return await in_thread(svc.db, svc.decay_worker.scan)
+        except Exception as e:
+            logger.exception("decay_scan failed")
             return {"error": f"Internal error: {e}"}

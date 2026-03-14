@@ -317,6 +317,7 @@ class Config:
     work_items: WorkItemsConfig = field(default_factory=WorkItemsConfig)
     clustering: ClusteringConfig = field(default_factory=ClusteringConfig)
     enrichment_enabled: bool = True
+    extended_tools: bool = False  # Gate for MCP tools not yet earning their keep
     profile: str = ""  # Active CAIRN_PROFILE name (empty = no profile)
     transport: str = "stdio"  # "stdio" or "http"
     http_host: str = "0.0.0.0"
@@ -725,6 +726,7 @@ _ENV_MAP: dict[str, str] = {
     "code_dir": "CAIRN_CODE_DIR",
     "ingest_max_size": "CAIRN_INGEST_MAX_SIZE",
     "enrichment_enabled": "CAIRN_ENRICHMENT_ENABLED",
+    "extended_tools": "CAIRN_EXTENDED_TOOLS",
     "profile": "CAIRN_PROFILE",
     "transport": "CAIRN_TRANSPORT",
     "http_host": "CAIRN_HTTP_HOST",
@@ -943,6 +945,7 @@ def load_config() -> Config:
             tsne_max_samples=int(os.getenv("CAIRN_CLUSTER_TSNE_MAX_SAMPLES", "500")),
         ),
         enrichment_enabled=os.getenv("CAIRN_ENRICHMENT_ENABLED", "true").lower() in ("true", "1", "yes"),
+        extended_tools=os.getenv("CAIRN_EXTENDED_TOOLS", "false").lower() in ("true", "1", "yes"),
         profile=profile_name,
         transport=os.getenv("CAIRN_TRANSPORT", "stdio"),
         http_host=os.getenv("CAIRN_HTTP_HOST", "0.0.0.0"),
