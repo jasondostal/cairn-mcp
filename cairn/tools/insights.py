@@ -1,4 +1,4 @@
-"""Insight tools: insights, beliefs, drift_check, decay_scan, think."""
+"""Insight tools: insights, drift_check, decay_scan, think."""
 
 import logging
 
@@ -102,96 +102,6 @@ def register(mcp, svc: Services):
             return await in_thread(svc.db, _do_insights)
         except Exception as e:
             logger.exception("insights failed")
-            return {"error": f"Internal error: {e}"}
-
-    @mcp.tool()
-    async def beliefs(
-        action: str,
-        project: str,
-        content: str | None = None,
-        domain: str | None = None,
-        confidence: float = 0.7,
-        evidence_ids: list[int] | None = None,
-        agent_name: str | None = None,
-        belief_id: int | None = None,
-        reason: str | None = None,
-        confidence_delta: float = -0.1,
-    ) -> dict:
-        """Manage durable beliefs — post-decisional knowledge with confidence tracking.
-
-        Beliefs are things an agent or the organization holds as true through experience.
-        They have confidence scores, domain tags, evidence linking, and can be challenged
-        or retracted. Beliefs are the downstream of working memory — hypotheses that
-        crystallized, tensions that resolved, observations that solidified.
-
-        Actions:
-        - 'crystallize': Create a new belief (project, content). Optional: domain, confidence,
-          evidence_ids, agent_name.
-        - 'list': List beliefs (project). Optional: agent_name, domain, status.
-        - 'get': Get full detail (belief_id).
-        - 'challenge': Lower confidence on a belief (belief_id). Optional: evidence_id,
-          reason, confidence_delta.
-        - 'retract': Mark a belief as wrong (belief_id). Optional: reason.
-
-        Args:
-            action: One of 'crystallize', 'list', 'get', 'challenge', 'retract'.
-            project: Project name.
-            content: Belief content (required for crystallize).
-            domain: Area of expertise (deployment, architecture, etc.).
-            confidence: Initial confidence 0.0-1.0 (crystallize only).
-            evidence_ids: Memory IDs supporting or challenging the belief.
-            agent_name: Who holds this belief (None = organizational).
-            belief_id: Belief ID (required for get, challenge, retract).
-            reason: Explanation for challenge or retraction.
-            confidence_delta: How much to adjust confidence on challenge (default -0.1).
-        """
-        try:
-            set_trace_tool("beliefs")
-            set_trace_project(project)
-            check_project_access(svc, project)
-            if not svc.belief_store:
-                return {"error": "BeliefStore not initialized"}
-
-            if action == "crystallize":
-                if not content:
-                    return {"error": "content is required for crystallize"}
-                return await in_thread(
-                    svc.db,
-                    svc.belief_store.crystallize, project, content,
-                    domain=domain, confidence=confidence,
-                    evidence_ids=evidence_ids, agent_name=agent_name,
-                )
-            elif action == "list":
-                return await in_thread(
-                    svc.db,
-                    svc.belief_store.list_beliefs, project,
-                    agent_name=agent_name, domain=domain,
-                )
-            elif action == "get":
-                if belief_id is None:
-                    return {"error": "belief_id is required for get"}
-                result = await in_thread(svc.db, svc.belief_store.get, belief_id)
-                return result or {"error": f"Belief {belief_id} not found"}
-            elif action == "challenge":
-                if belief_id is None:
-                    return {"error": "belief_id is required for challenge"}
-                return await in_thread(
-                    svc.db,
-                    svc.belief_store.challenge, belief_id,
-                    evidence_id=evidence_ids[0] if evidence_ids else None,
-                    reason=reason, confidence_delta=confidence_delta,
-                )
-            elif action == "retract":
-                if belief_id is None:
-                    return {"error": "belief_id is required for retract"}
-                return await in_thread(
-                    svc.db,
-                    svc.belief_store.retract, belief_id, reason=reason,
-                )
-            else:
-                return {"error": f"Unknown action '{action}'. Use: crystallize, list, get, challenge, retract"}
-        except Exception as e:
-            logger.exception("beliefs failed")
             return {"error": f"Internal error: {e}"}
 
     @mcp.tool()
