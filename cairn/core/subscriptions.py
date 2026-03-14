@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 # Default notification title templates by event type prefix
 _TITLE_TEMPLATES: dict[str, str] = {
     "work_item.completed": "Work item completed",
-    "work_item.gated": "Work item needs input",
+    "work_item.gate_set": "Agent needs input",
+    "work_item.gate_resolved": "Gate resolved",
     "deliverable.created": "Deliverable ready for review",
     "deliverable.approved": "Deliverable approved",
     "deliverable.revised": "Deliverable needs revision",
@@ -31,7 +32,8 @@ _TITLE_TEMPLATES: dict[str, str] = {
 
 _SEVERITY_MAP: dict[str, str] = {
     "work_item.completed": "success",
-    "work_item.gated": "warning",
+    "work_item.gate_set": "warning",
+    "work_item.gate_resolved": "success",
     "deliverable.created": "info",
     "deliverable.approved": "success",
     "deliverable.revised": "warning",
@@ -316,11 +318,14 @@ class SubscriptionManager:
             elif channel == "push" and self.push_notifier and self.push_notifier.enabled:
                 channel_config = sub.get("channel_config") or {}
                 topic = channel_config.get("topic")
+                # Build click URL for deep linking (gate response, work item view)
+                click_url = self._build_click_url(event_type, event, channel_config)
                 sent = self.push_notifier.send(
                     title=title,
                     body=body,
                     severity=severity,
                     topic=topic,
+                    click_url=click_url,
                 )
                 if sent:
                     created += 1
@@ -340,6 +345,19 @@ class SubscriptionManager:
     def _build_body(self, event_type: str, payload: dict) -> str | None:
         """Build notification body from payload."""
         parts = []
+
+        # Gate-specific: show the question the agent is asking
+        if event_type == "work_item.gate_set":
+            gate_data = payload.get("gate_data") or {}
+            question = gate_data.get("question")
+            if question:
+                parts.append(question)
+            options = gate_data.get("options")
+            if options and isinstance(options, list):
+                parts.append("Options: " + ", ".join(str(o) for o in options))
+            if parts:
+                return "\n".join(parts)
+
         if payload.get("summary"):
             parts.append(payload["summary"])
         if payload.get("description"):
@@ -349,6 +367,31 @@ class SubscriptionManager:
         if payload.get("assignee"):
             parts.append(f"Assignee: {payload['assignee']}")
         return "\n".join(parts) if parts else None
+
+    def _build_click_url(
+        self, event_type: str, event: dict, channel_config: dict,
+    ) -> str | None:
+        """Build a deep link URL for push notification tap action.
+
+        Uses base_url from channel_config (set per subscription) to construct
+        a link to the relevant cairn-ui page.
+        """
+        base_url = channel_config.get("base_url", "").rstrip("/")
+        if not base_url:
+            return None
+
+        payload = event.get("payload") or {}
+
+        # Gate events → link to work item for response
+        if event_type.startswith("work_item."):
+            display_id = payload.get("display_id")
+            if display_id:
+                return f"{base_url}/work/{display_id}"
+            work_item_id = event.get("work_item_id")
+            if work_item_id:
+                return f"{base_url}/work/{work_item_id}"
+
+        return None
 
     # ------------------------------------------------------------------
     # Helpers

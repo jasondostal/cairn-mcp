@@ -31,11 +31,13 @@ export function DispatchDialog({
 }: DispatchDialogProps) {
   const [selectedBackend, setSelectedBackend] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
+  const [selectedRiskTier, setSelectedRiskTier] = useState("");
   const [dispatching, setDispatching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const showBackendSelector = backends.length > 1;
-  const showModelSelector = selectedBackend === "claude_code";
+  const showModelSelector = selectedBackend === "claude_code" || selectedBackend === "agent_sdk";
+  const showRiskTier = selectedBackend === "agent_sdk";
 
   async function handleDispatch() {
     setDispatching(true);
@@ -46,6 +48,7 @@ export function DispatchDialog({
         work_item_id: item.id,
         backend: selectedBackend || undefined,
         model: selectedModel || undefined,
+        risk_tier: selectedRiskTier ? Number(selectedRiskTier) : undefined,
       });
       onDispatched?.();
       onOpenChange(false);
@@ -80,13 +83,17 @@ export function DispatchDialog({
                   { value: "", label: "Default" },
                   ...backends.map((b) => ({
                     value: b.name,
-                    label: b.name === "claude_code" ? "Claude Code" : b.name === "opencode" ? "OpenCode" : b.name,
+                    label: b.name === "claude_code" ? "Claude Code"
+                      : b.name === "opencode" ? "OpenCode"
+                      : b.name === "agent_sdk" ? "Agent SDK"
+                      : b.name,
                   })),
                 ]}
                 value={selectedBackend}
                 onValueChange={(v) => {
                   setSelectedBackend(v);
-                  if (v !== "claude_code") setSelectedModel("");
+                  if (v !== "claude_code" && v !== "agent_sdk") setSelectedModel("");
+                  if (v !== "agent_sdk") setSelectedRiskTier("");
                 }}
                 className="w-full"
               />
@@ -105,6 +112,26 @@ export function DispatchDialog({
                 ]}
                 value={selectedModel}
                 onValueChange={setSelectedModel}
+                className="w-full"
+              />
+            </div>
+          )}
+
+          {showRiskTier && (
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Risk Tier
+              </label>
+              <SingleSelect
+                options={[
+                  { value: "", label: "Default (Tier 1 — guided)" },
+                  { value: "0", label: "Tier 0 — research only (read-only)" },
+                  { value: "1", label: "Tier 1 — guided autonomy (edits auto-approved)" },
+                  { value: "2", label: "Tier 2 — broad autonomy (edits + bash)" },
+                  { value: "3", label: "Tier 3 — full autonomy (gated items only)" },
+                ]}
+                value={selectedRiskTier}
+                onValueChange={setSelectedRiskTier}
                 className="w-full"
               />
             </div>

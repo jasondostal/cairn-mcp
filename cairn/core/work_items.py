@@ -81,12 +81,14 @@ class WorkItemManager:
             logger.warning("Failed to emit %s for work_item %s", event_type, work_item_id, exc_info=True)
 
     def _allocate_seq_num(self, project_id: int) -> int:
-        """Atomically allocate the next sequence number for a project."""
+        """Derive the next sequence number from existing data.
+
+        Each project gets its own sequence starting at 1. No external
+        counter — MAX(seq_num) + 1 is the source of truth. The unique
+        constraint on (project_id, seq_num) prevents duplicates.
+        """
         row = self.db.execute_one(
-            """UPDATE projects
-               SET work_item_next_seq = work_item_next_seq + 1
-               WHERE id = %s
-               RETURNING work_item_next_seq - 1 AS seq_num""",
+            "SELECT COALESCE(MAX(seq_num), 0) + 1 AS seq_num FROM work_items WHERE project_id = %s",
             (project_id,),
         )
         assert row is not None
@@ -691,7 +693,7 @@ class WorkItemManager:
         query = f"""
             SELECT wi.id, wi.seq_num, wi.title, wi.item_type, wi.priority,
                    wi.status, wi.assignee, wi.parent_id, wi.session_name,
-                   wi.risk_tier, wi.gate_type, wi.agent_state,
+                   wi.risk_tier, wi.gate_type, wi.agent_state, wi.last_heartbeat,
                    wi.created_at, wi.updated_at, wi.completed_at, wi.cancelled_at,
                    p.name AS project, p.work_item_prefix,
                    COALESCE(cc.cnt, 0) AS children_count,
@@ -730,7 +732,7 @@ class WorkItemManager:
                     )
                     SELECT wi.id, wi.seq_num, wi.title, wi.item_type, wi.priority,
                            wi.status, wi.assignee, wi.parent_id, wi.session_name,
-                           wi.risk_tier, wi.gate_type, wi.agent_state,
+                           wi.risk_tier, wi.gate_type, wi.agent_state, wi.last_heartbeat,
                            wi.created_at, wi.updated_at, wi.completed_at, wi.cancelled_at,
                            p.name AS project, p.work_item_prefix,
                            COALESCE(cc.cnt, 0) AS children_count,
@@ -766,6 +768,7 @@ class WorkItemManager:
                 "risk_tier": r["risk_tier"] or 0,
                 "gate_type": r["gate_type"],
                 "agent_state": r["agent_state"],
+                "last_heartbeat": r["last_heartbeat"].isoformat() if r.get("last_heartbeat") else None,
                 "created_at": r["created_at"].isoformat() if r["created_at"] else None,
                 "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
                 "completed_at": r["completed_at"].isoformat() if r["completed_at"] else None,
@@ -1121,11 +1124,14 @@ class WorkItemManager:
         )
         self.db.commit()
 
-        # Event-driven graph projection
+        # Event-driven graph projection + push notification
         self._publish(
             "work_item.gate_set", work_item_id=item["id"],
             project_id=item["project_id"],
             gate_type=gate_type,
+            gate_data=gate_data or {},
+            title=item.get("title", ""),
+            display_id=self._display_id(item),
         )
 
         return {
@@ -1185,11 +1191,13 @@ class WorkItemManager:
         )
         self.db.commit()
 
-        # Event-driven graph projection
+        # Event-driven graph projection + push notification
         self._publish(
             "work_item.gate_resolved", work_item_id=item["id"],
             project_id=item["project_id"],
             new_status=new_status,
+            title=item.get("title", ""),
+            display_id=display_id,
         )
 
         return {

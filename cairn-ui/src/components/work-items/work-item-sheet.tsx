@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api, type WorkItem, type WorkItemDetail, type WorkItemActivity, type WorkItemStatus, type WorkspaceBackendInfo, type Deliverable } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
@@ -42,6 +42,108 @@ import {
   XCircle,
 } from "lucide-react";
 
+const STATUS_OPTIONS = [
+  { value: "open", label: "Open" },
+  { value: "ready", label: "Ready" },
+  { value: "in_progress", label: "In Progress" },
+  { value: "blocked", label: "Blocked" },
+  { value: "done", label: "Done" },
+  { value: "cancelled", label: "Cancelled" },
+];
+
+const PRIORITY_OPTIONS = Array.from({ length: 11 }, (_, i) => ({
+  value: String(i),
+  label: `P${i}${i === 0 ? " (none)" : i <= 2 ? " (low)" : i <= 5 ? "" : i <= 8 ? " (high)" : " (critical)"}`,
+}));
+
+/** Click-to-edit text field. Shows static text, switches to input on click. */
+function EditableText({
+  value,
+  onSave,
+  multiline = false,
+  disabled = false,
+  className = "",
+  placeholder = "Click to edit…",
+}: {
+  value: string;
+  onSave: (v: string) => Promise<void>;
+  multiline?: boolean;
+  disabled?: boolean;
+  className?: string;
+  placeholder?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [saving, setSaving] = useState(false);
+  const ref = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+
+  useEffect(() => { setDraft(value); }, [value]);
+  useEffect(() => { if (editing) ref.current?.focus(); }, [editing]);
+
+  async function save() {
+    const trimmed = draft.trim();
+    if (trimmed === value) { setEditing(false); return; }
+    setSaving(true);
+    try {
+      await onSave(trimmed);
+      setEditing(false);
+    } catch { setDraft(value); }
+    finally { setSaving(false); }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Escape") { setDraft(value); setEditing(false); }
+    if (e.key === "Enter" && !multiline) { e.preventDefault(); save(); }
+    if (e.key === "Enter" && multiline && (e.metaKey || e.ctrlKey)) { e.preventDefault(); save(); }
+  }
+
+  if (disabled || !editing) {
+    return (
+      <div
+        className={`group cursor-pointer ${disabled ? "cursor-default" : ""} ${className}`}
+        onClick={() => !disabled && setEditing(true)}
+      >
+        <span className={value ? "" : "text-muted-foreground italic"}>
+          {value || placeholder}
+        </span>
+        {!disabled && (
+          <Pencil className="h-3 w-3 ml-1.5 inline opacity-0 group-hover:opacity-40 transition-opacity" />
+        )}
+      </div>
+    );
+  }
+
+  const inputClass = "w-full rounded-md border border-input bg-background px-2 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+  if (multiline) {
+    return (
+      <textarea
+        ref={ref as React.RefObject<HTMLTextAreaElement>}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={save}
+        onKeyDown={handleKeyDown}
+        disabled={saving}
+        className={`${inputClass} min-h-[80px] resize-y ${className}`}
+        placeholder={placeholder}
+      />
+    );
+  }
+
+  return (
+    <input
+      ref={ref as React.RefObject<HTMLInputElement>}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={save}
+      onKeyDown={handleKeyDown}
+      disabled={saving}
+      className={`${inputClass} h-8 ${className}`}
+      placeholder={placeholder}
+    />
+  );
+}
+
 interface WorkItemSheetProps {
   itemId: number | null;
   open: boolean;
@@ -72,6 +174,16 @@ export function WorkItemSheet({
   const [deliverable, setDeliverable] = useState<Deliverable | null>(null);
   const [reviewNotes, setReviewNotes] = useState("");
   const [reviewActing, setReviewActing] = useState(false);
+
+  /** Generic field update — patches via API, refreshes detail + activity. */
+  async function updateField(field: string, value: unknown) {
+    if (!detail) return;
+    await api.workItemUpdate(detail.id, { [field]: value });
+    const updated = await api.workItem(detail.id);
+    setDetail(updated);
+    fetchActivities();
+    onAction?.();
+  }
 
   const fetchDetail = useCallback(() => {
     if (!itemId) return;
@@ -104,6 +216,23 @@ export function WorkItemSheet({
     fetchActivities();
     fetchDeliverable();
   }, [itemId, open, fetchDetail, fetchActivities, fetchDeliverable]);
+
+  // Auto-refresh while agent is working (in_progress or has recent heartbeat)
+  useEffect(() => {
+    if (!open || !detail) return;
+    const isActive = detail.status === "in_progress" || (
+      detail.agent_state === "working" && detail.last_heartbeat
+      && (Date.now() - new Date(detail.last_heartbeat).getTime()) < 120_000
+    );
+    if (!isActive) return;
+
+    const interval = setInterval(() => {
+      fetchDetail();
+      fetchActivities();
+      fetchDeliverable();
+    }, 5_000); // 5s refresh while agent is active
+    return () => clearInterval(interval);
+  }, [open, detail?.status, detail?.agent_state, detail?.last_heartbeat, fetchDetail, fetchActivities, fetchDeliverable]);
 
   async function handleComplete() {
     if (!detail) return;
@@ -221,22 +350,44 @@ export function WorkItemSheet({
             <SheetHeader>
               <div className="flex items-center gap-2 flex-wrap">
                 <StatusDot status={detail.status} className="h-2.5 w-2.5" />
-                <StatusText status={detail.status} />
+                {isTerminal ? (
+                  <StatusText status={detail.status} />
+                ) : (
+                  <SingleSelect
+                    options={STATUS_OPTIONS}
+                    value={detail.status}
+                    onValueChange={(v) => { if (v) updateField("status", v); }}
+                    className="h-6 min-w-0 text-xs"
+                  />
+                )}
                 <Badge variant="outline" className="font-mono text-xs">
                   {detail.item_type}
                 </Badge>
                 <Link href={`/projects/${encodeURIComponent(detail.project)}`} onClick={() => onOpenChange(false)}>
                   <ProjectPill name={detail.project} />
                 </Link>
-                <PriorityLabel priority={detail.priority} />
+                {isTerminal ? (
+                  <PriorityLabel priority={detail.priority} />
+                ) : (
+                  <SingleSelect
+                    options={PRIORITY_OPTIONS}
+                    value={String(detail.priority)}
+                    onValueChange={(v) => { if (v) updateField("priority", Number(v)); }}
+                    className="h-6 min-w-0 text-xs"
+                  />
+                )}
                 <RiskTierBadge tier={detail.risk_tier} />
               </div>
               <SheetTitle className="font-mono text-lg">
                 {detail.display_id}
               </SheetTitle>
-              <SheetDescription className="text-sm text-foreground">
-                {detail.title}
-              </SheetDescription>
+              <EditableText
+                value={detail.title}
+                onSave={(v) => updateField("title", v)}
+                disabled={isTerminal}
+                className="text-sm text-foreground"
+                placeholder="Untitled"
+              />
             </SheetHeader>
 
             <div className="space-y-4 px-4 pb-4">
@@ -305,47 +456,64 @@ export function WorkItemSheet({
               )}
 
               {/* Description */}
-              {detail.description && (
+              {(detail.description || !isTerminal) && (
                 <div>
                   <SectionHeader>Description</SectionHeader>
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                    {detail.description}
-                  </p>
+                  <EditableText
+                    value={detail.description || ""}
+                    onSave={(v) => updateField("description", v || null)}
+                    multiline
+                    disabled={isTerminal}
+                    className="whitespace-pre-wrap text-sm leading-relaxed"
+                    placeholder="Add a description…"
+                  />
                 </div>
               )}
 
               {/* Acceptance Criteria */}
-              {detail.acceptance_criteria && (
+              {(detail.acceptance_criteria || !isTerminal) && (
                 <div>
                   <SectionHeader>Acceptance Criteria</SectionHeader>
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
-                    {detail.acceptance_criteria}
-                  </p>
+                  <EditableText
+                    value={detail.acceptance_criteria || ""}
+                    onSave={(v) => updateField("acceptance_criteria", v || null)}
+                    multiline
+                    disabled={isTerminal}
+                    className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground"
+                    placeholder="Add acceptance criteria…"
+                  />
                 </div>
               )}
 
               {/* Assignee + Agent State */}
-              {(detail.assignee || detail.agent_state) && (
-                <div className="flex items-center gap-3 text-sm">
-                  {detail.assignee && (
-                    <div className="flex items-center gap-1.5">
-                      <User className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="font-mono text-muted-foreground">@{detail.assignee}</span>
-                    </div>
-                  )}
-                  {detail.agent_state && (
-                    <Badge variant="outline" className="font-mono text-xs">
-                      {detail.agent_state}
-                    </Badge>
-                  )}
-                  {detail.last_heartbeat && (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {formatDateTime(detail.last_heartbeat)}
+              <div className="flex items-center gap-3 text-sm">
+                <div className="flex items-center gap-1.5">
+                  <User className="h-3.5 w-3.5 text-muted-foreground" />
+                  {isTerminal ? (
+                    <span className="font-mono text-muted-foreground">
+                      {detail.assignee ? `@${detail.assignee}` : "Unassigned"}
                     </span>
+                  ) : (
+                    <EditableText
+                      value={detail.assignee || ""}
+                      onSave={(v) => updateField("assignee", v || null)}
+                      className="font-mono text-muted-foreground"
+                      placeholder="Unassigned"
+                    />
                   )}
                 </div>
-              )}
+                {detail.agent_state && (
+                  <Badge variant="outline" className="font-mono text-xs">
+                    {detail.agent_state}
+                  </Badge>
+                )}
+                {detail.last_heartbeat && (
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {formatDateTime(detail.last_heartbeat)}
+                  </span>
+                )}
+              </div>
 
               {/* Constraints */}
               {hasConstraints && (

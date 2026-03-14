@@ -22,6 +22,7 @@ from cairn.core.constants import (
     ActivityType,
 )
 from cairn.core.utils import get_or_create_project, get_project
+from cairn.core.user import UserManager
 from cairn.core.work_items import WorkItemManager
 from cairn.integrations.interface import WorkspaceBackend, WorkspaceBackendError
 from cairn.storage.database import Database
@@ -47,6 +48,7 @@ class WorkspaceManager:
         work_item_manager: WorkItemManager | None = None,
         default_agent: str = "cairn-build",
         budget_tokens: int = 6000,
+        user_manager: UserManager | None = None,
     ):
         self.db = db
         self._backends = backends or {}
@@ -54,7 +56,32 @@ class WorkspaceManager:
         self.work_item_manager = work_item_manager
         self.default_agent = default_agent
         self.budget_tokens = budget_tokens
+        self._user_manager = user_manager
         self.agent_registry: AgentRegistry | None = None
+
+    def _mint_agent_token(self, work_item_display_id: str = "") -> str:
+        """Create a scoped PAT for a dispatched agent.
+
+        The token is tied to the current user's account (visible under
+        their token list, revocable). This means agents run under the
+        dispatching user's RBAC scope — not a static admin backdoor.
+        Returns empty string if user management is not available.
+        """
+        if not self._user_manager:
+            return ""
+        from cairn.core.user import current_user
+        ctx = current_user()
+        if not ctx:
+            return ""
+        from datetime import datetime, timedelta, UTC
+        expires = datetime.now(UTC) + timedelta(hours=24)
+        label = f"agent:dispatch:{work_item_display_id}" if work_item_display_id else "agent:dispatch"
+        result = self._user_manager.create_api_token(
+            user_id=ctx.user_id,
+            name=label,
+            expires_at=expires,
+        )
+        return result["raw_token"]
 
     # -- backend resolution --------------------------------------------------
 
@@ -372,11 +399,24 @@ class WorkspaceManager:
 
             try:
                 send_kwargs: dict[str, Any] = {"agent": agent}
+                if work_item_id is not None:
+                    send_kwargs["work_item_id"] = str(work_item_id)
                 if backend_name == "claude_code":
                     if risk_tier is not None:
                         send_kwargs["risk_tier"] = risk_tier
                     if model:
                         send_kwargs["model"] = model
+
+                # Mint a scoped PAT so the dispatched agent authenticates
+                # to Cairn MCP as the user who triggered the dispatch.
+                _wi_display = ""
+                if briefing:
+                    _wi_display = briefing.get("work_item", {}).get("display_id", "")
+                auth_token = self._mint_agent_token(work_item_display_id=_wi_display)
+                if auth_token:
+                    send_kwargs["auth_token"] = auth_token
+                    logger.info("Agent PAT created for dispatch (%s)", _wi_display or "no work item")
+
                 be.send_message_async(session.id, combined, **send_kwargs)
                 result["task_sent"] = True
                 logger.info("Task sent to session %s via %s (async)", session.id, backend_name)

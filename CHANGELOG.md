@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — 0.78.0
+
+### Added
+- **Agent SDK backend** — native Python backend using `claude-agent-sdk` pip package for agent dispatch. Async streaming execution with hooks, MCP support, and session management. Risk tier mapping (0-3) controls tool access and permission modes. New file: `cairn/integrations/agent_sdk.py`
+- **RBAC-scoped agent dispatch** — dispatched agents run under the dispatching user's identity via auto-minted PATs (visible and revocable under the user's account). Replaces static admin token approach. Applies to both Claude Code CLI and Agent SDK backends
+- **Agent lifecycle events** — `agent.completed` and `agent.heartbeat` events flow through the EventBus to work item activity logs. New `AgentListener` subscriber translates backend events into activity entries
+- **Shared tool operations** — `cairn/core/tool_ops.py` extracts validate → service → budget → emit pipeline from both MCP and chat tools, eliminating ~200 lines of duplication (ca-257)
+- **Work item deep links** — `/work/{display_id}` route resolves display IDs (e.g., `ca-42`) and redirects to the work items page with the sheet open. Supports ntfy push notification tap-to-respond flow (ca-259)
+- **Push notification deep links** — gate and work item notifications include `click_url` for direct mobile response. Gate notifications now show the agent's question and options in the notification body
+- **Work item inline editing** — detail sheet now supports click-to-edit for title, description, acceptance criteria, assignee. Status and priority editable via dropdowns. All editing disabled on terminal items
+- **Epic filter** — work items toolbar gains an Epic dropdown; selecting one or more epics scopes the list to those epics and their subtasks
+- **Settings API defense-in-depth** — `_NEVER_EDITABLE` set with import-time assertion prevents security-critical keys (auth, DB passwords, OIDC config) from ever being added to `EDITABLE_KEYS`
+
+### Changed
+- **Work items filter toolbar** — removed FilterModeToggle (All/Active/Recent/Ready) and TimeRangeFilter (7d/30d/90d) toggle groups. Status and Types upgraded from SingleSelect to MultiSelect. Cleaner, flatter toolbar
+- **SingleSelect clear-on-reclick** — clicking the already-selected option now deselects it (sets value to ""), giving all SingleSelect dropdowns a natural "show all" behavior
+- **Seq_num allocation** — replaced fragile counter-based `work_item_next_seq` with data-derived `MAX(seq_num) + 1`. Each project gets its own sequence starting at 1. Unique constraint prevents duplicates
+- **MCP tool surface reduction** — removed `beliefs` and `working_memory` tools (28→26), then gated `code_query`, `arch_check`, `think`, `ingest`, `append_to_doc` behind `CAIRN_EXTENDED_TOOLS` env var (26→21 core tools)
+- **Chat tools refactor** — search, recall, modify, and discover_patterns in `chat_tools.py` now delegate to `tool_ops.py` shared functions instead of duplicating budget/event logic
+- **Work item list query** — now includes `last_heartbeat` in list results (previously detail-only), enabling heartbeat display without fetching full detail
+- **Dispatch auth** — both Claude Code CLI and Agent SDK backends thread `auth_token` through to MCP config generation, injecting Bearer auth headers so agents authenticate as the dispatching user
+- **Event callbacks** — Claude Code backend gains `event_callback` parameter and `_emit_completion` method; Agent SDK backend emits heartbeat and completion events during query streaming
+
+### Fixed
+- **Dispatch MCP auth** — dispatched agents previously got bare MCP config with no auth headers, causing 401s on all Cairn MCP calls
+- **Gate event payloads** — `work_item.gate_set` and `work_item.gate_resolved` events now include `gate_data`, `title`, and `display_id` for richer push notifications
+- **Subscription event types** — fixed `work_item.gated` (never matched) to `work_item.gate_set` / `work_item.gate_resolved` in notification title and severity maps
+
 ## [0.77.1] — 2026-03-13 — Security Hardening
 
 ### Security

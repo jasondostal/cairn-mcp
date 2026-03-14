@@ -2,19 +2,10 @@
 
 import logging
 
-from cairn.core.budget import apply_list_budget
-from cairn.core.constants import (
-    BUDGET_RECALL_PER_ITEM,
-    BUDGET_SEARCH_PER_ITEM,
-    MAX_CONTENT_SIZE,
-    MAX_RECALL_IDS,
-    VALID_MEMORY_TYPES,
-    VALID_SEARCH_MODES,
-    MemoryAction,
-)
 from cairn.core.services import Services
+from cairn.core.tool_ops import budgeted_recall, budgeted_search, validate_modify_inputs
 from cairn.core.trace import set_trace_project, set_trace_tool
-from cairn.core.utils import ValidationError, validate_search, validate_store
+from cairn.core.utils import ValidationError, validate_store
 from cairn.tools.auth import check_project_access, require_admin
 from cairn.tools.threading import in_thread
 
@@ -177,62 +168,20 @@ def register(mcp, svc: Services):
             if project:
                 set_trace_project(project)
             check_project_access(svc, project)
-            validate_search(query, limit)
-            if search_mode not in VALID_SEARCH_MODES:
-                return [{"error": f"invalid search_mode: {search_mode}. Must be one of: {', '.join(VALID_SEARCH_MODES)}"}]
-
             def _do_search():
-                results = svc.search_engine.search(
-                    query=query,
-                    project=project,
-                    memory_type=memory_type,
-                    search_mode=search_mode,
-                    limit=limit,
-                    include_full=include_full,
-                    as_of=as_of,
-                    event_after=event_after,
-                    event_before=event_before,
-                    ephemeral=ephemeral,
+                raw = budgeted_search(
+                    svc, query=query, project=project,
+                    memory_type=memory_type, search_mode=search_mode,
+                    limit=limit, include_full=include_full,
+                    as_of=as_of, event_after=event_after,
+                    event_before=event_before, ephemeral=ephemeral,
                 )
-
-                # Apply budget cap
-                budget = svc.config.budget.search
-                if budget > 0 and results:
-                    content_key = "content" if include_full else "summary"
-                    results_capped, meta = apply_list_budget(
-                        results, budget, content_key,
-                        per_item_max=BUDGET_SEARCH_PER_ITEM,
-                        overflow_message=(
-                            "...{omitted} more results omitted. "
-                            "Use recall(ids=[...]) for full content, or narrow your query."
-                        ),
-                    )
-                    if meta["omitted"] > 0:
-                        results_capped.append({"_overflow": meta["overflow_message"]})
-                    results = results_capped
-
-                # Publish search.executed event for access tracking
-                if svc.event_bus and results:
-                    try:
-                        memory_ids = [r["id"] for r in results if isinstance(r, dict) and "id" in r]
-                        svc.event_bus.emit(
-                            "search.executed",
-                            project=project,
-                            payload={
-                                "query": query[:200],
-                                "result_count": len(memory_ids),
-                                "memory_ids": memory_ids[:20],
-                                "search_mode": search_mode,
-                            },
-                        )
-                    except Exception:
-                        logger.debug("Failed to publish search.executed event", exc_info=True)
-
-                # Confidence gating: wrap results with assessment when active
-                confidence = svc.search_engine.assess_confidence(query, results)
+                if "error" in raw:
+                    return [raw]
+                confidence = raw["confidence"]
                 if confidence is not None:
-                    return {"results": results, "confidence": confidence}
-                return results
+                    return {"results": raw["results"], "confidence": confidence}
+                return raw["results"]
 
             return await in_thread(svc.db, _do_search)
         except ValidationError as e:
@@ -258,43 +207,11 @@ def register(mcp, svc: Services):
         """
         try:
             set_trace_tool("recall")
-            if not ids:
-                return [{"error": "ids list is required and cannot be empty"}]
-            if len(ids) > MAX_RECALL_IDS:
-                return [{"error": f"Maximum {MAX_RECALL_IDS} IDs per recall. Batch into multiple calls."}]
-
             def _do_recall():
-                results = svc.memory_store.recall(ids)
-
-                # Apply budget cap
-                budget = svc.config.budget.recall
-                if budget > 0 and results:
-                    results_capped, meta = apply_list_budget(
-                        results, budget, "content",
-                        per_item_max=BUDGET_RECALL_PER_ITEM,
-                        overflow_message=(
-                            "...{omitted} memories truncated from response. "
-                            "Recall fewer IDs per call for full content."
-                        ),
-                    )
-                    if meta["omitted"] > 0:
-                        results_capped.append({"_overflow": meta["overflow_message"]})
-                    results = results_capped
-                # Publish memory.recalled event for access tracking
-                if svc.event_bus and results:
-                    try:
-                        memory_ids = [r["id"] for r in results if isinstance(r, dict) and "id" in r]
-                        svc.event_bus.emit(
-                            "memory.recalled",
-                            payload={
-                                "memory_ids": memory_ids,
-                                "count": len(memory_ids),
-                            },
-                        )
-                    except Exception:
-                        logger.debug("Failed to publish memory.recalled event", exc_info=True)
-
-                return results
+                raw = budgeted_recall(svc, ids=ids)
+                if "error" in raw:
+                    return [raw]
+                return raw["results"]
 
             return await in_thread(svc.db, _do_recall)
         except Exception as e:
@@ -347,14 +264,9 @@ def register(mcp, svc: Services):
             if project:
                 set_trace_project(project)
             check_project_access(svc, project)
-            if action not in MemoryAction.ALL:
-                return {"error": f"invalid action: {action}. Must be one of: {', '.join(sorted(MemoryAction.ALL))}"}
-            if content is not None and len(content) > MAX_CONTENT_SIZE:
-                return {"error": f"content exceeds {MAX_CONTENT_SIZE} character limit"}
-            if memory_type is not None and memory_type not in VALID_MEMORY_TYPES:
-                return {"error": f"invalid memory_type: {memory_type}"}
-            if importance is not None and not (0.0 <= importance <= 1.0):
-                return {"error": "importance must be between 0.0 and 1.0"}
+            err = validate_modify_inputs(action, content, memory_type, importance)
+            if err:
+                return {"error": err}
 
             def _do_modify():
                 return svc.memory_store.modify(

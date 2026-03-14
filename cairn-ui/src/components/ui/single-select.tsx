@@ -91,7 +91,7 @@ export function SingleSelect({
                     key={option.value}
                     value={option.label}
                     onSelect={() => {
-                      onValueChange(option.value);
+                      onValueChange(option.value === value ? "" : option.value);
                       setOpen(false);
                     }}
                   >

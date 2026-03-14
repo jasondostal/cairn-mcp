@@ -346,6 +346,12 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     _notification_listener.register(event_bus)
     logger.info("NotificationListener registered with EventBus")
 
+    # Agent lifecycle listener — translates agent.completed/heartbeat events into activity log
+    from cairn.listeners.agent_listener import AgentListener
+    _agent_listener = AgentListener(_wi_mgr)
+    _agent_listener.register(event_bus)
+    logger.info("AgentListener registered with EventBus")
+
     # Agent type registry (ca-150)
     from cairn.core.agents import AgentRegistry
     agent_registry = AgentRegistry()
@@ -451,8 +457,44 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
             ssh_user=config.workspace.claude_code_ssh_user,
             ssh_key_path=config.workspace.claude_code_ssh_key,
         )
-        workspace_backends["claude_code"] = ClaudeCodeBackend(cc_config)
+        def _cc_event_callback(work_item_id, event_type, payload):
+            if event_bus:
+                event_bus.emit(
+                    event_type,
+                    work_item_id=int(work_item_id) if work_item_id else None,
+                    actor="agent:claude_code",
+                    payload=payload,
+                )
+
+        workspace_backends["claude_code"] = ClaudeCodeBackend(
+            cc_config, event_callback=_cc_event_callback,
+        )
         logger.info("Claude Code workspace backend enabled")
+
+    if config.workspace.agent_sdk_enabled:
+        from cairn.integrations.agent_sdk import AgentSDKBackend, AgentSDKConfig
+        sdk_config = AgentSDKConfig(
+            working_dir=config.workspace.agent_sdk_working_dir,
+            max_turns=config.workspace.agent_sdk_max_turns,
+            max_budget_usd=config.workspace.agent_sdk_max_budget,
+            cairn_mcp_url=config.workspace.agent_sdk_mcp_url,
+            default_model=config.workspace.agent_sdk_default_model,
+            sandbox_enabled=config.workspace.agent_sdk_sandbox,
+        )
+
+        def _sdk_event_callback(work_item_id, event_type, payload):
+            if event_bus:
+                event_bus.emit(
+                    event_type,
+                    work_item_id=int(work_item_id) if work_item_id else None,
+                    actor="agent:agent_sdk",
+                    payload=payload,
+                )
+
+        workspace_backends["agent_sdk"] = AgentSDKBackend(
+            sdk_config, event_callback=_sdk_event_callback,
+        )
+        logger.info("Agent SDK workspace backend enabled")
 
     # Wire EventBus ref into stats module so emit_usage_event() routes through bus
     init_event_bus_ref(event_bus)
@@ -494,6 +536,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
             work_item_manager=_wi_mgr,
             default_agent=config.workspace.default_agent,
             budget_tokens=config.budget.workspace,
+            user_manager=_user_manager,
         ),
         conversation_manager=ConversationManager(db, llm=llm_fast),
         analytics_tracker=analytics_tracker,

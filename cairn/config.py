@@ -161,6 +161,14 @@ class WorkspaceConfig:
     claude_code_ssh_host: str = ""        # SSH host for remote execution (empty = local)
     claude_code_ssh_user: str = ""        # SSH user (empty = current user)
     claude_code_ssh_key: str = ""         # Path to SSH private key (empty = default)
+    # Agent SDK backend (pip install claude-agent-sdk)
+    agent_sdk_enabled: bool = False       # Enable Agent SDK backend
+    agent_sdk_working_dir: str = ""       # cwd for agent execution
+    agent_sdk_max_turns: int = 50         # max agentic turns per query
+    agent_sdk_max_budget: float = 5.0     # spending cap per dispatch (USD)
+    agent_sdk_mcp_url: str = ""           # Cairn MCP URL for self-service context
+    agent_sdk_default_model: str = ""     # default model (empty = SDK default)
+    agent_sdk_sandbox: bool = True        # enable SDK sandboxing
 
 
 @dataclass(frozen=True)
@@ -390,6 +398,10 @@ EDITABLE_KEYS: set[str] = {
     "workspace.claude_code_working_dir", "workspace.claude_code_max_turns",
     "workspace.claude_code_max_budget", "workspace.claude_code_mcp_url",
     "workspace.claude_code_ssh_host", "workspace.claude_code_ssh_user", "workspace.claude_code_ssh_key",
+    "workspace.agent_sdk_enabled", "workspace.agent_sdk_working_dir",
+    "workspace.agent_sdk_max_turns", "workspace.agent_sdk_max_budget",
+    "workspace.agent_sdk_mcp_url", "workspace.agent_sdk_default_model",
+    "workspace.agent_sdk_sandbox",
     # Budget
     "budget.rules", "budget.search", "budget.recall",
     "budget.cairn_stack", "budget.insights", "budget.workspace",
@@ -707,6 +719,13 @@ _ENV_MAP: dict[str, str] = {
     "workspace.claude_code_ssh_host": "CAIRN_CLAUDE_CODE_SSH_HOST",
     "workspace.claude_code_ssh_user": "CAIRN_CLAUDE_CODE_SSH_USER",
     "workspace.claude_code_ssh_key": "CAIRN_CLAUDE_CODE_SSH_KEY",
+    "workspace.agent_sdk_enabled": "CAIRN_AGENT_SDK_ENABLED",
+    "workspace.agent_sdk_working_dir": "CAIRN_AGENT_SDK_WORKING_DIR",
+    "workspace.agent_sdk_max_turns": "CAIRN_AGENT_SDK_MAX_TURNS",
+    "workspace.agent_sdk_max_budget": "CAIRN_AGENT_SDK_MAX_BUDGET",
+    "workspace.agent_sdk_mcp_url": "CAIRN_AGENT_SDK_MCP_URL",
+    "workspace.agent_sdk_default_model": "CAIRN_AGENT_SDK_DEFAULT_MODEL",
+    "workspace.agent_sdk_sandbox": "CAIRN_AGENT_SDK_SANDBOX",
     "budget.rules": "CAIRN_BUDGET_RULES",
     "budget.search": "CAIRN_BUDGET_SEARCH",
     "budget.recall": "CAIRN_BUDGET_RECALL",
@@ -923,6 +942,13 @@ def load_config() -> Config:
             claude_code_ssh_host=os.getenv("CAIRN_CLAUDE_CODE_SSH_HOST", ""),
             claude_code_ssh_user=os.getenv("CAIRN_CLAUDE_CODE_SSH_USER", ""),
             claude_code_ssh_key=os.getenv("CAIRN_CLAUDE_CODE_SSH_KEY", ""),
+            agent_sdk_enabled=os.getenv("CAIRN_AGENT_SDK_ENABLED", "false").lower() in ("true", "1", "yes"),
+            agent_sdk_working_dir=os.getenv("CAIRN_AGENT_SDK_WORKING_DIR", ""),
+            agent_sdk_max_turns=int(os.getenv("CAIRN_AGENT_SDK_MAX_TURNS", "50")),
+            agent_sdk_max_budget=float(os.getenv("CAIRN_AGENT_SDK_MAX_BUDGET", "5.0")),
+            agent_sdk_mcp_url=os.getenv("CAIRN_AGENT_SDK_MCP_URL", ""),
+            agent_sdk_default_model=os.getenv("CAIRN_AGENT_SDK_DEFAULT_MODEL", ""),
+            agent_sdk_sandbox=os.getenv("CAIRN_AGENT_SDK_SANDBOX", "true").lower() in ("true", "1", "yes"),
         ),
         budget=BudgetConfig(
             rules=int(os.getenv("CAIRN_BUDGET_RULES", "3000")),

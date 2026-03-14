@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { api, type WorkItem, type GatedItem, type WorkspaceBackendInfo, type Deliverable } from "@/lib/api";
 import { usePageFilters } from "@/lib/use-page-filters";
 import { useLocalStorage } from "@/lib/use-local-storage";
@@ -12,9 +13,7 @@ import { EmptyState } from "@/components/empty-state";
 import { SkeletonList } from "@/components/skeleton-list";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { SingleSelect } from "@/components/ui/single-select";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Button } from "@/components/ui/button";
-import { TimeRangeFilter } from "@/components/time-range-filter";
 import { Input } from "@/components/ui/input";
 import { WorkItemRow } from "@/components/work-items/work-item-row";
 import { WorkItemSheet } from "@/components/work-items/work-item-sheet";
@@ -44,46 +43,6 @@ const sortOptions: { value: string; label: string }[] = [
   { value: "created", label: "Recently created" },
   { value: "done-bottom", label: "Done to bottom" },
 ];
-
-const FILTER_MODES = [
-  { value: "all", label: "All" },
-  { value: "active", label: "Active" },
-  { value: "active-recent", label: "Recent" },
-  { value: "ready", label: "Ready" },
-] as const;
-
-const FILTER_ACCENT = "oklch(0.72 0.19 165)";
-
-function FilterModeToggle({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <ToggleGroup
-      type="single"
-      variant="outline"
-      size="sm"
-      value={value}
-      onValueChange={(v) => { if (v) onChange(v); }}
-    >
-      {FILTER_MODES.map((m) => (
-        <ToggleGroupItem
-          key={m.value}
-          value={m.value}
-          className="text-xs px-2.5 data-[state=on]:text-foreground"
-          style={
-            value === m.value
-              ? {
-                  backgroundColor: `color-mix(in oklch, ${FILTER_ACCENT} 15%, transparent)`,
-                  borderColor: `color-mix(in oklch, ${FILTER_ACCENT} 40%, transparent)`,
-                  color: FILTER_ACCENT,
-                }
-              : undefined
-          }
-        >
-          {m.label}
-        </ToggleGroupItem>
-      ))}
-    </ToggleGroup>
-  );
-}
 
 const TERMINAL_STATUSES = new Set(["done", "cancelled"]);
 
@@ -156,15 +115,23 @@ function flattenTree(nodes: TreeNode[], collapsedSet: Set<number>, depth = 0): F
 const POLL_INTERVAL = 10_000;
 const POLL_BACKOFF_MAX = 60_000;
 
-export default function WorkItemsPage() {
+export default function WorkItemsPageWrapper() {
+  return (
+    <Suspense>
+      <WorkItemsPage />
+    </Suspense>
+  );
+}
+
+function WorkItemsPage() {
   const filters = usePageFilters({ defaultDays: 30 });
-  const days = filters.days ?? 30;
   const [items, setItems] = useState<WorkItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [itemTypeFilter, setItemTypeFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [itemTypeFilter, setItemTypeFilter] = useState<string[]>([]);
   const [assigneeFilter, setAssigneeFilter] = useState("");
+  const [epicFilter, setEpicFilter] = useState<string[]>([]);
   const [readyIds, setReadyIds] = useState<Set<number>>(new Set());
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -175,8 +142,23 @@ export default function WorkItemsPage() {
 
   // Persisted UI state
   const [collapsed, setCollapsed] = useLocalStorage<number[]>("cairn-wi-collapsed", []);
-  const [filterMode, setFilterMode] = useLocalStorage<string>("cairn-wi-filter", "all");
   const [sortMode, setSortMode] = useLocalStorage<string>("cairn-wi-sort", "default");
+
+  // Deep link: ?selected={id} opens the sheet on mount (ca-259)
+  const searchParams = useSearchParams();
+  const selectedParam = searchParams.get("selected");
+  const appliedSelected = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (selectedParam && selectedParam !== appliedSelected.current) {
+      appliedSelected.current = selectedParam;
+      const numId = Number(selectedParam);
+      if (!isNaN(numId) && numId > 0) {
+        setSelectedItemId(numId);
+        setSheetOpen(true);
+      }
+    }
+  }, [selectedParam]);
 
   const collapsedSet = useMemo(() => new Set(collapsed), [collapsed]);
 
@@ -199,8 +181,8 @@ export default function WorkItemsPage() {
 
     const opts: Record<string, string> = {};
     if (projectParam) opts.project = projectParam;
-    if (statusFilter) opts.status = statusFilter;
-    if (itemTypeFilter) opts.item_type = itemTypeFilter;
+    if (statusFilter.length) opts.status = statusFilter.join(",");
+    if (itemTypeFilter.length) opts.item_type = itemTypeFilter.join(",");
     opts.include_children = "true";
     opts.limit = "100";
 
@@ -227,7 +209,8 @@ export default function WorkItemsPage() {
       })
       .catch((err) => setError(err?.message || "Failed to load work items"))
       .finally(() => setLoading(false));
-  }, [projectParam, statusFilter, itemTypeFilter]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectParam, statusFilter.join(","), itemTypeFilter.join(",")]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -246,8 +229,8 @@ export default function WorkItemsPage() {
       if (document.hidden) return;
       const opts: Record<string, string> = {
         ...(projectParam ? { project: projectParam } : {}),
-        ...(statusFilter ? { status: statusFilter } : {}),
-        ...(itemTypeFilter ? { item_type: itemTypeFilter } : {}),
+        ...(statusFilter.length ? { status: statusFilter.join(",") } : {}),
+        ...(itemTypeFilter.length ? { item_type: itemTypeFilter.join(",") } : {}),
         include_children: "true",
         limit: "100",
       };
@@ -279,7 +262,8 @@ export default function WorkItemsPage() {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [projectParam, statusFilter, itemTypeFilter]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectParam, statusFilter.join(","), itemTypeFilter.join(",")]);
 
   // Derive assignee options from fetched items
   const assigneeOptions = useMemo(() => {
@@ -287,25 +271,28 @@ export default function WorkItemsPage() {
     return Array.from(unique).sort().map((a) => ({ value: a, label: a }));
   }, [items]);
 
-  // Filter items based on filter mode + assignee, build tree, sort, flatten
+  // Derive epic options from fetched items
+  const epicOptions = useMemo(() => {
+    return items
+      .filter((i) => i.item_type === "epic")
+      .map((i) => ({ value: String(i.id), label: i.display_id ? `${i.display_id} — ${i.title}` : i.title }));
+  }, [items]);
+
+  // Filter items based on dropdowns, build tree, sort, flatten
   const rows = useMemo(() => {
     let filtered = items;
-    const now = Date.now();
 
     // Assignee filter (client-side)
     if (assigneeFilter) {
       filtered = filtered.filter((i) => i.assignee === assigneeFilter);
     }
 
-    if (filterMode === "active") {
-      filtered = filtered.filter((i) => !TERMINAL_STATUSES.has(i.status));
-    } else if (filterMode === "active-recent") {
-      const recentMs = days * 24 * 60 * 60 * 1000;
-      filtered = filtered.filter((i) => {
-        if (!TERMINAL_STATUSES.has(i.status)) return true;
-        const completedAt = i.completed_at ? new Date(i.completed_at).getTime() : 0;
-        return now - completedAt < recentMs;
-      });
+    // Epic filter: show selected epics + their children
+    if (epicFilter.length > 0) {
+      const epicIds = new Set(epicFilter.map(Number));
+      filtered = filtered.filter(
+        (i) => epicIds.has(i.id) || (i.parent_id != null && epicIds.has(i.parent_id)),
+      );
     }
 
     let tree = buildTree(filtered);
@@ -326,12 +313,9 @@ export default function WorkItemsPage() {
     }
 
     return flattenTree(tree, collapsedSet);
-  }, [items, filterMode, sortMode, assigneeFilter, collapsedSet, days]);
+  }, [items, sortMode, assigneeFilter, epicFilter, collapsedSet]);
 
-  // Filter for ready-only view mode
-  const displayRows = filterMode === "ready"
-    ? rows.filter((r) => readyIds.has(r.item.id))
-    : rows;
+  const displayRows = rows;
 
   function openSheet(id: number) {
     setSelectedItemId(id);
@@ -394,7 +378,6 @@ export default function WorkItemsPage() {
       }
       filters={
         <div className="flex items-center gap-2 flex-wrap">
-          <FilterModeToggle value={filterMode} onChange={setFilterMode} />
           <MultiSelect
             options={filters.projectOptions}
             value={filters.projectFilter}
@@ -403,36 +386,36 @@ export default function WorkItemsPage() {
             searchPlaceholder="Search projects…"
             maxCount={2}
           />
-          <SingleSelect
+          <MultiSelect
             options={statusOptions}
             value={statusFilter}
             onValueChange={setStatusFilter}
             placeholder="All statuses"
+            maxCount={2}
           />
-          {/* Secondary filters — hidden on mobile to reduce toolbar height */}
-          <span className="hidden md:contents">
-            <SingleSelect
-              options={typeOptions}
-              value={itemTypeFilter}
-              onValueChange={setItemTypeFilter}
-              placeholder="All types"
-            />
-            <SingleSelect
-              options={assigneeOptions}
-              value={assigneeFilter}
-              onValueChange={setAssigneeFilter}
-              placeholder="Assignee"
-            />
-          </span>
-          <TimeRangeFilter
-            days={days}
-            onChange={filters.setDays}
-            presets={[
-              { label: "7d", value: 7 },
-              { label: "30d", value: 30 },
-              { label: "90d", value: 90 },
-            ]}
+          <MultiSelect
+            options={typeOptions}
+            value={itemTypeFilter}
+            onValueChange={setItemTypeFilter}
+            placeholder="All types"
+            maxCount={2}
           />
+          <SingleSelect
+            options={assigneeOptions}
+            value={assigneeFilter}
+            onValueChange={setAssigneeFilter}
+            placeholder="Assignee"
+          />
+          {epicOptions.length > 0 && (
+            <MultiSelect
+              options={epicOptions}
+              value={epicFilter}
+              onValueChange={setEpicFilter}
+              placeholder="All epics"
+              searchPlaceholder="Search epics…"
+              maxCount={1}
+            />
+          )}
           <SingleSelect
             options={sortOptions}
             value={sortMode}
@@ -555,8 +538,7 @@ export default function WorkItemsPage() {
 
       {!loading && !filters.projectsLoading && !error && displayRows.length === 0 && (
         <EmptyState
-          message={filterMode === "ready" ? "No dispatch-ready items." : "No work items found."}
-          detail={filterMode === "ready" ? "All items are either assigned, blocked, or completed." : undefined}
+          message="No work items found."
         />
       )}
 

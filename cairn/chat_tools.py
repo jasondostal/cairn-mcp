@@ -11,22 +11,16 @@ import logging
 from datetime import UTC
 from typing import TYPE_CHECKING
 
-from cairn.core.budget import apply_list_budget
 from cairn.core.code_ops import run_arch_check, run_code_query
-from cairn.core.constants import (
-    BUDGET_INSIGHTS_PER_ITEM,
-    BUDGET_RECALL_PER_ITEM,
-    BUDGET_SEARCH_PER_ITEM,
-    MAX_CONTENT_SIZE,
-    MAX_RECALL_IDS,
-    VALID_MEMORY_TYPES,
-    VALID_SEARCH_MODES,
-    MemoryAction,
-)
 from cairn.core.status import get_status
+from cairn.core.tool_ops import (
+    budgeted_discover_patterns,
+    budgeted_recall,
+    budgeted_search,
+    validate_modify_inputs,
+)
 from cairn.core.utils import (
     get_or_create_project,
-    validate_search,
     validate_store,
 )
 
@@ -420,53 +414,18 @@ class ChatToolExecutor:
         limit: int = 10, as_of: str | None = None,
         event_after: str | None = None, event_before: str | None = None,
     ) -> dict:
-        # Validate inputs (same as MCP tool)
-        validate_search(query, limit)
-        if search_mode not in VALID_SEARCH_MODES:
-            return {"error": f"invalid search_mode: {search_mode}. Must be one of: {', '.join(VALID_SEARCH_MODES)}"}
-
-        results = self.svc.search_engine.search(
-            query=query, project=project,
+        raw = budgeted_search(
+            self.svc, query=query, project=project,
             memory_type=memory_type, search_mode=search_mode,
-            limit=min(limit, 20), include_full=False,
+            limit=limit, include_full=False,
             as_of=as_of, event_after=event_after, event_before=event_before,
+            source="chat",
         )
+        if "error" in raw:
+            return raw
 
-        # Apply budget cap (same as MCP search tool)
-        budget = self.svc.config.budget.search
-        if budget > 0 and results:
-            results_capped, meta = apply_list_budget(
-                results, budget, "summary",
-                per_item_max=BUDGET_SEARCH_PER_ITEM,
-                overflow_message=(
-                    "...{omitted} more results omitted. "
-                    "Use recall_memory for full content, or narrow your query."
-                ),
-            )
-            if meta["omitted"] > 0:
-                results_capped.append({"_overflow": meta["overflow_message"]})
-            results = results_capped
-
-        # Publish search.executed event for access tracking
-        if self.svc.event_bus and results:
-            try:
-                memory_ids = [r["id"] for r in results if isinstance(r, dict) and "id" in r]
-                self.svc.event_bus.emit(
-                    "search.executed",
-                    project=project,
-                    payload={
-                        "query": query[:200],
-                        "result_count": len(memory_ids),
-                        "memory_ids": memory_ids[:20],
-                        "search_mode": search_mode,
-                        "source": "chat",
-                    },
-                )
-            except Exception:
-                logger.debug("Failed to publish search.executed event", exc_info=True)
-
-        # Confidence gating
-        confidence = self.svc.search_engine.assess_confidence(query, results)
+        results = raw["results"]
+        confidence = raw["confidence"]
 
         return {
             "count": len(results),
@@ -493,43 +452,11 @@ class ChatToolExecutor:
     # ------------------------------------------------------------------
 
     def _tool_recall_memory(self, ids: list[int]) -> dict:
-        if not ids:
-            return {"error": "ids list is required and cannot be empty"}
-        if len(ids) > MAX_RECALL_IDS:
-            return {"error": f"Maximum {MAX_RECALL_IDS} IDs per recall. Batch into multiple calls."}
+        raw = budgeted_recall(self.svc, ids=ids, source="chat")
+        if "error" in raw:
+            return raw
 
-        results = self.svc.memory_store.recall(ids)
-
-        # Apply budget cap (same as MCP recall tool)
-        budget = self.svc.config.budget.recall
-        if budget > 0 and results:
-            results_capped, meta = apply_list_budget(
-                results, budget, "content",
-                per_item_max=BUDGET_RECALL_PER_ITEM,
-                overflow_message=(
-                    "...{omitted} memories truncated from response. "
-                    "Recall fewer IDs per call for full content."
-                ),
-            )
-            if meta["omitted"] > 0:
-                results_capped.append({"_overflow": meta["overflow_message"]})
-            results = results_capped
-
-        # Publish memory.recalled event for access tracking
-        if self.svc.event_bus and results:
-            try:
-                memory_ids = [r["id"] for r in results if isinstance(r, dict) and "id" in r]
-                self.svc.event_bus.emit(
-                    "memory.recalled",
-                    payload={
-                        "memory_ids": memory_ids,
-                        "count": len(memory_ids),
-                        "source": "chat",
-                    },
-                )
-            except Exception:
-                logger.debug("Failed to publish memory.recalled event", exc_info=True)
-
+        results = raw["results"]
         return {
             "count": len(results),
             "memories": [
@@ -675,24 +602,16 @@ class ChatToolExecutor:
         tags: list[str] | None = None, reason: str | None = None,
         project: str | None = None,
     ) -> dict:
-        # Validate inputs (same as MCP modify tool)
-        if action not in MemoryAction.ALL:
-            return {"error": f"invalid action: {action}. Must be one of: {', '.join(sorted(MemoryAction.ALL))}"}
-        if content is not None and len(content) > MAX_CONTENT_SIZE:
-            return {"error": f"content exceeds {MAX_CONTENT_SIZE} character limit"}
-        if memory_type is not None and memory_type not in VALID_MEMORY_TYPES:
-            return {"error": f"invalid memory_type: {memory_type}"}
-        if importance is not None and not (0.0 <= importance <= 1.0):
-            return {"error": "importance must be between 0.0 and 1.0"}
+        err = validate_modify_inputs(action, content, memory_type, importance)
+        if err:
+            return {"error": err}
 
-        result = self.svc.memory_store.modify(
+        return self.svc.memory_store.modify(
             memory_id=id, action=action, content=content,
             memory_type=memory_type, importance=importance,
             tags=tags, reason=reason, project=project,
             author="assistant",
         )
-        # No explicit db.commit() — service layer handles transactions
-        return result
 
     # ------------------------------------------------------------------
     # discover_patterns — delegates to svc.cluster_engine with budget
@@ -702,46 +621,9 @@ class ChatToolExecutor:
         self, project: str | None = None, topic: str | None = None,
         limit: int = 10,
     ) -> dict:
-        ce = self.svc.cluster_engine
-        reclustered = False
-        labeling_error = None
-        if ce.is_stale(project):
-            cluster_result = ce.run_clustering(project)
-            reclustered = True
-            labeling_error = cluster_result.get("labeling_error")
-
-        clusters = ce.get_clusters(
-            project=project, topic=topic,
-            min_confidence=0.5, limit=min(limit, 20),
+        return budgeted_discover_patterns(
+            self.svc, project=project, topic=topic, limit=limit,
         )
-        last_run = ce.get_last_run(project)
-
-        # Apply budget cap (same as MCP insights tool)
-        budget = self.svc.config.budget.insights
-        overflow_msg = ""
-        if budget > 0 and clusters:
-            clusters, meta = apply_list_budget(
-                clusters, budget, "summary",
-                per_item_max=BUDGET_INSIGHTS_PER_ITEM,
-                overflow_message=(
-                    "...{omitted} clusters omitted. "
-                    "Use a topic filter or increase limit for targeted results."
-                ),
-            )
-            if meta["omitted"] > 0:
-                overflow_msg = meta["overflow_message"]
-
-        result = {
-            "status": "reclustered" if reclustered else "cached",
-            "cluster_count": len(clusters),
-            "clusters": clusters,
-            "last_clustered_at": last_run["created_at"] if last_run else None,
-        }
-        if labeling_error:
-            result["labeling_warning"] = labeling_error
-        if overflow_msg:
-            result["_overflow"] = overflow_msg
-        return result
 
     # ------------------------------------------------------------------
     # think — delegates to svc.thinking_engine (all actions)

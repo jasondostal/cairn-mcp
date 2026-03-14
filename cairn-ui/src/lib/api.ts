@@ -624,6 +624,7 @@ export interface WorkItem {
   risk_tier: number;
   gate_type: string | null;
   agent_state: string | null;
+  last_heartbeat: string | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;

@@ -81,11 +81,18 @@ class ClaudeCodeBackend(WorkspaceBackend):
     the first message exchange.
     """
 
-    def __init__(self, config: ClaudeCodeConfig | None = None):
+    def __init__(
+        self,
+        config: ClaudeCodeConfig | None = None,
+        *,
+        event_callback: Any | None = None,
+    ):
         self._config = config or ClaudeCodeConfig()
         # Local session store: placeholder_id → session metadata
         self._sessions: dict[str, dict[str, Any]] = {}
         self._lock = threading.Lock()
+        # Optional callback: event_callback(work_item_id, event_type, payload)
+        self._event_callback = event_callback
 
     # -- Core ----------------------------------------------------------------
 
@@ -142,6 +149,7 @@ class ClaudeCodeBackend(WorkspaceBackend):
         agent: str | None = None,
         risk_tier: int | None = None,
         model: str | None = None,
+        work_item_id: str | None = None,
         **kwargs: Any,
     ) -> AgentMessage:
         with self._lock:
@@ -152,6 +160,10 @@ class ClaudeCodeBackend(WorkspaceBackend):
                 backend="claude_code",
             )
 
+        if work_item_id:
+            with self._lock:
+                meta["work_item_id"] = work_item_id
+
         tier = risk_tier if risk_tier is not None else meta.get("risk_tier", self._config.default_risk_tier)
         claude_sid = meta.get("claude_session_id")
         resolved_model = model or meta.get("model")
@@ -161,28 +173,38 @@ class ClaudeCodeBackend(WorkspaceBackend):
             with self._lock:
                 meta["model"] = resolved_model
 
-        args = self._build_cli_args(text, risk_tier=tier, claude_session_id=claude_sid, model=resolved_model)
+        auth_token = kwargs.get("auth_token") or ""
+        args = self._build_cli_args(text, risk_tier=tier, claude_session_id=claude_sid, model=resolved_model, auth_token=auth_token)
 
+        is_error = False
         try:
             result = self._run_cmd(args, timeout=600)
         except subprocess.TimeoutExpired as e:
+            is_error = True
+            self._emit_completion(session_id, is_error=True)
             raise WorkspaceBackendError(
                 f"Claude CLI timed out after 600s for session {session_id}",
                 backend="claude_code",
             ) from e
         except FileNotFoundError as e:
+            is_error = True
+            self._emit_completion(session_id, is_error=True)
             raise WorkspaceBackendError(
                 "claude CLI not found — is Claude Code installed?",
                 backend="claude_code",
             ) from e
 
         if result.returncode != 0 and not result.stdout.strip():
+            is_error = True
+            self._emit_completion(session_id, is_error=True)
             raise WorkspaceBackendError(
                 f"Claude CLI exited with code {result.returncode}: {result.stderr[:500]}",
                 backend="claude_code",
             )
 
-        return self._parse_response(session_id, result.stdout)
+        msg = self._parse_response(session_id, result.stdout)
+        self._emit_completion(session_id, is_error=False, cost_usd=msg.cost_usd)
+        return msg
 
     def send_message_async(
         self,
@@ -192,11 +214,15 @@ class ClaudeCodeBackend(WorkspaceBackend):
         agent: str | None = None,
         risk_tier: int | None = None,
         model: str | None = None,
+        work_item_id: str | None = None,
         **kwargs: Any,
     ) -> None:
         def _run():
             try:
-                self.send_message(session_id, text, agent=agent, risk_tier=risk_tier, model=model, **kwargs)
+                self.send_message(
+                    session_id, text, agent=agent, risk_tier=risk_tier,
+                    model=model, work_item_id=work_item_id, **kwargs,
+                )
             except WorkspaceBackendError:
                 logger.warning("Async send_message failed for session %s", session_id, exc_info=True)
 
@@ -328,6 +354,7 @@ class ClaudeCodeBackend(WorkspaceBackend):
         risk_tier: int = 0,
         claude_session_id: str | None = None,
         model: str | None = None,
+        auth_token: str = "",
     ) -> list[str]:
         """Build the ``claude`` CLI argument list."""
         args = [
@@ -347,7 +374,7 @@ class ClaudeCodeBackend(WorkspaceBackend):
             args.extend(["--max-budget-usd", f"{self._config.max_budget_usd:.2f}"])
 
         # MCP config for Cairn self-service
-        mcp_config_path = self._generate_mcp_config()
+        mcp_config_path = self._generate_mcp_config(auth_token=auth_token)
         if mcp_config_path:
             args.extend(["--mcp-config", mcp_config_path])
 
@@ -361,22 +388,30 @@ class ClaudeCodeBackend(WorkspaceBackend):
 
         return args
 
-    def _generate_mcp_config(self) -> str | None:
+    def _generate_mcp_config(self, *, auth_token: str = "") -> str | None:
         """Generate a temp MCP config file pointing at Cairn's MCP endpoint.
 
         Returns the path to the temp file, or None if no MCP URL is configured.
+        Includes Authorization header when auth token is provided, so the
+        dispatched agent inherits the dispatching user's identity and RBAC scope.
         """
         if not self._config.cairn_mcp_url:
             return None
 
         # Use "type": "http" — matches the proven mcp.json config (see memory #98).
         # "type": "url" silently fails in Claude CLI ≤2.1.47.
+        server_config: dict[str, Any] = {
+            "type": "http",
+            "url": self._config.cairn_mcp_url,
+        }
+        if auth_token:
+            server_config["headers"] = {
+                "Authorization": f"Bearer {auth_token}",
+            }
+
         config = {
             "mcpServers": {
-                "cairn": {
-                    "type": "http",
-                    "url": self._config.cairn_mcp_url,
-                },
+                "cairn": server_config,
             },
         }
 
@@ -434,6 +469,29 @@ class ClaudeCodeBackend(WorkspaceBackend):
                 if k not in ("result", "session_id", "cost_usd")
             },
         )
+
+    def _emit_completion(
+        self,
+        session_id: str,
+        *,
+        is_error: bool = False,
+        cost_usd: float | None = None,
+    ) -> None:
+        """Emit agent.completed event if a callback is configured."""
+        if not self._event_callback:
+            return
+        with self._lock:
+            meta = self._sessions.get(session_id, {})
+        wi_id = meta.get("work_item_id")
+        if not wi_id:
+            return
+        self._event_callback(wi_id, "agent.completed", {
+            "session_id": session_id,
+            "claude_session_id": meta.get("claude_session_id"),
+            "cost_usd": cost_usd,
+            "is_error": is_error,
+            "backend": "claude_code",
+        })
 
     def set_risk_tier(self, session_id: str, risk_tier: int) -> None:
         """Update the risk tier for an existing session."""

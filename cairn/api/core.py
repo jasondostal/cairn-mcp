@@ -33,6 +33,21 @@ _SECRET_SETTINGS = {
     "push.token",
 }
 
+# Keys that must NEVER be editable via API, regardless of EDITABLE_KEYS.
+# Defense-in-depth: prevents accidental exposure if someone adds these to EDITABLE_KEYS.
+_NEVER_EDITABLE = {
+    "auth.enabled", "auth.api_key", "auth.jwt_secret",
+    "auth.auth_proxy_header", "auth.trusted_proxy_ips",
+    "auth.oidc.enabled", "auth.oidc.provider_url",
+    "auth.oidc.client_secret", "auth.oidc.admin_groups",
+    "db.password", "neo4j.password",
+}
+
+# Fail loud at import time if someone accidentally adds a security-critical key to EDITABLE_KEYS
+_overlap = _NEVER_EDITABLE & EDITABLE_KEYS
+if _overlap:
+    raise RuntimeError(f"Security-critical keys found in EDITABLE_KEYS: {_overlap}")
+
 
 def register_routes(router: APIRouter, svc: Services, **kw):
     from cairn.core.status import get_status
@@ -115,6 +130,9 @@ def register_routes(router: APIRouter, svc: Services, **kw):
         updates: dict[str, str] = {}
 
         for key, value in body.items():
+            if key in _NEVER_EDITABLE:
+                errors.append(f"Key '{key}' is security-critical and cannot be changed via API")
+                continue
             if key not in EDITABLE_KEYS:
                 errors.append(f"Key '{key}' is not editable")
                 continue
@@ -154,7 +172,7 @@ def register_routes(router: APIRouter, svc: Services, **kw):
                     errors.append(f"{key} must be a valid number")
                     continue
 
-            if key.startswith("capabilities.") or key in ("analytics.enabled", "auth.enabled", "enrichment_enabled"):
+            if key.startswith("capabilities.") or key in ("analytics.enabled", "enrichment_enabled"):
                 str_value = "true" if str(value).lower() in ("true", "1", "yes") else "false"
 
             updates[key] = str_value

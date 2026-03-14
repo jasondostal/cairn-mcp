@@ -1,10 +1,26 @@
 # Roadmap
 
-Current: **v0.77.0** — "Remote Access". Next up: SSE pipeline fix, scaling readiness.
+Current: **v0.77.1** (released). **v0.78.0** in development — agent dispatch, work items UX.
 
 ---
 
 ## In Progress
+
+### Agent Dispatch & Autonomy (v0.78.0)
+
+Agent SDK backend and RBAC-scoped dispatch shipped. Remaining:
+
+- [ ] Agent relief protocol — context window lifecycle management and automated handover (ca-103)
+- [ ] Dispatch from chat — natural language "dispatch this to an agent" flow
+- [ ] Agent SDK production validation — test with real workloads, tune risk tiers
+
+### Work Items UX (v0.78.0)
+
+Filter toolbar and inline editing shipped. Remaining:
+
+- [ ] Inline editing for item_type, risk_tier in detail sheet
+- [ ] Bulk actions — multi-select items for status change, assignment
+- [ ] Drag-and-drop reordering within epic hierarchy
 
 ### Unified Event Architecture — Remaining
 
@@ -78,6 +94,17 @@ Exploring, not committed.
 ---
 
 ## Shipped
+
+### v0.77.1 — Security Hardening ✓
+
+Dispatch RCE fix, OIDC redirect validation, SSE auth, Settings API scope lockdown.
+
+- [x] **REST dispatch requires admin** — prevents unauthenticated RCE via `/api/dispatch`
+- [x] **OIDC settings removed from Settings API** — IdP config is env-only
+- [x] **Filesystem paths removed from Settings API** — prevents path traversal
+- [x] **OIDC redirect_uri validated** — prevents open redirect / auth code theft
+- [x] **SSE endpoints require authentication** — accepts `?token=` query parameter
+- [x] **Secret masking expanded** — OIDC client secret, SSH key, push token
 
 ### v0.77.0 — "Remote Access" ✓
 

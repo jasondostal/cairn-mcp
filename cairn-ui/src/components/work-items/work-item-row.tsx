@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { StatusDot, StatusText, PriorityLabel } from "./status-dot";
 import { RiskTierBadge } from "./risk-tier-badge";
 import { DispatchDialog } from "./dispatch-dialog";
-import { ChevronRight, Hand, Bot } from "lucide-react";
+import { ChevronRight, Hand, Bot, Activity } from "lucide-react";
 import { ProjectPill } from "@/components/project-pill";
 
 interface WorkItemRowProps {
@@ -46,6 +46,10 @@ export function WorkItemRow({
   const isDone = item.status === "done";
   const isCancelled = item.status === "cancelled";
   const hasGate = item.gate_type !== null && item.gate_type !== undefined;
+
+  // Agent is actively working if heartbeat is within the last 2 minutes
+  const isAgentWorking = item.agent_state === "working" && item.last_heartbeat
+    && (Date.now() - new Date(item.last_heartbeat).getTime()) < 120_000;
 
   // Shared tree indent elements
   const treeIndent = depth > 0 ? (
@@ -128,6 +132,15 @@ export function WorkItemRow({
           <span className="text-xs text-muted-foreground shrink-0">Epic:</span>
         )}
         <span className={cn("flex-1 truncate", isCancelled && "line-through")}>{item.title}</span>
+        {isAgentWorking && (
+          <span className="shrink-0 flex items-center gap-1 text-xs text-green-500" title="Agent working">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+            </span>
+            <Activity className="h-3 w-3" />
+          </span>
+        )}
         {hasGate && <Hand className="h-3 w-3 text-status-gate shrink-0" />}
         <PriorityLabel priority={item.priority} />
         <RiskTierBadge tier={item.risk_tier} />
@@ -149,6 +162,12 @@ export function WorkItemRow({
             <span className="text-xs text-muted-foreground shrink-0">Epic:</span>
           )}
           <span className={cn("flex-1 truncate", isCancelled && "line-through")}>{item.title}</span>
+          {isAgentWorking && (
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+            </span>
+          )}
           {hasGate && <Hand className="h-3 w-3 text-status-gate shrink-0" />}
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground pl-5">
