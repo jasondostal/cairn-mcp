@@ -39,13 +39,13 @@ jobs:
         run: pip-audit -r requirements.lock --desc on
 
       - name: Hadolint (Dockerfile best practices)
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@v3.3.0
         with:
           dockerfile: Dockerfile
           failure-threshold: error
 
       - name: Hadolint (UI Dockerfile)
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@v3.3.0
         with:
           dockerfile: cairn-ui/Dockerfile
           failure-threshold: error
@@ -206,7 +206,7 @@ jobs:
       # --- SBOM generation + attestation ---
       - name: Generate SBOM (server)
         if: github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@0.34.2
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.server-build.outputs.digest }}"
           format: spdx-json
@@ -221,7 +221,7 @@ jobs:
 
       - name: Generate SBOM (UI)
         if: github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@0.34.2
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-ui@${{ steps.ui-build.outputs.digest }}"
           format: spdx-json
@@ -251,7 +251,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Trivy (server image)
-        uses: aquasecurity/trivy-action@0.34.2
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main"
           format: table
@@ -261,7 +261,7 @@ jobs:
           vuln-type: library
 
       - name: Trivy (UI image)
-        uses: aquasecurity/trivy-action@0.34.2
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-ui:main"
           format: table
