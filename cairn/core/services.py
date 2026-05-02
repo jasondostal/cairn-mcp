@@ -1,4 +1,7 @@
-"""Service container and factory. Centralizes component initialization."""
+"""Service container and factory. Centralizes component initialization.
+
+Post-cut (v0.80.0): memory core only. Agent infrastructure removed.
+"""
 
 from __future__ import annotations
 
@@ -16,8 +19,6 @@ from cairn.core.analytics import (
 )
 from cairn.core.clustering import ClusterEngine
 from cairn.core.consolidation import ConsolidationEngine
-from cairn.core.conversations import ConversationManager
-from cairn.core.deliverables import DeliverableManager
 from cairn.core.drift import DriftDetector
 from cairn.core.enrichment import Enricher
 from cairn.core.event_bus import EventBus
@@ -35,35 +36,21 @@ from cairn.core.stats import (
     init_event_bus_stats,
     init_llm_stats,
 )
-from cairn.core.synthesis import SessionSynthesizer
-from cairn.core.terminal import TerminalHostManager
 from cairn.core.thinking import ThinkingEngine
 from cairn.core.user import UserManager
 from cairn.core.work_items import WorkItemManager
 from cairn.core.working_memory import WorkingMemoryStore
-from cairn.core.workspace import WorkspaceManager
 from cairn.embedding import get_embedding_engine
 from cairn.embedding.interface import EmbeddingInterface
 from cairn.graph import get_graph_provider
 from cairn.graph.interface import GraphProvider
-from cairn.integrations.interface import WorkspaceBackend
-from cairn.integrations.opencode import OpenCodeBackend, OpenCodeClient
 from cairn.llm import get_llm
 from cairn.storage.database import Database
 
 if TYPE_CHECKING:
-    from cairn.core.agents import AgentRegistry
-    from cairn.core.alert_worker import AlertEvaluator
-    from cairn.core.alerting import AlertManager
-    from cairn.core.audit import AuditManager
     from cairn.core.beliefs import BeliefStore
     from cairn.core.consolidation import ConsolidationWorker
     from cairn.core.decay import DecayWorker
-    from cairn.core.retention import RetentionManager
-    from cairn.core.retention_worker import RetentionWorker
-    from cairn.core.subscriptions import SubscriptionManager
-    from cairn.core.webhook_worker import WebhookDeliveryWorker
-    from cairn.core.webhooks import WebhookManager
     from cairn.llm.interface import LLMInterface
 
 logger = logging.getLogger(__name__)
@@ -71,7 +58,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Services:
-    """Holds all initialized Cairn components."""
+    """Holds all initialized Cairn components (memory core)."""
 
     config: Config
     db: Database
@@ -85,32 +72,16 @@ class Services:
     cluster_engine: ClusterEngine
     project_manager: ProjectManager
     thinking_engine: ThinkingEngine
-    session_synthesizer: SessionSynthesizer
     consolidation_engine: ConsolidationEngine
     event_bus: EventBus
     drift_detector: DriftDetector
     ingest_pipeline: IngestPipeline
-    terminal_host_manager: TerminalHostManager | None
-    opencode: OpenCodeClient | None  # deprecated — use workspace_backends
-    workspace_backends: dict[str, WorkspaceBackend]
-    workspace_manager: WorkspaceManager
-    work_item_manager: WorkItemManager
-    deliverable_manager: DeliverableManager
-    conversation_manager: ConversationManager
+    work_item_manager: WorkItemManager  # experimental — tagged, not deleted
     event_dispatcher: EventDispatcher | None
     analytics_tracker: UsageTracker | None
     rollup_worker: RollupWorker | None
     decay_worker: DecayWorker | None
     analytics_engine: AnalyticsQueryEngine | None
-    audit_manager: AuditManager | None
-    webhook_manager: WebhookManager | None
-    webhook_worker: WebhookDeliveryWorker | None
-    alert_manager: AlertManager | None
-    alert_worker: AlertEvaluator | None
-    retention_manager: RetentionManager | None
-    retention_worker: RetentionWorker | None
-    subscription_manager: SubscriptionManager | None
-    agent_registry: AgentRegistry | None
     user_manager: UserManager | None
     working_memory_store: WorkingMemoryStore
     belief_store: BeliefStore | None
@@ -130,7 +101,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     if db is None:
         db = Database(config.db)
 
-    # Analytics first — so the tracker singleton is available when backends emit events
+    # Analytics — optional, for UI dashboard
     analytics_tracker = None
     rollup_worker = None
     decay_worker = None
@@ -168,7 +139,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
                 llm_capable = router.for_operation("capable")
                 llm_fast = router.for_operation("fast")
                 llm_chat = router.for_operation("chat")
-                llm = llm_chat  # default for components that don't have a tier assignment
+                llm = llm_chat
                 init_llm_stats(config.llm.backend, router.get_model_name())
                 enricher = Enricher(llm_fast)
                 logger.info("Model router enabled: capable=%s, fast=%s, chat=%s",
@@ -224,7 +195,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     # Event bus — created early so managers can publish events
     event_bus = EventBus(db, project_manager)
 
-    # Wire event_bus into memory_store (created before event_bus for DI ordering)
+    # Wire event_bus into memory_store
     memory_store.event_bus = event_bus
 
     # Register memory enrichment listener (async graph persist + relationships)
@@ -232,12 +203,6 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     _memory_listener = MemoryEnrichmentListener(memory_store)
     _memory_listener.register(event_bus)
     logger.info("MemoryEnrichmentListener registered with EventBus")
-
-    # NOTE: SessionSynthesisListener removed (v0.58.0). The v0.50.0 architecture
-    # decision (memory #256) killed LLM synthesis — organic memories from agents
-    # are the high-signal path, orient() trail provides session context via the
-    # knowledge graph. The listener was a regression that produced low-value
-    # duplicate summaries.
 
     # Register graph projection listener
     from cairn.listeners.graph_projection import GraphProjectionListener
@@ -258,116 +223,20 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         _code_listener.register(event_bus)
         logger.info("CodeIndexListener registered with EventBus")
 
-    # Work item + deliverable managers — created early for listener registration
+    # Work item manager — experimental, tagged for UI observability
     _wi_mgr = WorkItemManager(
         db, embedding, graph=graph_provider,
         knowledge_extractor=knowledge_extractor,
         event_bus=event_bus,
     )
-    _deliverable_mgr = DeliverableManager(db, event_bus=event_bus)
 
-    # Deliverable auto-generation listener — creates deliverables on work item completion
-    from cairn.listeners.deliverable_listener import DeliverableListener
-    _deliverable_listener = DeliverableListener(
-        deliverable_manager=_deliverable_mgr,
-        work_item_manager=_wi_mgr,
-        db=db,
-        llm=llm_fast,
-    )
-    _deliverable_listener.register(event_bus)
-    logger.info("DeliverableListener registered with EventBus")
-
-    # Review listener — handles work item state changes on deliverable approve/revise/reject
-    from cairn.listeners.review_listener import ReviewListener
-    _review_listener = ReviewListener(
-        work_item_manager=_wi_mgr,
-        db=db,
-    )
-    _review_listener.register(event_bus)
-    logger.info("ReviewListener registered with EventBus")
-
-    # Audit listener — append-only compliance log for mutation events (Watchtower Phase 2)
-    audit_manager = None
-    if config.audit.enabled:
-        from cairn.core.audit import AuditManager
-        from cairn.listeners.audit_listener import AuditListener
-        audit_manager = AuditManager(db)
-        _audit_listener = AuditListener(audit_manager)
-        _audit_listener.register(event_bus)
-        logger.info("AuditListener registered with EventBus")
-
-    # Webhook subscriptions — push events to external HTTP endpoints (Watchtower Phase 3)
-    webhook_manager = None
-    webhook_worker = None
-    if config.webhooks.enabled:
-        from cairn.core.webhook_worker import WebhookDeliveryWorker
-        from cairn.core.webhooks import WebhookManager
-        from cairn.listeners.webhook_listener import WebhookListener
-        webhook_manager = WebhookManager(db, config.webhooks)
-        _webhook_listener = WebhookListener(webhook_manager)
-        _webhook_listener.register(event_bus)
-        webhook_worker = WebhookDeliveryWorker(db, config.webhooks)
-        logger.info("WebhookListener registered with EventBus")
-
-    # Health alerting — rule evaluation + webhook delivery (Watchtower Phase 4)
-    alert_manager = None
-    alert_worker = None
-    if config.alerting.enabled:
-        from cairn.core.alert_worker import AlertEvaluator
-        from cairn.core.alerting import AlertManager
-        alert_manager = AlertManager(db, config.alerting)
-        alert_worker = AlertEvaluator(db, alert_manager, webhook_manager, config.alerting)
-        logger.info("AlertEvaluator enabled (interval=%ds)", config.alerting.eval_interval_seconds)
-
-    # Data retention — scheduled cleanup of old data (Watchtower Phase 5)
-    retention_manager = None
-    retention_worker = None
-    if config.retention.enabled:
-        from cairn.core.retention import RetentionManager
-        from cairn.core.retention_worker import RetentionWorker
-        retention_manager = RetentionManager(db, config.retention)
-        retention_worker = RetentionWorker(retention_manager, config.retention)
-        logger.info("RetentionWorker enabled (interval=%dh, dry_run=%s)",
-                     config.retention.scan_interval_hours, config.retention.dry_run)
-
-    # Push notifications via ntfy.sh (ca-148)
-    from cairn.listeners.push_notifier import PushNotifier
-    push_notifier: PushNotifier | None = None
-    if config.push.enabled and config.push.url:
-        push_notifier = PushNotifier(config.push)
-        logger.info("PushNotifier enabled (url=%s, topic=%s)",
-                     config.push.url, config.push.default_topic)
-
-    # Event subscriptions + notifications (ca-146)
-    from cairn.core.subscriptions import SubscriptionManager
-    from cairn.listeners.notification_listener import NotificationListener
-    subscription_manager = SubscriptionManager(db, push_notifier=push_notifier)
-    _notification_listener = NotificationListener(subscription_manager)
-    _notification_listener.register(event_bus)
-    logger.info("NotificationListener registered with EventBus")
-
-    # Agent lifecycle listener — translates agent.completed/heartbeat events into activity log
-    from cairn.listeners.agent_listener import AgentListener
-    _agent_listener = AgentListener(_wi_mgr)
-    _agent_listener.register(event_bus)
-    logger.info("AgentListener registered with EventBus")
-
-    # Agent type registry (ca-150)
-    from cairn.core.agents import AgentRegistry
-    agent_registry = AgentRegistry()
-    logger.info("AgentRegistry initialized with %d definitions", len(agent_registry.list()))
-
-    # User manager (ca-124) — created when auth is enabled with JWT
+    # User manager — created when auth is enabled with JWT
     _user_manager = None
     if config.auth.enabled and config.auth.jwt_secret:
         _user_manager = UserManager(db)
         logger.info("UserManager initialized (JWT auth enabled)")
 
-    # OTel export — optional bridge to external observability (Watchtower Phase 6)
-    from cairn.core import otel
-    otel.init(config.otel)
-
-    # Event dispatcher — background delivery worker (started in _start_workers)
+    # Event dispatcher — background delivery worker
     event_dispatcher = EventDispatcher(db, event_bus)
 
     # RRF search engine (core signal fusion)
@@ -381,7 +250,6 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
     )
 
     # Unified search — always wraps SearchEngine
-    # Passthrough when search_v2 capability is off, enhanced pipeline when on
     unified_search = SearchV2(
         db=db,
         embedding=embedding,
@@ -425,78 +293,7 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         )
         logger.info("ConsolidationWorker enabled (dry_run=%s)", config.consolidation_worker.dry_run)
 
-    # Terminal host manager (optional, based on config)
-    terminal_host_manager = None
-    if config.terminal.backend != "disabled":
-        if config.terminal.backend == "native" and not config.terminal.encryption_key:
-            logger.warning("Terminal backend=native but no encryption key — terminal disabled")
-        else:
-            terminal_host_manager = TerminalHostManager(db, config.terminal)
-            logger.info("Terminal enabled: backend=%s", config.terminal.backend)
-
-    # Workspace backends (optional, for workspace feature)
-    opencode = None
-    workspace_backends: dict[str, WorkspaceBackend] = {}
-
-    if config.workspace.url:
-        opencode = OpenCodeClient(
-            url=config.workspace.url,
-            password=config.workspace.password,
-        )
-        workspace_backends["opencode"] = OpenCodeBackend(opencode)
-        logger.info("OpenCode workspace backend enabled: %s", config.workspace.url)
-
-    if config.workspace.claude_code_enabled:
-        from cairn.integrations.claude_code import ClaudeCodeBackend, ClaudeCodeConfig
-        cc_config = ClaudeCodeConfig(
-            working_dir=config.workspace.claude_code_working_dir,
-            max_turns=config.workspace.claude_code_max_turns,
-            max_budget_usd=config.workspace.claude_code_max_budget,
-            cairn_mcp_url=config.workspace.claude_code_mcp_url,
-            ssh_host=config.workspace.claude_code_ssh_host,
-            ssh_user=config.workspace.claude_code_ssh_user,
-            ssh_key_path=config.workspace.claude_code_ssh_key,
-        )
-        def _cc_event_callback(work_item_id, event_type, payload):
-            if event_bus:
-                event_bus.emit(
-                    event_type,
-                    work_item_id=int(work_item_id) if work_item_id else None,
-                    actor="agent:claude_code",
-                    payload=payload,
-                )
-
-        workspace_backends["claude_code"] = ClaudeCodeBackend(
-            cc_config, event_callback=_cc_event_callback,
-        )
-        logger.info("Claude Code workspace backend enabled")
-
-    if config.workspace.agent_sdk_enabled:
-        from cairn.integrations.agent_sdk import AgentSDKBackend, AgentSDKConfig
-        sdk_config = AgentSDKConfig(
-            working_dir=config.workspace.agent_sdk_working_dir,
-            max_turns=config.workspace.agent_sdk_max_turns,
-            max_budget_usd=config.workspace.agent_sdk_max_budget,
-            cairn_mcp_url=config.workspace.agent_sdk_mcp_url,
-            default_model=config.workspace.agent_sdk_default_model,
-            sandbox_enabled=config.workspace.agent_sdk_sandbox,
-        )
-
-        def _sdk_event_callback(work_item_id, event_type, payload):
-            if event_bus:
-                event_bus.emit(
-                    event_type,
-                    work_item_id=int(work_item_id) if work_item_id else None,
-                    actor="agent:agent_sdk",
-                    payload=payload,
-                )
-
-        workspace_backends["agent_sdk"] = AgentSDKBackend(
-            sdk_config, event_callback=_sdk_event_callback,
-        )
-        logger.info("Agent SDK workspace backend enabled")
-
-    # Wire EventBus ref into stats module so emit_usage_event() routes through bus
+    # Wire EventBus ref into stats module
     init_event_bus_ref(event_bus)
 
     return Services(
@@ -512,7 +309,6 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
         cluster_engine=_cluster_engine,
         project_manager=project_manager,
         work_item_manager=_wi_mgr,
-        deliverable_manager=_deliverable_mgr,
         thinking_engine=ThinkingEngine(
             db,
             graph=graph_provider,
@@ -521,37 +317,15 @@ def create_services(config: Config | None = None, db: Database | None = None) ->
             thought_extraction=capabilities.thought_extraction,
             event_bus=event_bus,
         ),
-        session_synthesizer=SessionSynthesizer(db, llm=llm_fast, capabilities=capabilities),
         consolidation_engine=ConsolidationEngine(db, embedding, llm=llm_fast, capabilities=capabilities),
         event_bus=event_bus,
         event_dispatcher=event_dispatcher,
         drift_detector=DriftDetector(db),
         ingest_pipeline=IngestPipeline(db, project_manager, memory_store, llm_fast, config),
-        terminal_host_manager=terminal_host_manager,
-        opencode=opencode,
-        workspace_backends=workspace_backends,
-        workspace_manager=WorkspaceManager(
-            db, workspace_backends,
-            default_backend=config.workspace.default_backend,
-            work_item_manager=_wi_mgr,
-            default_agent=config.workspace.default_agent,
-            budget_tokens=config.budget.workspace,
-            user_manager=_user_manager,
-        ),
-        conversation_manager=ConversationManager(db, llm=llm_fast),
         analytics_tracker=analytics_tracker,
         rollup_worker=rollup_worker,
         decay_worker=decay_worker,
         analytics_engine=analytics_engine,
-        audit_manager=audit_manager,
-        webhook_manager=webhook_manager,
-        webhook_worker=webhook_worker,
-        alert_manager=alert_manager,
-        alert_worker=alert_worker,
-        retention_manager=retention_manager,
-        retention_worker=retention_worker,
-        subscription_manager=subscription_manager,
-        agent_registry=agent_registry,
         user_manager=_user_manager,
         working_memory_store=WorkingMemoryStore(
             db, embedding=embedding, event_bus=event_bus,

@@ -1,5 +1,7 @@
 """Cairn REST API — endpoints for the web UI and content ingestion.
 
+Post-cut (v0.80.0): memory console API. Agent endpoints removed.
+
 Split into domain modules under cairn/api/. Each module exports a
 register_routes(router, svc) function that adds its endpoints.
 """
@@ -42,10 +44,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "0"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-        # Cache-Control for API responses (don't cache sensitive data)
         if "Cache-Control" not in response.headers:
             response.headers["Cache-Control"] = "no-store"
         return response
+
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +74,7 @@ def create_api(svc: Services) -> FastAPI:
     app = FastAPI(
         title="Cairn API",
         version=__version__,
-        description="REST API for the Cairn web UI and content ingestion.",
+        description="REST API for the Cairn memory console.",
         docs_url="/swagger",
         redoc_url=None,
         dependencies=[Depends(_release_db_conn)],
@@ -116,60 +118,34 @@ def create_api(svc: Services) -> FastAPI:
 
     router = APIRouter()
 
-    # Register all route modules
-    from cairn.api.agents import register_routes as reg_agents
-    from cairn.api.alerting import register_routes as reg_alerting
+    # Register remaining route modules (memory console only)
     from cairn.api.analytics import register_routes as reg_analytics
     from cairn.api.attachments import register_routes as reg_attachments
-    from cairn.api.audit import register_routes as reg_audit
     from cairn.api.auth_routes import register_routes as reg_auth
     from cairn.api.beliefs import register_routes as reg_beliefs
-    from cairn.api.chat import register_routes as reg_chat
     from cairn.api.code import register_routes as reg_code
-    from cairn.api.conversations import register_routes as reg_conversations
     from cairn.api.core import register_routes as reg_core
-    from cairn.api.deliverables import register_routes as reg_deliverables
-    from cairn.api.dispatch import register_routes as reg_dispatch
     from cairn.api.events import register_routes as reg_events
     from cairn.api.export import register_routes as reg_export
     from cairn.api.graph_edit import register_routes as reg_graph_edit
     from cairn.api.ingest import register_routes as reg_ingest
     from cairn.api.knowledge import register_routes as reg_knowledge
-    from cairn.api.retention import register_routes as reg_retention
     from cairn.api.search import register_routes as reg_search
-    from cairn.api.sessions import register_routes as reg_sessions
-    from cairn.api.subscriptions import register_routes as reg_subscriptions
-    from cairn.api.terminal import register_routes as reg_terminal
     from cairn.api.thinking import register_routes as reg_thinking
-    from cairn.api.webhooks import register_routes as reg_webhooks
     from cairn.api.work_items import register_routes as reg_work_items
     from cairn.api.working_memory import register_routes as reg_working_memory
-    from cairn.api.workspace import register_routes as reg_workspace
 
     reg_core(router, svc)
     reg_search(router, svc)
     reg_knowledge(router, svc)
-    reg_thinking(router, svc)
     reg_events(router, svc)
     reg_ingest(router, svc)
-    reg_sessions(router, svc)
     reg_analytics(router, svc)
-    reg_chat(router, svc)
-    reg_conversations(router, svc)
-    reg_terminal(router, svc, app=app)
-    reg_workspace(router, svc)
     reg_export(router, svc)
+    reg_thinking(router, svc)
     reg_work_items(router, svc)
     reg_code(router, svc)
-    reg_dispatch(router, svc)
     reg_graph_edit(router, svc)
-    reg_audit(router, svc)
-    reg_webhooks(router, svc)
-    reg_alerting(router, svc)
-    reg_retention(router, svc)
-    reg_deliverables(router, svc)
-    reg_subscriptions(router, svc)
-    reg_agents(router, svc)
     reg_auth(router, svc)
     reg_working_memory(router, svc)
     reg_beliefs(router, svc)

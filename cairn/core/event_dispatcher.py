@@ -291,7 +291,14 @@ class EventDispatcher:
             return
 
         t0 = time.monotonic()
-        future = self._pool.submit(handler_fn, event)
+
+        def _run_handler():
+            try:
+                return handler_fn(event)
+            finally:
+                self.db.release_if_held()
+
+        future = self._pool.submit(_run_handler)
 
         try:
             future.result(timeout=self.HANDLER_TIMEOUT)
