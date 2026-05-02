@@ -143,21 +143,6 @@ class UsageTracker:
                     ),
                 )
             self.db.commit()
-
-            # OTel export — ship spans to external observability (Watchtower Phase 6)
-            from cairn.core import otel
-            if otel.is_enabled():
-                for ev in batch:
-                    otel.export_span(
-                        operation=ev.operation,
-                        duration_ms=ev.latency_ms,
-                        success=ev.success,
-                        tokens_in=ev.tokens_in,
-                        tokens_out=ev.tokens_out,
-                        project_id=str(ev.project_id) if ev.project_id is not None else None,
-                        model=ev.model,
-                        error_message=ev.error_message,
-                    )
         except Exception:
             logger.warning("UsageTracker: flush failed for %d events", len(batch), exc_info=True)
 
