@@ -4,7 +4,6 @@ import { usePathname } from "next/navigation";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { CommandPalette } from "@/components/command-palette";
-import { ChatDrawerTrigger } from "@/components/chat/chat-drawer-trigger";
 import { ErrorBoundary } from "@/components/error-boundary";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -30,7 +29,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </SidebarInset>
       </SidebarProvider>
       <CommandPalette />
-      <ChatDrawerTrigger />
     </>
   );
 }

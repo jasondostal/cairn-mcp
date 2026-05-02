@@ -472,7 +472,7 @@ export function MemorySheet({ memoryId, open, onOpenChange }: MemorySheetProps) 
               <Separator />
               <div className="space-y-1 text-xs text-muted-foreground">
                 {memory.session_name && (
-                  <p>Session: <Link href={`/sessions?selected=${encodeURIComponent(memory.session_name)}`} onClick={() => onOpenChange(false)} className="text-primary hover:underline">{memory.session_name}</Link></p>
+                  <p>Session: {memory.session_name}</p>
                 )}
                 <p>Created: {formatDateTime(memory.created_at)}</p>
                 <p>Updated: {formatDateTime(memory.updated_at)}</p>

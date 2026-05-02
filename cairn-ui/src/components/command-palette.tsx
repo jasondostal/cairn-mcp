@@ -16,29 +16,23 @@ import { ProjectPill } from "@/components/project-pill";
 import {
   Activity,
   BarChart3,
-  Boxes,
   BookOpen,
   FileText,
   FolderOpen,
   Kanban,
   Lightbulb,
   Brain,
-  MessageCircle,
   Network,
   PenLine,
-  Radio,
   Search,
   Settings,
   Share2,
   Shield,
-  Terminal,
 } from "lucide-react";
 
 const pages = [
   { href: "/capture", label: "New Capture", icon: PenLine },
   { href: "/", label: "Dashboard", icon: Activity },
-  { href: "/chat", label: "Chat", icon: MessageCircle },
-  { href: "/sessions", label: "Sessions", icon: Radio },
   { href: "/memories", label: "Memories", icon: BookOpen },
   { href: "/search", label: "Search", icon: Search },
   { href: "/projects", label: "Projects", icon: FolderOpen },
@@ -49,8 +43,6 @@ const pages = [
   { href: "/mind", label: "Mind", icon: Lightbulb },
   { href: "/thinking", label: "Thinking", icon: Brain },
   { href: "/rules", label: "Rules", icon: Shield },
-  { href: "/workspace", label: "Workspace", icon: Boxes },
-  { href: "/terminal", label: "Terminal", icon: Terminal },
   { href: "/analytics", label: "Ops Log", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

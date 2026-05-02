@@ -970,13 +970,9 @@ export function WorkItemSheet({
                           ) : (
                             <span className="h-2 w-2 rounded-full bg-muted-foreground/30 shrink-0" />
                           )}
-                          <Link
-                            href={`/sessions?selected=${encodeURIComponent(ls.session_name)}`}
-                            onClick={() => onOpenChange(false)}
-                            className="font-mono text-xs text-primary hover:underline truncate"
-                          >
+                          <span className="font-mono text-xs truncate">
                             {ls.session_name}
-                          </Link>
+                          </span>
                           <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">
                             {ls.role}
                           </Badge>
@@ -1015,7 +1011,7 @@ export function WorkItemSheet({
                 {detail.updated_at && <p>Updated: {formatDateTime(detail.updated_at)}</p>}
                 {detail.completed_at && <p>Completed: {formatDateTime(detail.completed_at)}</p>}
                 {detail.cancelled_at && <p>Cancelled: {formatDateTime(detail.cancelled_at)}</p>}
-                {detail.session_name && <p>Session: <Link href={`/sessions?selected=${encodeURIComponent(detail.session_name)}`} onClick={() => onOpenChange(false)} className="text-primary hover:underline">{detail.session_name}</Link></p>}
+                {detail.session_name && <p>Session: {detail.session_name}</p>}
               </div>
             </div>
           </>
