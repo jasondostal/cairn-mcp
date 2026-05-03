@@ -1,9 +1,12 @@
-"""Project tools: projects, code_query, arch_check."""
+"""Project & session tools: projects, code_query, arch_check, orient, rules, status."""
 
 import logging
 
 from cairn.api.utils import parse_multi
+from cairn.core.budget import apply_list_budget
+from cairn.core.constants import BUDGET_RULES_PER_ITEM
 from cairn.core.services import Services
+from cairn.core.status import get_status
 from cairn.core.trace import set_trace_project, set_trace_tool
 from cairn.tools.auth import check_project_access
 from cairn.tools.threading import in_thread
@@ -306,4 +309,96 @@ def register(mcp, svc: Services):
             logger.exception("arch_check failed")
             return {"error": f"Internal error: {e}"}
 
+    @mcp.tool()
+    async def orient(project: str | None = None) -> dict:
+        """Single-pass session boot. Returns rules, trail, learnings, and work items.
+
+        Replaces calling rules() + search() + work_items() individually with one call.
+        Each section gets a token budget allocation with surplus flowing to the next.
+
+        Use this at session start. Individual tools remain available for granular
+        use mid-session.
+
+        Args:
+            project: Project name for scoped rules and work items. Omit for global-only boot.
+        """
+        from cairn.core.orient import run_orient
+
+        try:
+            set_trace_tool("orient")
+            if project:
+                set_trace_project(project)
+            check_project_access(svc, project)
+
+            def _do_orient():
+                return run_orient(
+                    project=project,
+                    config=svc.config,
+                    db=svc.db,
+                    memory_store=svc.memory_store,
+                    search_engine=svc.search_engine,
+                    work_item_manager=svc.work_item_manager,
+                    graph_provider=svc.graph_provider,
+                    belief_store=svc.belief_store,
+                )
+
+            return await in_thread(svc.db, _do_orient)
+        except Exception as e:
+            logger.exception("orient failed")
+            return {"error": f"Internal error: {e}"}
+
+    @mcp.tool()
+    async def rules(project: str | None = None) -> list[dict]:
+        """Get behavioral rules and guardrails.
+
+        CRITICAL: Call this at session start. Rules define how you should behave —
+        deployment patterns, communication style, project conventions, safety guardrails.
+
+        Returns rule-type memories from __global__ (universal guardrails) and
+        the specified project.
+
+        Args:
+            project: Project name to get rules for. Omit for global rules only.
+        """
+        try:
+            set_trace_tool("rules")
+            if project:
+                set_trace_project(project)
+            check_project_access(svc, project)
+
+            def _do_rules():
+                result = svc.memory_store.get_rules(project)
+                items = result["items"]
+                budget = svc.config.budget.rules
+                if budget > 0 and items:
+                    items, meta = apply_list_budget(
+                        items, budget, "content",
+                        per_item_max=BUDGET_RULES_PER_ITEM,
+                        overflow_message=(
+                            "...{omitted} more rules omitted. "
+                            "Use search(query='topic', memory_type='rule') for targeted retrieval."
+                        ),
+                    )
+                    if meta["omitted"] > 0:
+                        items.append({"_overflow": meta["overflow_message"]})
+                return items
+
+            return await in_thread(svc.db, _do_rules)
+        except Exception as e:
+            logger.exception("rules failed")
+            return [{"error": f"Internal error: {e}"}]
+
+    @mcp.tool()
+    async def status() -> dict:
+        """System health and statistics.
+
+        Quick diagnostic tool — no parameters required.
+        Returns version, memory counts, embedding/LLM health, event bus stats.
+        """
+        try:
+            set_trace_tool("status")
+            return await in_thread(svc.db, get_status, svc.db, svc.config)
+        except Exception as e:
+            logger.exception("status failed")
+            return {"error": f"Internal error: {e}"}
 

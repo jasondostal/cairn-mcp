@@ -410,3 +410,5 @@ def register(mcp, svc: Services):
         except Exception as e:
             logger.exception("consolidate failed")
             return {"error": f"Internal error: {e}"}
+
+
