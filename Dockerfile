@@ -35,6 +35,9 @@ COPY scripts/ scripts/
 # Install the package itself (deps already satisfied by lockfile)
 RUN pip install --no-cache-dir --no-deps .
 
+# Pin setuptools above CVE-2025-47273 floor (torch pins <82, so this stays in range)
+RUN pip install --no-cache-dir 'setuptools>=78.1.1'
+
 # Non-root user for runtime security
 RUN useradd --create-home --shell /bin/bash cairn \
     && chown -R cairn:cairn /app
