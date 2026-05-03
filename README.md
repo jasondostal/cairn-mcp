@@ -11,25 +11,11 @@
 
 ---
 
-Yet another MCP, right? Yeah, it's that. But here's why this one exists.
+A self-hosted persistent memory platform for AI agents and humans. Store something once, find it later, across sessions, across projects. Four containers. `docker compose up`. Done.
 
-I'm a t-shaped engineer. PMP, SAFe Agilist, Certified Product Owner. But before any of that, I'm a systems person. Data centers, orchestration, automation. The kind of work that crosses 13 disciplines and stretches back to something you last touched 10 years ago.
+Cairn is the memory brain. Your agent runtime handles execution — Cairn handles knowing. What decisions were made, what facts are known, what patterns emerge across projects.
 
-I built Cairn for my workflow. At 1am, when I'm deep in something and I know the answer exists somewhere in the last three weeks of work but I don't want to spend 30 minutes digging and correlating. That emergency call, the panicked user coming to you as their only hope, and it's an issue buried in 6 systems you last touched in 2014.
-
-Cairn is there.
-
-*"Where did I put that singularity again? Let me just spawn a couple..."*
-
-Sure, dedicated tools will probably beat a given Cairn feature when it's all they do. Cairn isn't built for single-purpose depth — but it still [scores 81.6% on LoCoMo](#benchmark). It's built for the systems person. The curious. The t-shaped. The ones who need a memory that works the way they do, across everything, all at once.
-
-It's a self-hosted memory and orchestration layer for AI agents and humans. Store something once, find it later, across sessions, across projects. Four containers. `docker compose up`. Done.
-
-<p align="center">
-  <img src="images/cairn-loop.jpg" alt="Cairn chat creating work items with agent dispatch" width="700">
-  <br>
-  <sub>Chat creates a work item. Agent breaks it into subtasks. You review from your phone.</sub>
-</p>
+It's built for the systems person. The curious. The t-shaped. The ones who need a memory that works the way they do, across everything, all at once.
 
 ## Quick Start
 
@@ -72,6 +58,7 @@ Where that goes:
 | **Windsurf** | `.windsurf/mcp.json` |
 | **Cline** | MCP settings panel in VS Code |
 | **Continue** | `.continue/config.yaml` |
+| **PiClaw** | `.pi/mcp.json` |
 
 Or run the setup wizard — it walks you through everything: LLM backend, database, embeddings, auth, and IDE configuration:
 
@@ -91,7 +78,7 @@ Search for it later:
 
 > "What did we decide about the storage layer?"
 
-That's it. 23 tools available. The ones you'll use most:
+That's it. 11 tools available. The ones you'll use most:
 
 | Tool | What it does |
 |------|-------------|
@@ -102,13 +89,12 @@ That's it. 23 tools available. The ones you'll use most:
 | `rules` | Load behavioral guardrails (global or per-project) |
 | `beliefs` | Durable epistemic state — crystallize, challenge, retract knowledge with confidence tracking |
 | `work_items` | Create, claim, and complete tasks with dependencies and gates |
-| `working_memory` | Capture ephemeral thoughts — hypotheses, questions, tensions — with salience decay. Lives alongside crystallized memories; resolving graduates into permanent memories or beliefs |
+| `working_memory` | Capture ephemeral thoughts — hypotheses, questions, tensions — with salience decay |
 | `projects` | Manage project docs (briefs, PRDs, plans) |
 | `code_query` | Structural queries: dependents, impact, callers, callees, dead code, complexity, hotspots |
 | `arch_check` | Validate architecture boundary rules against imports |
-| `dispatch` | Dispatch work to a background agent — tracked, briefed, heartbeating |
 
-The rest: `modify`, `insights`, `think`, `status`, `consolidate`, `decay_scan`, `drift_check`, `ingest`, `deliverables`, `locks`, `suggest_agent`.
+The rest: `modify`, `insights`, `think`, `status`, `consolidate`, `ingest`.
 
 ## What's in the box
 
@@ -118,26 +104,18 @@ The rest: `modify`, `insights`, `think`, `status`, `consolidate`, `decay_scan`, 
 
 **Search that fuses signals.** Vector similarity, recency, access frequency, keyword matching, and tag overlap blended via Reciprocal Rank Fusion. Filter by project, type, or time range. Temporal queries: "what did we know as of Tuesday?" via `as_of`, "what happened last week?" via `event_after`/`event_before`.
 
-**Knowledge graph.** With Neo4j enabled, entities and facts get extracted into a graph that connects memories through shared people, places, projects, and concepts. Optional, but powerful when you're working across domains.
+**Knowledge graph.** Entities and facts get extracted into a Neo4j graph that connects memories through shared people, places, projects, and concepts. Optional, but powerful when you're working across domains.
 
-**Ephemeral memory.** Hypotheses, questions, tensions, and intuitions live alongside crystallized memories with decaying salience. Engage with an item to keep it alive, or let it fade naturally. When a thought crystallizes, resolve it into a permanent memory or belief and it graduates automatically. The Memories page unifies both lifecycles with OKLCH-accented toggle filters.
+**Thinking sequences.** Structured deliberation — start with a goal, add thoughts (observations, hypotheses, analysis, alternatives), conclude. Both humans and agents contribute. The exploration itself becomes searchable memory.
 
-**Work management and multi-agent orchestration.** Hierarchical work items, dependency tracking, a dispatch queue, and gates that pause for human decisions. Typed agent definitions with capability enforcement, file-level resource locking, affinity-based routing, and persistent cross-dispatch learning. Agents accumulate institutional knowledge and get smarter with every task.
+**Work management.** Hierarchical work items with dependency tracking, gates that pause for human decisions, and activity logging. Experimental — evolving as we learn what works.
 
-**Web dashboard.** Browse memories with OKLCH-colored toggle filters, score gradient bars, and shareable URL state. Explore the knowledge graph, view analytics, manage work items, chat with your memory. Port 3000.
+**Web dashboard.** Browse memories with OKLCH-colored toggle filters, score gradient bars, and shareable URL state. Explore the knowledge graph and entity relationships. View analytics, manage work items. Port 3000.
 
 <p align="center">
   <img src="images/cairn-dashboard.jpg" alt="Cairn dashboard with memory growth and token usage" width="700">
   <br>
   <sub>Memory growth by type, token usage tracking, and the full nav.</sub>
-</p>
-
-**Observability.** Watchtower is a six-phase enterprise observability stack, all manageable from a single tabbed UI page. Immutable audit trail for every state-changing operation. Webhook delivery with HMAC-SHA256 signing and retry. Rule-based health alerting against metrics and system health. Configurable data retention with legal hold and dry-run preview. Optional OpenTelemetry export — reads trace context, exports spans via OTLP, zero overhead when disabled.
-
-<p align="center">
-  <img src="images/cairn-watchtower.jpg" alt="Cairn Watchtower — audit, alerts, webhooks, retention" width="700">
-  <br>
-  <sub>Watchtower: audit trail, alerting rules, webhook delivery, and data retention in one place.</sub>
 </p>
 
 **Code intelligence.** A standalone worker indexes codebases with tree-sitter (30 languages) and builds a code graph in Neo4j. The server queries the graph without ever touching source files. Ask structural questions — "what depends on this file?", "who calls this function?", "what's the blast radius?" — and get answers from the code graph. Call graph extraction, cyclomatic complexity, dead code detection. Enforce architecture boundaries with YAML rules. Works across projects.
@@ -158,15 +136,13 @@ The rest: `modify`, `insights`, `think`, `status`, `consolidate`, `decay_scan`, 
 
 </details>
 
-**Multi-user authentication and RBAC.** Off by default, zero to enterprise in one command. `./scripts/setup.sh` includes auth configuration, or run `./scripts/setup-auth.sh` standalone. Auth mode selection (none / local JWT / OIDC SSO), JWT secret generation, OIDC provider validation with hints for Authentik, Keycloak, Auth0, Okta, and Azure AD. Personal Access Tokens for machine clients, stdio identity for MCP. Three roles, project-level scoping, first-user-becomes-admin. Groups with OIDC sync. See the **[Authentication Guide](docs/authentication.md)**.
+**Multi-user authentication and RBAC.** Off by default, zero to enterprise in one command. `./scripts/setup.sh` includes auth configuration, or run `./scripts/setup-auth.sh` standalone. Auth mode selection (none / local JWT / OIDC SSO), JWT secret generation, OIDC provider validation. Personal Access Tokens for machine clients, stdio identity for MCP. Three roles, project-level scoping, first-user-becomes-admin. Groups with OIDC sync. See the **[Authentication Guide](docs/authentication.md)**.
 
-**Session capture.** IDE hooks (Claude Code, Cursor, Cline, Windsurf) log every tool call. Next session boots warm. See [`examples/hooks/README.md`](examples/hooks/README.md).
-
-**Backup and disaster recovery.** Cron-friendly scripts for PostgreSQL dump and Neo4j graph export with configurable retention. Tested restore procedures with migration safety checks. See the **[Backup Guide](docs/backup.md)**.
+**Disaster recovery.** Cron-friendly scripts for PostgreSQL dump and Neo4j graph export with configurable retention. Tested restore procedures with migration safety checks. See the **[Backup Guide](docs/backup.md)**.
 
 ## Do I need an LLM?
 
-No. Store, search, recall, and rules work without one. You lose auto-enrichment (summaries, tags, importance scoring), knowledge extraction, and chat.
+No. Store, search, recall, and rules work without one. You lose auto-enrichment (summaries, tags, importance scoring), knowledge extraction, and thinking.
 
 If you want enrichment:
 
@@ -193,12 +169,6 @@ All via environment variables. The ones that matter:
 | `CAIRN_GRAPH_BACKEND` | *(disabled)* | Set to `neo4j` to enable knowledge graph |
 | `CAIRN_KNOWLEDGE_EXTRACTION` | `false` | Entity/statement extraction on store |
 | `CAIRN_EMBEDDING_BACKEND` | `local` | `local` (MiniLM, 384-dim) or `bedrock` (Titan V2, 1024-dim) |
-| `CAIRN_AUDIT_ENABLED` | `false` | Immutable audit trail for state-changing operations |
-| `CAIRN_WEBHOOKS_ENABLED` | `false` | HTTP webhook delivery with HMAC signing and retry |
-| `CAIRN_ALERTING_ENABLED` | `false` | Rule-based health alerting against metrics |
-| `CAIRN_RETENTION_ENABLED` | `false` | Data retention policies with TTL cleanup |
-| `CAIRN_OTEL_ENABLED` | `false` | OpenTelemetry span export via OTLP |
-| `CAIRN_OTEL_ENDPOINT` | *(empty)* | OTLP HTTP endpoint (e.g. `http://otel-collector:4318/v1/traces`) |
 | `CAIRN_INGEST_DIR` | `/data/ingest` | Staging directory for file-path ingestion of large documents |
 | `CAIRN_CODE_DIR` | `/data/code` | Root directory for code intelligence indexing (mount codebases here) |
 
@@ -335,7 +305,7 @@ python -m cairn.code
 ## Architecture
 
 ```
-MCP clients (Claude Code, Cursor, etc.)     REST clients (curl, web UI, hooks)
+MCP clients (Claude Code, Cursor, PiClaw)    REST clients (web UI, scripts)
         |                                            |
         | MCP (stdio or HTTP)                        | REST API
         |                                            |
@@ -343,10 +313,7 @@ MCP clients (Claude Code, Cursor, etc.)     REST clients (curl, web UI, hooks)
 |  cairn.server (MCP tools)     cairn.api (FastAPI endpoints) |
 |                                                             |
 |  core: memory, search, enrichment, extraction, clustering   |
-|        work items, projects, working memory, thinking       |
-|                                                             |
-|  watchtower: audit trail, webhooks, alerting, retention     |
-|              trace context, OTel export (optional)          |
+|        working memory, beliefs, thinking, work items        |
 |                                                             |
 |  embedding: local (MiniLM) or Bedrock (Titan V2)            |
 |  llm: Ollama, Bedrock, Gemini, OpenAI-compatible            |
@@ -356,9 +323,9 @@ MCP clients (Claude Code, Cursor, etc.)     REST clients (curl, web UI, hooks)
   PostgreSQL 16 + pgvector                    Neo4j 5 <-------+
                                              (optional)       |
                                                 ^             |
-  code worker (python -m cairn.code)            |      OTLP endpoint
-  tree-sitter parsing, call graph      --------+       (optional)
-  watches filesystem for changes
+  code worker (python -m cairn.code)            |             |
+  tree-sitter parsing, call graph      --------+             |
+  watches filesystem for changes                             |
 ```
 
 ## Benchmark
