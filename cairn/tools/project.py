@@ -1,4 +1,4 @@
-"""Project tools: projects, code_query, arch_check, dispatch."""
+"""Project tools: projects, code_query, arch_check."""
 
 import logging
 
@@ -306,73 +306,4 @@ def register(mcp, svc: Services):
             logger.exception("arch_check failed")
             return {"error": f"Internal error: {e}"}
 
-    @mcp.tool()
-    async def dispatch(
-        work_item_id: int | str | None = None,
-        project: str | None = None,
-        title: str | None = None,
-        description: str | None = None,
-        backend: str | None = None,
-        risk_tier: int | None = None,
-        model: str | None = None,
-        agent: str | None = None,
-        assignee: str | None = None,
-    ) -> dict:
-        """Dispatch work to a background agent — tracked, briefed, heartbeating.
 
-        USE THIS instead of native subagents (Task tool) when:
-        - The work will take more than a few minutes
-        - You want the job tracked (visible in cairn-ui, queryable, resumable)
-        - You want to continue working on other things in parallel
-        - The task involves a different codebase or working directory
-        - You want heartbeat monitoring and gate support
-
-        DO NOT USE when:
-        - The task is quick (< 2 minutes) and you need the result immediately
-        - You're doing a simple lookup or computation
-
-        Two modes:
-        - Dispatch an existing work item: pass work_item_id
-        - Create + dispatch in one shot: pass project + title (+ optional description)
-
-        Internally: creates/resolves work item → claims it → generates briefing →
-        creates workspace session → sends briefing to agent. One call does it all.
-
-        The dispatched agent gets Cairn MCP access and will heartbeat progress
-        back. Check status via work_items(action='get', work_item_id=...).
-
-        Args:
-            work_item_id: Existing work item to dispatch (display_id like 'ca-42' or numeric ID).
-            project: Project name (required if creating a new work item).
-            title: Work item title (required if creating a new work item).
-            description: Detailed description of the work to be done.
-            backend: Agent backend: 'claude_code' or 'opencode'. Auto-selects if omitted.
-            risk_tier: Permission level (0=full autonomy, 1=broad, 2=read-heavy, 3=research-only).
-            model: Model override for Claude Code (e.g. 'claude-sonnet-4-6').
-            agent: Agent definition to use (defaults to workspace config).
-            assignee: Name for the agent claim (auto-generated if omitted).
-        """
-        try:
-            set_trace_tool("dispatch")
-            if project:
-                set_trace_project(project)
-            require_admin(svc)
-            check_project_access(svc, project)
-            if svc.workspace_manager is None:
-                return {"error": "workspace manager not available"}
-            return await in_thread(
-                svc.db,
-                svc.workspace_manager.dispatch,
-                work_item_id=work_item_id,
-                project=project,
-                title=title,
-                description=description,
-                backend=backend,
-                risk_tier=risk_tier,
-                model=model,
-                agent=agent,
-                assignee=assignee,
-            )
-        except Exception as e:
-            logger.exception("dispatch failed")
-            return {"error": f"Internal error: {e}"}
