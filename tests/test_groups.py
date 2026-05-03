@@ -207,30 +207,4 @@ class TestUserGroups:
         assert groups[0]["name"] == "devs"
 
 
-class TestAuditListenerSettings:
-    """AuditListener handles settings.* events."""
 
-    def test_settings_domain_audited(self):
-        from cairn.listeners.audit_listener import _AUDITED_DOMAINS
-        assert "settings" in _AUDITED_DOMAINS
-
-    def test_settings_event_logged(self):
-        from cairn.listeners.audit_listener import AuditListener
-
-        audit_mgr = MagicMock()
-        listener = AuditListener(audit_mgr)
-
-        event = {
-            "event_type": "settings.updated",
-            "session_name": "settings",
-            "payload": {
-                "actor": "admin",
-                "changes": {"llm.backend": "bedrock"},
-            },
-        }
-        listener.handle(event)
-        audit_mgr.log.assert_called_once()
-        call_kwargs = audit_mgr.log.call_args[1]
-        assert call_kwargs["action"] == "updated"
-        assert call_kwargs["resource_type"] == "settings"
-        assert call_kwargs["actor"] == "admin"

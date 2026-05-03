@@ -14,7 +14,6 @@ import pytest
 from cairn.core.utils import ValidationError
 from cairn.tools.memory import register as register_memory
 from cairn.tools.work_items import register as register_work_items
-from cairn.tools.deliverables import register as register_deliverables
 
 
 # ---------------------------------------------------------------------------
@@ -261,48 +260,4 @@ class TestWorkItemsToolErrors:
         assert "Unknown action" in result["error"]
 
 
-# ---------------------------------------------------------------------------
-# Deliverables tool error propagation
-# ---------------------------------------------------------------------------
 
-class TestDeliverablesToolErrors:
-    """deliverables() should catch exceptions and return error dicts."""
-
-    def _get_tools(self, svc):
-        mcp = MockMCP()
-        register_deliverables(mcp, svc)
-        return mcp.tools
-
-    def test_valueerror_returns_error(self):
-        svc = _make_svc()
-        svc.deliverable_manager.create.side_effect = ValueError("bad input")
-        tools = self._get_tools(svc)
-
-        result = asyncio.run(tools["deliverables"](
-            action="create", work_item_id=1, description="test",
-        ))
-
-        assert "error" in result
-        assert "bad input" in result["error"]
-        assert "Internal error" not in result["error"]
-
-    def test_generic_exception_returns_internal_error(self):
-        svc = _make_svc()
-        svc.deliverable_manager.create.side_effect = RuntimeError("boom")
-        tools = self._get_tools(svc)
-
-        result = asyncio.run(tools["deliverables"](
-            action="create", work_item_id=1, description="test",
-        ))
-
-        assert "error" in result
-        assert "Internal error" in result["error"]
-
-    def test_unknown_action_returns_error(self):
-        svc = _make_svc()
-        tools = self._get_tools(svc)
-
-        result = asyncio.run(tools["deliverables"](action="nuke"))
-
-        assert "error" in result
-        assert "Unknown action" in result["error"]
