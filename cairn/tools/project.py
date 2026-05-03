@@ -5,7 +5,7 @@ import logging
 from cairn.api.utils import parse_multi
 from cairn.core.services import Services
 from cairn.core.trace import set_trace_project, set_trace_tool
-from cairn.tools.auth import check_project_access, require_admin
+from cairn.tools.auth import check_project_access
 from cairn.tools.threading import in_thread
 
 logger = logging.getLogger("cairn")
