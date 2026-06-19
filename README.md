@@ -9,6 +9,14 @@
   <img src="https://img.shields.io/badge/PostgreSQL-16%20%2B%20pgvector-336791?style=flat-square" alt="PostgreSQL">
 </p>
 
+> [!IMPORTANT]
+> **Cairn is retired, and this repository is archived (read-only).**
+> Its successor is **[rill](https://github.com/jasondostal/rill)** — a faster, leaner,
+> MCP-native memory server written in Go that learned from everything Cairn got right
+> (and the things it got wrong). Cairn was the first; rill is where the work continues.
+> This repo stays up as a read-only archive — explore it, fork it, but new development
+> lives in rill.
+
 ---
 
 A self-hosted persistent memory platform for AI agents and humans. Store something once, find it later, across sessions, across projects. Four containers. `docker compose up`. Done.
