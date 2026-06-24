@@ -148,7 +148,7 @@ jobs:
       # --- Server image ---
       - name: Server metadata
         id: server-meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -177,7 +177,7 @@ jobs:
       # --- UI image ---
       - name: UI metadata
         id: ui-meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-ui
           tags: |
