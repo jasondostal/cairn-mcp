@@ -39,13 +39,13 @@ jobs:
         run: pip-audit -r requirements.lock --desc on
 
       - name: Hadolint (Dockerfile best practices)
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@v3.3.0
         with:
           dockerfile: Dockerfile
           failure-threshold: error
 
       - name: Hadolint (UI Dockerfile)
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@v3.3.0
         with:
           dockerfile: cairn-ui/Dockerfile
           failure-threshold: error
